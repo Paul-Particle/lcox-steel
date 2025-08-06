@@ -31,7 +31,7 @@ results/*.json
 
 # IDE specific files
 .vscode/
-.swp
+*.swp
 output_for_gemini
 
 # Conda environment
