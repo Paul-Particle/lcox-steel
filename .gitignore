@@ -1,0 +1,38 @@
+# Gitignore for cfp_data_analysis project
+
+# Operating System Files
+.DS_Store
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+*.env
+.env
+
+# Data files
+data/*.feather
+
+# Snakemake
+.snakemake/
+.snakemake_profile/
+.snakemake_log/
+
+# Generated results
+results/*.html
+results/*.png
+results/*.svg
+results/*.json
+
+# IDE specific files
+.vscode/
+.swp
+output_for_gemini
+
+# Conda environment
+fca_env/

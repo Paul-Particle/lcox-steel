@@ -1,0 +1,60 @@
+area_code,description,enabled
+AL,Albania,false
+AT,,true
+BY,Belarus,false
+BE,,true
+BA,Bosnia Herzegovina,false
+BG,,true
+HR,,true
+CY,Cyprus,false
+CZ,,true
+DE_LU,"German bidding zone (+ Luxemburg) since 2018",true
+DE_AT_LU,old German zone,false
+CZ_DE_SK,old German zone,false
+DK_1,,true
+DK_2,,true
+DK_1_NO_1,DK_1_NO_1 is an interconnection,false
+EE,Estonia,true
+FI,,true
+MK,Macedonia,false
+FR,,true
+GR,,true
+IS,Iceland,false
+HU,,true
+IE_SEM,Ireland and Northern Ireland,true
+IT_CNOR,"Italy has lots of virtual zones to manage congestion",true
+IT_CSUD,"Italy has lots of virtual zones to manage congestion",true
+IT_NORD,"Italy has lots of virtual zones to manage congestion",true
+IT_SARD,"Italy has lots of virtual zones to manage congestion",true
+IT_SICI,"Italy has lots of virtual zones to manage congestion",true
+IT_SUD,"Italy has lots of virtual zones to manage congestion",true
+RU_KGD,"Kaliningrad (Russia)",false
+LV,,true
+LT,,true
+MT,Malta,false
+ME,"Montenegro (not coupled?)",false
+GB,"No(t much?) data since Brexit",false
+GE,"Georgia (not coupled?)",false
+NL,,true
+NO_1,"Norway has 5 zones",true
+NO_2,"Norway has 5 zones",true
+NO_3,"Norway has 5 zones",true
+NO_4,"Norway has 5 zones",true
+NO_5,"Norway has 5 zones",true
+PL,,true
+PT,,true
+MD,Moldova,false
+RO,,true
+RU,Russia,false
+SE_1,,true
+SE_2,,true
+SE_3,,true
+SE_4,,true
+RS,"Serbia (not coupled?)",false
+SK,Slovakia,true
+SI,Slovenia,true
+ES,,true
+CH,,true
+TR,"Turkey (not coupled)",false
+UA,"Ukraine (not coupled, just synchronized?)",false
+XK,"Kosovo (not coupled)",false
