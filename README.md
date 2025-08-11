@@ -16,7 +16,8 @@ This project is a data analysis pipeline for downloading, processing, and visual
 ```
 
 ## Setup and Usage
-0.  ** Get API key:**
+0.  **Get API key:**
+
     See [here](https://transparencyplatform.zendesk.com/hc/en-us/articles/12845911031188-How-to-get-security-token). Send an email to transparency@entsoe.eu with “Restful API access” in the subject line. Indicate the email address you entered during registration in the email body. 
 
 1.  **Create the Conda environment:**
