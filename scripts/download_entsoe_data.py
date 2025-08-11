@@ -4,7 +4,6 @@ import os
 import entsoe
 from dotenv import load_dotenv
 from pathlib import Path
-import country_converter as coco
 
 def get_enabled_areas():
     """Reads the areas.csv file and returns a list of enabled area codes."""
