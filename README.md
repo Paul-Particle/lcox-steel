@@ -45,7 +45,7 @@ This project is a data analysis pipeline for downloading, processing, and visual
 5.  **Run the Snakemake pipeline:**
 
     ```bash
-    snakemake --cores 1
+    snakemake --cores 1 --scheduler greedy
     ```
 
     This will execute the entire workflow, from data downloading to plot generation.

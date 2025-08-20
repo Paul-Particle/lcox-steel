@@ -277,6 +277,7 @@ dependencies:
   - zlib-ng=2.2.3=h13dfb9a_0
   - zstd=1.5.6=hb46c0d2_0
   - snakemake
+  - pulp
   - pip:
       - charset-normalizer==3.4.1
       - entsoe-py==0.6.16

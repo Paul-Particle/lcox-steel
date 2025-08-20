@@ -36,12 +36,16 @@ def download_price_data(client, areas, start, end, output_file):
         try:
             data = client.query_day_ahead_prices(country_code, start=start, end=end)
         except Exception as e:
-            print(repr(e))
+            print('ERROR: ', repr(e))
         print("ok", end=" | ")
         data.name = country_code  # returns a series, so .name not .columns
         dfs_price.append(data)
 
     df_price = pd.concat(dfs_price, axis=1)
+
+    # Connection errors can cause duplicated columns, save the later one
+    df_price = df_price.loc[:, ~df_price.columns.duplicated(keep="last")]
+
 
     df_price.to_feather(output_file)
     print(f"Successfully saved price data to {output_file}")
@@ -54,16 +58,18 @@ def download_load_data(client, areas, start, end, output_file):
     for country_code in areas:
         print(country_code, end=" ")
         try:
-            # continue
             data = client.query_load_forecast(country_code, start=start, end=end)
         except Exception as e:
-            print(repr(e))
-            # continue
+            print('ERRROR', repr(e))
         print("ok", end=" | ")
         data.columns = [country_code]  # returns a dataframe, so .columns not .name
         dfs_power.append(data)
 
     df_power = pd.concat(dfs_power, axis=1)
+
+    # Connection errors can cause duplicated columns, save the later one
+    df_power = df_power.loc[:, ~df_power.columns.duplicated(keep="last")]
+
     df_power.to_feather(output_file)
     print(f"Successfully saved load data to {output_file}")
 
@@ -90,11 +96,20 @@ def download_vre_data(client, areas, start, end, output_file):
         print("ok", end=" | ")
         dfs_vre_tup.append((data, country_code))
 
+    # take care of duplicted columns
+    seen_codes = set()
+    dfs_vre_tup_temp = []
+    for data, country_code in reversed(dfs_vre_tup):
+        if country_code in seen_codes:
+            continue
+        seen_codes.add(country_code)
+        dfs_vre_tup_temp.append((data, country_code))
+    dfs_vre_tup = list(reversed(dfs_vre_tup_temp))
+        
+
     dfs_vre = []
     for data, country_code in dfs_vre_tup:
         missing = vre_names - set(data.columns)
-        print(data.columns)
-        print(country_code, missing)
         data = data.copy()
         for m in missing:
             data[m] = 0.0

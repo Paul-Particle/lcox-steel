@@ -10,7 +10,7 @@ with open("config.yaml", "r") as f:
 # Define the final output of the workflow
 rule all:
     input:
-        "results/02_analysis_and_visualization.html",
+        "notebooks/results/02_analysis_and_visualization.html",
 
 
 # Rule to download day-ahead prices
@@ -18,7 +18,7 @@ rule download_prices:
     output:
         "data/prices.feather",
     shell:
-        "python scripts/download_entsoe_data.py prices {output} --start {config[start_date]} --end {config[end_date]}"
+        "python -u scripts/download_entsoe_data.py prices {output} --start {config[start_date]} --end {config[end_date]}"
 
 
 # Rule to download load forecast data
@@ -26,7 +26,7 @@ rule download_load:
     output:
         "data/load.feather",
     shell:
-        "python scripts/download_entsoe_data.py load {output} --start {config[start_date]} --end {config[end_date]}"
+        "python -u scripts/download_entsoe_data.py load {output} --start {config[start_date]} --end {config[end_date]}"
 
 
 # Rule to download VRE data
@@ -34,7 +34,7 @@ rule download_vre:
     output:
         "data/vre.feather",
     shell:
-        "python scripts/download_entsoe_data.py vre {output} --start {config[start_date]} --end {config[end_date]}"
+        "python -u scripts/download_entsoe_data.py vre {output} --start {config[start_date]} --end {config[end_date]}"
 
 
 # Rule to process the raw data
@@ -48,16 +48,20 @@ rule process_data:
         "data/processed_data.feather",
     conda: "environment.yml"
     shell:
-        "python scripts/processing.py {input.prices} {input.load} {input.vre} {output}"
+        "python -u scripts/processing.py {input.prices} {input.load} {input.vre} {output}"
 
 
 # Rule to render the notebook
 rule render_notebook:
     input:
-        "notebooks/02_analysis_and_visualization.ipynb",
-        "data/processed_data.feather",
+        notebook="notebooks/02_analysis_and_visualization.ipynb",
+        data="data/processed_data.feather"
     output:
-        "/results/02_analysis_and_visualization.html",
-    conda: "environment.yml"
+        "notebooks/results/02_analysis_and_visualization.html"
+    params:
+        intermediate_html=lambda wildcards, input: str(input.notebook).replace(".ipynb", ".html")
     shell:
-        "PYTHONPATH=$(pwd) jupyter nbconvert --to html --execute {input[0]} --output {output}"
+        """
+        jupyter nbconvert --to html --execute {input.notebook}
+        mv {params.intermediate_html} {output}
+        """
