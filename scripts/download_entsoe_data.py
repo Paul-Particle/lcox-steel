@@ -170,6 +170,10 @@ def download_generation_data(client, areas, start, end, output_file):
         "Wind Offshore": "wind_offshore",
         "Wind Onshore": "wind_onshore",
     }
+    gen_names_production = {k + "_Actual Aggregated": v for k, v in gen_names.items()}
+    gen_names_consumption = {k + "_Actual Consumption": v + "_cons" for k, v in gen_names.items()}
+    gen_names = gen_names_production | gen_names_consumption
+
     dfs_gen_tup = []
     for country_code in areas:
         print(country_code, end=" ")
@@ -179,12 +183,15 @@ def download_generation_data(client, areas, start, end, output_file):
             )
         except Exception as e:
             print(repr(e))
-        print("ok", end=" | ")
         if data.columns.nlevels == 2:
-            if 'Actual Consumption' in data.columns.get_level_values(1):
-                data = data.drop(columns='Actual Consumption', level=1).copy()
-            data.columns = data.columns.droplevel(level=1)
+            data.columns = ['_'.join(col) for col in data.columns.values]
+        else:
+            data.columns = ['_'.join([col, 'Actual Aggregated']) for col in data.columns]
+        cols_to_change = data.filter(regex='_cons$', axis=1).columns
+        data.loc[:, cols_to_change] = data.loc[:, cols_to_change] * -1
         dfs_gen_tup.append((data, country_code))
+        print("ok", end=" | ")
+
 
     # take care of duplicted countries
     seen_codes = set()

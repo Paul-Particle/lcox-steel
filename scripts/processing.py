@@ -91,27 +91,6 @@ def process_data(prices_file, load_fc_file, load_ac_file, vre_file, gen_file, ou
         # Select data for the current area, resulting in a DataFrame with single-level columns
         df_area_data = df_EU[area].copy()
 
-        # # vre_new_names = {'Solar': 'solar', 'Wind Onshore': 'wind_onshore', 'Wind Offshore': 'wind_offshore'}
-        # gen_names = {
-        #     "Biomass": "biomass",
-        #     "Fossil Brown coal/Lignite": "brown_coal",
-        #     "Fossil Coal-derived gas": "coal_gas",
-        #     "Fossil Gas": "gas",
-        #     "Fossil Hard coal": "hard_coal",
-        #     "Fossil Oil": "oil",
-        #     "Geothermal": "geothermal",
-        #     "Hydro Pumped Storage": "pumped_storage",
-        #     "Hydro Run-of-river and poundage": "hydro_river",
-        #     "Hydro Water Reservoir": "hydro_reservoir",
-        #     "Other": "other",
-        #     "Other renewable": "other_re",
-        #     "Solar": "solar",
-        #     "Waste": "waste",
-        #     "Wind Offshore": "wind_offshore",
-        #     "Wind Onshore": "wind_onshore",
-        # }
-        # df_area_data.rename(columns=gen_names, inplace=True)
-        
         # Perform the assign operations
         df_area_processed = (df_area_data
             .sort_index(axis=1)
