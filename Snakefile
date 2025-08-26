@@ -22,33 +22,48 @@ rule download_prices:
 
 
 # Rule to download load forecast data
-rule download_load:
+rule download_load_forecast:
     output:
-        "data/load.feather",
+        "data/load_fc.feather",
     shell:
-        "python -u scripts/download_entsoe_data.py load {output} --start {config[start_date]} --end {config[end_date]}"
+        "python -u scripts/download_entsoe_data.py load_forecast {output} --start {config[start_date]} --end {config[end_date]}"
 
+# Rule to download actual load data
+rule download_load_actual:
+    output:
+        "data/load_ac.feather",
+    shell:
+        "python -u scripts/download_entsoe_data.py load_actual {output} --start {config[start_date]} --end {config[end_date]}"
 
-# Rule to download VRE data
+# Rule to download vre forecast data
 rule download_vre:
     output:
         "data/vre.feather",
     shell:
         "python -u scripts/download_entsoe_data.py vre {output} --start {config[start_date]} --end {config[end_date]}"
 
+# Rule to download actual generation data
+rule download_gen:
+    output:
+        "data/gen.feather",
+    shell:
+        "python -u scripts/download_entsoe_data.py generation {output} --start {config[start_date]} --end {config[end_date]}"
+
 
 # Rule to process the raw data
 rule process_data:
     input:
         prices="data/prices.feather",
-        load="data/load.feather",
+        load_fc="data/load_fc.feather",
+        load_ac="data/load_ac.feather",
         vre="data/vre.feather",
+        gen="data/gen.feather",
         areas_config="areas.csv"
     output:
         "data/processed_data.feather",
     conda: "environment.yml"
     shell:
-        "python -u scripts/processing.py {input.prices} {input.load} {input.vre} {output}"
+        "python -u scripts/processing.py {input.prices} {input.load_fc} {input.load_ac} {input.vre} {input.gen} {output}"
 
 
 # Rule to render the notebook

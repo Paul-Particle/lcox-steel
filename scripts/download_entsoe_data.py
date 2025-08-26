@@ -51,14 +51,37 @@ def download_price_data(client, areas, start, end, output_file):
     print(f"Successfully saved price data to {output_file}")
 
 
-def download_load_data(client, areas, start, end, output_file):
+def download_load_forecast_data(client, areas, start, end, output_file):
     """Downloads load forecast data for a list of areas and saves to a feather file."""
     print("Downloading load forecast data...")
-    dfs_power = []
+    dfs_power_fc = []
     for country_code in areas:
         print(country_code, end=" ")
         try:
             data = client.query_load_forecast(country_code, start=start, end=end)
+        except Exception as e:
+            print('ERRROR', repr(e))
+        print("ok", end=" | ")
+        data.columns = [country_code]  # returns a dataframe, so .columns not .name
+        dfs_power_fc.append(data)
+
+    df_power_fc = pd.concat(dfs_power_fc, axis=1)
+
+    # Connection errors can cause duplicated columns, save the later one
+    df_power = df_power_fc.loc[:, ~df_power_fc.columns.duplicated(keep="last")]
+
+    df_power.to_feather(output_file)
+    print(f"Successfully saved load forecast data to {output_file}")
+
+
+def download_load_data(client, areas, start, end, output_file):
+    """Downloads actual load data for a list of areas and saves to a feather file."""
+    print("Downloading actual load data...")
+    dfs_power = []
+    for country_code in areas:
+        print(country_code, end=" ")
+        try:
+            data = client.query_load(country_code, start=start, end=end)
         except Exception as e:
             print('ERRROR', repr(e))
         print("ok", end=" | ")
@@ -71,18 +94,17 @@ def download_load_data(client, areas, start, end, output_file):
     df_power = df_power.loc[:, ~df_power.columns.duplicated(keep="last")]
 
     df_power.to_feather(output_file)
-    print(f"Successfully saved load data to {output_file}")
+    print(f"Successfully saved actual load data to {output_file}")
 
 
-def download_vre_data(client, areas, start, end, output_file):
-    """Downloads"""
+def download_vre_forecast_data(client, areas, start, end, output_file):
     print("Downloading wind and solar forecast data...")
 
     vre_names = {"Solar", "Wind Onshore", "Wind Offshore"}
     vre_new_names = {
-        "Solar": "solar",
-        "Wind Onshore": "wind_onshore",
-        "Wind Offshore": "wind_offshore",
+        "Solar": "solar_forecast",
+        "Wind Onshore": "wind_onshore_forecast",
+        "Wind Offshore": "wind_offshore_forecast",
     }
     dfs_vre_tup = []
     for country_code in areas:
@@ -96,7 +118,7 @@ def download_vre_data(client, areas, start, end, output_file):
         print("ok", end=" | ")
         dfs_vre_tup.append((data, country_code))
 
-    # take care of duplicted columns
+    # take care of duplicted countries
     seen_codes = set()
     dfs_vre_tup_temp = []
     for data, country_code in reversed(dfs_vre_tup):
@@ -122,6 +144,76 @@ def download_vre_data(client, areas, start, end, output_file):
     df_vre.to_feather(output_file)
     print(f"Successfully saved VRE data to {output_file}")
 
+def download_generation_data(client, areas, start, end, output_file):
+    print("Downloading actual generation data...")
+
+    gen_names = {
+        "Biomass": "biomass",
+        "Energy storage": "energy_storage",
+        "Fossil Brown coal/Lignite": "brown_coal",
+        "Fossil Coal-derived gas": "coal_gas",
+        "Fossil Gas": "gas",
+        "Fossil Hard coal": "hard_coal",
+        "Fossil Oil": "oil",
+        "Fossil Oil shale": "oil_shale",
+        "Fossil Peat": "peat",
+        "Geothermal": "geothermal",
+        "Hydro Pumped Storage": "pumped_storage",
+        "Hydro Run-of-river and poundage": "hydro_river",
+        "Hydro Water Reservoir": "hydro_reservoir",
+        "Marine": "marine",
+        "Nuclear": "nuclear",
+        "Other": "other",
+        "Other renewable": "other_re",
+        "Solar": "solar",
+        "Waste": "waste",
+        "Wind Offshore": "wind_offshore",
+        "Wind Onshore": "wind_onshore",
+    }
+    dfs_gen_tup = []
+    for country_code in areas:
+        print(country_code, end=" ")
+        try:
+            data = client.query_generation(
+                country_code, start=start, end=end
+            )
+        except Exception as e:
+            print(repr(e))
+        print("ok", end=" | ")
+        if data.columns.nlevels == 2:
+            if 'Actual Consumption' in data.columns.get_level_values(1):
+                data = data.drop(columns='Actual Consumption', level=1).copy()
+            data.columns = data.columns.droplevel(level=1)
+        dfs_gen_tup.append((data, country_code))
+
+    # take care of duplicted countries
+    seen_codes = set()
+    dfs_gen_tup_temp = []
+    for data, country_code in reversed(dfs_gen_tup):
+        if country_code in seen_codes:
+            continue
+        seen_codes.add(country_code)
+        dfs_gen_tup_temp.append((data, country_code))
+    dfs_gen_tup = list(reversed(dfs_gen_tup_temp))
+        
+
+    dfs_gen = []
+    for data, country_code in dfs_gen_tup:
+        missing = gen_names.keys() - set(data.columns)
+        data = data.copy()
+        for m in missing:
+            data[m] = 0.0
+        index = pd.MultiIndex.from_tuples(
+            [(country_code, gen_names[gen]) for gen in data.columns]
+        )  # list of tuples
+        data.columns = index
+        dfs_gen.append(data)
+    df_gen = pd.concat(dfs_gen, axis=1)
+    df_gen.to_feather(output_file)
+    print(f"Successfully saved actual generation data to {output_file}")
+
+
+
 
 if __name__ == "__main__":
     # Load environment variables from .env file
@@ -130,7 +222,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download data from the ENTSO-E API.")
     parser.add_argument(
         "data_type",
-        choices=["prices", "load", "vre"],
+        choices=["prices", "load_forecast", "load_actual", "vre", "generation"],
         help="The type of data to download.",
     )
     parser.add_argument("output_file", type=Path, help="The path to the output file.")
@@ -151,7 +243,11 @@ if __name__ == "__main__":
 
     if args.data_type == "prices":
         download_price_data(client, args.areas, start_ts, end_ts, args.output_file)
-    elif args.data_type == "load":
+    elif args.data_type == "load_forecast":
+        download_load_forecast_data(client, args.areas, start_ts, end_ts, args.output_file)
+    elif args.data_type == "load_actual":
         download_load_data(client, args.areas, start_ts, end_ts, args.output_file)
     elif args.data_type == "vre":
-        download_vre_data(client, args.areas, start_ts, end_ts, args.output_file)
+        download_vre_forecast_data(client, args.areas, start_ts, end_ts, args.output_file)
+    elif args.data_type == "generation":
+        download_generation_data(client, args.areas, start_ts, end_ts, args.output_file)
