@@ -1,3 +1,14 @@
-# Start and end dates for data download
-start_date: "20251030"
-end_date: "20251102"
+# Configuration for the cfp_data_analysis project
+
+scheduler: greedy
+
+split_download:
+  years: [2025]
+  months: [10, 11]
+
+integration:
+  start_date: "20251030"
+  end_date: "20251102"
+  year_months: ["2025-10", "2025-11"]
+
+data_types: ["prices", "load_forecast", "load_actual", "vre", "generation", "crossborder"]
