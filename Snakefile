@@ -27,7 +27,6 @@ rule download_split:
         "logs/download/{area}-{year}-{month}-{data_type}.log"
     shell:
         "(python -u scripts/download_entsoe_data_split.py {wildcards.data_type} data/downloads {wildcards.area} {wildcards.year} {wildcards.month}) &> {log}"
-        "python -u scripts/download_entsoe_data_split.py {wildcards.data_type} data/downloads {wildcards.area} {wildcards.year} {wildcards.month}"
 
 # Rule to integrate the downloaded data
 rule integrate_data:
@@ -39,12 +38,6 @@ rule integrate_data:
                data_type=config['data_types'])
     output:
         expand("data/integrated/{data_type}.feather", data_type=config['data_types'])
-    params:
-        areas=' '.join(enabled_areas),
-        year_months=' '.join(config['integration']['year_months'])
-    shell:
-        "python -u scripts/integrate_data.py --output-dir data/integrated --inputs {input}"
-        "python -u scripts/integrate_data.py data/downloads data/integrated --data_types {config[data_types]} --areas {params.areas} --year_months {params.year_months}"
     script:
         "scripts/integrate_data.py"
 
@@ -60,8 +53,6 @@ rule process_data:
     output:
         "data/processed_data.feather",
     conda: "environment.yml"
-    shell:
-        "python -u scripts/processing.py {input.prices} {input.load_forecast} {input.load_actual} {input.vre} {input.generation} {input.crossborder} {output}"
     script:
         "scripts/processing.py"
 
@@ -80,11 +71,9 @@ rule process_data:
 #         '''
 
 rule verify_data:
-    input:ts"
-    script:
-        "scrip/verify_data.py
+    input:
         "data/processed_data.feather"
     output:
         "results/data_availability.html"
-    shell:
-        "python -u scripts/verify_data.py {input} results"
+    script:
+        "scripts/verify_data.py"

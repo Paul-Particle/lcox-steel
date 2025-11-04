@@ -1,56 +1,31 @@
-import argparse
 import pandas as pd
 from pathlib import Path
 import country_converter as coco
 
-def get_enabled_areas():
+if "snakemake" not in globals():
+    from _stubs import snakemake
+
+def get_enabled_areas(areas_file_path):
     """Reads the areas.csv file and returns a list of enabled area codes."""
-    areas_df = pd.read_csv("areas.csv")
+    areas_df = pd.read_csv(areas_file_path)
     return areas_df[areas_df["enabled"]]["area_code"].tolist()
 
-AREAS = get_enabled_areas()
-
-# dictionary for special cases where coco fails
-special_cases = {
-    'DE_LU': 'Germany',
-    'IE_SEM': 'Ireland',
-    'IT_CNOR': 'Italy',
-    'IT_CSUD': 'Italy',
-    'IT_NORD': 'Italy',
-    'IT_SARD': 'Italy',
-    'IT_SICI': 'Italy',
-    'IT_SUD' : 'Italy',
-    'NO_1': 'Norway',
-    'NO_2': 'Norway',
-    'NO_3': 'Norway',
-    'NO_4': 'Norway',
-    'NO_5': 'Norway',
-    'SE_1': 'Sweden',
-    'SE_2': 'Sweden',
-    'SE_3': 'Sweden',
-    'SE_4': 'Sweden',
-    'DK_1': 'Denmark',
-    'DK_2': 'Denmark',
-}
-
-def area_to_country(area):
-    if area in special_cases:
-        return special_cases[area]
-    return coco.convert(names=area, to="name_short")
-
-area_to_country_dict = {area: area_to_country(area) for area in AREAS}
-
-def process_data(prices_file, load_fc_file, load_ac_file, vre_file, gen_file, output_file, xim_file):
+def process_data(snakemake):
     """
     Processes data into a single dataframe.
     """
     print("Processing data...")
-    df_price = pd.read_feather(prices_file)
-    df_power_fc = pd.read_feather(load_fc_file)
-    df_power_ac = pd.read_feather(load_ac_file)
-    df_vre = pd.read_feather(vre_file)
-    df_gen = pd.read_feather(gen_file)
-    df_xim = pd.read_feather(xim_file)
+    
+    # Use the input from snakemake to get the enabled areas
+    AREAS = get_enabled_areas(snakemake.input.areas_config)
+
+    # Access inputs by name, not by index, for robustness
+    df_price = pd.read_feather(snakemake.input.prices)
+    df_power_fc = pd.read_feather(snakemake.input.load_forecast)
+    df_power_ac = pd.read_feather(snakemake.input.load_actual)
+    df_vre = pd.read_feather(snakemake.input.vre)
+    df_gen = pd.read_feather(snakemake.input.generation)
+    df_xim = pd.read_feather(snakemake.input.crossborder)
 
     # forward fill interpolation, as some data might have higher resolution
     df_price = df_price.ffill(limit=3).fillna(0.0)
@@ -112,20 +87,9 @@ def process_data(prices_file, load_fc_file, load_ac_file, vre_file, gen_file, ou
     df_EU_all = pd.concat(dfs_EU.values(), axis=1)
     
     # Save the processed data
-    df_EU_all.to_feather(output_file)
-    print(f"Successfully saved processed data to {output_file}")
+    df_EU_all.to_feather(snakemake.output[0])
+    print(f"Successfully saved processed data to {snakemake.output[0]}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process ENTSO-E data.")
-    parser.add_argument("prices_file", type=Path, help="Path to the prices feather file.")
-    parser.add_argument("load_fc_file", type=Path, help="Path to the load forecast feather file.")
-    parser.add_argument("load_ac_file", type=Path, help="Path to the actual load feather file.")
-    parser.add_argument("vre_file", type=Path, help="Path to the VRE feather file.")
-    parser.add_argument("gen_file", type=Path, help="Path to the actual generation feather file.")
-    parser.add_argument("output_file", type=Path, help="Path to save the processed output feather file.")
-    parser.add_argument("xim_file", type=Path, help="Path to the crossborder export-import feather file.")
-    
-    args = parser.parse_args()
-    
-    process_data(args.prices_file, args.load_fc_file, args.load_ac_file, args.vre_file, args.gen_file, args.xim_file, args.output_file)
+    process_data(snakemake)

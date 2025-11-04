@@ -16,7 +16,11 @@ venv/
 .env
 
 # Data files
-data/*.feather
+*.feather
+data/
+
+# Log files
+logs/
 
 # Snakemake
 .snakemake/

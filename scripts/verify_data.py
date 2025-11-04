@@ -1,17 +1,22 @@
-import argparse
 import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
 
-def verify_data_availability(processed_data_file, output_dir):
+# This block is for linters and IDEs. It will not be executed by Snakemake.
+if "snakemake" not in globals():
+    from _stubs import snakemake
+
+def verify_data_availability(snakemake):
     """
     Analyzes processed data to visualize data availability for each area and data type.
     """
     print("Verifying data availability...")
+    processed_data_file = Path(snakemake.input[0])
+    output_file = Path(snakemake.output[0])
+    output_dir = output_file.parent
     output_dir.mkdir(parents=True, exist_ok=True)
 
     df = pd.read_feather(processed_data_file)
-
     areas = df.columns.get_level_values(0).unique()
     data_types = df.columns.get_level_values(1).unique()
 
@@ -57,13 +62,8 @@ def verify_data_availability(processed_data_file, output_dir):
         showlegend=True
     )
 
-    output_file = output_dir / "data_availability.html"
     fig.write_html(output_file)
     print(f"Successfully saved data availability plot to {output_file}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Verify processed data availability.")
-    parser.add_argument("processed_data_file", type=Path, help="Path to the processed data file.")
-    parser.add_argument("output_dir", type=Path, help="Path to the output directory.")
-    args = parser.parse_args()
-    verify_data_availability(args.processed_data_file, args.output_dir)
+    verify_data_availability(snakemake)
