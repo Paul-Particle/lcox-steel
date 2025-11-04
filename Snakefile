@@ -77,16 +77,16 @@ rule process_data:
 
 
 # Rule to render the notebook
-rule render_notebookxim:
-    input:
-        notebook="notebooks/02_analysis_and_visualization.ipynb",
-        data="data/processed_data.feather"
-    output:
-        "notebooks/results/02_analysis_and_visualization.html"
-    params:
-        intermediate_html=lambda wildcards, input: str(input.notebook).replace(".ipynb", ".html")
-    shell:
-        """
-        jupyter nbconvert --to html --execute {input.notebook}
-        mv {params.intermediate_html} {output}
-        """
+# rule render_notebookxim:
+#     input:
+#         notebook="notebooks/02_analysis_and_visualization.ipynb",
+#         data="data/processed_data.feather"
+#     output:
+#         "notebooks/results/02_analysis_and_visualization.html"
+#     params:
+#         intermediate_html=lambda wildcards, input: str(input.notebook).replace(".ipynb", ".html")
+#     shell:
+#         """
+#         jupyter nbconvert --to html --execute {input.notebook}
+#         mv {params.intermediate_html} {output}
+#         """
