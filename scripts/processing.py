@@ -40,9 +40,9 @@ def area_to_country(area):
 
 area_to_country_dict = {area: area_to_country(area) for area in AREAS}
 
-def process_data(prices_file, load_fc_file, load_ac_file, vre_file, gen_file, output_file):
+def process_data(prices_file, load_fc_file, load_ac_file, vre_file, gen_file, output_file, xim_file):
     """
-    Processes raw price, load, and VRE data into a single dataframe.
+    Processes data into a single dataframe.
     """
     print("Processing data...")
     df_price = pd.read_feather(prices_file)
@@ -50,20 +50,15 @@ def process_data(prices_file, load_fc_file, load_ac_file, vre_file, gen_file, ou
     df_power_ac = pd.read_feather(load_ac_file)
     df_vre = pd.read_feather(vre_file)
     df_gen = pd.read_feather(gen_file)
+    df_xim = pd.read_feather(xim_file)
 
-    # Resample everything to hourly frequency, as some data might have higher resolution
-    # df_price = df_price.resample('h').mean()
-    # df_power_fc = df_power_fc.resample('h').mean()
-    # df_power_ac = df_power_ac.resample('h').mean()
-    # df_vre = df_vre.resample('h').mean()
-    # df_gen = df_gen.resample('h').mean()
-    
     # forward fill interpolation, as some data might have higher resolution
-    df_price = df_price.ffill()
-    df_power_fc = df_power_fc.ffill()
-    df_power_ac = df_power_ac.ffill()
-    df_vre = df_vre.ffill()
-    df_gen = df_gen.ffill()
+    df_price = df_price.ffill(limit=3).fillna(0.0)
+    df_power_fc = df_power_fc.ffill(limit=3).fillna(0.0)
+    df_power_ac = df_power_ac.ffill(limit=3).fillna(0.0)
+    df_vre = df_vre.ffill(limit=3).fillna(0.0)
+    df_gen = df_gen.ffill(limit=3).fillna(0.0)
+    df_xim = df_xim.ffill(limit=3).fillna(0.0)
 
     # Create MultiIndex columns for merging
     df_p = df_price.copy()
@@ -82,8 +77,10 @@ def process_data(prices_file, load_fc_file, load_ac_file, vre_file, gen_file, ou
 
     df_g = df_gen.copy()
 
+    df_x = df_xim.copy()
+
     # Combine the dataframes
-    df_EU = pd.concat([df_p, df_d_fc, df_d_ac, df_v, df_g], axis=1)
+    df_EU = pd.concat([df_p, df_d_fc, df_d_ac, df_v, df_g, df_x], axis=1)
 
     # Process each area
     dfs_EU = {}
@@ -100,9 +97,8 @@ def process_data(prices_file, load_fc_file, load_ac_file, vre_file, gen_file, ou
             .assign(dt            = lambda x: x.index)
             .assign(wind_forecast = lambda x: x.get('wind_onshore_foreacast', 0) + x.get('wind_offshore_forecast', 0))
             .assign(vre_forecast  = lambda x: x.get('wind_forecast', 0) + x.get('solar_forecast', 0))
-            .assign(residual      = lambda x: x.get('demand', 0) - x.get('vre_forecast', 0))
-            .ffill()
-            .interpolate()
+            .assign(residual      = lambda x: x.get('demand_forecast', 0) - x.get('vre_forecast', 0))
+            .ffill(limit=3)
         )
         
         # Create a new MultiIndex for the columns of the processed area data
@@ -114,10 +110,6 @@ def process_data(prices_file, load_fc_file, load_ac_file, vre_file, gen_file, ou
 
     # Combine all areas into a single dataframe horizontally
     df_EU_all = pd.concat(dfs_EU.values(), axis=1)
-    
-    # The index is already the timestamp, no need to reset or set names
-    # The 'country' column can be derived from the MultiIndex if needed later
-
     
     # Save the processed data
     df_EU_all.to_feather(output_file)
@@ -132,7 +124,8 @@ if __name__ == "__main__":
     parser.add_argument("vre_file", type=Path, help="Path to the VRE feather file.")
     parser.add_argument("gen_file", type=Path, help="Path to the actual generation feather file.")
     parser.add_argument("output_file", type=Path, help="Path to save the processed output feather file.")
+    parser.add_argument("xim_file", type=Path, help="Path to the crossborder export-import feather file.")
     
     args = parser.parse_args()
     
-    process_data(args.prices_file, args.load_fc_file, args.load_ac_file, args.vre_file, args.gen_file, args.output_file)
+    process_data(args.prices_file, args.load_fc_file, args.load_ac_file, args.vre_file, args.gen_file, args.xim_file, args.output_file)

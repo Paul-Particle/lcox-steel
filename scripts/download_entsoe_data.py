@@ -12,7 +12,6 @@ def get_enabled_areas():
 
 AREAS = get_enabled_areas()
 
-
 # Keeping the api key out of the code is good practice. Instead:
 def get_entsoe_client():
     """Initializes and returns the EntsoePandasClient."""
@@ -23,7 +22,7 @@ def get_entsoe_client():
             "ENTSOE_API_KEY environment variable not set. Please set it in your .env file."
         )
 
-    client = entsoe.EntsoePandasClient(api_key=API_KEY)
+    client = entsoe.EntsoePandasClient(api_key=API_KEY) # pyright: ignore[reportPrivateImportUsage]
     return client
 
 
@@ -37,9 +36,10 @@ def download_price_data(client, areas, start, end, output_file):
             data = client.query_day_ahead_prices(country_code, start=start, end=end)
         except Exception as e:
             print('ERROR: ', repr(e))
-        print("ok", end=" | ")
-        data.name = country_code  # returns a series, so .name not .columns
-        dfs_price.append(data)
+        else:
+            print("ok", end=" | ")
+            data.name = country_code  # returns a series, so .name not .columns
+            dfs_price.append(data)
 
     df_price = pd.concat(dfs_price, axis=1)
 
@@ -60,10 +60,11 @@ def download_load_forecast_data(client, areas, start, end, output_file):
         try:
             data = client.query_load_forecast(country_code, start=start, end=end)
         except Exception as e:
-            print('ERRROR', repr(e))
-        print("ok", end=" | ")
-        data.columns = [country_code]  # returns a dataframe, so .columns not .name
-        dfs_power_fc.append(data)
+            print('ERROR', repr(e))
+        else:
+            print("ok", end=" | ")
+            data.columns = [country_code]  # returns a dataframe, so .columns not .name
+            dfs_power_fc.append(data)
 
     df_power_fc = pd.concat(dfs_power_fc, axis=1)
 
@@ -84,9 +85,10 @@ def download_load_data(client, areas, start, end, output_file):
             data = client.query_load(country_code, start=start, end=end)
         except Exception as e:
             print('ERRROR', repr(e))
-        print("ok", end=" | ")
-        data.columns = [country_code]  # returns a dataframe, so .columns not .name
-        dfs_power.append(data)
+        else:
+            print("ok", end=" | ")
+            data.columns = [country_code]  # returns a dataframe, so .columns not .name
+            dfs_power.append(data)
 
     df_power = pd.concat(dfs_power, axis=1)
 
@@ -100,7 +102,6 @@ def download_load_data(client, areas, start, end, output_file):
 def download_vre_forecast_data(client, areas, start, end, output_file):
     print("Downloading wind and solar forecast data...")
 
-    vre_names = {"Solar", "Wind Onshore", "Wind Offshore"}
     vre_new_names = {
         "Solar": "solar_forecast",
         "Wind Onshore": "wind_onshore_forecast",
@@ -115,8 +116,9 @@ def download_vre_forecast_data(client, areas, start, end, output_file):
             )
         except Exception as e:
             print(repr(e))
-        print("ok", end=" | ")
-        dfs_vre_tup.append((data, country_code))
+        else:
+            print("ok", end=" | ")
+            dfs_vre_tup.append((data, country_code))
 
     # take care of duplicted countries
     seen_codes = set()
@@ -131,10 +133,10 @@ def download_vre_forecast_data(client, areas, start, end, output_file):
 
     dfs_vre = []
     for data, country_code in dfs_vre_tup:
-        missing = vre_names - set(data.columns)
+        # missing = vre_names - set(data.columns)
         data = data.copy()
-        for m in missing:
-            data[m] = 0.0
+        # for m in missing:
+        #     data[m] = 0.0
         index = pd.MultiIndex.from_tuples(
             [(country_code, vre_new_names[vre]) for vre in data.columns]
         )  # list of tuples
@@ -183,14 +185,15 @@ def download_generation_data(client, areas, start, end, output_file):
             )
         except Exception as e:
             print(repr(e))
-        if data.columns.nlevels == 2:
-            data.columns = ['_'.join(col) for col in data.columns.values]
         else:
-            data.columns = ['_'.join([col, 'Actual Aggregated']) for col in data.columns]
-        cols_to_change = data.filter(regex='_cons$', axis=1).columns
-        data.loc[:, cols_to_change] = data.loc[:, cols_to_change] * -1
-        dfs_gen_tup.append((data, country_code))
-        print("ok", end=" | ")
+            if data.columns.nlevels == 2:
+                data.columns = ['_'.join(col) for col in data.columns.values]
+            else:
+                data.columns = ['_'.join([col, 'Actual Aggregated']) for col in data.columns]
+            cols_to_change = data.filter(regex='Consumption$', axis=1).columns
+            data.loc[:, cols_to_change] = data.loc[:, cols_to_change] * -1
+            dfs_gen_tup.append((data, country_code))
+            print("ok", end=" | ")
 
 
     # take care of duplicted countries
@@ -206,10 +209,10 @@ def download_generation_data(client, areas, start, end, output_file):
 
     dfs_gen = []
     for data, country_code in dfs_gen_tup:
-        missing = gen_names.keys() - set(data.columns)
+        # missing = gen_names.keys() - set(data.columns)
         data = data.copy()
-        for m in missing:
-            data[m] = 0.0
+        # for m in missing:
+        #     data[m] = 0.0
         index = pd.MultiIndex.from_tuples(
             [(country_code, gen_names[gen]) for gen in data.columns]
         )  # list of tuples
@@ -218,6 +221,43 @@ def download_generation_data(client, areas, start, end, output_file):
     df_gen = pd.concat(dfs_gen, axis=1)
     df_gen.to_feather(output_file)
     print(f"Successfully saved actual generation data to {output_file}")
+
+def download_export_import_data(client, areas, start, end, output_file):
+    print("Downloading crossborder export-import flow data...")
+    dfs_crossborder_tup = []
+    for country_code in areas:
+        print(country_code, end=" in ")
+        try: 
+            data = client.query_physical_crossborder_allborders(country_code, start=start, end=end, export=False, per_hour=False)
+        except Exception as e:
+            print(repr(e))
+            data = None
+        else:
+            print("ok", end=" - ")
+            data.columns = ['from_' + col for col in data.columns]
+            dfs_crossborder_tup.append((data, country_code))
+
+        print(country_code, end=" out ")
+        try: 
+            data = client.query_physical_crossborder_allborders(country_code, start=start, end=end, export=True, per_hour=False)
+        except Exception as e:
+            print(repr(e))
+        else:
+            print("ok", end=" | ")
+            data.columns = ['to_' + col for col in data.columns]
+            dfs_crossborder_tup.append((data * -1, country_code))
+
+    dfs_crossborder = []
+    for data, country_code in dfs_crossborder_tup:
+        index = pd.MultiIndex.from_tuples(
+            [(country_code, col) for col in data.columns]
+        )  # list of tuples
+        data.columns = index
+        dfs_crossborder.append(data)
+
+    df_crossborder = pd.concat(dfs_crossborder, axis=1)
+    df_crossborder.to_feather(output_file)
+    print(f"Successfully saved crossborder data to {output_file}")
 
 
 
@@ -229,7 +269,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download data from the ENTSO-E API.")
     parser.add_argument(
         "data_type",
-        choices=["prices", "load_forecast", "load_actual", "vre", "generation"],
+        choices=["prices", "load_forecast", "load_actual", "vre", "generation", "crossborder"],
         help="The type of data to download.",
     )
     parser.add_argument("output_file", type=Path, help="The path to the output file.")
@@ -247,6 +287,8 @@ if __name__ == "__main__":
     client = get_entsoe_client()
     start_ts = pd.Timestamp(args.start, tz="Europe/Brussels")
     end_ts = pd.Timestamp(args.end, tz="Europe/Brussels")
+    print(f"Downloading data from {start_ts} to {end_ts}")
+    print(f"Areas: {args.areas}")
 
     if args.data_type == "prices":
         download_price_data(client, args.areas, start_ts, end_ts, args.output_file)
@@ -258,3 +300,5 @@ if __name__ == "__main__":
         download_vre_forecast_data(client, args.areas, start_ts, end_ts, args.output_file)
     elif args.data_type == "generation":
         download_generation_data(client, args.areas, start_ts, end_ts, args.output_file)
+    elif args.data_type == "crossborder":
+        download_export_import_data(client, args.areas, start_ts, end_ts, args.output_file)

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import datetime
-import kaleido # required for saveFig
+# import kaleido # required for saveFig
 import plotly.graph_objects as go
 import plotly.io as pio
 import plotly.express as px
@@ -12,7 +12,7 @@ import plotly.express as px
 
 # Saving figures
 
-OUTPUTPATH = Path('./output/')
+OUTPUTPATH = Path('./results/')
 DATAPATH = Path('./data/')
 
 def get_timestamp(date=True,time=True):
@@ -57,12 +57,12 @@ save = False
 def toggle_save() -> bool:
     global save
     save = not save
-    print(f'Saving figures is now {'ON' if save else 'OFF'}')
+    print(f'Saving figures is now {"ON" if save else "OFF"}')
     return save
 def set_save(setting: bool) -> bool:
     global save
     save = setting
-    print(f'Saving figures is now {'ON' if save else 'OFF'}')
+    print(f'Saving figures is now {"ON" if save else "OFF"}')
     return save
 def save_is_on():
     global save
