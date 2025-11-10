@@ -1,6 +1,4 @@
 import pandas as pd
-from pathlib import Path
-import country_converter as coco
 
 if "snakemake" not in globals():
     from _stubs import snakemake
