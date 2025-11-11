@@ -52,7 +52,7 @@ SE_4,,false
 RS,"Serbia (not coupled?)",false
 SK,Slovakia,false
 SI,Slovenia,false
-ES,,false
+ES,,true
 CH,,false
 TR,"Turkey (not coupled)",false
 UA,"Ukraine (not coupled, just synchronized?)",false

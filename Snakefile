@@ -8,6 +8,14 @@ if config.get('scheduler') != 'greedy':
     print("WARNING: You are not using the greedy scheduler which might cause too many API calls from parallel execution of many small downloads. Using --scheduler greedy will ensure sequential downloads. Forcing greedy.")
     config['scheduler'] = 'greedy'
 
+def get_year_months(start_date_str, end_date_str):
+    start = pd.to_datetime(start_date_str, format='%Y%m%d')
+    end = pd.to_datetime(end_date_str, format='%Y%m%d')
+    date_range = pd.date_range(start, end, freq='MS')
+    return sorted(list(set(date_range.strftime('%Y-%m'))))
+
+DOWNLOAD_YEAR_MONTHS = get_year_months(config["split_download"]["start_date"], config["split_download"]["end_date"])
+
 def get_enabled_areas():
     areas_df = pd.read_csv("areas.csv")
     return areas_df[areas_df["enabled"]]["area_code"].tolist()
@@ -26,15 +34,15 @@ rule download_split:
     log:
         "logs/download/{area}-{year}-{month}-{data_type}.log"
     shell:
-        "(python -u scripts/download_entsoe_data_split.py {wildcards.data_type} data/downloads {wildcards.area} {wildcards.year} {wildcards.month}) &> {log}"
+        # "(python -u scripts/download_entsoe_data_split.py {wildcards.data_type} data/downloads {wildcards.area} {wildcards.year} {wildcards.month}) &> {log}"
+        "(python -u scripts/download_entsoe_data_split.py {wildcards.data_type} data/downloads {wildcards.area} {wildcards.year} {wildcards.month})"
 
 # Rule to integrate the downloaded data
 rule integrate_data:
     input:
-        expand("data/downloads/{area}/{year}-{month}/{data_type}.feather",
+        expand("data/downloads/{area}/{year_month}/{data_type}.feather",
                area=enabled_areas,
-               year=config['split_download']['years'],
-               month=config['split_download']['months'],
+               year_month=DOWNLOAD_YEAR_MONTHS,
                data_type=config['data_types'])
     output:
         expand("data/integrated/{data_type}.feather", data_type=config['data_types'])
