@@ -4,10 +4,6 @@ import pandas as pd
 with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
-if config.get('scheduler') != 'greedy':
-    print("WARNING: You are not using the greedy scheduler which might cause too many API calls from parallel execution of many small downloads. Using --scheduler greedy will ensure sequential downloads. Forcing greedy.")
-    config['scheduler'] = 'greedy'
-
 def get_year_months(start_date_str, end_date_str):
     start = pd.to_datetime(start_date_str, format='%Y%m%d')
     end = pd.to_datetime(end_date_str, format='%Y%m%d')
