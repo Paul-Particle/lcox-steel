@@ -11,6 +11,7 @@ def get_year_months(start_date_str, end_date_str):
     return sorted(list(set(date_range.strftime('%Y-%m'))))
 
 DOWNLOAD_YEAR_MONTHS = get_year_months(config["split_download"]["start_date"], config["split_download"]["end_date"])
+INTEGRATE_YEAR_MONTHS = get_year_months(config["integration"]["start_date"], config["integration"]["end_date"])
 
 def get_enabled_areas():
     areas_df = pd.read_csv("areas.csv")
@@ -21,7 +22,6 @@ enabled_areas = get_enabled_areas()
 rule all:
     input:
         "results/data_availability.html",
-        # "notebooks/results/CFP_analysis_and_visualization.html",
 
 # Rule to download data for a specific area, year, and month
 rule download_split:
@@ -30,18 +30,18 @@ rule download_split:
     log:
         "logs/download/{area}-{year}-{month}-{data_type}.log"
     shell:
-        # "(python -u scripts/download_entsoe_data_split.py {wildcards.data_type} data/downloads {wildcards.area} {wildcards.year} {wildcards.month}) &> {log}"
-        "(python -u scripts/download_entsoe_data_split.py {wildcards.data_type} data/downloads {wildcards.area} {wildcards.year} {wildcards.month})"
+        "(python -u scripts/download_entsoe_data_split.py {wildcards.data_type} data/downloads {wildcards.area} {wildcards.year} {wildcards.month})" #&> {log}"
 
 # Rule to integrate the downloaded data
 rule integrate_data:
     input:
         expand("data/downloads/{area}/{year_month}/{data_type}.feather",
                area=enabled_areas,
-               year_month=DOWNLOAD_YEAR_MONTHS,
+               year_month=INTEGRATE_YEAR_MONTHS,
                data_type=config['data_types'])
     output:
-        expand("data/integrated/{data_type}.feather", data_type=config['data_types'])
+        expand("data/integrated/{data_type}.feather", 
+               data_type=config['data_types'])
     script:
         "scripts/integrate_data.py"
 
@@ -60,19 +60,6 @@ rule process_data:
     script:
         "scripts/processing.py"
 
-# rule render_notebook:
-#     input:
-#         notebook="notebooks/CFP_analysis_and_visualization.ipynb",
-#         data="data/processed_data.feather"
-#     output:
-#         "notebooks/results/CFP_analysis_and_visualization.html"
-#     params:
-#         intermediate_html=lambda wildcards, input: str(input.notebook).replace(".ipynb", ".html")
-#     shell:
-#         '''
-#         jupyter nbconvert --to html --execute {input.notebook}
-#         mv {params.intermediate_html} {output}
-#         '''
 
 rule verify_data:
     input:
