@@ -1,4 +1,4 @@
-name: fca_env
+name: lcox-env
 channels:
   - conda-forge
   - bioconda
