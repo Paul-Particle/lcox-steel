@@ -40,10 +40,10 @@ rule integrate_data:
                year_month=INTEGRATE_YEAR_MONTHS,
                data_type=config['data_types'])
     output:
-        expand("data/integrated/{data_type}.feather", 
+        expand("data/integrated/{data_type}.feather",
                data_type=config['data_types'])
     script:
-        "scripts/integrate_data.py"
+        "scripts/integrate_entsoe_data.py"
 
 rule process_data:
     input:
@@ -58,7 +58,7 @@ rule process_data:
         "data/processed_data.feather",
     conda: "environment.yml"
     script:
-        "scripts/processing.py"
+        "scripts/process_entsoe_data.py"
 
 
 rule verify_data:
