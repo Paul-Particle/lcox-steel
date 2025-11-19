@@ -10,8 +10,8 @@ def get_year_months(start_date_str, end_date_str):
     date_range = pd.date_range(start, end, freq='MS')
     return sorted(list(set(date_range.strftime('%Y-%m'))))
 
-DOWNLOAD_YEAR_MONTHS = get_year_months(config["split_download"]["start_date"], config["split_download"]["end_date"])
-INTEGRATE_YEAR_MONTHS = get_year_months(config["integration"]["start_date"], config["integration"]["end_date"])
+DOWNLOAD_YEAR_MONTHS = get_year_months(config["entsoe_download"]["start_date"], config["entsoe_download"]["end_date"])
+INTEGRATE_YEAR_MONTHS = get_year_months(config["entsoe_integration"]["start_date"], config["entsoe_integration"]["end_date"])
 
 def get_enabled_areas():
     areas_df = pd.read_csv("areas.csv")
@@ -21,21 +21,28 @@ enabled_areas = get_enabled_areas()
 
 rule all:
     input:
-        "results/data_availability.html",
+        "data/processed_data.feather"
 
-# Rule to download data for a specific area, year, and month
 rule download_split:
     output:
-        "data/downloads/{area}/{year}-{month}/{data_type}.feather"
-    log:
-        "logs/download/{area}-{year}-{month}-{data_type}.log"
-    shell:
-        "(python -u scripts/download_entsoe_data_split.py {wildcards.data_type} data/downloads {wildcards.area} {wildcards.year} {wildcards.month})" #&> {log}"
+        "data/entsoe_cache/{area}/{year}-{month}/{data_type}.feather"
+    conda: "environment.yaml"
+    script:
+        "scripts/download_entsoe_data.py"
 
-# Rule to integrate the downloaded data
+rule download_nem_data:
+    output:
+        "data/nem_processed.feather"
+    params:
+        start_date=config["nem_download"]["start_date"],
+        end_date=config["nem_download"]["end_date"],
+        nemosis_cache_dir=config["nem_download"]["nemosis_cache_dir"]
+    conda: "environment.yaml"
+    script: "scripts/download_nem_data.py"
+
 rule integrate_data:
     input:
-        expand("data/downloads/{area}/{year_month}/{data_type}.feather",
+        expand("data/entsoe_cache/{area}/{year_month}/{data_type}.feather",
                area=enabled_areas,
                year_month=INTEGRATE_YEAR_MONTHS,
                data_type=config['data_types'])
@@ -56,15 +63,6 @@ rule process_data:
         areas_config="areas.csv"
     output:
         "data/processed_data.feather",
-    conda: "environment.yml"
+    conda: "environment.yaml"
     script:
         "scripts/process_entsoe_data.py"
-
-
-rule verify_data:
-    input:
-        "data/processed_data.feather"
-    output:
-        "results/data_availability.html"
-    script:
-        "scripts/verify_data.py"
