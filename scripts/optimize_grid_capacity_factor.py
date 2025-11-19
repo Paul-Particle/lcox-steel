@@ -1,8 +1,5 @@
 import numpy as np
 import pandas as pd
-import sys
-
-sys.path.insert(1, "../")
 
 # config
 # TODO: Move these into model_config.yml
@@ -152,14 +149,15 @@ def get_perfect_foresight_results(dfLCOH):
         optimum = data
         optimum = optimum[
             [
-                "price_max",
-                "variable_cost_max",
+                "price",
+                "variable_cost",
                 "average_cost",
                 "capacity_factor",
                 index.split("_")[0],
                 index,
             ]
         ]
+        optimum = optimum.rename({'price': 'price_max', 'variable_cost': 'variable_cost_max'})
         optima[f"capital_cost_{index.split('_')[0]}"] = optimum.rename(
             {index.split("_")[0]: "fixed_cost", index: "total_cost"}
         )
@@ -186,14 +184,15 @@ def get_heuristic_results(
         optimum = dfLCOH.loc[dfLCOH.loc[m].price.idxmax()]
         optimum = optimum[
             [
-                "price_max",
-                "variable_cost_max",
+                "price",
+                "variable_cost",
                 "average_cost",
                 "capacity_factor",
                 index.split("_")[0],
                 index,
             ]
         ]
+        optimum = optimum.rename({'price': 'price_max', 'variable_cost': 'variable_cost_max'})
         heuristic_optima[f"capital_cost_{index.split('_')[0]}"] = optimum.rename(
             {index.split("_")[0]: "fixed_cost", index: "total_cost"}
         )
@@ -212,13 +211,14 @@ def get_baseload_results(dfLCOH, baseload_cf=1):
     common_values = pd.concat(
         [
             dfLCOH.loc[m].loc[
-                ["price_max", "variable_cost_max", "average_cost", "capacity_factor"]
+                ["price", "variable_cost", "average_cost", "capacity_factor"]
             ]
         ]
         * 3,
         axis=1,
     )
     common_values.columns = columns
+    common_values = common_values.rename({"price": "price_max", "variable_cost": "variable_cost_max"})
     fixed_cost_row = dfLCOH.loc[m].loc[[f"{c}" for c in fixed_costs.index]].to_frame().T
     fixed_cost_row.columns = columns
     fixed_cost_row.index = ["fixed_costs"]
