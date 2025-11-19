@@ -17,6 +17,7 @@ venv/
 
 # Data files
 *.feather
+*.CSV
 entsoe_cache/
 integrated/
 
