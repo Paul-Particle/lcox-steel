@@ -17,7 +17,8 @@ venv/
 
 # Data files
 *.feather
-data/
+downloads/
+integrated/
 
 # Log files
 logs/
