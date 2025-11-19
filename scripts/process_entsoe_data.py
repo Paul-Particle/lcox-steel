@@ -64,10 +64,10 @@ def process_data(snakemake):
         # Perform the assign operations
         df_area_processed = (df_area_data
             .sort_index(axis=1)
-            .assign(hour          = lambda x: x.index.hour)
-            .assign(doy           = lambda x: x.index.dayofyear)
-            .assign(doy_season    = lambda x: ((x.doy + 8*30+4)%365)+1)
-            .assign(dt            = lambda x: x.index)
+            # .assign(hour          = lambda x: x.index.hour)
+            # .assign(doy           = lambda x: x.index.dayofyear)
+            # .assign(doy_season    = lambda x: ((x.doy + 8*30+4)%365)+1)
+            # .assign(dt            = lambda x: x.index)
             .assign(wind_forecast = lambda x: x.get('wind_onshore_foreacast', 0) + x.get('wind_offshore_forecast', 0))
             .assign(vre_forecast  = lambda x: x.get('wind_forecast', 0) + x.get('solar_forecast', 0))
             .assign(residual      = lambda x: x.get('demand_forecast', 0) - x.get('vre_forecast', 0))
