@@ -1,10 +1,16 @@
 import pandas as pd
 import os
+from datetime import datetime
 from nemosis import dynamic_data_compiler
+from pathlib import Path
 
-cache_dir = '../data/nemosis_cache'
-static_file_path = os.path.join(cache_dir, 'NEM Registration and Exemption List.xlsx')
+# This block is for linters and IDEs. It will not be executed by Snakemake.
+if "snakemake" not in globals():
+    from _stubs import snakemake
 
+cache_dir = Path(snakemake.params.nemosis_cache_dir)
+static_file_path = cache_dir / 'NEM Registration and Exemption List.xlsx'
+ 
 if not os.path.exists(static_file_path):
     print(f"Please ensure the file is at: {static_file_path}")
     raise FileNotFoundError("Missing manual config file.")
@@ -27,19 +33,24 @@ map_df = gen_info[cols_to_keep].copy()
 print(f"Successfully mapped {len(map_df)} units.")
 
 
-start = '2023/01/01 00:00:00'
-end = '2023/01/02 00:00:00' 
+# Parse the YYYYMMDD date from config and format for nemosis
+start_dt = datetime.strptime(snakemake.params.start_date, '%Y%m%d')
+end_dt = datetime.strptime(snakemake.params.end_date, '%Y%m%d')
+
+# Format it to what nemosis expects: YYYY/MM/DD HH:MM:SS
+start_time = start_dt.strftime('%Y/%m/%d') + " 00:00:00"
+end_time = end_dt.strftime('%Y/%m/%d') + " 23:59:59"
 
 print("Fetching SCADA...")
 scada = dynamic_data_compiler(
-    start, end, "DISPATCH_UNIT_SCADA", cache_dir,
+    start_time, end_time, "DISPATCH_UNIT_SCADA", cache_dir,
     select_columns=['SETTLEMENTDATE', 'DUID', 'SCADAVALUE'],
     fformat='feather', keep_csv=False
 )
 
 print("Fetching Demand...")
 demand = dynamic_data_compiler(
-    start, end, "DISPATCHREGIONSUM", cache_dir,
+    start_time, end_time, "DISPATCHREGIONSUM", cache_dir,
     select_columns=['SETTLEMENTDATE', 'REGIONID', 'TOTALDEMAND'], 
     fformat='feather', keep_csv=False
 )
@@ -93,17 +104,11 @@ for r in regions:
 # Keys become the top level (Region), Columns become the second level (Variable)
 df_final = pd.concat(frames, axis=1, names=['Region', 'Variable'])
 
-# 5. Add Date/Time helper columns (matching your ENTSO-E structure)
-# Note: Accessing the index once is more efficient
-df_final[('Meta', 'dt')] = df_final.index
-df_final[('Meta', 'hour')] = df_final.index.hour
-df_final[('Meta', 'doy')] = df_final.index.dayofyear
 
 # If you strictly want the ENTSO-E flat tuple structure like ('ES', 'hour')
 # instead of ('Meta', 'hour'), we can flatten specific columns or broadcast them.
 # However, for the specific value columns, the structure is now:
 # ('NSW1', 'wind_onshore'), ('NSW1', 'solar'), etc.
+df_final.to_feather(snakemake.output[0])
 
-print(df_final.head())
-print("\nColumn Structure:")
-print(df_final.columns)
+print(f"Successfully saved NEM data to {snakemake.output[0]}")

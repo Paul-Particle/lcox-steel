@@ -1,13 +1,18 @@
 # Configuration for the cfp_data_analysis project
 
 scheduler: greedy
-
-split_download:
-  start_date: "20230101"
+ 
+entsoe_download:
+  start_date: "20241101" # format as YYYYMMDD
+  end_date: "20241231"
+ 
+entsoe_integration:
+  start_date: "20241101"
   end_date: "20241231"
 
-integration:
-  start_date: "20230101"
-  end_date: "20241231"
+nem_download:
+  start_date: "20230101" # format as YYYYMMDD
+  end_date: "20230131"
+  nemosis_cache_dir: "data/nemosis_cache"
 
 data_types: ["prices", "load_forecast", "load_actual", "vre", "generation", "crossborder"]

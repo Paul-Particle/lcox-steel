@@ -1,16 +1,11 @@
-import argparse
 import pandas as pd
 import os
 import entsoe
 from dotenv import load_dotenv
 from pathlib import Path
 
-def get_enabled_areas():
-    """Reads the areas.csv file and returns a list of enabled area codes."""
-    areas_df = pd.read_csv("areas.csv")
-    return areas_df[areas_df["enabled"]]["area_code"].tolist()
-
-AREAS = get_enabled_areas()
+if "snakemake" not in globals():
+    from _stubs import snakemake
 
 def get_entsoe_client():
     """Initializes and returns the EntsoePandasClient."""
@@ -176,45 +171,39 @@ def download_export_import_data(client, area, start, end, output_file):
         print(f"Successfully saved crossborder data to {output_file}")
 
 
-if __name__ == "__main__":
+def download_data(snakemake):
+    """
+    Downloads data from the ENTSO-E API using parameters from a snakemake object.
+    """
     # Load environment variables from .env file
     load_dotenv()
 
-    parser = argparse.ArgumentParser(description="Download data from the ENTSO-E API.")
-    parser.add_argument(
-        "data_type",
-        choices=["prices", "load_forecast", "load_actual", "vre", "generation", "crossborder"],
-        help="The type of data to download.",
-    )
-    parser.add_argument("output_dir", type=Path, help="The path to the output directory.")
-    parser.add_argument("area", help="Area code to download data for.")
-    parser.add_argument("year", type=int, help="Year to download data for.")
-    parser.add_argument("month", type=int, help="Month to download data for.")
-
-
-    args = parser.parse_args()
+    data_type = snakemake.wildcards.data_type
+    area = snakemake.wildcards.area
+    year = int(snakemake.wildcards.year)
+    month = int(snakemake.wildcards.month)
+    output_file = Path(snakemake.output[0])
 
     client = get_entsoe_client()
-    start_ts = pd.Timestamp(f"{args.year}-{args.month}-01", tz="Europe/Brussels")
+    start_ts = pd.Timestamp(f"{year}-{month}-01", tz="Europe/Brussels")
     end_ts = start_ts + pd.offsets.MonthEnd(0)
 
-    output_path = args.output_dir / args.area / f"{args.year}-{args.month:02d}"
-    output_path.mkdir(parents=True, exist_ok=True)
-    output_file = output_path / f"{args.data_type}.feather"
-
+    output_file.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Downloading data from {start_ts} to {end_ts}")
-    print(f"Area: {args.area}")
+    print(f"Area: {area}")
 
-    if args.data_type == "prices":
-        download_price_data(client, args.area, start_ts, end_ts, output_file)
-    elif args.data_type == "load_forecast":
-        download_load_forecast_data(client, args.area, start_ts, end_ts, output_file)
-    elif args.data_type == "load_actual":
-        download_load_data(client, args.area, start_ts, end_ts, output_file)
-    elif args.data_type == "vre":
-        download_vre_forecast_data(client, args.area, start_ts, end_ts, output_file)
-    elif args.data_type == "generation":
-        download_generation_data(client, args.area, start_ts, end_ts, output_file)
-    elif args.data_type == "crossborder":
-        download_export_import_data(client, args.area, start_ts, end_ts, output_file)
+    download_functions = {
+        "prices": download_price_data,
+        "load_forecast": download_load_forecast_data,
+        "load_actual": download_load_data,
+        "vre": download_vre_forecast_data,
+        "generation": download_generation_data,
+        "crossborder": download_export_import_data,
+    }
+
+    if data_type in download_functions:
+        download_functions[data_type](client, area, start_ts, end_ts, output_file)
+
+if __name__ == "__main__":
+    download_data(snakemake)

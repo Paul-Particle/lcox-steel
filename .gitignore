@@ -17,7 +17,7 @@ venv/
 
 # Data files
 *.feather
-downloads/
+entsoe_cache/
 integrated/
 
 # Log files

@@ -11,8 +11,8 @@ CZ,,false
 DE_LU,"German bidding zone (+ Luxemburg) since 2018",true
 DE_AT_LU,old German zone,false
 CZ_DE_SK,old German zone,false
-DK_1,,false
-DK_2,,false
+DK_1,,true
+DK_2,,true
 EE,Estonia,false
 FI,,false
 MK,Macedonia,false
