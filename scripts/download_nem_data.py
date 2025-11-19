@@ -19,7 +19,6 @@ def download_data(snakemake):
             "Missing manual config file. See readme for download instructions."
         )
 
-    print("Reading generator map...")
     gen_info = pd.read_excel(
         generator_file_path, sheet_name="PU and Scheduled Loads", engine="openpyxl"
     )
@@ -28,13 +27,9 @@ def download_data(snakemake):
     cols_to_keep = ["DUID", "Region", "Fuel Source - Primary"]
     map_df = gen_info[cols_to_keep].copy()
 
-    print(f"Successfully mapped {len(map_df)} generator units.")
-
-    # Parse the YYYYMMDD date from config and format for nemosis
+    # Parse the YYYYMMDD date from config and format for nemosis as YYYY/MM/DD HH:MM:SS
     start_dt = datetime.strptime(snakemake.params.start_date, "%Y%m%d")
     end_dt = datetime.strptime(snakemake.params.end_date, "%Y%m%d")
-
-    # Format it to what nemosis expects: YYYY/MM/DD HH:MM:SS
     start_time = start_dt.strftime("%Y/%m/%d") + " 00:00:00"
     end_time = end_dt.strftime("%Y/%m/%d") + " 23:59:59"
 
@@ -63,7 +58,6 @@ def download_data(snakemake):
         rebuild=False,
     )
 
-    # Ensure Datetimes
     scada["SETTLEMENTDATE"] = pd.to_datetime(scada["SETTLEMENTDATE"])
     demand["SETTLEMENTDATE"] = pd.to_datetime(demand["SETTLEMENTDATE"])
 
@@ -81,32 +75,32 @@ def download_data(snakemake):
         .fillna(0)
     )
 
-    # Pivot Demand
-    dem_pivot = demand.pivot_table(
+    # Pivot load
+    load = demand.pivot_table(
         index="SETTLEMENTDATE", columns="REGIONID", values="TOTALDEMAND"
     )
+    load.index.name = None
 
-    gen_pivot = gen_pivot.clip(lower=0)
+    generation = gen_pivot.clip(lower=0)
+    generation.index.name = None
 
     # Resample to Hourly (Mean)
     # NEM data is 5-min/30-min; ENTSO-E is hourly.
-    # generation = gen_pivot.resample('1h').mean()
-    # load = dem_pivot.resample('1h').mean()
-    generation = gen_pivot
-    load = dem_pivot
+    # generation = generation.resample('1h').mean()
+    # load = load.resample('1h').mean()
 
     # Calculate Region-Specific Variables using a dictionary comprehension
     # This is faster and cleaner than the manual list append loop
-    regions = ["NSW1", "VIC1", "QLD1", "SA1", "TAS1"]
+    areas = ["NSW1", "VIC1", "QLD1", "SA1", "TAS1"]
     frames = {}
 
-    for r in regions:
-        if r in load.columns:
+    for a in areas:
+        if a in load.columns:
             # Extract Demand and Generation
-            d = load[r]
+            d = load[a]
             # Use .get() to handle cases where a region might miss a fuel type (e.g., no solar in TAS1 historically)
-            w = generation.get((r, "Wind"), pd.Series(0, index=generation.index))
-            s = generation.get((r, "Solar"), pd.Series(0, index=generation.index))
+            w = generation.get((a, "Wind"), pd.Series(0, index=generation.index))
+            s = generation.get((a, "Solar"), pd.Series(0, index=generation.index))
 
             # Create a DataFrame for this region
             region_df = pd.DataFrame(index=generation.index)
@@ -115,7 +109,7 @@ def download_data(snakemake):
             region_df["residual"] = d - (w + s)
 
             # Add to dictionary
-            frames[r] = region_df
+            frames[a] = region_df
 
     # Keys become the top level (Region), Columns become the second level (Variable)
     df_final = pd.concat(frames, axis=1, names=["Region", "Variable"])
