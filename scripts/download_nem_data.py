@@ -3,14 +3,36 @@ import os
 from datetime import datetime
 from nemosis import dynamic_data_compiler
 from pathlib import Path
+from collections import defaultdict
 
 # This block is for linters and IDEs. It will not be executed by Snakemake.
 if "snakemake" not in globals():
     from _stubs import snakemake
 
 
-def download_data(snakemake):
-    cache_dir = Path(snakemake.params.nemosis_cache_dir)
+def download_price_data(start_time, end_time, cache_dir):
+    """Downloads price data."""
+    print("Fetching prices...")
+    prices = dynamic_data_compiler(
+        start_time,
+        end_time,
+        "DISPATCHPRICE",
+        cache_dir,
+        select_columns=["SETTLEMENTDATE", "REGIONID", "RRP"],
+        fformat="feather",
+        keep_csv=True,
+        rebuild=False,
+    )
+    prices["SETTLEMENTDATE"] = pd.to_datetime(prices["SETTLEMENTDATE"])
+    prices = prices.pivot_table(
+        index="SETTLEMENTDATE", columns="REGIONID", values="RRP"
+    )
+    prices.columns = pd.MultiIndex.from_tuples([(col, 'price') for col in prices.columns])
+    prices.index.name = None
+    return prices
+
+def download_generation_data(start_time, end_time, cache_dir):
+    """Downloads and processes generation data."""
     generator_file_path = cache_dir / "NEM Registration and Exemption List.xlsx"
 
     if not os.path.exists(generator_file_path):
@@ -19,21 +41,68 @@ def download_data(snakemake):
             "Missing manual config file. See readme for download instructions."
         )
 
-    gen_info = pd.read_excel(
+    generator_info = pd.read_excel(
         generator_file_path, sheet_name="PU and Scheduled Loads", engine="openpyxl"
     )
-    gen_info.columns = gen_info.columns.str.strip().str.replace("\n", " ")
+    generator_info.columns = generator_info.columns.str.strip().str.replace("\n", " ")
 
-    cols_to_keep = ["DUID", "Region", "Fuel Source - Primary"]
-    map_df = gen_info[cols_to_keep].copy()
+    
+    def determine_gen_type(df):
+        dfi = df['gen_info']
+        type_regex = {
+            'hard_coal' : 'black coal',
+            'brown_coal' : 'brown coal',
+            'coal_gas' : 'coal seam methane|coal mine gas',
+            'waste' : 'methane',
+            'oil' : 'diesel|ethane|kerosene',
+            'biomass' : 'bagasse|biomass|biogas',
+            'gas' : 'natural gas|natrual gas',
+            'solar' : 'solar',
+            'energy_storage' : 'battery',
+            'pumped_storage' : 'pump storage|^- -$',
+            'other_re' : 'sewerage',
+            'wind_onshore' : 'wind - onshore|wind',
+            'hydro_river' : 'run of river',
+            'hydro' : 'hydro',
+        }
+        for t, r in type_regex.items():
+            m = dfi.str.contains(r)
+            df.loc[m, 'gen_type'] = t
+            df.loc[m, 'gen_info2'] = df.loc[m, 'gen_info']
+            df.loc[m, 'gen_info'] = ''
+        df = df.drop(columns=['gen_info'])
+        df.columns = ['gen_type', 'gen_info']
+        return df.loc[:,['gen_info', 'gen_type']]
 
-    # Parse the YYYYMMDD date from config and format for nemosis as YYYY/MM/DD HH:MM:SS
-    start_dt = datetime.strptime(snakemake.params.start_date, "%Y%m%d")
-    end_dt = datetime.strptime(snakemake.params.end_date, "%Y%m%d")
-    start_time = start_dt.strftime("%Y/%m/%d") + " 00:00:00"
-    end_time = end_dt.strftime("%Y/%m/%d") + " 23:59:59"
 
-    # SCADA = Supervisory Control and Data Acquisition = actual physical generation data
+    nem_gen_names = dict(generator_info.copy()
+        .loc[:, ["DUID", "Fuel Source - Descriptor", "Technology Type - Descriptor"]]
+        .dropna()
+        .pivot_table(
+            index=["Fuel Source - Descriptor"],
+            columns=["Technology Type - Descriptor"],
+            values="DUID",
+            aggfunc="count",
+            fill_value=0,
+        )
+        .stack()
+        .loc[lambda s: s>0]
+        .reset_index()
+        .assign(gen_info = lambda df: df["Fuel Source - Descriptor"].str.lower() + ' ' + df["Technology Type - Descriptor"].str.lower())
+        .drop(columns=["Technology Type - Descriptor", "Fuel Source - Descriptor", 0])
+        .pipe(determine_gen_type)
+        .values
+    )
+
+
+    map_df = (generator_info.copy()
+        .loc[:, ["DUID", "Region", "Fuel Source - Descriptor", "Technology Type - Descriptor"]]
+        .assign(gen_info = lambda df: df["Fuel Source - Descriptor"].str.lower() + ' ' + df["Technology Type - Descriptor"].str.lower())
+        .drop(columns=["Technology Type - Descriptor", "Fuel Source - Descriptor"])
+        .assign(gen_type = lambda df: df["gen_info"].map(nem_gen_names))
+    )
+
+
     print("Fetching generation...")
     scada = dynamic_data_compiler(
         start_time,
@@ -45,9 +114,29 @@ def download_data(snakemake):
         keep_csv=True,
         rebuild=False,
     )
+    scada["SETTLEMENTDATE"] = pd.to_datetime(scada["SETTLEMENTDATE"])
 
+    generation = (
+        scada.merge(map_df.dropna(subset=['gen_type']), on="DUID", how="left")
+        .groupby(["SETTLEMENTDATE", "Region", "gen_type"])["SCADAVALUE"]
+        .sum()
+        .reset_index()
+        .pivot_table(
+            index="SETTLEMENTDATE",
+            columns=["Region", "gen_type"],
+            values="SCADAVALUE",
+        )
+        .fillna(0)
+    )
+    generation = generation.clip(lower=0)
+    generation.index.name = None
+    return generation
+
+
+def download_load_data(start_time, end_time, cache_dir):
+    """Downloads and processes load data."""
     print("Fetching load...")
-    demand = dynamic_data_compiler(
+    load = dynamic_data_compiler(
         start_time,
         end_time,
         "DISPATCHREGIONSUM",
@@ -57,37 +146,30 @@ def download_data(snakemake):
         keep_csv=True,
         rebuild=False,
     )
-
-    scada["SETTLEMENTDATE"] = pd.to_datetime(scada["SETTLEMENTDATE"])
-    demand["SETTLEMENTDATE"] = pd.to_datetime(demand["SETTLEMENTDATE"])
-
-    # Pivot Generation
-    gen_pivot = (
-        scada.merge(map_df, on="DUID", how="left")
-        .groupby(["SETTLEMENTDATE", "Region", "Fuel Source - Primary"])["SCADAVALUE"]
-        .sum()
-        .reset_index()
-        .pivot_table(
-            index="SETTLEMENTDATE",
-            columns=["Region", "Fuel Source - Primary"],
-            values="SCADAVALUE",
-        )
-        .fillna(0)
-    )
+    load["SETTLEMENTDATE"] = pd.to_datetime(load["SETTLEMENTDATE"])
 
     # Pivot load
-    load = demand.pivot_table(
+    load = load.pivot_table(
         index="SETTLEMENTDATE", columns="REGIONID", values="TOTALDEMAND"
     )
+    load.columns = pd.MultiIndex.from_tuples([(col, 'demand') for col in load.columns])
     load.index.name = None
+    return load
 
-    generation = gen_pivot.clip(lower=0)
-    generation.index.name = None
 
-    # Resample to Hourly (Mean)
-    # NEM data is 5-min/30-min; ENTSO-E is hourly.
-    # generation = generation.resample('1h').mean()
-    # load = load.resample('1h').mean()
+def download_data(snakemake):
+    cache_dir = Path(snakemake.params.nemosis_cache_dir)
+    # Parse the YYYYMMDD date from config and format for nemosis as YYYY/MM/DD HH:MM:SS
+    start_time = datetime.strptime(snakemake.params.start_date, "%Y%m%d")
+    start_time = start_time.strftime("%Y/%m/%d") + " 00:00:00"
+    end_time = datetime.strptime(snakemake.params.end_date, "%Y%m%d")
+    end_time = end_time.strftime("%Y/%m/%d") + " 23:59:59"
+    
+    prices = download_price_data(start_time, end_time, cache_dir)
+    generation = download_generation_data(start_time, end_time, cache_dir)
+    load = download_load_data(start_time, end_time, cache_dir)
+
+    df_combined = pd.concat([prices, load, generation], axis=1)
 
     # Calculate Region-Specific Variables using a dictionary comprehension
     # This is faster and cleaner than the manual list append loop
@@ -95,24 +177,24 @@ def download_data(snakemake):
     frames = {}
 
     for a in areas:
-        if a in load.columns:
+        if (a, 'demand') in df_combined.columns:
             # Extract Demand and Generation
-            d = load[a]
+            d = df_combined[(a, 'demand')]
             # Use .get() to handle cases where a region might miss a fuel type (e.g., no solar in TAS1 historically)
-            w = generation.get((a, "Wind"), pd.Series(0, index=generation.index))
-            s = generation.get((a, "Solar"), pd.Series(0, index=generation.index))
+            w = df_combined.get((a, "wind_onshore"), pd.Series(0, index=df_combined.index))
+            s = df_combined.get((a, "solar"), pd.Series(0, index=df_combined.index))
 
             # Create a DataFrame for this region
             region_df = pd.DataFrame(index=generation.index)
-            region_df["wind_onshore"] = w
-            region_df["solar"] = s  # User 'vre' equivalent
+            # region_df["wind_onshore"] = w
+            # region_df["solar"] = s 
             region_df["residual"] = d - (w + s)
 
-            # Add to dictionary
-            frames[a] = region_df
+            # Combine with other data for the region
+            frames[a] = pd.concat([df_combined[a], region_df], axis=1)
 
     # Keys become the top level (Region), Columns become the second level (Variable)
-    df_final = pd.concat(frames, axis=1, names=["Region", "Variable"])
+    df_final = pd.concat(frames.values(), axis=1, keys=frames.keys())
 
     df_final.to_feather(snakemake.output[0])
 
@@ -120,4 +202,24 @@ def download_data(snakemake):
 
 
 if __name__ == "__main__":
+    # # --- Configuration for debugging ---
+    # # Create a dummy snakemake object for debugging
+    # from types import SimpleNamespace
+
+    # class Snakemake:
+    #     def __init__(self):
+    #         self.params = SimpleNamespace()
+    #         self.output = []
+
+    # snakemake = Snakemake()
+
+    # # Set parameters that your script expects
+    # snakemake.params.nemosis_cache_dir = '/Users/peter/My Drive/Programming/FCA_python/lcox-steel/data/nemosis_cache'
+    # snakemake.params.start_date = "20230101"
+    # snakemake.params.end_date = "20230102"
+
+    # # Define the output file path
+    # snakemake.output.append("nem_data.feather")
+    # # --- End of configuration ---
+
     download_data(snakemake)
