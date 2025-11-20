@@ -28,13 +28,10 @@ rule all:
                year_month=DOWNLOAD_YEAR_MONTHS,
                data_type=config['data_types'])
 
+
 rule download_entsoe_data:
     output:
-        temp("data/entsoe_cache/{area}/{year_month}/{data_type}.feather")
-    input:
-        # If rebuild is false, the rule depends on its own output.
-        # If the output exists, Snakemake skips this job.
-        lambda wildcards: [] if config["entsoe_download"]["rebuild"] else "data/entsoe_cache/{area}/{year_month}/{data_type}.feather"
+        "data/entsoe_cache/{area}/{year_month}/{data_type}.feather"
     conda: "environment.yaml"
     script:
         "scripts/download_entsoe_data.py"
