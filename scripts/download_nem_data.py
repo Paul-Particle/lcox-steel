@@ -17,7 +17,7 @@ def download_price_data(start_time, end_time, cache_dir, rebuild):
         end_time,
         "DISPATCHPRICE",
         cache_dir,
-        select_columns=["SETTLEMENTDATE", "REGIONID", "RRP"],
+        select_columns=["SETTLEMENTDATE", "REGIONID", "RRP"], # regional reference price in Australian Dollar
         fformat="feather",
         keep_csv=True,
         rebuild=rebuild,
@@ -113,7 +113,7 @@ def download_generation_data(start_time, end_time, cache_dir, rebuild):
         end_time,
         "DISPATCH_UNIT_SCADA",
         cache_dir,
-        select_columns=["SETTLEMENTDATE", "DUID", "SCADAVALUE"],
+        select_columns=["SETTLEMENTDATE", "DUID", "SCADAVALUE"], # SCADA = generation in MW
         fformat="feather",
         keep_csv=True,
         rebuild=rebuild,
@@ -156,7 +156,7 @@ def download_load_data(start_time, end_time, cache_dir, rebuild):
     load = load.pivot_table(
         index="SETTLEMENTDATE", columns="REGIONID", values="TOTALDEMAND"
     )
-    load.columns = pd.MultiIndex.from_tuples([(col, 'demand') for col in load.columns])
+    load.columns = pd.MultiIndex.from_tuples([(col, 'load') for col in load.columns])
     load.index.name = None
     return load
 
@@ -182,17 +182,16 @@ def download_data(snakemake):
     frames = {}
 
     for a in areas:
-        if (a, 'demand') in df_combined.columns:
+        if (a, 'load') in df_combined.columns:
             # Extract Demand and Generation
-            d = df_combined[(a, 'demand')]
+            d = df_combined[(a, 'load')]
             # Use .get() to handle cases where a region might miss a fuel type (e.g., no solar in TAS1 historically)
             w = df_combined.get((a, "wind_onshore"), pd.Series(0, index=df_combined.index))
             s = df_combined.get((a, "solar"), pd.Series(0, index=df_combined.index))
 
             # Create a DataFrame for this region
             region_df = pd.DataFrame(index=generation.index)
-            # region_df["wind_onshore"] = w
-            # region_df["solar"] = s 
+            region_df["wind"] = w 
             region_df["residual"] = d - (w + s)
 
             # Combine with other data for the region
@@ -208,24 +207,4 @@ def download_data(snakemake):
 
 
 if __name__ == "__main__":
-    # # --- Configuration for debugging ---
-    # # Create a dummy snakemake object for debugging
-    # from types import SimpleNamespace
-
-    # class Snakemake:
-    #     def __init__(self):
-    #         self.params = SimpleNamespace()
-    #         self.output = []
-
-    # snakemake = Snakemake()
-
-    # # Set parameters that your script expects
-    # snakemake.params.nemosis_cache_dir = '/Users/peter/My Drive/Programming/FCA_python/lcox-steel/data/nemosis_cache'
-    # snakemake.params.start_date = "20230101"
-    # snakemake.params.end_date = "20230102"
-
-    # # Define the output file path
-    # snakemake.output.append("nem_data.feather")
-    # # --- End of configuration ---
-
     download_data(snakemake)
