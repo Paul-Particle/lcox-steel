@@ -10,7 +10,7 @@ if "snakemake" not in globals():
 
 
 def download_price_data(start_time, end_time, cache_dir):
-    """Downloads price data."""
+    """Downloads price data or gets it from the cached feather files or csv files if rebuild=True."""
     print("Fetching prices...")
     prices = dynamic_data_compiler(
         start_time,
@@ -37,7 +37,7 @@ def download_generation_data(start_time, end_time, cache_dir):
     if not os.path.exists(generator_file_path):
         print(f"Please ensure the generator excel file is at: {generator_file_path}")
         raise FileNotFoundError(
-            "Missing manual config file. See readme for download instructions."
+            "Missing manual excel config file. See readme for download instructions."
         )
 
     generator_info = pd.read_excel(
@@ -67,7 +67,7 @@ def download_generation_data(start_time, end_time, cache_dir):
         for t, r in type_regex.items():
             m = dfi.str.contains(r)
             df.loc[m, 'gen_type'] = t
-            df.loc[m, 'gen_info2'] = df.loc[m, 'gen_info']
+            df.loc[m, 'gen_info_temp'] = df.loc[m, 'gen_info']
             df.loc[m, 'gen_info'] = ''
         df = df.drop(columns=['gen_info'])
         df.columns = ['gen_type', 'gen_info']
@@ -84,16 +84,21 @@ def download_generation_data(start_time, end_time, cache_dir):
             aggfunc="count",
             fill_value=0,
         )
-        .stack()
-        .loc[lambda s: s>0]
-        .reset_index()
+        .stack() # getting all combinations of Fuel Source and Technology Type
+        .loc[lambda s: s>0] # filter for existing combinations
+        .reset_index() # put the columns back into the df
         .assign(gen_info = lambda df: df["Fuel Source - Descriptor"].str.lower() + ' ' + df["Technology Type - Descriptor"].str.lower())
-        .drop(columns=["Technology Type - Descriptor", "Fuel Source - Descriptor", 0])
-        .pipe(determine_gen_type)
+        .drop(columns=["Technology Type - Descriptor", "Fuel Source - Descriptor", 0]) # 0 column is number of plants for each combination, i.e. not relevant
+        .pipe(determine_gen_type) # apply regex-based categorization
         .values
     )
+    # Ensure that there are no nan values in the dict, to catch changes to future versions of the excel.
+    # This can happen if a new 'Fuel Source - Descriptor' and 'Technology Type - Descriptor' combination
+    # is not covered by the regex in `determine_gen_type`.
+    assert not any(pd.isna(v) for v in nem_gen_names.values()), "NaN values found in nem_gen_names mapping. Please update the regex in 'determine_gen_type'."
+    
 
-
+    # final mapping of generator ID to generator type
     map_df = (generator_info.copy()
         .loc[:, ["DUID", "Region", "Fuel Source - Descriptor", "Technology Type - Descriptor"]]
         .assign(gen_info = lambda df: df["Fuel Source - Descriptor"].str.lower() + ' ' + df["Technology Type - Descriptor"].str.lower())
