@@ -200,7 +200,8 @@ def download_data(snakemake):
 
     # Keys become the top level (Region), Columns become the second level (Variable)
     df_final = pd.concat(frames.values(), axis=1, keys=frames.keys())
-
+    
+    df_final.index = df_final.index.tz_localize(None) # pyright: ignore[reportAttributeAccessIssue]
     df_final.to_feather(snakemake.output[0])
 
     print(f"Successfully saved NEM data to {snakemake.output[0]}")
