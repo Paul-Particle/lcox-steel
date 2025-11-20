@@ -9,6 +9,7 @@ if "snakemake" not in globals():
 
 def get_entsoe_client():
     """Initializes and returns the EntsoePandasClient."""
+    # Load environment variables from .env file, you need to create this yourself and add your ENTSO-E API key
     load_dotenv()
     API_KEY = os.environ.get("ENTSOE_API_KEY")
     if not API_KEY:
@@ -137,7 +138,7 @@ def download_generation_data(client, area, start, end, output_file):
         data.to_feather(output_file)
         print(f"Successfully saved actual generation data to {output_file}")
 
-def download_export_import_data(client, area, start, end, output_file):
+def download_crossborder_data(client, area, start, end, output_file):
     print(f"Downloading crossborder export-import flow data for {area}...")
     dfs_crossborder = []
     
@@ -175,8 +176,6 @@ def download_data(snakemake):
     """
     Downloads data from the ENTSO-E API using parameters from a snakemake object.
     """
-    # Load environment variables from .env file
-    load_dotenv()
 
     data_type = snakemake.wildcards.data_type
     area = snakemake.wildcards.area
@@ -199,7 +198,7 @@ def download_data(snakemake):
         "load_actual": download_load_data,
         "vre": download_vre_forecast_data,
         "generation": download_generation_data,
-        "crossborder": download_export_import_data,
+        "crossborder": download_crossborder_data,
     }
 
     if data_type in download_functions:
