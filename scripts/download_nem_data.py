@@ -160,11 +160,47 @@ def download_load_data(start_time, end_time, cache_dir, rebuild):
     load.index.name = None
     return load
 
+def download_crossborder_data(start_time, end_time, cache_dir, rebuild):
+    """Downloads and processes cross-border flow data."""
+    print("Fetching cross-border flows...")
+    interconnector = dynamic_data_compiler(
+        start_time,
+        end_time,
+        "DISPATCHINTERCONNECTORRES",
+        cache_dir,
+        select_columns=["SETTLEMENTDATE", "INTERCONNECTORID", "METEREDMWFLOW", "MWFLOW"],
+        fformat="feather",
+        keep_csv=True,
+        rebuild=rebuild,
+    )
+    interconnector["SETTLEMENTDATE"] = pd.to_datetime(interconnector["SETTLEMENTDATE"])
+
+    ic_names = {
+        k: v
+        for k, v in zip(
+            ["N-Q-MNSP1", "NSW1-QLD1", "T-V-MNSP1", "V-S-MNSP1", "V-SA", "VIC1-NSW1"],
+            ["NSW1-QLD1", "NSW1-QLD1", "TAS1-VIC1", "VIC1-SA1", "VIC1-SA1", "VIC1-NSW1"],
+        )
+    }
+
+    regions = interconnector['INTERCONNECTORID'].map(ic_names).str.split('-', expand=True)
+    interconnector['from_region'] = regions[0]
+    interconnector['to_region'] = regions[1]
+
+    crossborder = (interconnector.copy()
+        .assign(region = lambda df: df.from_region)
+        .assign(flow_type = lambda df: df.METEREDMWFLOW.apply(lambda v: 'to_' if v >= 0 else 'from_') + df.to_region)
+    )
+    crossborder = crossborder.pivot_table(
+        index="SETTLEMENTDATE", columns=["region", "flow_type"], values="METEREDMWFLOW", aggfunc='sum'
+    ).fillna(0)
+    crossborder.index.name = None
+    return crossborder
+
 
 def download_data(snakemake):
     cache_dir = Path(snakemake.params.nemosis_cache_dir)
     rebuild = snakemake.params.get("rebuild", False) # pyright: ignore[reportGeneralTypeIssues]
-    # Parse the YYYYMMDD date from config and format for nemosis as YYYY/MM/DD HH:MM:SS
     start_time = datetime.strptime(snakemake.params.start_date, "%Y%m%d")
     start_time = start_time.strftime("%Y/%m/%d") + " 00:00:00"
     end_time = datetime.strptime(snakemake.params.end_date, "%Y%m%d")
@@ -173,8 +209,9 @@ def download_data(snakemake):
     prices = download_price_data(start_time, end_time, cache_dir, rebuild)
     generation = download_generation_data(start_time, end_time, cache_dir, rebuild)
     load = download_load_data(start_time, end_time, cache_dir, rebuild)
+    crossborder = download_crossborder_data(start_time, end_time, cache_dir, rebuild)
 
-    df_combined = pd.concat([prices, load, generation], axis=1)
+    df_combined = pd.concat([prices, load, generation, crossborder], axis=1)
 
     # Calculate Region-Specific Variables using a dictionary comprehension
     # This is faster and cleaner than the manual list append loop
