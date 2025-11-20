@@ -179,15 +179,15 @@ def download_data(snakemake):
 
     data_type = snakemake.wildcards.data_type
     area = snakemake.wildcards.area
-    year = int(snakemake.wildcards.year)
-    month = int(snakemake.wildcards.month)
+    year_month = snakemake.wildcards.year_month
+    year, month = map(int, year_month.split('-'))
     output_file = Path(snakemake.output[0])
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
 
     client = get_entsoe_client()
     start_ts = pd.Timestamp(f"{year}-{month}-01", tz="Europe/Brussels")
     end_ts = start_ts + pd.offsets.MonthEnd(0)
-
-    output_file.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Downloading data from {start_ts} to {end_ts}")
     print(f"Area: {area}")

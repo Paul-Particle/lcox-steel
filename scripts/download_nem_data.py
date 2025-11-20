@@ -9,7 +9,7 @@ if "snakemake" not in globals():
     from _stubs import snakemake
 
 
-def download_price_data(start_time, end_time, cache_dir):
+def download_price_data(start_time, end_time, cache_dir, rebuild):
     """Downloads price data or gets it from the cached feather files or csv files if rebuild=True."""
     print("Fetching prices...")
     prices = dynamic_data_compiler(
@@ -20,7 +20,7 @@ def download_price_data(start_time, end_time, cache_dir):
         select_columns=["SETTLEMENTDATE", "REGIONID", "RRP"],
         fformat="feather",
         keep_csv=True,
-        rebuild=False,
+        rebuild=rebuild,
     )
     prices["SETTLEMENTDATE"] = pd.to_datetime(prices["SETTLEMENTDATE"])
     prices = prices.pivot_table(
@@ -30,7 +30,7 @@ def download_price_data(start_time, end_time, cache_dir):
     prices.index.name = None
     return prices
 
-def download_generation_data(start_time, end_time, cache_dir):
+def download_generation_data(start_time, end_time, cache_dir, rebuild):
     """Downloads and processes generation data."""
     generator_file_path = cache_dir / "NEM Registration and Exemption List.xlsx"
 
@@ -116,7 +116,7 @@ def download_generation_data(start_time, end_time, cache_dir):
         select_columns=["SETTLEMENTDATE", "DUID", "SCADAVALUE"],
         fformat="feather",
         keep_csv=True,
-        rebuild=False,
+        rebuild=rebuild,
     )
     scada["SETTLEMENTDATE"] = pd.to_datetime(scada["SETTLEMENTDATE"])
 
@@ -137,7 +137,7 @@ def download_generation_data(start_time, end_time, cache_dir):
     return generation
 
 
-def download_load_data(start_time, end_time, cache_dir):
+def download_load_data(start_time, end_time, cache_dir, rebuild):
     """Downloads and processes load data."""
     print("Fetching load...")
     load = dynamic_data_compiler(
@@ -148,7 +148,7 @@ def download_load_data(start_time, end_time, cache_dir):
         select_columns=["SETTLEMENTDATE", "REGIONID", "TOTALDEMAND"],
         fformat="feather",
         keep_csv=True,
-        rebuild=False,
+        rebuild=rebuild,
     )
     load["SETTLEMENTDATE"] = pd.to_datetime(load["SETTLEMENTDATE"])
 
@@ -163,15 +163,16 @@ def download_load_data(start_time, end_time, cache_dir):
 
 def download_data(snakemake):
     cache_dir = Path(snakemake.params.nemosis_cache_dir)
+    rebuild = snakemake.params.get("rebuild", False) # pyright: ignore[reportGeneralTypeIssues]
     # Parse the YYYYMMDD date from config and format for nemosis as YYYY/MM/DD HH:MM:SS
     start_time = datetime.strptime(snakemake.params.start_date, "%Y%m%d")
     start_time = start_time.strftime("%Y/%m/%d") + " 00:00:00"
     end_time = datetime.strptime(snakemake.params.end_date, "%Y%m%d")
     end_time = end_time.strftime("%Y/%m/%d") + " 23:59:59"
     
-    prices = download_price_data(start_time, end_time, cache_dir)
-    generation = download_generation_data(start_time, end_time, cache_dir)
-    load = download_load_data(start_time, end_time, cache_dir)
+    prices = download_price_data(start_time, end_time, cache_dir, rebuild)
+    generation = download_generation_data(start_time, end_time, cache_dir, rebuild)
+    load = download_load_data(start_time, end_time, cache_dir, rebuild)
 
     df_combined = pd.concat([prices, load, generation], axis=1)
 
