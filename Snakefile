@@ -21,11 +21,20 @@ enabled_areas = get_enabled_areas()
 
 rule all:
     input:
-        "data/processed_data.feather"
+        "data/processed_data.feather",
+        "data/nem_processed.feather",
+        expand("data/entsoe_cache/{area}/{year_month}/{data_type}.feather",
+               area=enabled_areas,
+               year_month=DOWNLOAD_YEAR_MONTHS,
+               data_type=config['data_types'])
 
-rule download_split:
+rule download_entsoe_data:
     output:
-        "data/entsoe_cache/{area}/{year}-{month}/{data_type}.feather"
+        temp("data/entsoe_cache/{area}/{year_month}/{data_type}.feather")
+    input:
+        # If rebuild is false, the rule depends on its own output.
+        # If the output exists, Snakemake skips this job.
+        lambda wildcards: [] if config["entsoe_download"]["rebuild"] else "data/entsoe_cache/{area}/{year_month}/{data_type}.feather"
     conda: "environment.yaml"
     script:
         "scripts/download_entsoe_data.py"
@@ -36,7 +45,8 @@ rule download_nem_data:
     params:
         start_date=config["nem_download"]["start_date"],
         end_date=config["nem_download"]["end_date"],
-        nemosis_cache_dir=config["nem_download"]["nemosis_cache_dir"]
+        nemosis_cache_dir=config["nem_download"]["nemosis_cache_dir"],
+        rebuild=config["nem_download"]["rebuild"]
     conda: "environment.yaml"
     script: "scripts/download_nem_data.py"
 
@@ -49,6 +59,7 @@ rule integrate_data:
     output:
         expand("data/integrated/{data_type}.feather",
                data_type=config['data_types'])
+    conda: "environment.yaml"
     script:
         "scripts/integrate_entsoe_data.py"
 
