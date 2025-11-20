@@ -76,6 +76,8 @@ def process_data(snakemake):
         dfs_EU[area] = df_area_processed
 
     df_EU_all = pd.concat(dfs_EU.values(), axis=1)
+
+    df_EU_all.index = df_EU_all.index.tz_localize(None) # pyright: ignore[reportAttributeAccessIssue]
     
     df_EU_all.to_feather(snakemake.output[0])
     print(f"Successfully saved processed data to {snakemake.output[0]}")
