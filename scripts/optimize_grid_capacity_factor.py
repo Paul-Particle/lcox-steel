@@ -66,14 +66,14 @@ df = df.dropna()
 def reorder_columns(dfCountry):
     macro_data = [
         "price",
-        "demand_forecast",
+        "load_forecast",
         "wind_onshore_forecast",
         "wind_offshore_forecast",
         "wind_forecast",
         "solar_forecast",
         "vre_forecast",
-        "residual",
-        "demand",
+        "residual_forecast",
+        "load",
     ]
     imports = [
         c for c in dfCountry.columns if c.startswith("from") and c != "from_sum"
@@ -82,10 +82,9 @@ def reorder_columns(dfCountry):
         "to_sum"
     ]
     consumption = [c for c in dfCountry.columns if c.endswith("_cons")]
-    time_data = ["dt", "hour", "doy", "doy_season"]
 
     new_columns = (
-        time_data + macro_data + sorted(imports) + sorted(exports) + sorted(consumption)
+        macro_data + sorted(imports) + sorted(exports) + sorted(consumption)
     )
     production = set(dfCountry.columns) - set(new_columns)
     new_columns += sorted(production)
