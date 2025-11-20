@@ -3,7 +3,6 @@ import os
 from datetime import datetime
 from nemosis import dynamic_data_compiler
 from pathlib import Path
-from collections import defaultdict
 
 # This block is for linters and IDEs. It will not be executed by Snakemake.
 if "snakemake" not in globals():
