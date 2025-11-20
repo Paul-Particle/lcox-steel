@@ -5,7 +5,7 @@ scheduler: greedy
 entsoe_download:
   start_date: "20241230" # format as YYYYMMDD
   end_date: "20241231"
-  rebuild: false
+  rebuild: false # not implemented, use --rerun-triggers inputs params to avoid re-downloading
  
 entsoe_integration:
   start_date: "20230101"
