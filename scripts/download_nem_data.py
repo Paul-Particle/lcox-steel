@@ -175,6 +175,7 @@ def download_crossborder_data(start_time, end_time, cache_dir, rebuild):
     )
     interconnector["SETTLEMENTDATE"] = pd.to_datetime(interconnector["SETTLEMENTDATE"])
 
+    # convert fromatting to match ENTSO-E
     ic_names = {
         k: v
         for k, v in zip(
