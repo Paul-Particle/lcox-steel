@@ -188,13 +188,43 @@ def download_crossborder_data(start_time, end_time, cache_dir, rebuild):
     interconnector['to_region'] = regions[1]
 
     crossborder = (interconnector.copy()
-        .assign(region = lambda df: df.from_region)
-        .assign(flow_type = lambda df: df.METEREDMWFLOW.apply(lambda v: 'to_' if v >= 0 else 'from_') + df.to_region)
+        .assign(flow_type_for_region    = lambda df: df.METEREDMWFLOW.apply(lambda v: 'to_'   if v >= 0 else 'from_') + df.to_region  )
+        .assign(flow_type_for_other     = lambda df: df.METEREDMWFLOW.apply(lambda v: 'from_' if v >= 0 else 'to_'  ) + df.from_region)
+        .assign(flow_type_r_for_region  = lambda df: df.METEREDMWFLOW.apply(lambda v: 'from_' if v >= 0 else 'to_'  ) + df.to_region  )
+        .assign(flow_type_r_for_other   = lambda df: df.METEREDMWFLOW.apply(lambda v: 'to_'   if v >= 0 else 'from_') + df.from_region)
+        .assign(flow_value_for_region   = lambda df: df.METEREDMWFLOW.apply(lambda v: v       if v >= 0 else -v))
+        .assign(flow_value_for_other    = lambda df: df.METEREDMWFLOW.apply(lambda v: v       if v >= 0 else -v))
+        .assign(flow_value_r_for_region = lambda df: df.METEREDMWFLOW.apply(lambda v: 0.0))
+        .assign(flow_value_r_for_other  = lambda df: df.METEREDMWFLOW.apply(lambda v: 0.0))
+
     )
-    crossborder = crossborder.pivot_table(
-        index="SETTLEMENTDATE", columns=["region", "flow_type"], values="METEREDMWFLOW", aggfunc='sum'
-    ).fillna(0)
-    crossborder.index.name = None
+    common_names = {
+        'from_region':'region',
+        'to_region':'region',
+        'flow_type_for_region': 'flow_type',
+        'flow_type_for_other': 'flow_type',
+        'flow_type_r_for_region': 'flow_type',
+        'flow_type_r_for_other': 'flow_type',
+        'flow_value_for_region': 'flow_value',
+        'flow_value_for_other': 'flow_value',
+        'flow_value_r_for_region': 'flow_value',
+        'flow_value_r_for_other': 'flow_value',
+    }
+
+    cols_a = ['SETTLEMENTDATE', 'from_region','flow_type_for_region', 'flow_value_for_region', 'INTERCONNECTORID', 'METEREDMWFLOW']
+    df_a = crossborder[cols_a].rename(columns=common_names)
+
+    cols_b = ['SETTLEMENTDATE', 'to_region', 'flow_type_for_other', 'flow_value_for_other',  'INTERCONNECTORID',  'METEREDMWFLOW']
+    df_b = crossborder[cols_b].rename(columns=common_names)
+
+    cols_c = ['SETTLEMENTDATE', 'from_region', 'flow_type_r_for_region', 'flow_value_r_for_region',  'INTERCONNECTORID',  'METEREDMWFLOW']
+    df_c = crossborder[cols_c].rename(columns=common_names)
+
+    cols_d = ['SETTLEMENTDATE', 'to_region', 'flow_type_r_for_other', 'flow_value_r_for_other',  'INTERCONNECTORID',  'METEREDMWFLOW']
+    df_d = crossborder[cols_d].rename(columns=common_names)
+
+    crossborder = pd.concat([df_a, df_b, df_c, df_d], ignore_index=True)
+    crossborder = crossborder.pivot_table(index='SETTLEMENTDATE', values='flow_value', columns=['region', 'flow_type'], aggfunc='sum')
     return crossborder
 
 
@@ -213,7 +243,7 @@ def download_data(snakemake):
 
     df_combined = pd.concat([prices, load, generation, crossborder], axis=1)
 
-    # Calculate Region-Specific Variables using a dictionary comprehension
+    # Calculate Region-Specific Variables using a dictionary
     # This is faster and cleaner than the manual list append loop
     areas = ["NSW1", "VIC1", "QLD1", "SA1", "TAS1"]
     frames = {}
