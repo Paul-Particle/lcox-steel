@@ -1,0 +1,38 @@
+# Global data settings
+data:
+  processed_path: "data/processed_data.feather"  # what was just created with Snakemake
+  timezone: "UTC"
+
+# Global finance defaults
+finance:
+  default_wacc: 0.07 # 7% default WACC if asset-level wacc not given
+
+# Start with one scenario
+scenarios:
+  - name: "DE_wind_onshore_baseline"
+
+    # MultiIndex
+    area: "DE_LU"              # top-level column, e.g. DE_LU, DK_1, ES, FR, ...
+    res_column: "wind_onshore" # second-level column under that area
+  
+
+    # RES cost assumptions (per MW of RES capacity)
+    res:
+      capex_per_mw_eur: 1_000_000      # €/MW RES
+      opex_per_mw_per_year_eur: 30_000 # €/MW/year
+      lifetime_years: 25
+      #wacc: 0.07  # optional override, otherwise default_wacc is used:
+
+    # Electrolyser assumptions (per MW electrolyser capacity)
+    electrolyser:
+      capex_per_mw_eur: 700_000        # €/MW el
+      opex_per_mw_per_year_eur: 20_000 # €/MW/year
+      lifetime_years: 20
+      efficiency_kwh_per_kg: 50        # ~50 kWh/kg H2 as a starting point
+     #wacc: 0.07  # optional override, otherwise default_wacc is used:
+
+    # Optimisation grid for RES:electrolyser ratio
+    optimization:
+      min_res_per_el_mw: 1.0   # 1 MW RES per 1 MW electrolysers
+      max_res_per_el_mw: 5.0   # upper bound
+      steps: 41                # how many points between min and max (incl.)
