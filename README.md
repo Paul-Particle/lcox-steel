@@ -24,7 +24,13 @@ The ultimate goal is to model the costs associated with producing steel with gre
 
     See [here](https://transparencyplatform.zendesk.com/hc/en-us/articles/12845911031188-How-to-get-security-token). Send an email to transparency@entsoe.eu with “Restful API access” in the subject line. Indicate the email address you entered during registration in the email body. 
 
-1.  **Create the Conda environment:**
+1.  **Create a .env file**
+    ```
+    touch .env
+    ```
+    Add the line ```ENTSOE_API_KEY=<your-api-key-here>```
+
+2.  **Create the Conda environment:**
 
     ```bash
     conda env create -f environment.yml
