@@ -33,7 +33,7 @@ The ultimate goal is to model the costs associated with producing steel with gre
 2.  **Create the Conda environment:**
 
     ```bash
-    conda env create -f environment.yml
+    conda env create -f environment.yaml
     ```
 
 2.  **Activate the environment:**
