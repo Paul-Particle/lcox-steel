@@ -46,11 +46,11 @@ emissions_factors = pd.Series(
     }
 )
 
-CAPEX = pd.Series([750, 1500, 3000])  # EUR/kW
+CAPEX = pd.Series([750, 1500, 3000])  # EUR/kW CAPEX scenarios -> config
 CAPEX.index = pd.Index(CAPEX.astype(str))
 annutitized_capital_cost = CAPEX * capital_recovery_factor
 annual_operations_and_maintenance = CAPEX * operation_and_maintenance_estimate
-fixed_costs = (
+annual_fixed_costs_scenarios = (
     (annual_operations_and_maintenance + annutitized_capital_cost)
     / electrolyzer_efficiency
     * 1000
@@ -96,9 +96,9 @@ dfC = reorder_columns(df.DE_LU)
 
 
 # Calculate LCOH
-def add_levelized_capex_cols(df_in, factors):
+def add_levelized_capex_cols(df_in, annual_fixed_costs_scenarios):
     levelized_capex_df = df_in.capacity_factor.apply(
-        lambda x: factors / (len(df_in) * x)
+        lambda x: annual_fixed_costs_scenarios / (len(df_in) * x)
     )
     return df_in.join(levelized_capex_df)
 
@@ -110,35 +110,34 @@ def add_total_cost_cols(df_in, cols):
     return df_in.join(total_cost_df)
 
 
-def calculate_LCOH(dfCountry, year, fixed_costs):
+def calculate_LCOH(dfCountry, year, annual_fixed_costs_scenarios):
     dfLCOH = (
         dfCountry.copy()
         .loc[year, ["price"]]
-        .resample("1h")
-        .first()
+        .resample("1h").first()
         .dropna()
         .sort_values("price")
         .assign(
             variable_cost=lambda df: (df.price + grid_cost) / electrolyzer_efficiency
         )  # grid cost also needs to account for inefficiency
         .assign(
-            average_cost=lambda df: df.variable_cost.cumsum()
+            average_cost=lambda df: df.variable_cost.cumsum() # levelized OPEX
             / np.arange(1, len(df) + 1)
         )  # sorted price -> summing as we use more and more hours of the year + dividing by number of hours we use -> average for that capacity factor/hours of the year used
         .assign(capacity_factor=lambda df: np.arange(1, len(df) + 1) / len(df))
-        .pipe(add_levelized_capex_cols, factors=fixed_costs)
-        .pipe(add_total_cost_cols, cols=fixed_costs.index)
+        .pipe(add_levelized_capex_cols, factors=annual_fixed_costs_scenarios)
+        .pipe(add_total_cost_cols, cols=annual_fixed_costs_scenarios.index)
     )
     return dfLCOH
 
 
-dfLCOH23 = calculate_LCOH(dfC, "2023", fixed_costs)
-dfLCOH24 = calculate_LCOH(dfC, "2024", fixed_costs)
-
+dfLCOH23 = calculate_LCOH(dfC, "2023", annual_fixed_costs_scenarios)
+dfLCOH24 = calculate_LCOH(dfC, "2024", annual_fixed_costs_scenarios)
 
 # results
 def get_perfect_foresight_results(dfLCOH):
-    m = dfLCOH.loc[:, [f"{c}_total" for c in fixed_costs.index]].idxmin()
+    # get the capacity factor, max price, etc. where LCOH is minimum
+    m = dfLCOH.loc[:, [f"{c}_total" for c in annual_fixed_costs_scenarios.index]].idxmin()
     results = dfLCOH.loc[m]
     results.index = m.index
     optima = {}
@@ -150,13 +149,13 @@ def get_perfect_foresight_results(dfLCOH):
             [
                 "price",
                 "variable_cost",
-                "average_cost",
+                "average_cost", # levelized OPEX @ optimum
                 "capacity_factor",
                 index.split("_")[0],
                 index,
             ]
         ]
-        optimum = optimum.rename({'price': 'price_max', 'variable_cost': 'variable_cost_max'})
+        optimum = optimum.rename({'price': 'price_max', 'variable_cost': 'variable_cost_max'}) # price max: highest accepted spot price, variable_cost_max: max price + grid / efficiency
         optima[f"capital_cost_{index.split('_')[0]}"] = optimum.rename(
             {index.split("_")[0]: "fixed_cost", index: "total_cost"}
         )
@@ -172,7 +171,7 @@ results24 = get_perfect_foresight_results(dfLCOH24)
 def get_heuristic_results(
     previous_year_dfLCOH, dfLCOH, cost_decrease_expectation_factor=0.9
 ):
-    m = previous_year_dfLCOH.loc[:, [f"{c}_total" for c in fixed_costs.index]].idxmin()
+    m = previous_year_dfLCOH.loc[:, [f"{c}_total" for c in annual_fixed_costs_scenarios.index]].idxmin()
     previous_optima = previous_year_dfLCOH.loc[m]
     previous_optima.index = m.index
     heuristic_optima = {}
@@ -206,7 +205,7 @@ delta_results = results24_heuristic - results24
 # Note: not using a cf of 1 would be more realistic but still would implicitly assume one can somehow time downtime to fall perfectly into the hours of high prices.
 def get_baseload_results(dfLCOH, baseload_cf=1):
     m = dfLCOH.query("capacity_factor >= @baseload_cf").capacity_factor.idxmax()
-    columns = [f"capital_cost_{c}" for c in fixed_costs.index]
+    columns = [f"capital_cost_{c}" for c in annual_fixed_costs_scenarios.index]
     common_values = pd.concat(
         [
             dfLCOH.loc[m].loc[
@@ -218,11 +217,11 @@ def get_baseload_results(dfLCOH, baseload_cf=1):
     )
     common_values.columns = columns
     common_values = common_values.rename({"price": "price_max", "variable_cost": "variable_cost_max"})
-    fixed_cost_row = dfLCOH.loc[m].loc[[f"{c}" for c in fixed_costs.index]].to_frame().T
+    fixed_cost_row = dfLCOH.loc[m].loc[[f"{c}" for c in annual_fixed_costs_scenarios.index]].to_frame().T
     fixed_cost_row.columns = columns
     fixed_cost_row.index = ["fixed_costs"]
     total_cost_row = (
-        dfLCOH.loc[m].loc[[f"{c}_total" for c in fixed_costs.index]].to_frame().T
+        dfLCOH.loc[m].loc[[f"{c}_total" for c in annual_fixed_costs_scenarios.index]].to_frame().T
     )
     total_cost_row.columns = columns
     total_cost_row.index = ["total_costs"]
