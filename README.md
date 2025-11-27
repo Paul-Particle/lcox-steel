@@ -77,3 +77,7 @@ The `Snakefile` defines the following steps:
 
 5.  **Plotting:**
     *   `plotting_utils.py`: This script is not directly executed yet but contains helper functions and style definitions used by other scripts (like those in the `notebooks/` directory) to create standardized plots for analysis.
+
+## Other notes
+
+```.gitattributes``` contains settings to filter out large ```.ipynb``` notebooks to store the using ```git-lfs```.
