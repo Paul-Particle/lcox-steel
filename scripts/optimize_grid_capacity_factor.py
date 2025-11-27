@@ -125,7 +125,7 @@ def calculate_LCOH(dfCountry, year, annual_fixed_costs_scenarios):
             / np.arange(1, len(df) + 1)
         )  # sorted price -> summing as we use more and more hours of the year + dividing by number of hours we use -> average for that capacity factor/hours of the year used
         .assign(capacity_factor=lambda df: np.arange(1, len(df) + 1) / len(df))
-        .pipe(add_levelized_capex_cols, factors=annual_fixed_costs_scenarios)
+        .pipe(add_levelized_capex_cols, annual_fixed_costs_scenarios=annual_fixed_costs_scenarios)
         .pipe(add_total_cost_cols, cols=annual_fixed_costs_scenarios.index)
     )
     return dfLCOH
