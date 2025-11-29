@@ -20,11 +20,14 @@ The ultimate goal is to model the costs associated with producing steel with gre
 ```
 
 ## Setup and Usage
-0.  **Get API key:**
+0.  **Get API key (+basics):**
 
     See [here](https://transparencyplatform.zendesk.com/hc/en-us/articles/12845911031188-How-to-get-security-token). Send an email to transparency@entsoe.eu with “Restful API access” in the subject line. Indicate the email address you entered during registration in the email body. 
 
+    If you are not setup for using python for data analysis at all, you may want to download and install: An IDE (e.g. [vscode](https://code.visualstudio.com/download)), [git](https://git-scm.com/install/windows), and [miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install#windows-installation). Then use the anaconda prompt to run ```git clone https://github.com/Paul-Particle/lcox-steel```
+
 1.  **Create a .env file**
+    On windows create an empty text file an name it ```.env``` manually, on macOS you can use:
     ```
     touch .env
     ```
@@ -32,13 +35,13 @@ The ultimate goal is to model the costs associated with producing steel with gre
 
 2.  **Create the Conda environment:**
 
-    ```bash
-    conda env create -f environment.yml
+    ```
+    conda env create -f environment.yaml
     ```
 
 2.  **Activate the environment:**
 
-    ```bash
+    ```
     conda activate lcox-env
     ```
 
@@ -48,7 +51,7 @@ The ultimate goal is to model the costs associated with producing steel with gre
 
 4.  **Run the Snakemake pipeline:**
 
-    ```bash
+    ```
     snakemake --cores 1
     ```
 
