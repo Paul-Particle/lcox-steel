@@ -32,7 +32,6 @@ rule all:
 rule download_entsoe_data:
     output:
         "data/entsoe_cache/{area}/{year_month}/{data_type}.feather"
-    conda: "environment.yaml"
     script:
         "scripts/download_entsoe_data.py"
 
@@ -44,7 +43,6 @@ rule download_nem_data:
         end_date=config["nem_download"]["end_date"],
         nemosis_cache_dir=config["nem_download"]["nemosis_cache_dir"],
         rebuild=config["nem_download"]["rebuild"]
-    conda: "environment.yaml"
     script: "scripts/download_nem_data.py"
 
 rule integrate_data:
@@ -56,7 +54,6 @@ rule integrate_data:
     output:
         expand("data/integrated/{data_type}.feather",
                data_type=config['data_types'])
-    conda: "environment.yaml"
     script:
         "scripts/integrate_entsoe_data.py"
 
@@ -71,6 +68,5 @@ rule process_data:
         areas_config="areas.csv"
     output:
         "data/processed_data.feather",
-    conda: "environment.yaml"
     script:
         "scripts/process_entsoe_data.py"
