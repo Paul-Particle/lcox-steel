@@ -45,3 +45,13 @@ fca_env/
 
 # Git attributes
 * text=auto eol=lf
+
+# Atlite / ERA5
+data/cutouts/
+*.nc
+
+# Raw geodata
+data/shapes/*.zip
+
+# Debug artefacts
+data/debug/
