@@ -42,3 +42,13 @@ output_for_gemini
 
 # Conda environment
 fca_env/
+
+# Atlite / ERA5
+data/cutouts/
+*.nc
+
+# Raw geodata
+data/shapes/*.zip
+
+# Debug artefacts
+data/debug/
