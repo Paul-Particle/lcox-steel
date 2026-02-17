@@ -21,7 +21,8 @@ from res_to_h2_logic import optimise_res_to_el_ratio
 
 
 CONFIG_PATH = Path("config_hannah.yaml")
-PROCESSED_DATA_PATH = Path("data/processed_data.feather")
+RES_PROFILES_PU_PATH = Path("data/res_profiles_pu.feather")
+
 
 
 def load_config(config_path: Path) -> dict:
@@ -37,30 +38,47 @@ def main() -> None:
     area = scenario["area"]          # e.g. "DE_LU"
     res_col = scenario["res_column"] # e.g. "wind_onshore"
 
-    # 2) Load processed data
-    df = pd.read_feather(PROCESSED_DATA_PATH)
+    # 2) Load precomputed per-unit RES profiles
+    # We now use precomputed per-unit RES profiles (generation MW / installed MW)
+# from data/res_profiles_pu.feather. This replaces the previous "divide by max"
+# normalisation, which was not country-comparable and could distort optimisation.
+# Installed capacities come from ENTSO-E and profiles are normalised consistently
+# by technology and area.
 
-    # Ensure MultiIndex on columns (should already be the case, but safe)
-    if not isinstance(df.columns, pd.MultiIndex):
-        df.columns = pd.MultiIndex.from_tuples(df.columns)
+    df_pu = pd.read_feather(RES_PROFILES_PU_PATH)
 
-    # 3) Extract RES profile for this scenario (DE_LU / wind_onshore)
+# Ensure MultiIndex on columns (should already be the case, but safe)
+    if not isinstance(df_pu.columns, pd.MultiIndex):
+        df_pu.columns = pd.MultiIndex.from_tuples(df_pu.columns)
+
+# 3) Extract per-unit RES profile for this scenario (area / res_col)
     try:
-        res_series = df[(area, res_col)]
+        res_series_pu = df_pu[(area, res_col)]
     except KeyError as e:
         raise KeyError(
-            f"Could not find column ({area!r}, {res_col!r}) in processed_data.feather"
-        ) from e
+            f"Could not find column ({area!r}, {res_col!r}) in res_profiles_pu.feather"
+     ) from e
 
-    # Normalise to per-unit profile (0..1) for the optimisation.
-    # If the data is already p.u., you can skip this step.
-    max_val = res_series.max()
-    if max_val <= 0:
-        raise ValueError(f"RES column ({area}, {res_col}) has non-positive max value.")
-    res_profile_pu = (res_series / max_val).to_numpy()
+# Defensive cleanup: per-unit profile should be finite and non-negative
+    res_series_pu = res_series_pu.astype(float)
+    if not np.isfinite(res_series_pu.to_numpy()).all():
+        raise ValueError(f"Per-unit profile ({area}, {res_col}) contains NaN/inf values.")
+    if res_series_pu.max() <= 0:
+        raise ValueError(f"Per-unit profile ({area}, {res_col}) has non-positive max value.")
+
+    # Soft diagnostic: warn if per-unit profile has unusually high peaks
+# (can occur due to reporting artefacts or capacity-year mismatches)
+    if res_series_pu.max() > 1.5:
+        print(
+            f"Warning: high p.u. max for ({area}, {res_col}): "
+            f"{res_series_pu.max():.3f}"
+        )
+
+    res_profile_pu = res_series_pu.to_numpy()
+
 
     # 4) Determine timestep length [h] from index
-    idx = res_series.index
+    idx = res_series_pu.index
     if len(idx) < 2:
         raise ValueError("Time series must have at least 2 timesteps to infer resolution.")
 
