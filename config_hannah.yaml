@@ -36,3 +36,20 @@ scenarios:
       min_res_per_el_mw: 1.0   # 1 MW RES per 1 MW electrolysers
       max_res_per_el_mw: 5.0   # upper bound
       steps: 41                # how many points between min and max (incl.)
+
+
+#How all the pieces fit together (high level)
+#For each scenario (DE_LU + wind_onshore baseline):
+#1.	Load processed_data.feather → pick (DE_LU, "wind_onshore") → res_profile.
+#2.	Loop over RES:EL ratios (1.0 … 5.0):
+#o	choose a ratio r
+#o	set electrolyser size (e.g. 1 MW or 10 MW – scale choice doesn’t matter for LCOH if all linear)
+#o	compute RES size = r * electrolyser_mw
+#o	simulate_res_output → annual electricity used by EL, curtailed energy etc.
+#o	from this, compute annual H₂ kg via efficiency
+#o	compute annual RES cost (CRF + OPEX)
+#o	compute annual EL cost (CRF + OPEX)
+#o	sum → total annual cost
+#o	compute_lcoe / convert to LCOH → €/kg H₂ for that ratio
+#3.	Store all ratios + results; choose the ratio with lowest LCOH.
+#So the functions are building blocks inside that loop – they don’t replace the “optimisation”; they are called by it.
