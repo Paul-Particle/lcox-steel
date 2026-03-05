@@ -55,3 +55,15 @@ data/shapes/*.zip
 
 # Debug artefacts
 data/debug/
+# Local virtualenv (Atlite)
+.venv-atlite/
+
+# Local temporary data
+data/tmp/
+
+# Unzipped shape files
+data/shapes/
+
+# Model outputs
+results/
+results.zip
