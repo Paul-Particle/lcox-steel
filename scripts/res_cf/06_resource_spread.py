@@ -4,7 +4,7 @@
 Purpose
 -------
 Quantifies intra-country spatial resource heterogeneity ("best-site uplift")
-for wind onshore and solar using existing Atlite cutouts (2023).
+for wind onshore, wind offshore, and solar using existing Atlite cutouts (2023).
 
 Method
 ------
@@ -42,24 +42,26 @@ import geopandas as gpd
 CUTOUT_DIR = Path("data/cutouts")
 REGIONS_PATH = Path("data/shapes/regions.geojson")
 NATIONAL_CF_DIR = Path("data/res_cf")
+OFFSHORE_REGIONS_PATH = Path("data/shapes/offshore_regions.geojson")
 OUT_PATH = Path("data/res_cf/resource_spread_2023.csv")
 
 YEAR = 2023
 
 COUNTRIES = {
-    "DE": ["h1", "h2"],
+    "DE": ["q1", "q2", "q3", "q4"],
     "FR": ["q1", "q2", "q3", "q4"],
     "ES": ["q1", "q2", "q3", "q4"],
     "AUS": ["q1", "q2", "q3", "q4"],
     "BRA": ["q1", "q2", "q3", "q4"],
 }
 
-TECHS = ["wind_onshore", "solar"]
+TECHS = ["wind_onshore", "wind_offshore", "solar"]
 
 # Must match your existing assumptions
 WIND_TURBINE = "Vestas_V112_3MW"
 PV_PANEL = "CSi"
 PV_ORIENTATION = "latitude_optimal"
+WIND_OFFSHORE_TURBINE = "NREL_ReferenceTurbine_5MW_offshore"
 
 def weighted_percentile(values: np.ndarray, weights: np.ndarray, q: float) -> float:
     """
@@ -94,6 +96,12 @@ def load_country_geometry(iso2: str):
         raise ValueError(f"Country {iso2} not found in {REGIONS_PATH}")
     return row.geometry.iloc[0]
 
+def load_offshore_geometry(iso2: str):
+    gdf = gpd.read_file(OFFSHORE_REGIONS_PATH)
+    row = gdf.loc[gdf["region"] == iso2]
+    if row.empty:
+        raise ValueError(f"Country {iso2} not found in {OFFSHORE_REGIONS_PATH}")
+    return row.geometry.iloc[0]
 
 def cutout_path(iso2: str, seg: str) -> Path:
     # Adjust to your actual naming convention
@@ -106,10 +114,14 @@ def compute_cf_grid(cutout: atlite.Cutout, tech: str) -> xr.DataArray:
     Keeps Atlite tech assumptions identical to national pipeline.
     """
     if tech == "wind_onshore":
-        # Atlite typically supports capacity_factor=True for wind/pv
         cf = cutout.wind(turbine=WIND_TURBINE, capacity_factor=True)
+
+    elif tech == "wind_offshore":
+        cf = cutout.wind(turbine=WIND_OFFSHORE_TURBINE, capacity_factor=True)
+
     elif tech == "solar":
         cf = cutout.pv(panel=PV_PANEL, orientation=PV_ORIENTATION, capacity_factor=True)
+
     else:
         raise ValueError(f"Unknown tech: {tech}")
 
@@ -165,7 +177,12 @@ def national_mean_from_csv(iso2: str, tech: str) -> float:
     if not p.exists():
         return np.nan
     df = pd.read_csv(p)
-    col = "wind_onshore_cf" if tech == "wind_onshore" else "solar_cf"
+    if tech == "wind_onshore":
+        col = "wind_onshore_cf"
+    elif tech == "wind_offshore":
+        col = "wind_offshore_cf"
+    else:
+        col = "solar_cf"
     return float(df[col].mean())
 
 def main():
@@ -177,15 +194,13 @@ def main():
             regions_geom_cache[iso2] = load_country_geometry(iso2)
         geom = regions_geom_cache[iso2]
 
-        # Load first cutout to build weights (grid should be identical across segments)
-        first_cutout = atlite.Cutout(path=str(cutout_path(iso2, segments[0])))
-        weights = build_weights(first_cutout, geom)
-
-        # Flatten weights for later
-        w = weights.values.ravel()
 
         for tech in TECHS:
             # Build full-year CF grid by concatenating segments along time
+            geom = load_offshore_geometry(iso2) if tech == "wind_offshore" else regions_geom_cache[iso2]
+            first_cutout = atlite.Cutout(path=str(cutout_path(iso2, segments[0])))
+            weights = build_weights(first_cutout, geom)
+            w = weights.values.ravel()
             cf_parts = []
             for seg in segments:
                 p = cutout_path(iso2, seg)

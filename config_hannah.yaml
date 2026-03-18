@@ -9,11 +9,12 @@ finance:
 
 # Shared defaults (applied to every scenario unless overridden)
 defaults:
-  # RES cost assumptions (per MW of RES capacity)
+  # RES assumptions (per MW of RES capacity)
   res:
     capex_per_mw_eur: 1_000_000
     opex_per_mw_per_year_eur: 30_000
     lifetime_years: 25
+    offshore_max_distance_km: 200 # offshore wind area restrictions
 
   # Electrolyser assumptions (per MW electrolyser capacity)
   electrolyser:

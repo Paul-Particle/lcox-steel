@@ -36,6 +36,19 @@ def _one_country(world: gpd.GeoDataFrame, iso_a3: str) -> gpd.GeoSeries:
 
     raise ValueError(f"Code '{iso_a3}' not found in columns ADM0_A3/SOV_A3/ISO_A3.")
 
+def _fr_mainland_only(fr_geom):
+    parts = list(fr_geom.geoms) if fr_geom.geom_type == "MultiPolygon" else [fr_geom]
+
+    # keep only polygons whose centroid is in metropolitan Europe
+    eu_parts = [
+        p for p in parts
+        if (-10 <= p.centroid.x <= 15) and (41 <= p.centroid.y <= 52)
+    ]
+
+    if not eu_parts:
+        raise ValueError("Could not isolate metropolitan France polygon.")
+
+    return gpd.GeoSeries(eu_parts, crs=4326).union_all()
 
 
 def main() -> None:
@@ -52,7 +65,7 @@ def main() -> None:
 
     geoms = {
         "DE": _one_country(world, "DEU"),
-        "FR": _one_country(world, "FRA"),
+        "FR": _fr_mainland_only(_one_country(world, "FRA")), #Only European landmass
         "ES": _one_country(world, "ESP"),
         "AUS": _one_country(world, "AUS"),
         "BRA": _one_country(world, "BRA"),
