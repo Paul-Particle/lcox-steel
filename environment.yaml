@@ -16,5 +16,5 @@ dependencies:
   - jupyter
 
   - pip:
-    - nemosis
-    - snakemake
+      - nemosis
+      - snakemake
