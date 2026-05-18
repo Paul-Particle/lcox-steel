@@ -42,3 +42,6 @@ output_for_gemini
 
 # Conda environment
 fca_env/
+
+# Git attributes
+* text=auto eol=lf
