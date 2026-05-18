@@ -20,8 +20,8 @@ import yaml
 from res_to_h2_logic import optimise_res_to_el_ratio
 
 
-CONFIG_PATH = Path("config_hannah.yaml")
-PROCESSED_DATA_PATH = Path("data/processed_data.feather")
+CONFIG_PATH = Path("../config_hannah.yaml")
+PROCESSED_DATA_PATH = Path("../data/processed_data.feather")
 
 
 def load_config(config_path: Path) -> dict:
