@@ -7,12 +7,12 @@ REGIONS_PATH = "data/shapes/regions.geojson"
 OFFSHORE_REGIONS_PATH = "data/shapes/offshore_regions.geojson"
 OUTDIR = Path("data/res_cf")
 
-# --- set these two for each run ---
-CUTOUT_PATH = "data/cutouts/fr_2023_q1.nc"   # or q2
-TAG = "q1"                                   # or q2
+# --- set these for each run ---
+CUTOUT_PATH = "data/cutouts/de_2023_jan2w.nc"
+TAG = "jan2w"
 YEAR = 2023
-COUNTRY = "fr"
-# ----------------------------------
+COUNTRY = "de"
+# ------------------------------
 
 
 def to_cf_series(x, name="cf"):
@@ -44,22 +44,14 @@ def main():
     OUTDIR.mkdir(parents=True, exist_ok=True)
 
     gdf = get_region_gdf(REGIONS_PATH, COUNTRY)
-    offshore_gdf = get_region_gdf(OFFSHORE_REGIONS_PATH, COUNTRY)
+    has_offshore = Path(OFFSHORE_REGIONS_PATH).exists()
 
     cutout = atlite.Cutout(CUTOUT_PATH)
     matrix = cutout.indicatormatrix(gdf)
-    offshore_matrix = cutout.indicatormatrix(offshore_gdf)
 
     wind_cf = cutout.wind(
         matrix=matrix,
         turbine="Vestas_V112_3MW",
-        capacity_factor=False,
-        per_unit=True,
-    )
-
-    offshore_wind_cf = cutout.wind(
-        matrix=offshore_matrix,
-        turbine="NREL_ReferenceTurbine_5MW_offshore",
         capacity_factor=False,
         per_unit=True,
     )
@@ -73,21 +65,33 @@ def main():
     )
 
     wind_cf = to_cf_series(wind_cf)
-    offshore_wind_cf = to_cf_series(offshore_wind_cf)
     solar_cf = to_cf_series(solar_cf)
 
     wind_out = OUTDIR / f"{COUNTRY}_wind_onshore_cf_{YEAR}_{TAG}.csv"
-    offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_cf_{YEAR}_{TAG}.csv"
     solar_out = OUTDIR / f"{COUNTRY}_solar_cf_{YEAR}_{TAG}.csv"
 
-    wind_cf.to_csv(wind_out)   # keeps time index in first column
-    offshore_wind_cf.to_csv(offshore_wind_out)
+    wind_cf.to_csv(wind_out)
     solar_cf.to_csv(solar_out)
 
     print("Wrote:")
     print(" -", wind_out)
-    print(" -", offshore_wind_out)
     print(" -", solar_out)
+
+    if has_offshore:
+        offshore_gdf = get_region_gdf(OFFSHORE_REGIONS_PATH, COUNTRY)
+        offshore_matrix = cutout.indicatormatrix(offshore_gdf)
+        offshore_wind_cf = cutout.wind(
+            matrix=offshore_matrix,
+            turbine="NREL_ReferenceTurbine_5MW_offshore",
+            capacity_factor=False,
+            per_unit=True,
+        )
+        offshore_wind_cf = to_cf_series(offshore_wind_cf)
+        offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_cf_{YEAR}_{TAG}.csv"
+        offshore_wind_cf.to_csv(offshore_wind_out)
+        print(" -", offshore_wind_out)
+    else:
+        print("No offshore regions file — skipping offshore wind.")
 
 
 if __name__ == "__main__":
