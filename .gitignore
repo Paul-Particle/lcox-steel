@@ -50,8 +50,13 @@ fca_env/
 data/cutouts/
 *.nc
 
-# Raw geodata
+# Raw/large geodata (download manually — see README)
+data/shapes/eez/
+data/shapes/ne_110m_admin_0_countries/
 data/shapes/*.zip
+
+# Derived shape files are committed (small, reproducible outputs)
+# data/shapes/regions.geojson and offshore_regions.geojson are tracked
 
 # Debug artefacts
 data/debug/
@@ -60,9 +65,6 @@ data/debug/
 
 # Local temporary data
 data/tmp/
-
-# Unzipped shape files
-data/shapes/
 
 # Model outputs
 results/
