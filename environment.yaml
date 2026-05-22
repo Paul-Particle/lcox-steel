@@ -276,6 +276,7 @@ dependencies:
   - zstd=1.5.6=hb46c0d2_0
   - snakemake
   - pulp
+  - pypsa>=1.0
   - pip:
       - charset-normalizer==3.4.1
       - entsoe-py==0.6.16
