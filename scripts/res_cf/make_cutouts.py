@@ -1,57 +1,67 @@
 """
-Create Atlite ERA5 cutouts for RES capacity factors.
+Create one Atlite ERA5 cutout for a given country, year, and quarter.
 
-Start small + stable (DE, Jan–Feb 2023) to avoid CDS/GRIB flakiness on Windows.
-Output:
-- data/cutouts/de_2023_q1.nc
+Output: data/cutouts/{country}_{year}_{quarter}.nc
 """
-
 from pathlib import Path
 import atlite
 import geopandas as gpd
 
-REGIONS = gpd.read_file("data/shapes/regions.geojson").to_crs(4326)
-_offshore_path = Path("data/shapes/offshore_regions.geojson")
-OFFSHORE_REGIONS = gpd.read_file(_offshore_path).to_crs(4326) if _offshore_path.exists() else None
-
+REGIONS_PATH         = Path("data/shapes/regions.geojson")
+OFFSHORE_REGIONS_PATH = Path("data/shapes/offshore_regions.geojson")
 TMPDIR = Path("data/tmp/atlite")
 
+# Countries that need coarser resolution to avoid CDS instability / memory limits
+COARSE_RESOLUTION_COUNTRIES = {"aus", "bra"}
 
-def bounds_for(region_names, pad=1.0):
-    land_geom = REGIONS.loc[REGIONS["region"].isin(region_names), "geometry"]
-    geoms = list(land_geom)
-    if OFFSHORE_REGIONS is not None:
-        offshore_geom = OFFSHORE_REGIONS.loc[OFFSHORE_REGIONS["region"].isin(region_names), "geometry"]
-        geoms += list(offshore_geom)
+QUARTER_DATES = {
+    "q1": ("-01-01", "-03-31 23:00"),
+    "q2": ("-04-01", "-06-30 23:00"),
+    "q3": ("-07-01", "-09-30 23:00"),
+    "q4": ("-10-01", "-12-31 23:00"),
+}
 
+# Defaults for standalone use
+COUNTRY = "de"
+YEAR    = 2023
+QUARTER = "q1"
+OUTPUT_PATH = Path(f"data/cutouts/{COUNTRY}_{YEAR}_{QUARTER}.nc")
+
+if "snakemake" in dir():
+    COUNTRY     = snakemake.wildcards.country.lower()
+    YEAR        = int(snakemake.wildcards.year)
+    QUARTER     = snakemake.wildcards.quarter
+    OUTPUT_PATH = Path(snakemake.output[0])
+
+
+def get_bounds(country_lower: str, pad: float = 1.0):
+    country_upper = country_lower.upper()
+    regions = gpd.read_file(REGIONS_PATH).to_crs(4326)
+    geoms = list(regions.loc[regions["region"] == country_upper, "geometry"])
+    if OFFSHORE_REGIONS_PATH.exists():
+        offshore = gpd.read_file(OFFSHORE_REGIONS_PATH).to_crs(4326)
+        geoms += list(offshore.loc[offshore["region"] == country_upper, "geometry"])
     geom = gpd.GeoSeries(geoms, crs=4326).union_all()
     minx, miny, maxx, maxy = geom.bounds
     return slice(minx - pad, maxx + pad), slice(miny - pad, maxy + pad)
 
 
 def main():
-    Path("data/cutouts").mkdir(parents=True, exist_ok=True)
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     TMPDIR.mkdir(parents=True, exist_ok=True)
 
-    # diagnostic: DE, 2 weeks — minimal download for testing
-    region_names = ["DE"]
-    x, y = bounds_for(region_names)
-    print("Cutout bounds:")
-    print("x =", x)
-    print("y =", y)
+    x, y = get_bounds(COUNTRY)
+    start_suffix, end_suffix = QUARTER_DATES[QUARTER]
+    time_range = slice(f"{YEAR}{start_suffix}", f"{YEAR}{end_suffix}")
 
-    cutout = atlite.Cutout(
-        path="data/cutouts/de_2023_jan2w.nc",
-        module="era5",
-        x=x,
-        y=y,
-        time=slice("2023-01-01", "2023-01-14 23:00"),
-    )
+    kwargs = dict(path=str(OUTPUT_PATH), module="era5", x=x, y=y, time=time_range)
+    if COUNTRY in COARSE_RESOLUTION_COUNTRIES:
+        kwargs.update(dx=0.5, dy=0.5)
 
-    # ✅ reduce parallelism + use fixed tmpdir (Windows-safe)
+    cutout = atlite.Cutout(**kwargs)
     cutout.prepare(tmpdir=str(TMPDIR), concurrent_requests=1)
+    print(f"Prepared: {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
     main()
-

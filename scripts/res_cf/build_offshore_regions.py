@@ -6,8 +6,12 @@ import yaml
 
 CONFIG_PATH = Path("config_hannah.yaml")
 EEZ_SHP = Path("data/shapes/eez/eez_v12.shp")
-OUT_GEOJSON = Path("data/shapes/offshore_regions.geojson")
+OUT_GEOJSON  = Path("data/shapes/offshore_regions.geojson")
 LAND_REGIONS = Path("data/shapes/regions.geojson")
+
+if "snakemake" in dir():
+    OUT_GEOJSON  = Path(snakemake.output[0])
+    LAND_REGIONS = Path(snakemake.input.regions)
 
 
 ISO3_TO_REGION = {

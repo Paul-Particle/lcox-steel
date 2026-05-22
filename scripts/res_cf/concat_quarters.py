@@ -26,6 +26,11 @@ import pandas as pd
 
 OUTDIR = Path("data/res_cf")
 YEAR = 2023
+COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # standalone default
+
+if "snakemake" in dir():
+    COUNTRIES = [snakemake.wildcards.country.lower()]
+    YEAR      = int(snakemake.wildcards.year)
 
 def read_series(path: Path) -> pd.Series:
     df = pd.read_csv(path)
@@ -73,6 +78,5 @@ def run_for_country(cc: str):
     print(" -", solar_out)
 
 if __name__ == "__main__":
-    # add/remove countries here
-    for cc in ["fr", "es", "aus", "bra", "de"]:
+    for cc in COUNTRIES:
         run_for_country(cc)

@@ -73,6 +73,17 @@ MAX_TRIPLETS_BRUTE_FORCE = 500_000
 # Module-level country variable set in main loop
 _current_country: str = ""
 
+# Snakemake overrides (set before main() runs)
+_SM_COUNTRY = None
+_SM_TOP_OUT = None
+_SM_AVG_OUT = None
+
+if "snakemake" in dir():
+    _SM_COUNTRY = snakemake.wildcards.country.upper()
+    _SM_TOP_OUT = Path(snakemake.output.top)
+    _SM_AVG_OUT = Path(snakemake.output.avg)
+    YEAR        = int(snakemake.config["res_cf"]["year"])
+
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -478,7 +489,7 @@ def greedy_screen(
 
 def save_average_profiles(cc: str, year: int) -> None:
     src = CF_DIR / f"{cc.lower()}_cf_{year}.csv"
-    dst = CF_DIR / f"{cc.lower()}_average_profiles_{year}.csv"
+    dst = _SM_AVG_OUT if _SM_AVG_OUT is not None else CF_DIR / f"{cc.lower()}_average_profiles_{year}.csv"
     if not src.exists():
         raise FileNotFoundError(f"National mean CF file not found: {src}")
     df = pd.read_csv(src, parse_dates=["time"])
@@ -495,8 +506,9 @@ def main() -> None:
     cfg    = get_pypsa_config(config)
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
-    print("Countries from config:", cfg["countries"])
-    for country in cfg["countries"]:
+    countries = [_SM_COUNTRY] if _SM_COUNTRY is not None else [c.upper() for c in cfg["countries"]]
+    print("Countries:", countries)
+    for country in countries:
         _current_country = country.upper()
         cc = country.lower()
 
@@ -585,7 +597,7 @@ def main() -> None:
         df.insert(0, "rank",    range(1, len(df) + 1))
         df.insert(1, "country", _current_country)
 
-        out_path = OUTDIR / f"{cc}_complementarity_top{cfg['top_n']}_{cfg['year']}.csv"
+        out_path = _SM_TOP_OUT if _SM_TOP_OUT is not None else OUTDIR / f"{cc}_complementarity_top{cfg['top_n']}_{cfg['year']}.csv"
         df.to_csv(out_path, index=False)
 
         print(f"\n  Top {len(df)} complementary triplets → {out_path.name}")

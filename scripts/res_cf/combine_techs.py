@@ -18,9 +18,13 @@ Notes:
 from pathlib import Path
 import pandas as pd
 
-OUTDIR = Path("data/res_cf")
-COUNTRIES = ["de", "fr", "es", "aus", "bra"]
-YEAR = 2023
+OUTDIR    = Path("data/res_cf")
+COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # standalone default
+YEAR      = 2023
+
+if "snakemake" in dir():
+    COUNTRIES = [snakemake.wildcards.country.lower()]
+    YEAR      = int(snakemake.wildcards.year)
 
 def read_cf(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
@@ -53,6 +57,6 @@ def build_country(country: str):
 
 
 if __name__ == "__main__":
-    for c in COUNTRIES:
-        build_country(c)
+    for country in COUNTRIES:
+        build_country(country)
 

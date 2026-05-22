@@ -56,10 +56,13 @@ import atlite
 import geopandas as gpd
 from shapely.geometry import box
 
-YEAR = 2023
-OUTDIR = Path("data/res_cf")
+YEAR      = 2023
+OUTDIR    = Path("data/res_cf")
+COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # lowercase to match filenames; standalone default
 
-COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # lowercase to match filenames
+if "snakemake" in dir():
+    COUNTRIES = [snakemake.wildcards.country.lower()]
+    YEAR      = int(snakemake.config["res_cf"]["year"])
 
 CUTOUT_DIR = Path("data/cutouts")
 REGIONS_PATH = Path("data/shapes/regions.geojson")

@@ -7,12 +7,18 @@ REGIONS_PATH = "data/shapes/regions.geojson"
 OFFSHORE_REGIONS_PATH = "data/shapes/offshore_regions.geojson"
 OUTDIR = Path("data/res_cf")
 
-# --- set these for each run ---
-CUTOUT_PATH = "data/cutouts/de_2023_jan2w.nc"
-TAG = "jan2w"
-YEAR = 2023
-COUNTRY = "de"
-# ------------------------------
+# --- set these for standalone use ---
+CUTOUT_PATH = "data/cutouts/de_2023_q1.nc"
+QUARTER     = "q1"
+YEAR        = 2023
+COUNTRY     = "de"
+# ------------------------------------
+
+if "snakemake" in dir():
+    COUNTRY     = snakemake.wildcards.country.lower()
+    YEAR        = int(snakemake.wildcards.year)
+    QUARTER     = snakemake.wildcards.quarter
+    CUTOUT_PATH = snakemake.input.cutout
 
 
 def to_cf_series(x, name="cf"):
@@ -67,8 +73,8 @@ def main():
     wind_cf = to_cf_series(wind_cf)
     solar_cf = to_cf_series(solar_cf)
 
-    wind_out = OUTDIR / f"{COUNTRY}_wind_onshore_cf_{YEAR}_{TAG}.csv"
-    solar_out = OUTDIR / f"{COUNTRY}_solar_cf_{YEAR}_{TAG}.csv"
+    wind_out = OUTDIR / f"{COUNTRY}_wind_onshore_cf_{YEAR}_{QUARTER}.csv"
+    solar_out = OUTDIR / f"{COUNTRY}_solar_cf_{YEAR}_{QUARTER}.csv"
 
     wind_cf.to_csv(wind_out)
     solar_cf.to_csv(solar_out)
@@ -87,7 +93,7 @@ def main():
             per_unit=True,
         )
         offshore_wind_cf = to_cf_series(offshore_wind_cf)
-        offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_cf_{YEAR}_{TAG}.csv"
+        offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_cf_{YEAR}_{QUARTER}.csv"
         offshore_wind_cf.to_csv(offshore_wind_out)
         print(" -", offshore_wind_out)
     else:

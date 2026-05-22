@@ -24,6 +24,9 @@ import pandas as pd
 NE_SHP = Path("data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp")
 OUT_GEOJSON = Path("data/shapes/regions.geojson")
 
+if "snakemake" in dir():
+    OUT_GEOJSON = Path(snakemake.output[0])
+
 
 def _one_country(world: gpd.GeoDataFrame, iso_a3: str) -> gpd.GeoSeries:
     # Natural Earth: ISO_A3 can be -99; ADM0_A3 / SOV_A3 are more reliable

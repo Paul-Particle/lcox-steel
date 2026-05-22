@@ -55,6 +55,12 @@ COUNTRIES = {
     "BRA": ["q1", "q2", "q3", "q4"],
 }
 
+if "snakemake" in dir():
+    YEAR     = int(snakemake.config["res_cf"]["year"])
+    OUT_PATH = Path(snakemake.output[0])
+    quarters = ["q1", "q2", "q3", "q4"]
+    COUNTRIES = {c.upper(): quarters for c in snakemake.config["res_cf"]["countries"]}
+
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
 
 # Must match your existing assumptions

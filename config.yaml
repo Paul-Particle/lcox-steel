@@ -18,3 +18,8 @@ nem_download:
   rebuild: false
 
 data_types: ["prices", "load_forecast", "load_actual", "vre", "generation", "crossborder"]
+
+res_cf:
+  countries: ["de", "fr", "es", "aus", "bra"]
+  year: 2023
+  top_n: 10
