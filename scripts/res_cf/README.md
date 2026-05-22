@@ -155,28 +155,31 @@ Best-site CFs represent **resource-optimised project locations** and should be i
 
 # Scripts (pipeline overview)
 
-- `scripts/res_cf/01_build_regions.py`  
+- `scripts/res_cf/build_regions.py`  
   Builds `data/shapes/regions.geojson` from Natural Earth country geometries.
 
-- `scripts/res_cf/02_make_cutouts.py`  
+- `scripts/res_cf/build_offshore_regions.py`  
+  Builds `data/shapes/offshore_regions.geojson` from EEZ polygons restricted to a near-shore deployment band.
+
+- `scripts/res_cf/make_cutouts.py`  
   Creates ERA5 cutouts (`data/cutouts/*.nc`) for a given country and time segment
   (Q1–Q4). For large domains (AUS/BRA), uses coarser grid (`dx=0.5`, `dy=0.5`)
   to avoid CDS job failures and reduce runtime/memory.
 
-- `scripts/res_cf/03_build_cf_timeseries.py`  
+- `scripts/res_cf/build_cf_timeseries.py`  
   Computes per-unit hourly CF time series (wind onshore + solar) from a single cutout
   using indicator-matrix aggregation over the country geometry. Outputs per-segment CSVs
   (e.g. `*_q1.csv`).
 
-- `scripts/res_cf/04_concat_quaters.py`  
+- `scripts/res_cf/concat_quarters.py`  
   Concatenates quarterly outputs (Q1–Q4) into full-year per-technology series:
   `*_wind_onshore_cf_2023.csv`, `*_solar_cf_2023.csv`, `*_wind_offshore_cf_2023.csv` (8760 hours).
 
-- `scripts/res_cf/05_combine_techs.py`  
+- `scripts/res_cf/combine_techs.py`  
   Merges yearly wind + solar into the final modelling inputs:
-  `*_cf_2023.csv` with columns `time`, `wind_onshore_cf`, `wind_offshore_cf`,`solar_cf`.
+  `*_cf_2023.csv` with columns `time`, `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
 
-- `scripts/res_cf/06_resource_spread.py`  
+- `scripts/res_cf/resource_spread.py`  
   Computes intra-country spatial resource distribution metrics from the existing Atlite cutouts.  
   For each country and technology:
   - derives annual mean CF per grid cell (no national aggregation)
@@ -185,7 +188,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   Outputs:
   - `data/res_cf/resource_spread_2023.csv`
 
-- `scripts/res_cf/07_make_bestsite_cf_timeseries.py`  
+- `scripts/res_cf/make_bestsite_cf_timeseries.py`  
 
   ### Updated behaviour:
   Generates “best-site” hourly CF time series by **direct extraction from Atlite CF grids**.
@@ -199,12 +202,17 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   Outputs:
   - `data/res_cf/<cc>_cf_2023_bestsite_p95.csv`
 
-  ❌ No longer:
+  No longer:
   - multiplies national CF by uplift factors
   - uses resource_spread outputs for time series generation
 
-- `scripts/res_cf/99_qc_yearly_cf.py`  
-  QC helper used during validation (structural + physical sanity checks).
+- `scripts/res_cf/complementarity.py`  
+  Screens all valid (onshore, offshore, solar) grid-cell triplets per country and ranks them
+  by a complementarity score (coincidence - correlation). Outputs top-N triplets and national
+  mean profiles for use in PyPSA scenarios.
+
+- `scripts/res_cf/diag_qc_yearly_cf.py`  
+  Structural + physical sanity checks on yearly CF outputs.
 
 ---
 

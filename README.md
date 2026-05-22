@@ -25,16 +25,16 @@ lcox-steel/
     │   ├── download_nem.py
     │   ├── integrate_entsoe.py
     │   └── process_entsoe.py
-    ├── res_cf/             # Atlite capacity factor pipeline (run sequentially 01→08)
-    │   ├── 01_build_regions.py
-    │   ├── 01b_build_offshore_regions.py
-    │   ├── 02_make_cutouts.py
-    │   ├── 03_build_cf_timeseries.py
-    │   ├── 04_concat_quarters.py
-    │   ├── 05_combine_techs.py
-    │   ├── 06_resource_spread.py
-    │   ├── 07_make_bestsite_cf_timeseries.py
-    │   ├── 08_complementarity.py   # Spatial site selection (wind/solar triplets)
+    ├── res_cf/             # Atlite capacity factor pipeline
+    │   ├── build_regions.py
+    │   ├── build_offshore_regions.py
+    │   ├── make_cutouts.py
+    │   ├── build_cf_timeseries.py
+    │   ├── concat_quarters.py
+    │   ├── combine_techs.py
+    │   ├── resource_spread.py
+    │   ├── make_bestsite_cf_timeseries.py
+    │   ├── complementarity.py      # Spatial site selection (wind/solar triplets)
     │   ├── diag_*.py               # Diagnostic and QC scripts
     │   └── README.md
     ├── h2_dri/             # PyPSA investment model

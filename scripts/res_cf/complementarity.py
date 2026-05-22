@@ -1,5 +1,5 @@
 """
-08_complementarity.py
+complementarity.py
 
 Purpose
 -------
@@ -45,10 +45,10 @@ import numpy as np
 import pandas as pd
 import yaml
 
-# ── Import reusable functions from script 07 ─────────────────────────────────
+# ── Import reusable functions from make_bestsite_cf_timeseries ───────────────
 _spec = importlib.util.spec_from_file_location(
     "bestsite",
-    Path(__file__).parent / "07_make_bestsite_cf_timeseries.py"
+    Path(__file__).parent / "make_bestsite_cf_timeseries.py"
 )
 _bestsite = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_bestsite)
