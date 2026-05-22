@@ -83,6 +83,7 @@ def main():
     print(" -", wind_out)
     print(" -", solar_out)
 
+    offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_{YEAR}_{QUARTER}.csv"
     if has_offshore:
         offshore_gdf = get_region_gdf(OFFSHORE_REGIONS_PATH, COUNTRY)
         offshore_matrix = cutout.indicatormatrix(offshore_gdf)
@@ -93,11 +94,13 @@ def main():
             per_unit=True,
         )
         offshore_wind_cf = to_cf_series(offshore_wind_cf)
-        offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_{YEAR}_{QUARTER}.csv"
-        offshore_wind_cf.to_csv(offshore_wind_out)
-        print(" -", offshore_wind_out)
     else:
-        print("No offshore regions file — skipping offshore wind.")
+        # Write zeros so Snakemake output contract is satisfied; real values require EEZ file.
+        offshore_wind_cf = pd.Series(0.0, index=wind_cf.index, name="cf")
+        offshore_wind_cf.index.name = "time"
+        print("No offshore regions file — writing zero placeholder for offshore wind.")
+    offshore_wind_cf.to_csv(offshore_wind_out)
+    print(" -", offshore_wind_out)
 
 
 if __name__ == "__main__":

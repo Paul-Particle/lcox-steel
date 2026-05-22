@@ -105,16 +105,14 @@ rule build_offshore_regions:
 
 rule make_cutout:
     input:
-        regions="data/shapes/regions.geojson",
-        offshore_regions="data/shapes/offshore_regions.geojson"
+        regions="data/shapes/regions.geojson"
     output: "data/cutouts/{country}_{year}_{quarter}.nc"
     script: "scripts/res_cf/make_cutouts.py"
 
 rule build_cf_timeseries:
     input:
         cutout="data/cutouts/{country}_{year}_{quarter}.nc",
-        regions="data/shapes/regions.geojson",
-        offshore_regions="data/shapes/offshore_regions.geojson"
+        regions="data/shapes/regions.geojson"
     output:
         wind_onshore="data/res_cf/quarterly/{country}_wind_onshore_{year}_{quarter}.csv",
         wind_offshore="data/res_cf/quarterly/{country}_wind_offshore_{year}_{quarter}.csv",
