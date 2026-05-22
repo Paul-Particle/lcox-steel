@@ -1,18 +1,39 @@
-name: lcox-env
+name: lcox-steel
 channels:
   - conda-forge
   - defaults
 dependencies:
   - python=3.12
   - pip
+
+  # Data handling
   - pandas
   - pyarrow
   - numpy
+  - scipy
+  - scikit-learn
+  - xarray
   - openpyxl
+
+  # Grid / market data
   - entsoe-py
   - country_converter
   - python-dotenv
+
+  # Capacity factor pipeline (atlite + ERA5)
+  - atlite
+  - geopandas
+
+  # PyPSA investment model (brings linopy + HiGHS solver)
+  - pypsa>=1.0
+
+  # Visualisation
+  - matplotlib
+  - seaborn
   - plotly
+
+  # Config & workflow
+  - pyyaml
   - jupyter
 
   - pip:
