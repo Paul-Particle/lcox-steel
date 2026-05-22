@@ -163,6 +163,10 @@ def optimise_res_to_el_ratio(
         storage_duration_cap_binding_bool = False
         annual_unserved_mwh_after_storage_cap = 0.0
 
+        energy_served_fraction_no_storage = np.nan
+        energy_served_fraction_proxy = np.nan
+        energy_unserved_mwh_proxy = np.nan
+
         if h2_kg <= 0:
             lcoh = np.inf
             lcoh_with_storage = np.inf
