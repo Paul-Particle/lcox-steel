@@ -1,0 +1,34 @@
+finance:
+  default_wacc: 0.07
+
+res:
+  wind_onshore:
+    capex_per_mw_eur: 1_000_000
+    opex_per_mw_per_year_eur: 30_000
+    lifetime_years: 25
+  solar:
+    capex_per_mw_eur: 600_000
+    opex_per_mw_per_year_eur: 12_000
+    lifetime_years: 25
+  wind_offshore:
+    capex_per_mw_eur: 2_500_000
+    opex_per_mw_per_year_eur: 75_000
+    lifetime_years: 25
+
+electrolyser:
+  capex_per_mw_eur: 700_000
+  opex_per_mw_per_year_eur: 20_000
+  lifetime_years: 20
+  efficiency_kwh_per_kg: 55   # nominal; future: add overload_efficiency_kwh_per_kg
+
+battery:
+  capex_per_mw_eur: 200_000   # power capacity cost
+  capex_per_mwh_eur: 150_000  # energy capacity cost
+  lifetime_years: 15
+  efficiency_roundtrip: 0.90
+  max_hours: 6                # cap on energy/power ratio
+
+h2_buffer:
+  capex_per_mwh_eur: 10_000   # compressed H2 tank, ~€10/kWh
+  lifetime_years: 25
+  # e_nom_extendable always True — PyPSA finds optimal buffer size
