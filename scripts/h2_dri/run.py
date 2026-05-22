@@ -22,16 +22,6 @@ from network import build_network
 from costs import compute_lcoh, extract_summary
 
 
-def deep_merge(base: dict, override: dict) -> dict:
-    """Recursively merge override into base; override values take precedence."""
-    out = dict(base)
-    for k, v in override.items():
-        if isinstance(v, dict) and isinstance(out.get(k), dict):
-            out[k] = deep_merge(out[k], v)
-        else:
-            out[k] = v
-    return out
-
 REPO_ROOT = Path(__file__).parent.parent.parent
 CONFIG_DIR = REPO_ROOT / "config"
 RESULTS_DIR = REPO_ROOT / "results"
