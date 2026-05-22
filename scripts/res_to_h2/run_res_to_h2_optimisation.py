@@ -237,7 +237,6 @@ def main():
                 "firm_energy_served_fraction_no_storage": np.nan,
                 "firm_energy_served_fraction_proxy": np.nan,
                 "firm_energy_unserved_mwh_proxy": np.nan,
-                "firm_storage_required_bool": False,
 
             })
         else:
@@ -258,7 +257,6 @@ def main():
                 "firm_energy_served_fraction_no_storage": float(firm_row_feasible["energy_served_fraction_no_storage"]) if "energy_served_fraction_no_storage" in firm_row_feasible else np.nan,
                 "firm_energy_served_fraction_proxy": float(firm_row_feasible["energy_served_fraction_proxy"]) if "energy_served_fraction_proxy" in firm_row_feasible else np.nan,
                 "firm_energy_unserved_mwh_proxy": float(firm_row_feasible["energy_unserved_mwh_proxy"]) if "energy_unserved_mwh_proxy" in firm_row_feasible else np.nan,
-                "firm_storage_required_bool": bool(float(firm_row_feasible.get("annual_storage_cost_eur", 0.0)) > 0.0),
             })
 
         pd.DataFrame([summary]).to_csv(out_dir / f"{scenario_name}_res_to_h2_summary.csv", index=False)       
