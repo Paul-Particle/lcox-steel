@@ -39,6 +39,8 @@ results/*.json
 .vscode/
 *.swp
 output_for_gemini
+.antigravitycli
+.claude
 
 # Conda environment
 fca_env/
