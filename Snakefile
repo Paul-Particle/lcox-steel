@@ -116,30 +116,30 @@ rule build_cf_timeseries:
         regions="data/shapes/regions.geojson",
         offshore_regions="data/shapes/offshore_regions.geojson"
     output:
-        wind_onshore="data/res_cf/{country}_wind_onshore_cf_{year}_{quarter}.csv",
-        wind_offshore="data/res_cf/{country}_wind_offshore_cf_{year}_{quarter}.csv",
-        solar="data/res_cf/{country}_solar_cf_{year}_{quarter}.csv"
+        wind_onshore="data/res_cf/quarterly/{country}_wind_onshore_{year}_{quarter}.csv",
+        wind_offshore="data/res_cf/quarterly/{country}_wind_offshore_{year}_{quarter}.csv",
+        solar="data/res_cf/quarterly/{country}_solar_{year}_{quarter}.csv"
     script: "scripts/res_cf/build_cf_timeseries.py"
 
 rule concat_quarters:
     input:
-        wind_onshore=expand("data/res_cf/{{country}}_wind_onshore_cf_{{year}}_{quarter}.csv",
+        wind_onshore=expand("data/res_cf/quarterly/{{country}}_wind_onshore_{{year}}_{quarter}.csv",
                             quarter=CF_QUARTERS),
-        wind_offshore=expand("data/res_cf/{{country}}_wind_offshore_cf_{{year}}_{quarter}.csv",
+        wind_offshore=expand("data/res_cf/quarterly/{{country}}_wind_offshore_{{year}}_{quarter}.csv",
                              quarter=CF_QUARTERS),
-        solar=expand("data/res_cf/{{country}}_solar_cf_{{year}}_{quarter}.csv",
+        solar=expand("data/res_cf/quarterly/{{country}}_solar_{{year}}_{quarter}.csv",
                      quarter=CF_QUARTERS),
     output:
-        wind_onshore="data/res_cf/{country}_wind_onshore_cf_{year}.csv",
-        wind_offshore="data/res_cf/{country}_wind_offshore_cf_{year}.csv",
-        solar="data/res_cf/{country}_solar_cf_{year}.csv"
+        wind_onshore="data/res_cf/annual/{country}_wind_onshore_{year}.csv",
+        wind_offshore="data/res_cf/annual/{country}_wind_offshore_{year}.csv",
+        solar="data/res_cf/annual/{country}_solar_{year}.csv"
     script: "scripts/res_cf/concat_quarters.py"
 
 rule combine_techs:
     input:
-        wind_onshore="data/res_cf/{country}_wind_onshore_cf_{year}.csv",
-        wind_offshore="data/res_cf/{country}_wind_offshore_cf_{year}.csv",
-        solar="data/res_cf/{country}_solar_cf_{year}.csv"
+        wind_onshore="data/res_cf/annual/{country}_wind_onshore_{year}.csv",
+        wind_offshore="data/res_cf/annual/{country}_wind_offshore_{year}.csv",
+        solar="data/res_cf/annual/{country}_solar_{year}.csv"
     output: "data/res_cf/{country}_cf_{year}.csv"
     script: "scripts/res_cf/combine_techs.py"
 

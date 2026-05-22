@@ -20,6 +20,13 @@ nem_download:
 data_types: ["prices", "load_forecast", "load_actual", "vre", "generation", "crossborder"]
 
 res_cf:
-  countries: ["de", "fr", "es", "aus", "bra"]
+  countries: ["de"]   # expand to ["de","fr","es","aus","bra"] for full runs
   year: 2023
   top_n: 10
+  offshore_max_distance_km: 200
+  complementarity:
+    coincidence_threshold: 0.20
+    w_coincidence: 0.6
+    w_correlation: 0.4
+    max_radius_km: 300.0
+    quality_floor: 0.90

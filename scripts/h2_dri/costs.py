@@ -48,7 +48,16 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
 
 
 def _annual_cost(n: pypsa.Network) -> float:
-    """Sum of all annualized capital costs and variable grid import costs."""
+    """
+    Annualized capital costs + variable grid import costs (scaled to annual).
+
+    Capital costs are always per-year (annualized CAPEX × p_nom_opt).
+    Variable costs from grid import are scaled from simulation period to 8760 h
+    so that LCOH is meaningful even when running with partial-year data.
+    """
+    t_hours = len(n.snapshots)
+    annual_scale = 8760.0 / t_hours
+
     cost = 0.0
 
     # Extendable generators (wind, solar)
@@ -66,20 +75,20 @@ def _annual_cost(n: pypsa.Network) -> float:
     mask = n.stores.e_nom_extendable
     cost += (n.stores.loc[mask, "capital_cost"] * n.stores.loc[mask, "e_nom_opt"]).sum()
 
-    # Grid import variable cost — price * dispatch summed over all hours
+    # Grid import variable cost — scale to annual so LCOH is consistent
     if "grid_import" in n.generators.index:
         p = n.generators_t.p.get("grid_import", pd.Series(0.0, index=n.snapshots))
-        # marginal_cost may be time-varying (in generators_t) or a scalar (in generators)
         if "grid_import" in n.generators_t.marginal_cost.columns:
             mc = n.generators_t.marginal_cost["grid_import"]
         else:
             mc = n.generators.at["grid_import", "marginal_cost"]
-        cost += float((p * mc).sum())
+        cost += float((p * mc).sum()) * annual_scale
 
     return float(cost)
 
 
 def _h2_produced_kg(n: pypsa.Network) -> float:
-    """H2 consumed by the DRI load over the simulation period, in kg."""
-    h2_mwh_lhv = float(n.loads_t.p["dri_load"].sum())
+    """Annual H2 production in kg, scaled from the simulation period to 8760 h."""
+    t_hours = len(n.snapshots)
+    h2_mwh_lhv = float(n.loads_t.p["dri_load"].sum()) * (8760.0 / t_hours)
     return h2_mwh_lhv / H2_LHV_MWH_PER_KG

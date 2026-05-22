@@ -61,7 +61,6 @@ mask_cells_inside       = _bestsite.mask_cells_inside
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-CONFIG_PATH  = PROJECT_ROOT / "config_hannah.yaml"
 OUTDIR       = PROJECT_ROOT / "data" / "res_cf"
 CF_DIR       = PROJECT_ROOT / "data" / "res_cf"
 
@@ -87,23 +86,20 @@ if "snakemake" in dir():
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-def load_config() -> dict:
-    with CONFIG_PATH.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-def get_pypsa_config(config: dict) -> dict:
-    pypsa = config.get("defaults", {}).get("pypsa", {})
-    spatial = config.get("defaults", {}).get("spatial_matching_res_mix", {})
+def load_cfg() -> dict:
+    with open(PROJECT_ROOT / "config.yaml") as f:
+        c = yaml.safe_load(f)
+    rc = c["res_cf"]
+    comp = rc.get("complementarity", {})
     return {
-        "countries":             pypsa.get("countries", ["DE", "FR", "ES", "AUS", "BRA"]),
-        "year":                  pypsa.get("year", YEAR),
-        "top_n":                 pypsa.get("top_n_combinations", 10),
-        "coincidence_threshold": pypsa.get("coincidence_threshold", 0.20),
-        "w_coincidence":         pypsa.get("complementarity_weights", {}).get("w_coincidence", 0.6),
-        "w_correlation":         pypsa.get("complementarity_weights", {}).get("w_correlation", 0.4),
-        "max_radius_km":         float(spatial.get("max_radius_km", 300.0)),
-        "quality_floor":         float(spatial.get("quality_floor_fraction", 0.90)),
+        "countries":             [x.upper() for x in rc["countries"]],
+        "year":                  rc["year"],
+        "top_n":                 rc["top_n"],
+        "coincidence_threshold": comp.get("coincidence_threshold", 0.20),
+        "w_coincidence":         comp.get("w_coincidence", 0.6),
+        "w_correlation":         comp.get("w_correlation", 0.4),
+        "max_radius_km":         float(comp.get("max_radius_km", 300.0)),
+        "quality_floor":         float(comp.get("quality_floor", 0.90)),
     }
 
 
@@ -502,8 +498,7 @@ def save_average_profiles(cc: str, year: int) -> None:
 def main() -> None:
     global _current_country
 
-    config = load_config()
-    cfg    = get_pypsa_config(config)
+    cfg = load_cfg()
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
     countries = [_SM_COUNTRY] if _SM_COUNTRY is not None else [c.upper() for c in cfg["countries"]]

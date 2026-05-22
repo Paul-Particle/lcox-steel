@@ -5,7 +5,7 @@ import pandas as pd
 
 REGIONS_PATH = "data/shapes/regions.geojson"
 OFFSHORE_REGIONS_PATH = "data/shapes/offshore_regions.geojson"
-OUTDIR = Path("data/res_cf")
+OUTDIR = Path("data/res_cf/quarterly")
 
 # --- set these for standalone use ---
 CUTOUT_PATH = "data/cutouts/de_2023_q1.nc"
@@ -73,8 +73,8 @@ def main():
     wind_cf = to_cf_series(wind_cf)
     solar_cf = to_cf_series(solar_cf)
 
-    wind_out = OUTDIR / f"{COUNTRY}_wind_onshore_cf_{YEAR}_{QUARTER}.csv"
-    solar_out = OUTDIR / f"{COUNTRY}_solar_cf_{YEAR}_{QUARTER}.csv"
+    wind_out = OUTDIR / f"{COUNTRY}_wind_onshore_{YEAR}_{QUARTER}.csv"
+    solar_out = OUTDIR / f"{COUNTRY}_solar_{YEAR}_{QUARTER}.csv"
 
     wind_cf.to_csv(wind_out)
     solar_cf.to_csv(solar_out)
@@ -93,7 +93,7 @@ def main():
             per_unit=True,
         )
         offshore_wind_cf = to_cf_series(offshore_wind_cf)
-        offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_cf_{YEAR}_{QUARTER}.csv"
+        offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_{YEAR}_{QUARTER}.csv"
         offshore_wind_cf.to_csv(offshore_wind_out)
         print(" -", offshore_wind_out)
     else:

@@ -18,6 +18,7 @@ Notes:
 from pathlib import Path
 import pandas as pd
 
+INDIR     = Path("data/res_cf/annual")
 OUTDIR    = Path("data/res_cf")
 COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # standalone default
 YEAR      = 2023
@@ -32,9 +33,9 @@ def read_cf(path: Path) -> pd.DataFrame:
     return df.sort_values("time")
 
 def build_country(country: str):
-    wind_path = OUTDIR / f"{country}_wind_onshore_cf_{YEAR}.csv"
-    offshore_path = OUTDIR / f"{country}_wind_offshore_cf_{YEAR}.csv"
-    solar_path = OUTDIR / f"{country}_solar_cf_{YEAR}.csv"
+    wind_path     = INDIR / f"{country}_wind_onshore_{YEAR}.csv"
+    offshore_path = INDIR / f"{country}_wind_offshore_{YEAR}.csv"
+    solar_path    = INDIR / f"{country}_solar_{YEAR}.csv"
 
     wind = read_cf(wind_path).rename(columns={"cf": "wind_onshore_cf"})
     offshore = read_cf(offshore_path).rename(columns={"cf": "wind_offshore_cf"})

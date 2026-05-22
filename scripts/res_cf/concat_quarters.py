@@ -24,7 +24,8 @@ Checks:
 from pathlib import Path
 import pandas as pd
 
-OUTDIR = Path("data/res_cf")
+INDIR  = Path("data/res_cf/quarterly")
+OUTDIR = Path("data/res_cf/annual")
 YEAR = 2023
 COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # standalone default
 
@@ -55,18 +56,17 @@ def stitch_quarters(paths, expected_hours=8760) -> pd.Series:
     return s
 
 def run_for_country(cc: str):
-    wind_q = [OUTDIR / f"{cc}_wind_onshore_cf_{YEAR}_q{i}.csv" for i in [1,2,3,4]]
-    offshore_q = [OUTDIR / f"{cc}_wind_offshore_cf_{YEAR}_q{i}.csv" for i in [1,2,3,4]]
-    solar_q = [OUTDIR / f"{cc}_solar_cf_{YEAR}_q{i}.csv" for i in [1,2,3,4]]
-
+    wind_q    = [INDIR / f"{cc}_wind_onshore_{YEAR}_q{i}.csv"  for i in [1,2,3,4]]
+    offshore_q = [INDIR / f"{cc}_wind_offshore_{YEAR}_q{i}.csv" for i in [1,2,3,4]]
+    solar_q   = [INDIR / f"{cc}_solar_{YEAR}_q{i}.csv"          for i in [1,2,3,4]]
 
     wind = stitch_quarters(wind_q)
     offshore = stitch_quarters(offshore_q)
     solar = stitch_quarters(solar_q)
 
-    wind_out = OUTDIR / f"{cc}_wind_onshore_cf_{YEAR}.csv"
-    offshore_out = OUTDIR / f"{cc}_wind_offshore_cf_{YEAR}.csv"
-    solar_out = OUTDIR / f"{cc}_solar_cf_{YEAR}.csv"
+    wind_out     = OUTDIR / f"{cc}_wind_onshore_{YEAR}.csv"
+    offshore_out = OUTDIR / f"{cc}_wind_offshore_{YEAR}.csv"
+    solar_out    = OUTDIR / f"{cc}_solar_{YEAR}.csv"
 
     wind.reset_index().rename(columns={"index":"time"}).to_csv(wind_out, index=False)
     offshore.reset_index().rename(columns={"index":"time"}).to_csv(offshore_out, index=False)
