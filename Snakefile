@@ -33,7 +33,7 @@ rule download_entsoe_data:
     output:
         "data/entsoe_cache/{area}/{year_month}/{data_type}.feather"
     script:
-        "scripts/download_entsoe_data.py"
+        "scripts/grid/download_entsoe.py"
 
 rule download_nem_data:
     output:
@@ -43,7 +43,7 @@ rule download_nem_data:
         end_date=config["nem_download"]["end_date"],
         nemosis_cache_dir=config["nem_download"]["nemosis_cache_dir"],
         rebuild=config["nem_download"]["rebuild"]
-    script: "scripts/download_nem_data.py"
+    script: "scripts/grid/download_nem.py"
 
 rule integrate_data:
     input:
@@ -55,7 +55,7 @@ rule integrate_data:
         expand("data/integrated/{data_type}.feather",
                data_type=config['data_types'])
     script:
-        "scripts/integrate_entsoe_data.py"
+        "scripts/grid/integrate_entsoe.py"
 
 rule process_data:
     input:
@@ -69,4 +69,4 @@ rule process_data:
     output:
         "data/processed_data.feather",
     script:
-        "scripts/process_entsoe_data.py"
+        "scripts/grid/process_entsoe.py"

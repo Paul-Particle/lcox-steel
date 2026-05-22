@@ -16,8 +16,8 @@ from pathlib import Path
 import pandas as pd
 import pypsa
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "res_to_h2"))
-from res_to_h2_logic import annuity_factor, dri_to_el_mw
+sys.path.insert(0, str(Path(__file__).parent))
+from sizing import annuity_factor, dri_to_el_mw
 
 H2_LHV_MWH_PER_KG = 33.33 / 1000  # LHV of hydrogen in MWh/kg
 

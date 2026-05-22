@@ -2,8 +2,8 @@
 CLI runner for the DRI-hydrogen PyPSA optimisation.
 
 Usage (from repo root):
-    python scripts/dri_model/run.py --project DE_2023_baseline --scenario dedicated_res
-    python scripts/dri_model/run.py --project DE_2023_baseline  # runs all scenarios
+    python scripts/h2_dri/run.py --project DE_2023_baseline --scenario dedicated_res
+    python scripts/h2_dri/run.py --project DE_2023_baseline  # runs all scenarios
 """
 
 import argparse
@@ -18,11 +18,19 @@ pd.options.mode.string_storage = "python"
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "res_to_h2"))
-from run_res_to_h2_optimisation import deep_merge
-
 from network import build_network
 from costs import compute_lcoh, extract_summary
+
+
+def deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge override into base; override values take precedence."""
+    out = dict(base)
+    for k, v in override.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 CONFIG_DIR = REPO_ROOT / "config"
