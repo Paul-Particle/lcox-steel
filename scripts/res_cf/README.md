@@ -64,7 +64,7 @@ Annual hourly CF time series aggregated at country level from Atlite cutouts usi
 
 ## Best-site P95 CFs
 
-- `data/res_cf/<cc>_cf_2023_bestsite_p95.csv`
+- `resources/res_cf/<cc>_cf_2023_bestsite_p95.csv`
 
 ### Definition
 **Best-site P95 CFs**:  
@@ -156,13 +156,13 @@ Best-site CFs represent **resource-optimised project locations** and should be i
 # Scripts (pipeline overview)
 
 - `scripts/res_cf/build_regions.py`  
-  Builds `data/shapes/regions.geojson` from Natural Earth country geometries.
+  Builds `resources/shapes/regions.geojson` from Natural Earth country geometries.
 
 - `scripts/res_cf/build_offshore_regions.py`  
-  Builds `data/shapes/offshore_regions.geojson` from EEZ polygons restricted to a near-shore deployment band.
+  Builds `resources/shapes/offshore_regions.geojson` from EEZ polygons restricted to a near-shore deployment band.
 
 - `scripts/res_cf/make_cutouts.py`  
-  Creates ERA5 cutouts (`data/cutouts/*.nc`) for a given country and time segment
+  Creates ERA5 cutouts (`cutouts/*.nc`) for a given country and time segment
   (Q1–Q4). For large domains (AUS/BRA), uses coarser grid (`dx=0.5`, `dy=0.5`)
   to avoid CDS job failures and reduce runtime/memory.
 
@@ -186,7 +186,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   - calculates area-weighted spatial statistics (mean, P90, P95, max)
   - computes uplift factors relative to the national mean  
   Outputs:
-  - `data/res_cf/resource_spread_2023.csv`
+  - `resources/res_cf/resource_spread_2023.csv`
 
 - `scripts/res_cf/make_bestsite_cf_timeseries.py`  
 
@@ -200,7 +200,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   - applies 3×3 spatial averaging (wind only)
 
   Outputs:
-  - `data/res_cf/<cc>_cf_2023_bestsite_p95.csv`
+  - `resources/res_cf/<cc>_cf_2023_bestsite_p95.csv`
 
   No longer:
   - multiplies national CF by uplift factors
@@ -282,8 +282,8 @@ python -c "import pandas as pd; from pathlib import Path;
 countries=['de','fr','es','aus','bra'];
 
 for c in countries:
-    nat=pd.read_csv(f'data/res_cf/{c}_cf_2023.csv');
-    best=pd.read_csv(f'data/res_cf/{c}_cf_2023_bestsite_p95.csv');
+    nat=pd.read_csv(f'resources/res_cf/{c}_cf_2023.csv');
+    best=pd.read_csv(f'resources/res_cf/{c}_cf_2023_bestsite_p95.csv');
 
     print('\n' + c.upper());
 

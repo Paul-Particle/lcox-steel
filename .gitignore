@@ -19,7 +19,13 @@ venv/
 *.feather
 *.CSV
 entsoe_cache/
-integrated/
+
+# Derived workflow outputs (rebuilt by snakemake)
+resources/*.feather
+resources/entsoe/
+resources/res_cf/
+# Derived shape files are committed (small, reproducible outputs):
+# resources/shapes/*.geojson are tracked
 
 # Log files
 logs/
@@ -49,7 +55,7 @@ fca_env/
 * text=auto eol=lf
 
 # Atlite / ERA5
-data/cutouts/
+cutouts/
 *.nc
 
 # Raw/large geodata (download manually — see README)
@@ -57,16 +63,13 @@ data/shapes/eez/
 data/shapes/ne_110m_admin_0_countries/
 data/shapes/*.zip
 
-# Derived shape files are committed (small, reproducible outputs)
-# data/shapes/regions.geojson and offshore_regions.geojson are tracked
-
 # Debug artefacts
 data/debug/
 # Local virtualenv (Atlite)
 .venv-atlite/
 
-# Local temporary data
-data/tmp/
+# Atlite scratch (working dir)
+.atlite-cache/
 
 # Model outputs
 results/

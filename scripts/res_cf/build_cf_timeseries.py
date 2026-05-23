@@ -3,12 +3,12 @@ import atlite
 import geopandas as gpd
 import pandas as pd
 
-REGIONS_PATH = "data/shapes/regions.geojson"
-OFFSHORE_REGIONS_PATH = "data/shapes/offshore_regions.geojson"
-OUTDIR = Path("data/res_cf/quarterly")
+REGIONS_PATH = "resources/shapes/regions.geojson"
+OFFSHORE_REGIONS_PATH = "resources/shapes/offshore_regions.geojson"
+OUTDIR = Path("resources/res_cf/quarterly")
 
 # --- set these for standalone use ---
-CUTOUT_PATH = "data/cutouts/de_2023_q1.nc"
+CUTOUT_PATH = "cutouts/de_2023_q1.nc"
 QUARTER     = "q1"
 YEAR        = 2023
 COUNTRY     = "de"

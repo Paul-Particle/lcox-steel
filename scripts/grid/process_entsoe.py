@@ -1,60 +1,61 @@
+"""Process per-(area, data_type) ENTSO-E feathers into a single hourly EU dataset.
+
+Inputs: a flat list of resources/entsoe/{area}/{data_type}.feather paths
+        (each file already covers the full date range for its area+data_type).
+Output: resources/processed_data.feather — wide DataFrame, columns = (area, metric).
+"""
+
+from collections import defaultdict
+from pathlib import Path
+
 import pandas as pd
 
 if "snakemake" not in globals():
     from _stubs import snakemake
 
-def get_enabled_areas(areas_file_path):
-    """Reads the areas.csv file and returns a list of enabled area codes."""
-    areas_df = pd.read_csv(areas_file_path)
-    return areas_df[areas_df["enabled"]]["area_code"].tolist()
+
+def load_per_data_type(input_paths):
+    """Group inputs by data_type and concat areas horizontally per data_type."""
+    by_dt = defaultdict(list)
+    for p in input_paths:
+        p = Path(p)
+        by_dt[p.stem].append(p)
+
+    result = {}
+    for dt, paths in by_dt.items():
+        dfs = [pd.read_feather(p) for p in sorted(paths)]
+        result[dt] = pd.concat(dfs, axis=1).sort_index()
+    return result
+
 
 def process_data(snakemake):
-    """
-    Processes data into a single dataframe.
-    """
     print("Processing data...")
-    
-    AREAS = get_enabled_areas(snakemake.input.areas_config)
+    AREAS = list(snakemake.params.areas)
 
-    df_price = pd.read_feather(snakemake.input.prices)
-    df_load_forecast = pd.read_feather(snakemake.input.load_forecast)
-    df_load_actual = pd.read_feather(snakemake.input.load_actual)
-    df_vre_forecast = pd.read_feather(snakemake.input.vre)
-    df_generation = pd.read_feather(snakemake.input.generation)
-    df_crossborder = pd.read_feather(snakemake.input.crossborder)
+    by_dt = load_per_data_type(list(snakemake.input.entsoe))
 
-    # forward fill interpolation, as some data might have higher resolution
-    df_price = df_price.ffill(limit=3).fillna(0.0)
-    df_load_forecast = df_load_forecast.ffill(limit=3).fillna(0.0)
-    df_load_actual = df_load_actual.ffill(limit=3).fillna(0.0)
-    df_vre_forecast = df_vre_forecast.ffill(limit=3).fillna(0.0)
-    df_generation = df_generation.ffill(limit=3).fillna(0.0)
-    df_crossborder = df_crossborder.ffill(limit=3).fillna(0.0)
+    df_price          = by_dt["prices"].ffill(limit=3).fillna(0.0)
+    df_load_forecast  = by_dt["load_forecast"].ffill(limit=3).fillna(0.0)
+    df_load_actual    = by_dt["load_actual"].ffill(limit=3).fillna(0.0)
+    df_vre_forecast   = by_dt["vre"].ffill(limit=3).fillna(0.0)
+    df_generation     = by_dt["generation"].ffill(limit=3).fillna(0.0)
+    df_crossborder    = by_dt["crossborder"].ffill(limit=3).fillna(0.0)
 
-    # Create MultiIndex columns for merging
+    # Wrap single-level frames in a (area, metric) MultiIndex so they can be merged
+    # with the already-MultiIndex generation / VRE / crossborder frames.
     df_p = df_price.copy()
-    index_p = pd.MultiIndex.from_tuples([(col, 'price') for col in df_p.columns])
-    df_p.columns = index_p
+    df_p.columns = pd.MultiIndex.from_tuples([(col, 'price') for col in df_p.columns])
 
     df_d_fc = df_load_forecast.copy()
-    index_d = pd.MultiIndex.from_tuples([(col, 'load_forecast') for col in df_d_fc.columns])
-    df_d_fc.columns = index_d
+    df_d_fc.columns = pd.MultiIndex.from_tuples([(col, 'load_forecast') for col in df_d_fc.columns])
 
     df_d_ac = df_load_actual.copy()
-    index_d = pd.MultiIndex.from_tuples([(col, 'load') for col in df_d_ac.columns])
-    df_d_ac.columns = index_d
+    df_d_ac.columns = pd.MultiIndex.from_tuples([(col, 'load') for col in df_d_ac.columns])
 
-    df_v = df_vre_forecast.copy()
-
-    df_g = df_generation.copy()
-
-    df_x = df_crossborder.copy()
-
-    df_EU = pd.concat([df_p, df_d_fc, df_d_ac, df_v, df_g, df_x], axis=1)
+    df_EU = pd.concat([df_p, df_d_fc, df_d_ac, df_vre_forecast, df_generation, df_crossborder], axis=1)
 
     dfs_EU = {}
     for area in [col for col in df_EU.columns.get_level_values(0).unique() if col in AREAS]:
-        # Select data for the current area, resulting in a DataFrame with single-level columns
         df_area_data = df_EU[area].copy()
 
         df_area_processed = (df_area_data
@@ -63,22 +64,16 @@ def process_data(snakemake):
             .assign(vre_forecast  = lambda x: x.get('wind_forecast', 0) + x.get('solar_forecast', 0))
             .assign(residual_forecast = lambda x: x.get('load_forecast', 0) - x.get('vre_forecast', 0))
             .assign(wind = lambda x: x.get('wind_onshore', 0) + x.get('wind_offshore', 0))
-            .assign(vre = lambda x: x.get('wind', 0) + x.get('solar', 0))
+            .assign(vre  = lambda x: x.get('wind', 0) + x.get('solar', 0))
             .assign(residual = lambda x: x.get('load', 0) - x.get('vre', 0))
             .ffill(limit=3)
         )
-        
-        # Create a new MultiIndex for the columns of the processed area data
-        # The first level is the area, the second level are the new and old metrics
-        new_columns = pd.MultiIndex.from_product([[area], df_area_processed.columns])
-        df_area_processed.columns = new_columns
-        
+
+        df_area_processed.columns = pd.MultiIndex.from_product([[area], df_area_processed.columns])
         dfs_EU[area] = df_area_processed
 
     df_EU_all = pd.concat(dfs_EU.values(), axis=1)
-
-    df_EU_all.index = df_EU_all.index.tz_localize(None) # pyright: ignore[reportAttributeAccessIssue]
-    
+    df_EU_all.index = df_EU_all.index.tz_localize(None)  # pyright: ignore[reportAttributeAccessIssue]
     df_EU_all.to_feather(snakemake.output[0])
     print(f"Successfully saved processed data to {snakemake.output[0]}")
 

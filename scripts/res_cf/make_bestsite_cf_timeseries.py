@@ -41,7 +41,7 @@ Notes
 
 Outputs
 -------
-data/res_cf/<cc>_cf_2023_bestsite_p95.csv
+resources/res_cf/<cc>_cf_2023_bestsite_p95.csv
 
 (columns: time, wind_onshore_cf, wind_offshore_cf, solar_cf)
 """
@@ -57,16 +57,16 @@ import geopandas as gpd
 from shapely.geometry import box
 
 YEAR      = 2023
-OUTDIR    = Path("data/res_cf")
+OUTDIR    = Path("resources/res_cf")
 COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # lowercase to match filenames; standalone default
 
 if "snakemake" in dir():
     COUNTRIES = [snakemake.wildcards.country.lower()]
     YEAR      = int(snakemake.config["res_cf"]["year"])
 
-CUTOUT_DIR = Path("data/cutouts")
-REGIONS_PATH = Path("data/shapes/regions.geojson")
-OFFSHORE_REGIONS_PATH = Path("data/shapes/offshore_regions.geojson")
+CUTOUT_DIR = Path("cutouts")
+REGIONS_PATH = Path("resources/shapes/regions.geojson")
+OFFSHORE_REGIONS_PATH = Path("resources/shapes/offshore_regions.geojson")
 
 COUNTRY_SEGMENTS = {
     "DE": ["q1", "q2", "q3", "q4"],

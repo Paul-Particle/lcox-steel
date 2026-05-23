@@ -11,13 +11,17 @@ lcox-steel/
 ├── config/
 │   ├── assumptions.yaml    # Techno-economic defaults (CAPEX, OPEX, WACC, lifetimes)
 │   └── projects.yaml       # Project + scenario definitions for PyPSA runs
-├── areas.csv               # ENTSO-E areas to download (enabled flag)
+├── _paths.py               # Canonical repo path roots (DATA, RESOURCES, CUTOUTS, …)
 ├── environment.yaml        # Conda environment (lcox-steel)
-├── data/
-│   ├── entsoe_cache/       # Raw ENTSO-E feather files (area/year-month/data_type)
-│   ├── integrated/         # Integrated ENTSO-E data (one feather per data type)
-│   ├── cutouts/            # Atlite ERA5 cutout files (gitignored)
-│   ├── shapes/             # Geographic boundaries (gitignored — see below)
+├── data/                   # Raw / external / expensive (not produced by this repo)
+│   ├── entsoe_cache/       # Internal ENTSO-E monthly cache (area/year-month/data_type) — gitignored
+│   ├── nemosis_cache/      # Internal AEMO NEMOSIS cache — gitignored
+│   └── shapes/             # Raw shapefiles: ne_110m_admin_0_countries/, eez/ (gitignored — see below)
+├── resources/              # Derived / Snakemake-tracked outputs (reproducible)
+│   ├── entsoe/{area}/{data_type}.feather  # Stitched per-area, per-data_type ENTSO-E series
+│   ├── processed_data.feather             # Wide hourly grid dataset (MultiIndex columns)
+│   ├── nem_processed.feather              # Australian NEM equivalent
+│   ├── shapes/             # Derived geojsons (regions, offshore_regions — committed in git)
 │   └── res_cf/
 │       ├── quarterly/      # Per-tech CF time series by quarter (intermediate)
 │       ├── annual/         # Per-tech CF time series full-year (intermediate)
@@ -25,6 +29,8 @@ lcox-steel/
 │       ├── <cc>_cf_<year>_bestsite_p95.csv # P95 best-site profiles
 │       ├── resource_spread_<year>.csv      # Spatial resource statistics
 │       └── <cc>_complementarity_top<N>_<year>.csv
+├── cutouts/                # Atlite ERA5 cutout files (gitignored)
+├── .atlite-cache/          # Atlite scratch working dir (gitignored)
 ├── results/                # PyPSA optimization outputs (.nc + summary CSVs)
 └── scripts/
     ├── grid/               # Grid data pipeline (ENTSO-E + NEM)
@@ -102,15 +108,27 @@ snakemake --cores 4   # execute
 ### Grid data only
 
 ```bash
-snakemake data/processed_data.feather --cores 4
+snakemake resources/processed_data.feather --cores 4 --resources entsoe_api=4
 ```
 
-Downloads and integrates ENTSO-E data into `data/processed_data.feather` (MultiIndex columns `(area, metric)`, hourly UTC DatetimeIndex).
+Downloads and stitches ENTSO-E data into `resources/processed_data.feather` (MultiIndex columns `(area, metric)`, hourly UTC DatetimeIndex). The `download_entsoe_data` rule manages a per-month cache in `data/entsoe_cache/` internally; once a month is cached it is never re-fetched.
+
+`--resources entsoe_api=N` caps concurrent ENTSO-E API calls (their rate limit is ~400/min globally per API key — without throttling, a cold-cache build can exhaust the quota).
+
+To force a refresh, delete the relevant cache files then re-run snakemake:
+
+```bash
+rm -rf data/entsoe_cache/DE_LU/2024-12   # one month for one area
+rm -rf data/entsoe_cache/*/2024-12       # one month for all areas
+rm resources/entsoe/DE_LU/prices.feather # force the rule to re-run too
+```
+
+Months that fail (transient ENTSO-E errors, network blips) are retried 3× with exponential backoff inside the rule. Months that still fail are logged and skipped; the rule writes a partial output covering only the successful months and fails only if zero months succeeded. The next run will automatically re-attempt the missing months.
 
 ### res_cf pipeline for one country
 
 ```bash
-snakemake "data/res_cf/de_cf_2023.csv" --cores 4
+snakemake "resources/res_cf/de_cf_2023.csv" --cores 4
 ```
 
 This chains: `build_regions` → `build_offshore_regions` → `make_cutout` (4 quarters, ERA5) → `build_cf_timeseries` → `concat_quarters` → `combine_techs`.
@@ -128,10 +146,10 @@ Edit `config/projects.yaml` to add projects and scenarios. Edit `config/assumpti
 
 ## Data formats
 
-**Grid data** (`data/processed_data.feather`): pandas DataFrame with a UTC hourly DatetimeIndex and MultiIndex columns `(area_code, metric)`. Metrics include `price`, `load_actual`, `load_forecast`, `vre`, `generation`, `crossborder`.
+**Grid data** (`resources/processed_data.feather`): pandas DataFrame with a UTC hourly DatetimeIndex and MultiIndex columns `(area_code, metric)`. Metrics include `price`, `load_actual`, `load_forecast`, `vre`, `generation`, `crossborder`.
 
-**Capacity factors** (`data/res_cf/<cc>_cf_<year>.csv`): hourly CSV with a `time` column and columns `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
+**Capacity factors** (`resources/res_cf/<cc>_cf_<year>.csv`): hourly CSV with a `time` column and columns `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
 
-**Best-site profiles** (`data/res_cf/<cc>_cf_<year>_bestsite_p95.csv`): same format; P95 grid cell extracted directly from the Atlite CF grid with 3×3 spatial averaging for wind.
+**Best-site profiles** (`resources/res_cf/<cc>_cf_<year>_bestsite_p95.csv`): same format; P95 grid cell extracted directly from the Atlite CF grid with 3×3 spatial averaging for wind.
 
-**Complementarity results** (`data/res_cf/<cc>_complementarity_top<N>_<year>.csv`): ranked triplets of (onshore, offshore, solar) grid cells with score, coincidence, correlation, distance, and coordinates.
+**Complementarity results** (`resources/res_cf/<cc>_complementarity_top<N>_<year>.csv`): ranked triplets of (onshore, offshore, solar) grid cells with score, coincidence, correlation, distance, and coordinates.

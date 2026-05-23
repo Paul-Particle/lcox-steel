@@ -1,6 +1,6 @@
 data:
-  processed_path: "data/processed_data.feather"
-  cf_dir: "data/res_cf"
+  processed_path: "resources/processed_data.feather"
+  cf_dir: "resources/res_cf"
 
 projects:
   - name: DE_2023_baseline

@@ -1,15 +1,15 @@
 """
 Create one Atlite ERA5 cutout for a given country, year, and quarter.
 
-Output: data/cutouts/{country}_{year}_{quarter}.nc
+Output: cutouts/{country}_{year}_{quarter}.nc
 """
 from pathlib import Path
 import atlite
 import geopandas as gpd
 
-REGIONS_PATH         = Path("data/shapes/regions.geojson")
-OFFSHORE_REGIONS_PATH = Path("data/shapes/offshore_regions.geojson")
-TMPDIR = Path("data/tmp/atlite")
+REGIONS_PATH         = Path("resources/shapes/regions.geojson")
+OFFSHORE_REGIONS_PATH = Path("resources/shapes/offshore_regions.geojson")
+TMPDIR = Path(".atlite-cache")
 
 # Countries that need coarser resolution to avoid CDS instability / memory limits
 COARSE_RESOLUTION_COUNTRIES = {"aus", "bra"}
@@ -25,7 +25,7 @@ QUARTER_DATES = {
 COUNTRY = "de"
 YEAR    = 2023
 QUARTER = "q1"
-OUTPUT_PATH = Path(f"data/cutouts/{COUNTRY}_{YEAR}_{QUARTER}.nc")
+OUTPUT_PATH = Path(f"cutouts/{COUNTRY}_{YEAR}_{QUARTER}.nc")
 
 if "snakemake" in dir():
     COUNTRY     = snakemake.wildcards.country.lower()

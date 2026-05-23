@@ -27,9 +27,9 @@ import atlite
 import regionmask
 import pandas as pd
 
-CUTOUT_DIR = Path("data/cutouts")
-REGIONS_PATH = Path("data/shapes/regions.geojson")
-OFFSHORE_REGIONS_PATH = Path("data/shapes/offshore_regions.geojson")
+CUTOUT_DIR = Path("cutouts")
+REGIONS_PATH = Path("resources/shapes/regions.geojson")
+OFFSHORE_REGIONS_PATH = Path("resources/shapes/offshore_regions.geojson")
 
 OUTDIR = Path("results/plots/bestsite_locations")
 OUTDIR.mkdir(parents=True, exist_ok=True)
@@ -52,7 +52,7 @@ PV_PANEL = "CSi"
 PV_ORIENTATION = "latitude_optimal"
 
 def get_national_mean_from_csv(iso2: str, tech: str) -> float:
-    path = Path(f"data/res_cf/{iso2.lower()}_cf_2023.csv")
+    path = Path(f"resources/res_cf/{iso2.lower()}_cf_2023.csv")
     df = pd.read_csv(path)
 
     col_map = {

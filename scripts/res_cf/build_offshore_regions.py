@@ -4,8 +4,8 @@ import yaml
 
 
 EEZ_SHP      = Path("data/shapes/eez/eez_v12.shp")
-OUT_GEOJSON  = Path("data/shapes/offshore_regions.geojson")
-LAND_REGIONS = Path("data/shapes/regions.geojson")
+OUT_GEOJSON  = Path("resources/shapes/offshore_regions.geojson")
+LAND_REGIONS = Path("resources/shapes/regions.geojson")
 
 
 def _read_offshore_max_distance_km() -> float:

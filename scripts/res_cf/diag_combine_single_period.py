@@ -5,7 +5,7 @@ into the merged format expected by the plot script.
 Use this instead of running scripts 04 + 05 when you only have one period
 and just want to get to a plot quickly.
 
-Output: data/res_cf/{COUNTRY}_cf_{YEAR}.csv
+Output: resources/res_cf/{COUNTRY}_cf_{YEAR}.csv
         columns: time, wind_onshore_cf, [wind_offshore_cf,] solar_cf
 """
 
@@ -16,7 +16,7 @@ COUNTRY = "de"
 TAG     = "oct2w"
 YEAR    = 2025
 
-DATA_DIR = Path("data/res_cf")
+DATA_DIR = Path("resources/res_cf")
 
 
 def read_cf(path: Path, col_name: str) -> pd.DataFrame:

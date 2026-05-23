@@ -1,95 +1,70 @@
-import pandas as pd
+"""Download ENTSO-E data for a single (area, data_type) pair.
+
+Manages a per-month cache in data/entsoe_cache/{area}/{YYYY-MM}/{data_type}.feather.
+Cached months are skipped; missing months are fetched (with 3 retries + exponential
+backoff per month). Per-month failures are logged and the run continues; the rule
+fails only if ZERO months succeed. To force a refresh, delete the relevant cache
+files then re-run snakemake.
+"""
+
+import logging
 import os
-import entsoe
-from dotenv import load_dotenv
+import time
 from pathlib import Path
+
+import entsoe
+import pandas as pd
+from dotenv import load_dotenv
 
 if "snakemake" not in globals():
     from _stubs import snakemake
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("download_entsoe")
+
+
 def get_entsoe_client():
-    """Initializes and returns the EntsoePandasClient."""
-    # Load environment variables from .env file, you need to create this yourself and add your ENTSO-E API key
     load_dotenv()
-    API_KEY = os.environ.get("ENTSOE_API_KEY")
-    if not API_KEY:
+    api_key = os.environ.get("ENTSOE_API_KEY")
+    if not api_key:
         raise ValueError(
             "ENTSOE_API_KEY environment variable not set. Please set it in your .env file."
         )
-
-    client = entsoe.EntsoePandasClient(api_key=API_KEY) # pyright: ignore[reportPrivateImportUsage]
-    return client
+    return entsoe.EntsoePandasClient(api_key=api_key)  # pyright: ignore[reportPrivateImportUsage]
 
 
-def download_price_data(client, area, start, end, output_file):
-    """Downloads day-ahead prices for a single area and saves to a feather file."""
-    print(f"Downloading day-ahead prices for {area}...")
-    try:
-        data = client.query_day_ahead_prices(area, start=start, end=end)
-    except Exception as e:
-        print('ERROR: ', repr(e))
-    else:
-        print("ok")
-        data.name = area
-        df = data.to_frame()
-        df.to_feather(output_file)
-        print(f"Successfully saved price data to {output_file}")
+# ── Per-data_type fetchers (return DataFrame or raise) ────────────────────────
+
+def fetch_prices(client, area, start, end):
+    data = client.query_day_ahead_prices(area, start=start, end=end)
+    data.name = area
+    return data.to_frame()
 
 
-def download_load_forecast_data(client, area, start, end, output_file):
-    """Downloads load forecast data for a single area and saves to a feather file."""
-    print(f"Downloading load forecast data for {area}...")
-    try:
-        data = client.query_load_forecast(area, start=start, end=end)
-    except Exception as e:
-        print('ERROR', repr(e))
-    else:
-        print("ok")
-        data.columns = [area]
-        data.to_feather(output_file)
-        print(f"Successfully saved load forecast data to {output_file}")
+def fetch_load_forecast(client, area, start, end):
+    data = client.query_load_forecast(area, start=start, end=end)
+    data.columns = [area]
+    return data
 
 
-def download_load_data(client, area, start, end, output_file):
-    """Downloads actual load data for a single area and saves to a feather file."""
-    print(f"Downloading actual load data for {area}...")
-    try:
-        data = client.query_load(area, start=start, end=end)
-    except Exception as e:
-        print('ERROR', repr(e))
-    else:
-        print("ok")
-        data.columns = [area]
-        data.to_feather(output_file)
-        print(f"Successfully saved actual load data to {output_file}")
+def fetch_load_actual(client, area, start, end):
+    data = client.query_load(area, start=start, end=end)
+    data.columns = [area]
+    return data
 
 
-def download_vre_forecast_data(client, area, start, end, output_file):
-    print(f"Downloading wind and solar forecast data for {area}...")
-
-    vre_new_names = {
+def fetch_vre(client, area, start, end):
+    vre_names = {
         "Solar": "solar_forecast",
         "Wind Onshore": "wind_onshore_forecast",
         "Wind Offshore": "wind_offshore_forecast",
     }
-    try:
-        data = client.query_wind_and_solar_forecast(
-            area, start=start, end=end
-        )
-    except Exception as e:
-        print(repr(e))
-    else:
-        print("ok")
-        index = pd.MultiIndex.from_tuples(
-            [(area, vre_new_names[vre]) for vre in data.columns]
-        )
-        data.columns = index
-        data.to_feather(output_file)
-        print(f"Successfully saved VRE data to {output_file}")
+    data = client.query_wind_and_solar_forecast(area, start=start, end=end)
+    data.columns = pd.MultiIndex.from_tuples([(area, vre_names[c]) for c in data.columns])
+    return data
 
-def download_generation_data(client, area, start, end, output_file):
-    print(f"Downloading actual generation data for {area}...")
 
+def fetch_generation(client, area, start, end):
     gen_names = {
         "Biomass": "biomass",
         "Energy storage": "energy_storage",
@@ -113,96 +88,136 @@ def download_generation_data(client, area, start, end, output_file):
         "Wind Offshore": "wind_offshore",
         "Wind Onshore": "wind_onshore",
     }
-    gen_names_production = {k + "_Actual Aggregated": v for k, v in gen_names.items()}
-    gen_names_consumption = {k + "_Actual Consumption": v + "_cons" for k, v in gen_names.items()}
-    gen_names = gen_names_production | gen_names_consumption
+    rename_map = {k + "_Actual Aggregated": v for k, v in gen_names.items()}
+    rename_map |= {k + "_Actual Consumption": v + "_cons" for k, v in gen_names.items()}
 
-    try:
-        data = client.query_generation(
-            area, start=start, end=end
-        )
-    except Exception as e:
-        print(repr(e))
+    data = client.query_generation(area, start=start, end=end)
+    if data.columns.nlevels == 2:
+        data.columns = ["_".join(col) for col in data.columns.values]
     else:
-        if data.columns.nlevels == 2:
-            data.columns = ['_'.join(col) for col in data.columns.values]
-        else:
-            data.columns = ['_'.join([col, 'Actual Aggregated']) for col in data.columns]
-        cols_to_change = data.filter(regex='Consumption$', axis=1).columns
-        data.loc[:, cols_to_change] = data.loc[:, cols_to_change] * -1
-        
-        index = pd.MultiIndex.from_tuples(
-            [(area, gen_names[gen]) for gen in data.columns]
-        )
-        data.columns = index
-        data.to_feather(output_file)
-        print(f"Successfully saved actual generation data to {output_file}")
+        data.columns = ["_".join([col, "Actual Aggregated"]) for col in data.columns]
+    cons_cols = data.filter(regex="Consumption$", axis=1).columns
+    data.loc[:, cons_cols] = data.loc[:, cons_cols] * -1
+    data.columns = pd.MultiIndex.from_tuples([(area, rename_map[c]) for c in data.columns])
+    return data
 
-def download_crossborder_data(client, area, start, end, output_file):
-    print(f"Downloading crossborder export-import flow data for {area}...")
-    dfs_crossborder = []
-    
-    print(f"{area} in")
-    try: 
-        data_in = client.query_physical_crossborder_allborders(area, start=start, end=end, export=False, per_hour=False)
-    except Exception as e:
-        print(repr(e))
-    else:
-        print("ok")
-        data_in.columns = ['from_' + col for col in data_in.columns]
-        dfs_crossborder.append(data_in)
 
-    print(f"{area} out")
-    try: 
-        data_out = client.query_physical_crossborder_allborders(area, start=start, end=end, export=True, per_hour=False)
-    except Exception as e:
-        print(repr(e))
-    else:
-        print("ok")
-        data_out.columns = ['to_' + col for col in data_out.columns]
-        dfs_crossborder.append(data_out * -1)
+def fetch_crossborder(client, area, start, end):
+    parts = []
+    data_in = client.query_physical_crossborder_allborders(
+        area, start=start, end=end, export=False, per_hour=False
+    )
+    data_in.columns = ["from_" + c for c in data_in.columns]
+    parts.append(data_in)
+    data_out = client.query_physical_crossborder_allborders(
+        area, start=start, end=end, export=True, per_hour=False
+    )
+    data_out.columns = ["to_" + c for c in data_out.columns]
+    parts.append(data_out * -1)
+    df = pd.concat(parts, axis=1)
+    df.columns = pd.MultiIndex.from_tuples([(area, c) for c in df.columns])
+    return df
 
-    if dfs_crossborder:
-        df_crossborder = pd.concat(dfs_crossborder, axis=1)
-        index = pd.MultiIndex.from_tuples(
-            [(area, col) for col in df_crossborder.columns]
-        )
-        df_crossborder.columns = index
-        df_crossborder.to_feather(output_file)
-        print(f"Successfully saved crossborder data to {output_file}")
 
+FETCHERS = {
+    "prices": fetch_prices,
+    "load_forecast": fetch_load_forecast,
+    "load_actual": fetch_load_actual,
+    "vre": fetch_vre,
+    "generation": fetch_generation,
+    "crossborder": fetch_crossborder,
+}
+
+
+# ── Month iteration & retry helpers ──────────────────────────────────────────
+
+def iter_months(start_date_str, end_date_str):
+    """Yield (YYYY-MM, month_start_ts, month_end_ts) for each month in [start, end]."""
+    start = pd.to_datetime(start_date_str, format="%Y%m%d")
+    end = pd.to_datetime(end_date_str, format="%Y%m%d")
+    for ts in pd.date_range(start, end, freq="MS"):
+        ym = ts.strftime("%Y-%m")
+        month_start = pd.Timestamp(ts, tz="Europe/Brussels")
+        month_end = month_start + pd.offsets.MonthEnd(0)
+        yield ym, month_start, month_end
+
+
+def fetch_with_retry(fetcher, client, area, start, end, max_attempts=3):
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return fetcher(client, area, start=start, end=end)
+        except Exception as e:
+            if attempt == max_attempts:
+                raise
+            backoff = 2 ** attempt
+            log.warning(
+                f"  attempt {attempt}/{max_attempts} failed ({e!r}); retry in {backoff}s"
+            )
+            time.sleep(backoff)
+
+
+# ── Main ─────────────────────────────────────────────────────────────────────
 
 def download_data(snakemake):
-    """
-    Downloads data from the ENTSO-E API using parameters from a snakemake object.
-    """
-
-    data_type = snakemake.wildcards.data_type
     area = snakemake.wildcards.area
-    year_month = snakemake.wildcards.year_month
-    year, month = map(int, year_month.split('-'))
-    output_file = Path(snakemake.output[0])
+    data_type = snakemake.wildcards.data_type
+    output_path = Path(snakemake.output[0])
+    cache_dir = Path(snakemake.params.cache_dir)
+    start_date = snakemake.params.start_date
+    end_date = snakemake.params.end_date
 
-    output_file.parent.mkdir(parents=True, exist_ok=True)
+    if data_type not in FETCHERS:
+        raise ValueError(f"unknown data_type {data_type!r}")
+    fetcher = FETCHERS[data_type]
 
-    client = get_entsoe_client()
-    start_ts = pd.Timestamp(f"{year}-{month}-01", tz="Europe/Brussels")
-    end_ts = start_ts + pd.offsets.MonthEnd(0)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    area_cache_dir = cache_dir / area
 
-    print(f"Downloading data from {start_ts} to {end_ts}")
-    print(f"Area: {area}")
+    client = None  # lazily instantiated; warm cache = no API call
+    successful_dfs = []
+    n_total = n_cached = n_fetched = n_failed = 0
 
-    download_functions = {
-        "prices": download_price_data,
-        "load_forecast": download_load_forecast_data,
-        "load_actual": download_load_data,
-        "vre": download_vre_forecast_data,
-        "generation": download_generation_data,
-        "crossborder": download_crossborder_data,
-    }
+    for ym, month_start, month_end in iter_months(start_date, end_date):
+        n_total += 1
+        month_cache_dir = area_cache_dir / ym
+        cache_path = month_cache_dir / f"{data_type}.feather"
 
-    if data_type in download_functions:
-        download_functions[data_type](client, area, start_ts, end_ts, output_file)
+        if cache_path.exists():
+            successful_dfs.append(pd.read_feather(cache_path))
+            n_cached += 1
+            continue
+
+        if client is None:
+            client = get_entsoe_client()
+
+        try:
+            log.info(f"{area}/{ym}/{data_type}: fetching")
+            df = fetch_with_retry(fetcher, client, area, month_start, month_end)
+        except Exception as e:
+            log.error(f"{area}/{ym}/{data_type}: FAILED after retries — {e!r}")
+            n_failed += 1
+            continue
+
+        month_cache_dir.mkdir(parents=True, exist_ok=True)
+        df.to_feather(cache_path)
+        successful_dfs.append(df)
+        n_fetched += 1
+
+    if not successful_dfs:
+        raise RuntimeError(
+            f"{area}/{data_type}: zero months succeeded — refusing to write empty output. "
+            f"(total={n_total}, failed={n_failed})"
+        )
+
+    combined = pd.concat(successful_dfs, axis=0)
+    combined = combined[~combined.index.duplicated(keep="last")]
+    combined = combined.sort_index()
+    combined.to_feather(output_path)
+    log.info(
+        f"{area}/{data_type}: wrote {output_path} "
+        f"(cached={n_cached}, fetched={n_fetched}, failed={n_failed}, total={n_total})"
+    )
+
 
 if __name__ == "__main__":
     download_data(snakemake)

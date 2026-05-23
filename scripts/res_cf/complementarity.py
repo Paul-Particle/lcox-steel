@@ -30,8 +30,8 @@ For each country:
 
 Outputs
 -------
-data/res_cf/<cc>_complementarity_top{N}_2023.csv
-data/res_cf/<cc>_average_profiles_2023.csv
+resources/res_cf/<cc>_complementarity_top{N}_2023.csv
+resources/res_cf/<cc>_average_profiles_2023.csv
 """
 
 from __future__ import annotations

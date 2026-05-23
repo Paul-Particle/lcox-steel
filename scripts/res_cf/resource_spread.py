@@ -26,7 +26,7 @@ Important
 
 Output
 ------
-data/res_cf/resource_spread_2023.csv
+resources/res_cf/resource_spread_2023.csv
 """
 
 from __future__ import annotations
@@ -39,11 +39,11 @@ import xarray as xr
 import atlite
 import geopandas as gpd
 
-CUTOUT_DIR = Path("data/cutouts")
-REGIONS_PATH = Path("data/shapes/regions.geojson")
-NATIONAL_CF_DIR = Path("data/res_cf")
-OFFSHORE_REGIONS_PATH = Path("data/shapes/offshore_regions.geojson")
-OUT_PATH = Path("data/res_cf/resource_spread_2023.csv")
+CUTOUT_DIR = Path("cutouts")
+REGIONS_PATH = Path("resources/shapes/regions.geojson")
+NATIONAL_CF_DIR = Path("resources/res_cf")
+OFFSHORE_REGIONS_PATH = Path("resources/shapes/offshore_regions.geojson")
+OUT_PATH = Path("resources/res_cf/resource_spread_2023.csv")
 
 YEAR = 2023
 
@@ -59,7 +59,7 @@ if "snakemake" in dir():
     YEAR     = int(snakemake.config["res_cf"]["year"])
     OUT_PATH = Path(snakemake.output[0])
     quarters = ["q1", "q2", "q3", "q4"]
-    COUNTRIES = {c.upper(): quarters for c in snakemake.config["res_cf"]["countries"]}
+    COUNTRIES = {c.upper(): quarters for c, info in snakemake.config["res_cf"]["countries"].items() if info.get("enabled")}
 
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
 

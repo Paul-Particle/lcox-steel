@@ -2,18 +2,18 @@
 Concatenate quarterly (Q1–Q4) RES capacity factor time series into a full-year series.
 
 Inputs (CSV, hourly; produced by Script 03):
-- data/res_cf/<cc>_wind_onshore_cf_<year>_q1.csv
-- data/res_cf/<cc>_wind_onshore_cf_<year>_q2.csv
-- data/res_cf/<cc>_wind_onshore_cf_<year>_q3.csv
-- data/res_cf/<cc>_wind_onshore_cf_<year>_q4.csv
+- resources/res_cf/<cc>_wind_onshore_cf_<year>_q1.csv
+- resources/res_cf/<cc>_wind_onshore_cf_<year>_q2.csv
+- resources/res_cf/<cc>_wind_onshore_cf_<year>_q3.csv
+- resources/res_cf/<cc>_wind_onshore_cf_<year>_q4.csv
 (and same for solar)
 
 Expected input format:
 - Columns: time, cf
 
 Outputs (CSV, hourly):
-- data/res_cf/<cc>_wind_onshore_cf_<year>.csv
-- data/res_cf/<cc>_solar_cf_<year>.csv
+- resources/res_cf/<cc>_wind_onshore_cf_<year>.csv
+- resources/res_cf/<cc>_solar_cf_<year>.csv
 
 Checks:
 - Hourly continuity (1h steps)
@@ -24,8 +24,8 @@ Checks:
 from pathlib import Path
 import pandas as pd
 
-INDIR  = Path("data/res_cf/quarterly")
-OUTDIR = Path("data/res_cf/annual")
+INDIR  = Path("resources/res_cf/quarterly")
+OUTDIR = Path("resources/res_cf/annual")
 YEAR = 2023
 COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # standalone default
 

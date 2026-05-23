@@ -2,12 +2,12 @@
 Combine yearly per-technology CF time series into a single country-year file.
 
 Inputs (yearly, hourly; produced by Script 04):
-- data/res_cf/de_wind_onshore_cf_2023.csv   (columns: time, cf)
-- data/res_cf/de_wind_offshore_cf_2023.csv  (columns: time, cf)
-- data/res_cf/de_solar_cf_2023.csv          (columns: time, cf)
+- resources/res_cf/de_wind_onshore_cf_2023.csv   (columns: time, cf)
+- resources/res_cf/de_wind_offshore_cf_2023.csv  (columns: time, cf)
+- resources/res_cf/de_solar_cf_2023.csv          (columns: time, cf)
 
 Output:
-- data/res_cf/de_cf_2023.csv
+- resources/res_cf/de_cf_2023.csv
   columns: time, wind_onshore_cf, wind_offshore_cf, solar_cf
 
 Notes:
@@ -18,8 +18,8 @@ Notes:
 from pathlib import Path
 import pandas as pd
 
-INDIR     = Path("data/res_cf/annual")
-OUTDIR    = Path("data/res_cf")
+INDIR     = Path("resources/res_cf/annual")
+OUTDIR    = Path("resources/res_cf")
 COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # standalone default
 YEAR      = 2023
 

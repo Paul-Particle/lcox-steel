@@ -8,5 +8,5 @@ def monthly_means(path):
     print("\n===", path, "(monthly mean CF) ===")
     print(m.to_string())
 
-monthly_means("data/res_cf/de_wind_onshore_cf_2023.csv")
-monthly_means("data/res_cf/de_solar_cf_2023.csv")
+monthly_means("resources/res_cf/de_wind_onshore_cf_2023.csv")
+monthly_means("resources/res_cf/de_solar_cf_2023.csv")

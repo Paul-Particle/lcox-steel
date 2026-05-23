@@ -1,15 +1,76 @@
 # Configuration for the cfp_data_analysis project
 
 scheduler: greedy
- 
-entsoe_download:
-  start_date: "20241230" # format as YYYYMMDD
-  end_date: "20241231"
-  rebuild: false # not implemented, use snakemake --rerun-triggers input params to avoid re-downloading
- 
-entsoe_integration:
-  start_date: "20230101"
-  end_date: "20241231"
+
+entsoe:
+  # ENTSO-E bidding-zone catalog. Flip enabled to add/drop areas from downloads.
+  # See https://transparency.entsoe.eu/ for available zones.
+  areas:
+    DE_LU:   { desc: "German bidding zone (+ Luxemburg), since 2018", enabled: true }
+    DK_1:    { enabled: true }
+    DK_2:    { enabled: true }
+    FR:      { enabled: true }
+    ES:      { enabled: true }
+    AL:      { desc: "Albania", enabled: false }
+    AT:      { enabled: false }
+    BY:      { desc: "Belarus", enabled: false }
+    BE:      { enabled: false }
+    BA:      { desc: "Bosnia Herzegovina", enabled: false }
+    BG:      { enabled: false }
+    HR:      { enabled: false }
+    CY:      { desc: "Cyprus", enabled: false }
+    CZ:      { enabled: false }
+    DE_AT_LU: { desc: "old German zone", enabled: false }
+    CZ_DE_SK: { desc: "old German zone", enabled: false }
+    EE:      { desc: "Estonia", enabled: false }
+    FI:      { enabled: false }
+    MK:      { desc: "Macedonia", enabled: false }
+    GR:      { enabled: false }
+    IS:      { desc: "Iceland", enabled: false }
+    HU:      { enabled: false }
+    IE_SEM:  { desc: "Ireland and Northern Ireland", enabled: false }
+    IT_CNOR: { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
+    IT_CSUD: { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
+    IT_NORD: { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
+    IT_SARD: { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
+    IT_SICI: { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
+    IT_SUD:  { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
+    RU_KGD:  { desc: "Kaliningrad (Russia)", enabled: false }
+    LV:      { enabled: false }
+    LT:      { enabled: false }
+    MT:      { desc: "Malta", enabled: false }
+    ME:      { desc: "Montenegro (not coupled?)", enabled: false }
+    GB:      { desc: "No(t much?) data since Brexit", enabled: false }
+    GE:      { desc: "Georgia (not coupled?)", enabled: false }
+    NL:      { enabled: false }
+    NO_1:    { desc: "Norway has 5 zones", enabled: false }
+    NO_2:    { desc: "Norway has 5 zones", enabled: false }
+    NO_3:    { desc: "Norway has 5 zones", enabled: false }
+    NO_4:    { desc: "Norway has 5 zones", enabled: false }
+    NO_5:    { desc: "Norway has 5 zones", enabled: false }
+    PL:      { enabled: false }
+    PT:      { enabled: false }
+    MD:      { desc: "Moldova", enabled: false }
+    RO:      { enabled: false }
+    RU:      { desc: "Russia", enabled: false }
+    SE_1:    { enabled: false }
+    SE_2:    { enabled: false }
+    SE_3:    { enabled: false }
+    SE_4:    { enabled: false }
+    RS:      { desc: "Serbia (not coupled?)", enabled: false }
+    SK:      { desc: "Slovakia", enabled: false }
+    SI:      { desc: "Slovenia", enabled: false }
+    CH:      { enabled: false }
+    TR:      { desc: "Turkey (not coupled)", enabled: false }
+    UA:      { desc: "Ukraine (not coupled, just synchronized?)", enabled: false }
+    XK:      { desc: "Kosovo (not coupled)", enabled: false }
+  data_types: [prices, load_forecast, load_actual, vre, generation, crossborder]
+  # Date range that ends up in resources/entsoe/{area}/{data_type}.feather.
+  # The download script caches per-month in data/entsoe_cache/; once a month is
+  # cached it is never re-fetched. To force a refresh, delete the relevant cache
+  # files (e.g. `rm -rf data/entsoe_cache/DE_LU/2024-12`) then re-run snakemake.
+  start_date: "20230101" # format as YYYYMMDD
+  end_date:   "20241231"
 
 nem_download:
   start_date: "20230101" # format as YYYYMMDD
@@ -17,10 +78,15 @@ nem_download:
   nemosis_cache_dir: "data/nemosis_cache"
   rebuild: false
 
-data_types: ["prices", "load_forecast", "load_actual", "vre", "generation", "crossborder"]
-
 res_cf:
-  countries: ["de"]   # expand to ["de","fr","es","aus","bra"] for full runs
+  # ISO-2 country codes for atlite cutouts + capacity factor pipeline.
+  # Flip enabled to add/drop a country.
+  countries:
+    de:  { enabled: true }
+    fr:  { enabled: false }
+    es:  { enabled: false }
+    aus: { enabled: false }
+    bra: { enabled: false }
   year: 2023
   top_n: 10
   offshore_max_distance_km: 200
