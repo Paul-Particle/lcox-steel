@@ -73,9 +73,9 @@ python scripts/res_cf/check_external_data.py
 ```
 
 **World EEZ v12** (Marine Regions)
-- Download from: https://www.marineregions.org/eez.php (free registration required)
+- Download from: https://www.marineregions.org/downloads.php (free registration required)
 - Choose "World EEZ v12 (2023)" → Shapefile format
-- Extract so that `data/shapes/eez/eez_v12.shp` exists
+- Extract the entire ZIP into `data/shapes/eez/` so that `eez_v12.shp`, `eez_v12.shx`, `eez_v12.dbf`, `eez_v12.prj` (and any companions) all live in that folder. Just the `.shp` on its own won't open — geopandas needs the full suite.
 - Any v11 or v12 release works; check `ISO_TER1` and `POL_TYPE` columns are present
 
 **Natural Earth 1:110m Admin-0 countries**

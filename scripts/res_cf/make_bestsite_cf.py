@@ -63,7 +63,7 @@ YEAR      = 2023
 OUTDIR    = Path("resources/res_cf")
 COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # lowercase to match filenames; standalone default
 
-if "snakemake" in dir():
+if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     COUNTRIES = [snakemake.wildcards.country.lower()]
     YEAR      = int(snakemake.config["res_cf"]["year"])
 

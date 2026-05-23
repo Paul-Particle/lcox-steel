@@ -18,7 +18,7 @@ COUNTRY     = "de"
 # ------------------------------------
 
 
-if "snakemake" in dir():
+if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     COUNTRY     = snakemake.wildcards.country.lower()
     YEAR        = int(snakemake.wildcards.year)
     QUARTER     = snakemake.wildcards.quarter

@@ -58,7 +58,7 @@ COUNTRIES = {
     "BRA": ["q1", "q2", "q3", "q4"],
 }
 
-if "snakemake" in dir():
+if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     YEAR     = int(snakemake.config["res_cf"]["year"])
     OUT_PATH = Path(snakemake.output[0])
     quarters = ["q1", "q2", "q3", "q4"]

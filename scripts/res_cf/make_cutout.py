@@ -30,7 +30,7 @@ YEAR    = 2023
 QUARTER = "q1"
 OUTPUT_PATH = Path(f"cutouts/{COUNTRY}_{YEAR}_{QUARTER}.nc")
 
-if "snakemake" in dir():
+if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     COUNTRY     = snakemake.wildcards.country.lower()
     YEAR        = int(snakemake.wildcards.year)
     QUARTER     = snakemake.wildcards.quarter

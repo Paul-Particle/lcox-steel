@@ -16,7 +16,7 @@ def read_offshore_max_distance_km() -> float:
     return float(cfg["res_cf"]["offshore_max_distance_km"])
 
 
-if "snakemake" in dir():
+if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     OUT_GEOJSON  = Path(snakemake.output[0])
     LAND_REGIONS = Path(snakemake.input.regions)
     OFFSHORE_MAX_KM = float(snakemake.config["res_cf"]["offshore_max_distance_km"])

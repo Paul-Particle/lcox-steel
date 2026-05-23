@@ -27,7 +27,7 @@ if "snakemake" not in globals():
 NE_SHP = Path("data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp")
 OUT_GEOJSON = Path("resources/shapes/regions.geojson")
 
-if "snakemake" in dir():
+if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     OUT_GEOJSON = Path(snakemake.output[0])
 
 

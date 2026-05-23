@@ -64,8 +64,8 @@ mask_cells_inside       = _bestsite.mask_cells_inside
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-OUTDIR       = PROJECT_ROOT / "data" / "res_cf"
-CF_DIR       = PROJECT_ROOT / "data" / "res_cf"
+OUTDIR       = PROJECT_ROOT / "resources" / "res_cf"
+CF_DIR       = PROJECT_ROOT / "resources" / "res_cf"
 
 YEAR  = 2023
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
@@ -80,7 +80,7 @@ _SM_COUNTRY = None
 _SM_TOP_OUT = None
 _SM_AVG_OUT = None
 
-if "snakemake" in dir():
+if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _SM_COUNTRY = snakemake.wildcards.country.upper()
     _SM_TOP_OUT = Path(snakemake.output.top)
     _SM_AVG_OUT = Path(snakemake.output.avg)
