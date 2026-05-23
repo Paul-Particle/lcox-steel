@@ -167,6 +167,34 @@ def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
     inside = points.within(geom) | points.touches(geom)
     return inside.values.reshape(cell_mean.shape)
 
+
+def haversine_distance_km(lon1, lat1, lon2, lat2):
+    """
+    Compute great-circle distance in km between one target point and arrays of points.
+
+    lon1, lat1: target point in degrees
+    lon2, lat2: arrays of candidate point coordinates in degrees
+    """
+    earth_radius_km = 6371.0
+
+    lon1_rad = np.deg2rad(lon1)
+    lat1_rad = np.deg2rad(lat1)
+    lon2_rad = np.deg2rad(lon2)
+    lat2_rad = np.deg2rad(lat2)
+
+    dlon = lon2_rad - lon1_rad
+    dlat = lat2_rad - lat1_rad
+
+    a = (
+        np.sin(dlat / 2.0) ** 2
+        + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon / 2.0) ** 2
+    )
+
+    c = 2.0 * np.arcsin(np.sqrt(a))
+
+    return earth_radius_km * c
+
+
 def _find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
     """
     Identify the representative P95 grid cell based on annual mean CF.
