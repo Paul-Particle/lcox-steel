@@ -1,58 +1,98 @@
 """
-Validate that required external data files are present before running the
-res_cf pipeline. Run this once after cloning / setting up the repo.
+Validate (and set up) required external data files for the res_cf pipeline.
 
-External files that Snakemake cannot download automatically:
+For each dataset:
+  1. Auto-creates the target directory if missing.
+  2. Extracts any .zip in that directory (a shapefile is .shp + .shx + .dbf
+     + .prj that all need to live together; dropping the ZIP and letting this
+     script extract it is the easiest path).
+  3. Reports OK / missing.
 
-  data/shapes/eez/eez_v12.shp
-      World EEZ v12 from Marine Regions (marineregions.org).
-      Free to download after brief registration:
-        https://www.marineregions.org/eez.php
-      → Download "World EEZ v12 (2023)" as a shapefile (.zip)
-      → Extract the contents so that eez_v12.shp (and its companion
-        .dbf / .shx / .prj files) live at data/shapes/eez/
-
-  data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp
-      Natural Earth 1:110m Admin-0 countries shapefile.
-      Download from naturalearthdata.com or via:
-        https://www.naturalearthdata.com/downloads/110m-cultural-vectors/
-      → Extract to data/shapes/ne_110m_admin_0_countries/
-
-Both datasets are stable; any version released within the last 2–3 years
-will work. If you already have them from a different project, symlinks are
-fine.
+Workflow after cloning:
+  1. `python scripts/res_cf/check_external_data.py`   (creates the dirs)
+  2. Download:
+       - World EEZ v12 from https://www.marineregions.org/downloads.php
+       - Natural Earth 110m countries from
+         https://www.naturalearthdata.com/downloads/110m-cultural-vectors/
+  3. Drop the two ZIPs into the directories created in step 1.
+  4. Re-run this script — it will extract and verify.
 """
 
 from pathlib import Path
+import shutil
 import sys
-
-REQUIRED = {
-    "EEZ (Marine Regions v12)": "data/shapes/eez/eez_v12.shp",
-    "Natural Earth 110m countries": (
-        "data/shapes/ne_110m_admin_0_countries/"
-        "ne_110m_admin_0_countries.shp"
-    ),
-}
+import zipfile
 
 ROOT = Path(__file__).parent.parent.parent
 
-ok = True
-for label, rel_path in REQUIRED.items():
-    p = ROOT / rel_path
-    if p.exists():
-        print(f"  [ok]  {label}")
-    else:
-        print(f"  [!!]  {label}")
-        print(f"        Missing: {rel_path}")
-        ok = False
+DATASETS = [
+    {
+        "label": "EEZ (Marine Regions v12)",
+        "dir":   ROOT / "data/shapes/eez",
+        "shp":   ROOT / "data/shapes/eez/eez_v12.shp",
+        "stem":  "eez_v12",
+    },
+    {
+        "label": "Natural Earth 110m countries",
+        "dir":   ROOT / "data/shapes/ne_110m_admin_0_countries",
+        "shp":   ROOT / "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp",
+        "stem":  "ne_110m_admin_0_countries",
+    },
+]
 
-if ok:
+
+def extract_zips(target_dir: Path, stem: str) -> list[Path]:
+    """
+    Extract every .zip in target_dir. If the ZIP nests shapefile components
+    inside a subfolder, move them up so the .shp ends up directly at
+    target_dir/{stem}.shp.
+    """
+    extracted = []
+    for zp in sorted(target_dir.glob("*.zip")):
+        with zipfile.ZipFile(zp) as zf:
+            zf.extractall(target_dir)
+        extracted.append(zp)
+
+    # Flatten: if {stem}.shp is nested, move it + companions up
+    expected = target_dir / f"{stem}.shp"
+    if not expected.exists():
+        found = next(iter(target_dir.rglob(f"{stem}.shp")), None)
+        if found is not None and found.parent != target_dir:
+            for sibling in list(found.parent.iterdir()):
+                if sibling.is_file() and sibling.stem == stem:
+                    shutil.move(str(sibling), target_dir / sibling.name)
+            try:
+                found.parent.rmdir()
+            except OSError:
+                pass
+
+    return extracted
+
+
+def main() -> int:
+    ok = True
+    for ds in DATASETS:
+        if not ds["dir"].exists():
+            ds["dir"].mkdir(parents=True)
+            print(f"  [mkdir] {ds['dir'].relative_to(ROOT)}/")
+
+        if not ds["shp"].exists():
+            for zp in extract_zips(ds["dir"], ds["stem"]):
+                print(f"  [unzip] {zp.relative_to(ROOT)}")
+
+        if ds["shp"].exists():
+            print(f"  [ok]    {ds['label']}")
+        else:
+            print(f"  [!!]    {ds['label']}")
+            print(f"          Missing: {ds['shp'].relative_to(ROOT)}")
+            print(f"          Drop the ZIP into {ds['dir'].relative_to(ROOT)}/ and re-run.")
+            ok = False
+
+    if not ok:
+        return 1
     print("\nAll external data files present.")
-else:
-    print("\nSome files are missing — see the docstring at the top of this")
-    print("script or the README for download instructions.")
-    sys.exit(1)
+    return 0
 
 
 if __name__ == "__main__":
-    pass
+    sys.exit(main())

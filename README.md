@@ -66,21 +66,19 @@ conda activate lcox-steel
 
 ### 2. External data files
 
-Two large geographic datasets must be downloaded manually before the res_cf pipeline can run. Run the check script to see what's missing:
+Two large geographic datasets must be downloaded manually. Run the check script — it creates the target dirs and extracts any ZIP it finds in them:
 
 ```bash
 python scripts/res_cf/check_external_data.py
 ```
 
-**World EEZ v12** (Marine Regions)
-- Download from: https://www.marineregions.org/downloads.php (free registration required)
-- Choose "World EEZ v12 (2023)" → Shapefile format
-- Extract the entire ZIP into `data/shapes/eez/` so that `eez_v12.shp`, `eez_v12.shx`, `eez_v12.dbf`, `eez_v12.prj` (and any companions) all live in that folder. Just the `.shp` on its own won't open — geopandas needs the full suite.
-- Any v11 or v12 release works; check `ISO_TER1` and `POL_TYPE` columns are present
+Then drop the ZIPs into the directories it printed and re-run:
 
-**Natural Earth 1:110m Admin-0 countries**
-- Download from: https://www.naturalearthdata.com/downloads/110m-cultural-vectors/
-- Extract to `data/shapes/ne_110m_admin_0_countries/`
+**World EEZ v12** — https://www.marineregions.org/downloads.php (free registration). Choose "World EEZ v12 (2023)" → Shapefile. Drop the ZIP into `data/shapes/eez/`. Any v11 or v12 works; needs `ISO_TER1` and `POL_TYPE` columns.
+
+**Natural Earth 1:110m Admin-0 countries** — https://www.naturalearthdata.com/downloads/110m-cultural-vectors/. Drop the ZIP into `data/shapes/ne_110m_admin_0_countries/`.
+
+(A shapefile is a `.shp` + `.shx` + `.dbf` + `.prj` suite that has to travel together — the auto-extract handles that.)
 
 ### 3. API keys
 
