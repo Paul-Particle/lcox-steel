@@ -1,5 +1,3 @@
-# Gitignore for cfp_data_analysis project
-
 # Operating System Files
 .DS_Store
 .ipynb_checkpoints/

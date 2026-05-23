@@ -59,32 +59,35 @@ from shapely.geometry import box
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-YEAR      = 2023
-OUTDIR    = Path("resources/res_cf")
-COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # lowercase to match filenames; standalone default
+import yaml
+from common._paths import CUTOUTS, RES_CF, SHAPES_RES, REPO_ROOT
+
+
+def load_res_cf_cfg() -> dict:
+    with open(REPO_ROOT / "config/config.yaml") as f:
+        return yaml.safe_load(f)["res_cf"]
+
+
+YEAR       = 2023
+OUTDIR     = RES_CF
+COUNTRIES  = ["de"]  # lowercase to match filenames; standalone default
+RES_CF_CFG = load_res_cf_cfg()
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    COUNTRIES = [snakemake.wildcards.country.lower()]
-    YEAR      = int(snakemake.config["res_cf"]["year"])
+    COUNTRIES  = [snakemake.wildcards.country.lower()]
+    YEAR       = int(snakemake.config["res_cf"]["year"])
+    RES_CF_CFG = snakemake.config["res_cf"]
 
-CUTOUT_DIR = Path("cutouts")
-REGIONS_PATH = Path("resources/shapes/regions.geojson")
-OFFSHORE_REGIONS_PATH = Path("resources/shapes/offshore_regions.geojson")
+CUTOUT_DIR            = CUTOUTS
+REGIONS_PATH          = SHAPES_RES / "regions.geojson"
+OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
 
-COUNTRY_SEGMENTS = {
-    "DE": ["q1", "q2", "q3", "q4"],
-    "FR": ["q1", "q2", "q3", "q4"],
-    "ES": ["q1", "q2", "q3", "q4"],
-    "AUS": ["q1", "q2", "q3", "q4"],
-    "BRA": ["q1", "q2", "q3", "q4"],
-}
-
-TECHS = ["wind_onshore", "wind_offshore", "solar"]
-
-WIND_TURBINE = "Vestas_V112_3MW"
-WIND_OFFSHORE_TURBINE = "NREL_ReferenceTurbine_5MW_offshore"
-PV_PANEL = "CSi"
-PV_ORIENTATION = "latitude_optimal"
+QUARTERS              = ["q1", "q2", "q3", "q4"]
+TECHS                 = ["wind_onshore", "wind_offshore", "solar"]
+WIND_ONSHORE_TURBINE  = RES_CF_CFG["wind_onshore_turbine"]
+WIND_OFFSHORE_TURBINE = RES_CF_CFG["wind_offshore_turbine"]
+PV_PANEL              = RES_CF_CFG["pv_panel"]
+PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
 
 
 def extract_cell_timeseries(cf_year: xr.DataArray, y_idx: int, x_idx: int, tech: str) -> pd.Series:
@@ -106,13 +109,13 @@ def extract_cell_timeseries(cf_year: xr.DataArray, y_idx: int, x_idx: int, tech:
 def build_cf_year(country_upper: str, tech: str) -> xr.DataArray:
     parts = []
 
-    for seg in COUNTRY_SEGMENTS[country_upper]:
+    for seg in QUARTERS:
         cutout_path = CUTOUT_DIR / f"{country_upper.lower()}_{YEAR}_{seg}.nc"
         co = atlite.Cutout(path=str(cutout_path))
 
         if tech == "wind_onshore":
             cf = co.wind(
-                turbine=WIND_TURBINE,
+                turbine=WIND_ONSHORE_TURBINE,
                 capacity_factor_timeseries=True,
                 smooth=True,
                 add_cutout_windspeed=True,

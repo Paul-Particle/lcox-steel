@@ -24,11 +24,13 @@ Checks:
 from pathlib import Path
 import pandas as pd
 
+from common._paths import RES_CF
+
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-INDIR  = Path("resources/res_cf/quarterly")
-OUTDIR = Path("resources/res_cf/annual")
+INDIR  = RES_CF / "quarterly"
+OUTDIR = RES_CF / "annual"
 YEAR = 2023
 COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # standalone default
 
@@ -80,6 +82,9 @@ def run_for_country(cc: str):
     print(" -", offshore_out)
     print(" -", solar_out)
 
-if __name__ == "__main__":
+def main():
     for cc in COUNTRIES:
         run_for_country(cc)
+
+if __name__ == "__main__":
+    main()

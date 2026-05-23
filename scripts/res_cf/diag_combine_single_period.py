@@ -16,7 +16,7 @@ COUNTRY = "de"
 TAG     = "oct2w"
 YEAR    = 2025
 
-DATA_DIR = Path("resources/res_cf")
+DATA_DIR = RES_CF
 
 
 def read_cf(path: Path, col_name: str) -> pd.DataFrame:

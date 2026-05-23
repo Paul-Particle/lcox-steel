@@ -1,83 +1,107 @@
+import yaml
 from pathlib import Path
+
 import atlite
 import geopandas as gpd
 import pandas as pd
 
+from common._paths import CUTOUTS, RES_CF, SHAPES_RES, REPO_ROOT
+
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-REGIONS_PATH = "resources/shapes/regions.geojson"
-OFFSHORE_REGIONS_PATH = "resources/shapes/offshore_regions.geojson"
-OUTDIR = Path("resources/res_cf/quarterly")
+REGIONS_PATH          = SHAPES_RES / "regions.geojson"
+OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
+OUTDIR                = RES_CF / "quarterly"
 
-# --- set these for standalone use ---
-CUTOUT_PATH = "cutouts/de_2023_q1.nc"
+
+def load_res_cf_cfg() -> dict:
+    with open(REPO_ROOT / "config/config.yaml") as f:
+        return yaml.safe_load(f)["res_cf"]
+
+
+# --- defaults for standalone use ---
+CUTOUT_PATH = CUTOUTS / "de_2023_q1.nc"
 QUARTER     = "q1"
 YEAR        = 2023
 COUNTRY     = "de"
-# ------------------------------------
-
+RES_CF_CFG  = load_res_cf_cfg()
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     COUNTRY     = snakemake.wildcards.country.lower()
     YEAR        = int(snakemake.wildcards.year)
     QUARTER     = snakemake.wildcards.quarter
     CUTOUT_PATH = snakemake.input.cutout
+    RES_CF_CFG  = snakemake.config["res_cf"]
+
+REGION_TAG            = RES_CF_CFG["countries"][COUNTRY]["region"]
+WIND_ONSHORE_TURBINE  = RES_CF_CFG["wind_onshore_turbine"]
+WIND_OFFSHORE_TURBINE = RES_CF_CFG["wind_offshore_turbine"]
+PV_PANEL              = RES_CF_CFG["pv_panel"]
+PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
 
 
-def to_cf_series(x, name="cf"):
+def to_cf_series(x, name: str = "cf") -> pd.Series:
     obj = x.to_pandas()
 
-    if isinstance(obj, pd.DataFrame):
-        if obj.shape[1] == 1:
-            s = obj.iloc[:, 0]
-        else:
-            col = COUNTRY.upper() if COUNTRY.upper() in obj.columns else obj.columns[0]
-            s = obj[col]
-    else:
+    # We need a series but might get a df
+    if not isinstance(obj, pd.DataFrame):
         s = obj
+    elif obj.shape[1] == 1:
+        s = obj.iloc[:, 0]
+    else:
+        if REGION_TAG in obj.columns:
+            s = obj[REGION_TAG]
+        else:
+            s = obj.iloc[:, 0]
 
     s.index = pd.to_datetime(s.index)
     s.index.name = "time"
+
     return s.rename(name).clip(0, 1)
 
-def get_region_gdf(path: str, region_code: str) -> gpd.GeoDataFrame:
+
+def get_region_gdf(path: Path, region_tag: str) -> gpd.GeoDataFrame:
     gdf = gpd.read_file(path).to_crs(4326)
-    gdf = gdf.loc[gdf["region"] == region_code.upper(), ["region", "geometry"]].copy()
-
+    gdf = gdf.loc[gdf["region"] == region_tag, ["region", "geometry"]].copy()
     if gdf.empty:
-        raise ValueError(f"Region '{region_code.upper()}' not found in {path}")
-
+        raise ValueError(f"Region '{region_tag}' not found in {path}")
     return gdf
 
-def main():
+
+def main() -> None:
     OUTDIR.mkdir(parents=True, exist_ok=True)
 
-    gdf = get_region_gdf(REGIONS_PATH, COUNTRY)
-    has_offshore = Path(OFFSHORE_REGIONS_PATH).exists()
+    gdf = get_region_gdf(REGIONS_PATH, REGION_TAG)
+    has_offshore = OFFSHORE_REGIONS_PATH.exists()
 
-    cutout = atlite.Cutout(CUTOUT_PATH)
+    cutout = atlite.Cutout(str(CUTOUT_PATH))
     matrix = cutout.indicatormatrix(gdf)
 
+    # smooth=True + add_cutout_windspeed=True: smooth the turbine power curve and
+    # preserve its built-in 25 m/s cutoff during smoothing. Used for consistency
+    # with make_bestsite_cf.py and resource_spread.py.
     wind_cf = cutout.wind(
         matrix=matrix,
-        turbine="Vestas_V112_3MW",
+        turbine=WIND_ONSHORE_TURBINE,
         capacity_factor=False,
         per_unit=True,
+        smooth=True,
+        add_cutout_windspeed=True,
     )
 
     solar_cf = cutout.pv(
         matrix=matrix,
-        panel="CSi",
-        orientation="latitude_optimal",
+        panel=PV_PANEL,
+        orientation=PV_ORIENTATION,
         capacity_factor=False,
         per_unit=True,
     )
 
-    wind_cf = to_cf_series(wind_cf)
+    wind_cf  = to_cf_series(wind_cf)
     solar_cf = to_cf_series(solar_cf)
 
-    wind_out = OUTDIR / f"{COUNTRY}_wind_onshore_{YEAR}_{QUARTER}.csv"
+    wind_out  = OUTDIR / f"{COUNTRY}_wind_onshore_{YEAR}_{QUARTER}.csv"
     solar_out = OUTDIR / f"{COUNTRY}_solar_{YEAR}_{QUARTER}.csv"
 
     wind_cf.to_csv(wind_out)
@@ -89,13 +113,15 @@ def main():
 
     offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_{YEAR}_{QUARTER}.csv"
     if has_offshore:
-        offshore_gdf = get_region_gdf(OFFSHORE_REGIONS_PATH, COUNTRY)
+        offshore_gdf = get_region_gdf(OFFSHORE_REGIONS_PATH, REGION_TAG)
         offshore_matrix = cutout.indicatormatrix(offshore_gdf)
         offshore_wind_cf = cutout.wind(
             matrix=offshore_matrix,
-            turbine="NREL_ReferenceTurbine_5MW_offshore",
+            turbine=WIND_OFFSHORE_TURBINE,
             capacity_factor=False,
             per_unit=True,
+            smooth=True,
+            add_cutout_windspeed=True,
         )
         offshore_wind_cf = to_cf_series(offshore_wind_cf)
     else:

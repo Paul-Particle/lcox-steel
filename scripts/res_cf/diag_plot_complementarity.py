@@ -16,9 +16,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-CF_DIR       = PROJECT_ROOT / "resources" / "res_cf"
-PLOT_DIR     = PROJECT_ROOT / "results" / "plots"
+from common._paths import RES_CF, RESULTS
+
+CF_DIR   = RES_CF
+PLOT_DIR = RESULTS / "plots"
 
 # ── Import reusable functions from make_bestsite_cf ──────────────────────────
 _spec = importlib.util.spec_from_file_location(

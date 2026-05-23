@@ -22,7 +22,7 @@ START     = "2025-10-20"
 END       = "2025-11-02"
 # ----------------------
 
-DATA_DIR = Path("resources/res_cf")
+DATA_DIR = RES_CF
 
 
 def load_cf(country: str, variant: str, year: int) -> pd.DataFrame:

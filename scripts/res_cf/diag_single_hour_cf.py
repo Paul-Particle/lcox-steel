@@ -16,14 +16,14 @@ import geopandas as gpd
 import plotly.graph_objects as go
 
 # --- configure here ---
-CUTOUT_PATH = "cutouts/de_2025_oct2w.nc"
+CUTOUT_PATH = str(CUTOUTS / "de_2025_oct2w.nc")
 TURBINE     = "Vestas_V112_3MW"
 TARGET_HOUR = "2025-10-26 12:00"
 LAT_MIN     = 46.0
 LAT_MAX     = 56.0
 # ----------------------
 
-REGIONS_PATH = Path("resources/shapes/regions.geojson")
+REGIONS_PATH = SHAPES_RES / "regions.geojson"
 
 
 def main():

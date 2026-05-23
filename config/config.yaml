@@ -79,14 +79,30 @@ nem_download:
   rebuild: false
 
 res_cf:
-  # ISO-2 country codes for atlite cutouts + capacity factor pipeline.
-  # Flip enabled to add/drop a country.
+  # Per-country metadata for the atlite + capacity factor pipeline.
+  # Lowercase key = ISO-2 (used in cutout filenames and CF output filenames).
+  #   iso3:           3-letter code for Natural Earth ADM0_A3 lookup
+  #   region:         tag stored in regions.geojson (mostly ISO-2, but AUS/BRA
+  #                   stayed ISO-3 historically — kept that way to avoid
+  #                   regenerating the geojson and chasing downstream)
+  #   coarse:         use a coarser cutout resolution to avoid CDS instability
+  #                   / memory limits for large countries
+  #   mainland_bbox:  optional [lon_min, lon_max, lat_min, lat_max] — keeps only
+  #                   polygon parts whose centroid falls inside the box. Used
+  #                   to drop overseas territories (e.g. metropolitan France).
   countries:
-    de:  { enabled: true }
-    fr:  { enabled: false }
-    es:  { enabled: false }
-    aus: { enabled: false }
-    bra: { enabled: false }
+    de:  { enabled: true,  iso3: DEU, region: DE,  coarse: false }
+    fr:  { enabled: false, iso3: FRA, region: FR,  coarse: false, mainland_bbox: [-10, 15, 41, 52] }
+    es:  { enabled: false, iso3: ESP, region: ES,  coarse: false }
+    aus: { enabled: false, iso3: AUS, region: AUS, coarse: true  }
+    bra: { enabled: false, iso3: BRA, region: BRA, coarse: true  }
+
+  # atlite technology settings (passed to cutout.wind / cutout.pv).
+  wind_onshore_turbine:  Vestas_V112_3MW
+  wind_offshore_turbine: NREL_ReferenceTurbine_5MW_offshore
+  pv_panel:              CSi
+  pv_orientation:        latitude_optimal
+
   year: 2023
   top_n: 10
   offshore_max_distance_km: 200

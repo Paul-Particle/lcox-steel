@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
 
-OUTDIR = Path("resources/res_cf")
+OUTDIR = RES_CF
 YEAR = 2023
 COUNTRIES = ["fr", "es", "aus", "bra"]
 

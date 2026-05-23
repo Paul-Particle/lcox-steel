@@ -31,7 +31,6 @@ resources/res_cf/resource_spread_2023.csv
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -42,35 +41,38 @@ import geopandas as gpd
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-CUTOUT_DIR = Path("cutouts")
-REGIONS_PATH = Path("resources/shapes/regions.geojson")
-NATIONAL_CF_DIR = Path("resources/res_cf")
-OFFSHORE_REGIONS_PATH = Path("resources/shapes/offshore_regions.geojson")
-OUT_PATH = Path("resources/res_cf/resource_spread_2023.csv")
+import yaml
+from common._paths import CUTOUTS, RES_CF, SHAPES_RES, REPO_ROOT
 
-YEAR = 2023
 
-COUNTRIES = {
-    "DE": ["q1", "q2", "q3", "q4"],
-    "FR": ["q1", "q2", "q3", "q4"],
-    "ES": ["q1", "q2", "q3", "q4"],
-    "AUS": ["q1", "q2", "q3", "q4"],
-    "BRA": ["q1", "q2", "q3", "q4"],
-}
+def load_res_cf_cfg() -> dict:
+    with open(REPO_ROOT / "config/config.yaml") as f:
+        return yaml.safe_load(f)["res_cf"]
+
+
+CUTOUT_DIR            = CUTOUTS
+REGIONS_PATH          = SHAPES_RES / "regions.geojson"
+OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
+NATIONAL_CF_DIR       = RES_CF
+
+YEAR        = 2023
+OUT_PATH    = RES_CF / f"resource_spread_{YEAR}.csv"
+RES_CF_CFG  = load_res_cf_cfg()
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    YEAR     = int(snakemake.config["res_cf"]["year"])
-    OUT_PATH = Path(snakemake.output[0])
-    quarters = ["q1", "q2", "q3", "q4"]
-    COUNTRIES = {c.upper(): quarters for c, info in snakemake.config["res_cf"]["countries"].items() if info.get("enabled")}
+    YEAR       = int(snakemake.config["res_cf"]["year"])
+    OUT_PATH   = Path(snakemake.output[0])
+    RES_CF_CFG = snakemake.config["res_cf"]
+
+QUARTERS = ["q1", "q2", "q3", "q4"]
+COUNTRIES = {info["region"]: QUARTERS for info in RES_CF_CFG["countries"].values() if info.get("enabled")}
 
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
 
-# Must match your existing assumptions
-WIND_TURBINE = "Vestas_V112_3MW"
-PV_PANEL = "CSi"
-PV_ORIENTATION = "latitude_optimal"
-WIND_OFFSHORE_TURBINE = "NREL_ReferenceTurbine_5MW_offshore"
+WIND_ONSHORE_TURBINE  = RES_CF_CFG["wind_onshore_turbine"]
+WIND_OFFSHORE_TURBINE = RES_CF_CFG["wind_offshore_turbine"]
+PV_PANEL              = RES_CF_CFG["pv_panel"]
+PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
 
 def weighted_percentile(values: np.ndarray, weights: np.ndarray, q: float) -> float:
     """
@@ -123,10 +125,12 @@ def compute_cf_grid(cutout: atlite.Cutout, tech: str) -> xr.DataArray:
     Keeps Atlite tech assumptions identical to national pipeline.
     """
     if tech == "wind_onshore":
-        cf = cutout.wind(turbine=WIND_TURBINE, capacity_factor=True)
+        cf = cutout.wind(turbine=WIND_ONSHORE_TURBINE, capacity_factor=True,
+                         smooth=True, add_cutout_windspeed=True)
 
     elif tech == "wind_offshore":
-        cf = cutout.wind(turbine=WIND_OFFSHORE_TURBINE, capacity_factor=True)
+        cf = cutout.wind(turbine=WIND_OFFSHORE_TURBINE, capacity_factor=True,
+                         smooth=True, add_cutout_windspeed=True)
 
     elif tech == "solar":
         cf = cutout.pv(panel=PV_PANEL, orientation=PV_ORIENTATION, capacity_factor=True)

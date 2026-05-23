@@ -45,6 +45,8 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from common._paths import REPO_ROOT, RES_CF
+
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
@@ -63,9 +65,8 @@ haversine_distance_km   = _bestsite.haversine_distance_km
 mask_cells_inside       = _bestsite.mask_cells_inside
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-OUTDIR       = PROJECT_ROOT / "resources" / "res_cf"
-CF_DIR       = PROJECT_ROOT / "resources" / "res_cf"
+OUTDIR = RES_CF
+CF_DIR = RES_CF
 
 YEAR  = 2023
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
@@ -90,7 +91,7 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
 # ── Config ────────────────────────────────────────────────────────────────────
 
 def load_cfg() -> dict:
-    with open(PROJECT_ROOT / "config/config.yaml") as f:
+    with open(REPO_ROOT / "config/config.yaml") as f:
         c = yaml.safe_load(f)
     rc = c["res_cf"]
     comp = rc.get("complementarity", {})

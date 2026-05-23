@@ -1,15 +1,10 @@
 configfile: "config/config.yaml"
 
-
-def get_enabled_areas():
-    return [code for code, info in config["entsoe"]["areas"].items() if info.get("enabled")]
-
-enabled_areas = get_enabled_areas()
-
-CF_COUNTRIES = [c for c, info in config["res_cf"]["countries"].items() if info.get("enabled")]
-CF_YEAR      = config["res_cf"]["year"]
-CF_QUARTERS  = ["q1", "q2", "q3", "q4"]
-CF_TOP_N     = config["res_cf"]["top_n"]
+enabled_areas = [code for code, info in config["entsoe"]["areas"].items() if info.get("enabled")]
+CF_COUNTRIES  = [code for code, info in config["res_cf"]["countries"].items() if info.get("enabled")]
+CF_YEAR       = config["res_cf"]["year"]
+CF_QUARTERS   = ["q1", "q2", "q3", "q4"]
+CF_TOP_N      = config["res_cf"]["top_n"]
 
 
 rule all:
