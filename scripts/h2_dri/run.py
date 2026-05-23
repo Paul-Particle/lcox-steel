@@ -116,7 +116,7 @@ def run_scenario(
     return summary
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Run DRI-hydrogen PyPSA optimisation")
     parser.add_argument("--project", help="Project name from projects.yaml (default: first project)")
     parser.add_argument("--scenario", help="Scenario name (default: all scenarios in project)")

@@ -14,7 +14,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 
-def load_per_data_type(input_paths):
+def load_per_data_type(input_paths: list[str]) -> dict[str, pd.DataFrame]:
     """Group inputs by data_type and concat areas horizontally per data_type."""
     by_dt = defaultdict(list)
     for p in input_paths:
@@ -28,7 +28,7 @@ def load_per_data_type(input_paths):
     return result
 
 
-def process_data(snakemake):
+def process_data(snakemake) -> None:
     print("Processing data...")
     AREAS = list(snakemake.params.areas)
 

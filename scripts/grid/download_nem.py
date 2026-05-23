@@ -47,7 +47,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 
-def download_price_data(start_time, end_time, cache_dir, rebuild):
+def download_price_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads price data or gets it from the cached feather files or csv files if rebuild=True."""
     print("Fetching prices...")
     prices = dynamic_data_compiler(
@@ -68,7 +68,7 @@ def download_price_data(start_time, end_time, cache_dir, rebuild):
     prices.index.name = None
     return prices
 
-def download_generation_data(start_time, end_time, cache_dir, rebuild):
+def download_generation_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads and processes generation data."""
     generator_file_path = cache_dir / "NEM Registration and Exemption List.xlsx"
 
@@ -186,7 +186,7 @@ def download_generation_data(start_time, end_time, cache_dir, rebuild):
     return generation
 
 
-def download_load_data(start_time, end_time, cache_dir, rebuild):
+def download_load_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads and processes load data."""
     print("Fetching load...")
     load = dynamic_data_compiler(
@@ -209,7 +209,7 @@ def download_load_data(start_time, end_time, cache_dir, rebuild):
     load.index.name = None
     return load
 
-def download_crossborder_data(start_time, end_time, cache_dir, rebuild):
+def download_crossborder_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads and processes cross-border flow data."""
     print("Fetching cross-border flows...")
     interconnector = dynamic_data_compiler(
@@ -278,7 +278,7 @@ def download_crossborder_data(start_time, end_time, cache_dir, rebuild):
     return crossborder
 
 
-def download_data(snakemake):
+def download_data(snakemake) -> None:
     cache_dir = Path(snakemake.params.cache_dir)
     rebuild = snakemake.params.get("rebuild", False) # pyright: ignore[reportGeneralTypeIssues]
     start_time = datetime.strptime(snakemake.params.start_date, "%Y%m%d")

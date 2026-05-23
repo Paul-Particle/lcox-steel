@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("download_entsoe")
 
 
-def get_entsoe_client():
+def get_entsoe_client() -> entsoe.EntsoePandasClient:
     load_dotenv()
     api_key = os.environ.get("ENTSOE_API_KEY")
     if not api_key:
@@ -35,25 +35,25 @@ def get_entsoe_client():
 
 # ── Per-data_type fetchers (return DataFrame or raise) ────────────────────────
 
-def fetch_prices(client, area, start, end):
+def fetch_prices(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     data = client.query_day_ahead_prices(area, start=start, end=end)
     data.name = area
     return data.to_frame()
 
 
-def fetch_load_forecast(client, area, start, end):
+def fetch_load_forecast(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     data = client.query_load_forecast(area, start=start, end=end)
     data.columns = [area]
     return data
 
 
-def fetch_load_actual(client, area, start, end):
+def fetch_load_actual(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     data = client.query_load(area, start=start, end=end)
     data.columns = [area]
     return data
 
 
-def fetch_res(client, area, start, end):
+def fetch_res(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     data = client.query_wind_and_solar_forecast(area, start=start, end=end)
     res_names = {
         "Solar": "solar_forecast",
@@ -64,7 +64,7 @@ def fetch_res(client, area, start, end):
     return data
 
 
-def fetch_generation(client, area, start, end):
+def fetch_generation(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     data = client.query_generation(area, start=start, end=end)
     if data.columns.nlevels == 2:
         data.columns = ["_".join(col) for col in data.columns.values]
@@ -103,7 +103,7 @@ def fetch_generation(client, area, start, end):
     return data
 
 
-def fetch_crossborder(client, area, start, end):
+def fetch_crossborder(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     parts = []
     data_in = client.query_physical_crossborder_allborders(
         area, start=start, end=end, export=False, per_hour=False
@@ -132,7 +132,7 @@ FETCHERS = {
 
 # ── Month iteration & retry helpers ──────────────────────────────────────────
 
-def iter_months(start_date_str, end_date_str):
+def iter_months(start_date_str: str, end_date_str: str):
     """Yield (YYYY-MM, month_start_ts, month_end_ts) for each month in [start, end]."""
     start = pd.to_datetime(start_date_str, format="%Y%m%d")
     end = pd.to_datetime(end_date_str, format="%Y%m%d")
@@ -143,7 +143,14 @@ def iter_months(start_date_str, end_date_str):
         yield ym, month_start, month_end
 
 
-def fetch_with_retry(fetcher, client, area, start, end, max_attempts=3):
+def fetch_with_retry(
+    fetcher,
+    client: entsoe.EntsoePandasClient,
+    area: str,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    max_attempts: int = 3,
+) -> pd.DataFrame:
     for attempt in range(1, max_attempts + 1):
         try:
             return fetcher(client, area, start=start, end=end)
@@ -159,7 +166,7 @@ def fetch_with_retry(fetcher, client, area, start, end, max_attempts=3):
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-def download_data(snakemake):
+def download_data(snakemake) -> None:
     area = snakemake.wildcards.area
     data_type = snakemake.wildcards.data_type
     output_path = Path(snakemake.output[0])

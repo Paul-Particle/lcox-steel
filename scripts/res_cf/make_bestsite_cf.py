@@ -87,7 +87,7 @@ PV_PANEL = "CSi"
 PV_ORIENTATION = "latitude_optimal"
 
 
-def extract_cell_timeseries(cf_year, y_idx, x_idx, tech):
+def extract_cell_timeseries(cf_year: xr.DataArray, y_idx: int, x_idx: int, tech: str) -> pd.Series:
 
     if tech.startswith("wind"):
         ts = cf_year.isel(
@@ -155,7 +155,7 @@ def _load_offshore_geometry(iso2: str):
         raise ValueError(f"{iso2} not found in {OFFSHORE_REGIONS_PATH}")
     return row.geometry.iloc[0]
 
-def geometry_for_tech(iso2: str, tech: str):
+def geometry_for_tech(iso2: str, tech: str):  # returns shapely geometry
     return _load_offshore_geometry(iso2) if tech == "wind_offshore" else _load_land_geometry(iso2)
 
 
@@ -168,7 +168,12 @@ def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
     return inside.values.reshape(cell_mean.shape)
 
 
-def haversine_distance_km(lon1, lat1, lon2, lat2):
+def haversine_distance_km(
+    lon1: float,
+    lat1: float,
+    lon2: np.ndarray,
+    lat2: np.ndarray,
+) -> np.ndarray:
     """
     Compute great-circle distance in km between one target point and arrays of points.
 
@@ -222,7 +227,7 @@ def _find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
 
     return int(y_idx), int(x_idx)
 
-def _to_cf_series(x, name="cf"):
+def _to_cf_series(x: xr.DataArray, name: str = "cf") -> pd.Series:
     obj = x.to_pandas()
 
     if isinstance(obj, pd.DataFrame):

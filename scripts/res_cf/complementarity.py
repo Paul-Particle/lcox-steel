@@ -108,8 +108,8 @@ def load_cfg() -> dict:
 
 # ── Coordinate helpers ────────────────────────────────────────────────────────
 
-def get_candidate_coords(cf, ys: np.ndarray, xs: np.ndarray):
-    """Return (lons, lats) arrays for all candidate cells."""
+def get_candidate_coords(cf, ys: np.ndarray, xs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return (lons, lats) arrays for all candidate cells. `cf` is an xr.DataArray."""
     lons = np.array([float(cf.x.values[xi]) for xi in xs])
     lats = np.array([float(cf.y.values[yi]) for yi in ys])
     return lons, lats
@@ -159,13 +159,13 @@ def score_triplet(
 # ── Brute-force screen ────────────────────────────────────────────────────────
 
 def brute_force_screen(
-    ys_on,  xs_on,  lons_on,  lats_on,
-    ys_off, xs_off, lons_off, lats_off,
-    ys_sol, xs_sol, lons_sol, lats_sol,
+    ys_on:  np.ndarray, xs_on:  np.ndarray, lons_on:  np.ndarray, lats_on:  np.ndarray,
+    ys_off: np.ndarray, xs_off: np.ndarray, lons_off: np.ndarray, lats_off: np.ndarray,
+    ys_sol: np.ndarray, xs_sol: np.ndarray, lons_sol: np.ndarray, lats_sol: np.ndarray,
     ts_on_all:  np.ndarray,
     ts_off_all: np.ndarray,
     ts_sol_all: np.ndarray,
-    cf_on, cf_off, cf_sol,
+    cf_on, cf_off, cf_sol,    # xr.DataArrays
     max_radius_km:  float,
     threshold:      float,
     w_coincidence:  float,
@@ -217,13 +217,13 @@ def brute_force_screen(
 # ── Greedy search + neighbourhood top-N ──────────────────────────────────────
 
 def greedy_screen(
-    ys_on,  xs_on,  lons_on,  lats_on,
-    ys_off, xs_off, lons_off, lats_off,
-    ys_sol, xs_sol, lons_sol, lats_sol,
+    ys_on:  np.ndarray, xs_on:  np.ndarray, lons_on:  np.ndarray, lats_on:  np.ndarray,
+    ys_off: np.ndarray, xs_off: np.ndarray, lons_off: np.ndarray, lats_off: np.ndarray,
+    ys_sol: np.ndarray, xs_sol: np.ndarray, lons_sol: np.ndarray, lats_sol: np.ndarray,
     ts_on_all:  np.ndarray,
     ts_off_all: np.ndarray,
     ts_sol_all: np.ndarray,
-    cf_on, cf_off, cf_sol,
+    cf_on, cf_off, cf_sol,    # xr.DataArrays
     max_radius_km:  float,
     threshold:      float,
     w_coincidence:  float,
