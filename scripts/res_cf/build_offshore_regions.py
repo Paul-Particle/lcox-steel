@@ -9,7 +9,7 @@ LAND_REGIONS = Path("resources/shapes/regions.geojson")
 
 
 def _read_offshore_max_distance_km() -> float:
-    with open("config.yaml", "r", encoding="utf-8") as f:
+    with open("config/config.yaml", "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     return float(cfg["res_cf"]["offshore_max_distance_km"])
 

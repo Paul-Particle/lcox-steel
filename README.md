@@ -7,8 +7,8 @@ This project calculates the levelized cost of hydrogen (LCOH) for green-steel DR
 ```
 lcox-steel/
 ├── Snakefile               # End-to-end workflow (grid + res_cf pipelines)
-├── config.yaml             # Pipeline config (dates, countries, CF parameters)
 ├── config/
+│   ├── config.yaml         # Snakemake pipeline config (dates, countries, CF parameters)
 │   ├── assumptions.yaml    # Techno-economic defaults (CAPEX, OPEX, WACC, lifetimes)
 │   └── projects.yaml       # Project + scenario definitions for PyPSA runs
 ├── _paths.py               # Canonical repo path roots (DATA, RESOURCES, CUTOUTS, …)
@@ -96,7 +96,7 @@ Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` follow
 
 ## Running the pipelines
 
-Both pipelines are managed by Snakemake. `config.yaml` controls which countries and years are processed.
+Both pipelines are managed by Snakemake. `config/config.yaml` controls which countries and years are processed.
 
 ### Full workflow (dry-run first)
 

@@ -87,7 +87,7 @@ if "snakemake" in dir():
 # ── Config ────────────────────────────────────────────────────────────────────
 
 def load_cfg() -> dict:
-    with open(PROJECT_ROOT / "config.yaml") as f:
+    with open(PROJECT_ROOT / "config/config.yaml") as f:
         c = yaml.safe_load(f)
     rc = c["res_cf"]
     comp = rc.get("complementarity", {})

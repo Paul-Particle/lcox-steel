@@ -1,7 +1,5 @@
-import yaml
+configfile: "config/config.yaml"
 
-with open("config.yaml", "r") as f:
-    config = yaml.safe_load(f)
 
 def get_enabled_areas():
     return [code for code, info in config["entsoe"]["areas"].items() if info.get("enabled")]
