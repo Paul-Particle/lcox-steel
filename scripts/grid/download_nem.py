@@ -28,11 +28,11 @@ def download_unzip_csv_patched(url: str, down_load_to: str) -> None:
     u = urlsplit(url_fixed)
     path = u.path + (f"?{u.query}" if u.query else "")
     conn = http.client.HTTPSConnection(
-        u.hostname, u.port or 443, context=ssl.create_default_context(), timeout=120
+        u.hostname, u.port or 443, context=ssl.create_default_context(), timeout=120 # pyright:ignore
     )
     try:
         conn.request("GET", path,
-                     headers={**_dl.USR_AGENT_HEADER, "Host": u.hostname, "Accept": "*/*"})
+                     headers={**_dl.USR_AGENT_HEADER, "Host": u.hostname, "Accept": "*/*"}) # pyright: ignore
         resp = conn.getresponse()
         if resp.status != 200:
             raise IOError(f"GET {url} -> {resp.status} {resp.reason}")

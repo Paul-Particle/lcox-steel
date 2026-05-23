@@ -11,6 +11,7 @@ import logging
 import os
 import time
 from pathlib import Path
+from typing import Callable
 
 import entsoe
 import pandas as pd
@@ -144,13 +145,13 @@ def iter_months(start_date_str: str, end_date_str: str):
 
 
 def fetch_with_retry(
-    fetcher,
+    fetcher: Callable[..., pd.DataFrame],
     client: entsoe.EntsoePandasClient,
     area: str,
     start: pd.Timestamp,
     end: pd.Timestamp,
     max_attempts: int = 3,
-) -> pd.DataFrame:
+) -> pd.DataFrame | None:
     for attempt in range(1, max_attempts + 1):
         try:
             return fetcher(client, area, start=start, end=end)

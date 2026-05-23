@@ -18,7 +18,6 @@ Regions:
 from pathlib import Path
 
 import geopandas as gpd
-import pandas as pd
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
