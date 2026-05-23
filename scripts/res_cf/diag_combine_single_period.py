@@ -11,6 +11,7 @@ Output: resources/res_cf/{COUNTRY}_cf_{YEAR}.csv
 
 from pathlib import Path
 import pandas as pd
+from common._paths import RES_CF
 
 COUNTRY = "de"
 TAG     = "oct2w"

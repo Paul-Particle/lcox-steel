@@ -27,6 +27,8 @@ import atlite
 import regionmask
 import pandas as pd
 
+from common._paths import RES_CF, SHAPES_RES
+
 CUTOUT_DIR = Path("cutouts")
 REGIONS_PATH = SHAPES_RES / "regions.geojson"
 OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"

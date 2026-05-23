@@ -1,5 +1,6 @@
 import pandas as pd
 from pathlib import Path
+from common._paths import RES_CF
 
 OUTDIR = RES_CF
 YEAR = 2023

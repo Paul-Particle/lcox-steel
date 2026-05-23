@@ -14,6 +14,7 @@ import pandas as pd
 import atlite
 import geopandas as gpd
 import plotly.graph_objects as go
+from common._paths import CUTOUTS, SHAPES_RES
 
 # --- configure here ---
 CUTOUT_PATH = str(CUTOUTS / "de_2025_oct2w.nc")

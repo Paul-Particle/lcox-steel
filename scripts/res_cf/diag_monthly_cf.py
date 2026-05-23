@@ -1,4 +1,5 @@
 import pandas as pd
+from common._paths import RES_CF
 
 def monthly_means(path):
     df = pd.read_csv(path)

@@ -10,9 +10,9 @@ Run from project root:
     python scripts/res_cf/diag_plot_cf_window.py
 """
 
-from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
+from common._paths import RES_CF
 
 # --- configure here ---
 COUNTRY   = "de"
