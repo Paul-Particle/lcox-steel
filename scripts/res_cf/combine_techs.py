@@ -18,6 +18,9 @@ Notes:
 from pathlib import Path
 import pandas as pd
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 INDIR     = Path("resources/res_cf/annual")
 OUTDIR    = Path("resources/res_cf")
 COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # standalone default

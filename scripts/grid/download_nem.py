@@ -22,7 +22,7 @@ _dl.USR_AGENT_HEADER["User-Agent"] = (
 # Sending a literal '#' also fails (proxies strip it as a fragment). The only working
 # encoding is double-encoding '%2523'; Azure decodes one layer to '%23' as expected.
 # requests would re-normalise '%2523' → '%23', so we bypass it entirely with http.client.
-def _download_unzip_csv_patched(url: str, down_load_to: str) -> None:
+def download_unzip_csv_patched(url: str, down_load_to: str) -> None:
     from urllib.parse import urlsplit
     url_fixed = url.replace("#", "%2523").replace("%23", "%2523")
     u = urlsplit(url_fixed)
@@ -41,11 +41,10 @@ def _download_unzip_csv_patched(url: str, down_load_to: str) -> None:
         conn.close()
     zipfile.ZipFile(io.BytesIO(body)).extractall(down_load_to)
 
-_dl.download_unzip_csv = _download_unzip_csv_patched
+_dl.download_unzip_csv = download_unzip_csv_patched
 
-# This block is for linters and IDEs. It will not be executed by Snakemake.
 if "snakemake" not in globals():
-    from _stubs import snakemake
+    from common._stubs import snakemake
 
 
 def download_price_data(start_time, end_time, cache_dir, rebuild):
@@ -113,8 +112,11 @@ def download_generation_data(start_time, end_time, cache_dir, rebuild):
         return df.loc[:,['gen_info', 'gen_type']]
 
 
-    nem_gen_names = dict(generator_info.copy()
-        .loc[:, ["DUID", "Fuel Source - Descriptor", "Technology Type - Descriptor"]]
+    nem_gen_names = dict(
+        generator_info.copy()
+        .loc[
+            :, ["DUID", "Fuel Source - Descriptor", "Technology Type - Descriptor"]
+        ]  # DUID = dispatchable unit ID
         .dropna()
         .pivot_table(
             index=["Fuel Source - Descriptor"],
@@ -123,12 +125,20 @@ def download_generation_data(start_time, end_time, cache_dir, rebuild):
             aggfunc="count",
             fill_value=0,
         )
-        .stack() # getting all combinations of Fuel Source and Technology Type
-        .loc[lambda s: s>0] # filter for existing combinations
-        .reset_index() # put the columns back into the df
-        .assign(gen_info = lambda df: df["Fuel Source - Descriptor"].str.lower() + ' ' + df["Technology Type - Descriptor"].str.lower())
-        .drop(columns=["Technology Type - Descriptor", "Fuel Source - Descriptor", 0]) # 0 column is number of plants for each combination, i.e. not relevant
-        .pipe(determine_gen_type) # apply regex-based categorization
+        .stack()  # getting all combinations of Fuel Source and Technology Type
+        .loc[lambda s: s > 0]  # filter for existing combinations
+        .reset_index()  # put the columns back into the df
+        .assign(
+            gen_info=lambda df: (
+                df["Fuel Source - Descriptor"].str.lower()
+                + " "
+                + df["Technology Type - Descriptor"].str.lower()
+            )
+        )
+        .drop(
+            columns=["Technology Type - Descriptor", "Fuel Source - Descriptor", 0]
+        )  # 0 column is number of plants for each combination, i.e. not relevant
+        .pipe(determine_gen_type)  # apply regex-based categorization
         .values
     )
     # Ensure that there are no nan values in the dict, to catch changes to future versions of the excel.
@@ -147,20 +157,20 @@ def download_generation_data(start_time, end_time, cache_dir, rebuild):
 
 
     print("Fetching generation...")
-    scada = dynamic_data_compiler(
+    unit_generation = dynamic_data_compiler(
         start_time,
         end_time,
         "DISPATCH_UNIT_SCADA",
         cache_dir,
-        select_columns=["SETTLEMENTDATE", "DUID", "SCADAVALUE"], # SCADA = generation in MW
+        select_columns=["SETTLEMENTDATE", "DUID", "SCADAVALUE"], # SCADAVALUE = generation in MW
         fformat="feather",
         keep_csv=True,
         rebuild=rebuild,
     )
-    scada["SETTLEMENTDATE"] = pd.to_datetime(scada["SETTLEMENTDATE"])
+    unit_generation["SETTLEMENTDATE"] = pd.to_datetime(unit_generation["SETTLEMENTDATE"])
 
     generation = (
-        scada.merge(map_df.dropna(subset=['gen_type']), on="DUID", how="left")
+        unit_generation.merge(map_df.dropna(subset=['gen_type']), on="DUID", how="left")
         .groupby(["SETTLEMENTDATE", "Region", "gen_type"])["SCADAVALUE"]
         .sum()
         .reset_index()

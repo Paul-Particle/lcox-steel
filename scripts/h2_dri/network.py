@@ -25,7 +25,7 @@ H2_LHV_MWH_PER_KG = 33.33 / 1000  # LHV of hydrogen in MWh/kg
 def build_network(
     project_cfg: dict,
     assumptions: dict,
-    cf_df: pd.DataFrame,
+    cf_timeseries: pd.DataFrame,
     price_series: pd.Series | None = None,
 ) -> pypsa.Network:
     """
@@ -33,8 +33,8 @@ def build_network(
 
     project_cfg: one entry from projects.yaml (with 'plant' and 'scenarios' resolved)
     assumptions: full assumptions.yaml dict
-    cf_df:       DataFrame indexed by DatetimeIndex, columns = tech names in assumptions.res
-    price_series: optional hourly price Series (€/MWh), same index as cf_df
+    cf_timeseries:       DataFrame indexed by DatetimeIndex, columns = tech names in assumptions.res
+    price_series: optional hourly price Series (€/MWh), same index as cf_timeseries
     """
     wacc = assumptions["finance"]["default_wacc"]
     el_cfg = assumptions["electrolyser"]
@@ -49,33 +49,33 @@ def build_network(
     el_efficiency = H2_LHV_MWH_PER_KG * 1000 / el_cfg["efficiency_kwh_per_kg"]
 
     n = pypsa.Network()
-    n.set_snapshots(cf_df.index)
+    n.set_snapshots(cf_timeseries.index)
 
-    _add_buses(n)
-    _add_generators(n, cf_df, assumptions["res"], wacc)
-    _add_battery(n, assumptions["battery"], wacc)
-    _add_electrolyser(n, el_mw, el_efficiency, el_cfg, wacc)
-    _add_h2_buffer(n, assumptions["h2_buffer"], wacc)
-    _add_dri_load(n, el_mw, el_efficiency)
+    add_buses(n)
+    add_generators(n, cf_timeseries, assumptions["res"], wacc)
+    add_battery(n, assumptions["battery"], wacc)
+    add_electrolyser(n, el_mw, el_efficiency, el_cfg, wacc)
+    add_h2_buffer(n, assumptions["h2_buffer"], wacc)
+    add_dri_load(n, el_mw, el_efficiency)
 
     if price_series is not None:
-        _add_grid_import(n, price_series)
+        add_grid_import(n, price_series)
 
     return n
 
 
-def _add_buses(n: pypsa.Network) -> None:
+def add_buses(n: pypsa.Network) -> None:
     n.add("Bus", "electricity", carrier="AC")
     n.add("Bus", "hydrogen", carrier="H2")
 
 
-def _add_generators(
+def add_generators(
     n: pypsa.Network,
-    cf_df: pd.DataFrame,
+    cf_timeseries: pd.DataFrame,
     res_cfg: dict,
     wacc: float,
 ) -> None:
-    for tech in cf_df.columns:
+    for tech in cf_timeseries.columns:
         if tech not in res_cfg:
             raise KeyError(f"No assumptions found for tech '{tech}' — add it to assumptions.yaml")
         cfg = res_cfg[tech]
@@ -91,11 +91,11 @@ def _add_generators(
             p_nom_extendable=True,
             capital_cost=cap_cost,
             marginal_cost=0.0,
-            p_max_pu=cf_df[tech],
+            p_max_pu=cf_timeseries[tech],
         )
 
 
-def _add_battery(n: pypsa.Network, bat_cfg: dict, wacc: float) -> None:
+def add_battery(n: pypsa.Network, bat_cfg: dict, wacc: float) -> None:
     eta = bat_cfg["efficiency_roundtrip"] ** 0.5
     max_hours = bat_cfg["max_hours"]
     # Fold energy capex into per-MW capital cost (assumes fixed duration = max_hours)
@@ -117,7 +117,7 @@ def _add_battery(n: pypsa.Network, bat_cfg: dict, wacc: float) -> None:
     )
 
 
-def _add_electrolyser(
+def add_electrolyser(
     n: pypsa.Network,
     el_mw: float,
     el_efficiency: float,
@@ -141,7 +141,7 @@ def _add_electrolyser(
     )
 
 
-def _add_h2_buffer(n: pypsa.Network, buf_cfg: dict, wacc: float) -> None:
+def add_h2_buffer(n: pypsa.Network, buf_cfg: dict, wacc: float) -> None:
     # Store capital_cost is per MWh of e_nom (H2 LHV energy capacity)
     cap_cost = annuity_factor(wacc, buf_cfg["lifetime_years"]) * buf_cfg["capex_per_mwh_eur"]
     n.add(
@@ -156,12 +156,12 @@ def _add_h2_buffer(n: pypsa.Network, buf_cfg: dict, wacc: float) -> None:
     )
 
 
-def _add_dri_load(n: pypsa.Network, el_mw: float, el_efficiency: float) -> None:
+def add_dri_load(n: pypsa.Network, el_mw: float, el_efficiency: float) -> None:
     h2_demand_mw_lhv = el_mw * el_efficiency  # continuous H2 demand in MW LHV
     n.add("Load", "dri_load", bus="hydrogen", carrier="H2", p_set=h2_demand_mw_lhv)
 
 
-def _add_grid_import(n: pypsa.Network, price_series: pd.Series) -> None:
+def add_grid_import(n: pypsa.Network, price_series: pd.Series) -> None:
     n.add(
         "Generator",
         "grid_import",

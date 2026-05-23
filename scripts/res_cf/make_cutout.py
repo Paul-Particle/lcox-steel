@@ -7,6 +7,9 @@ from pathlib import Path
 import atlite
 import geopandas as gpd
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 REGIONS_PATH         = Path("resources/shapes/regions.geojson")
 OFFSHORE_REGIONS_PATH = Path("resources/shapes/offshore_regions.geojson")
 TMPDIR = Path(".atlite-cache")

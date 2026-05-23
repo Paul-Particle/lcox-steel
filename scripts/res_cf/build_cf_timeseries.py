@@ -3,6 +3,9 @@ import atlite
 import geopandas as gpd
 import pandas as pd
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 REGIONS_PATH = "resources/shapes/regions.geojson"
 OFFSHORE_REGIONS_PATH = "resources/shapes/offshore_regions.geojson"
 OUTDIR = Path("resources/res_cf/quarterly")
@@ -13,6 +16,7 @@ QUARTER     = "q1"
 YEAR        = 2023
 COUNTRY     = "de"
 # ------------------------------------
+
 
 if "snakemake" in dir():
     COUNTRY     = snakemake.wildcards.country.lower()

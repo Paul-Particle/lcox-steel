@@ -1,20 +1,18 @@
 """Single source of truth for repo-relative path roots.
 
-Scripts in `scripts/<subdir>/` import this with:
+Scripts import this with:
 
-    import sys
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from _paths import DATA, RESOURCES, RES_CF  # noqa: E402
+    from common._paths import DATA, RESOURCES, RES_CF, CUTOUTS
 
-`parents[2]` resolves to the repo root in both standalone runs
-(scripts/<subdir>/foo.py → scripts/<subdir> → scripts → repo) and
-under Snakemake's tmp script copy (.snakemake/scripts/tmp.py → scripts → .snakemake → repo).
+This works because the repo root is on sys.path under Snakemake (it runs from
+the Snakefile's directory) and when running standalone the conventional cwd is
+the repo root. For standalone runs from elsewhere, add `sys.path.insert(0, "<repo>")`
+first.
 """
 
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Raw / external / expensive (won't be re-fetched on rebuild)
 DATA = REPO_ROOT / "data"

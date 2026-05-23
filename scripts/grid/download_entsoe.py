@@ -17,7 +17,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 if "snakemake" not in globals():
-    from _stubs import snakemake
+    from common._stubs import snakemake
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("download_entsoe")
@@ -53,18 +53,26 @@ def fetch_load_actual(client, area, start, end):
     return data
 
 
-def fetch_vre(client, area, start, end):
-    vre_names = {
+def fetch_res(client, area, start, end):
+    data = client.query_wind_and_solar_forecast(area, start=start, end=end)
+    res_names = {
         "Solar": "solar_forecast",
         "Wind Onshore": "wind_onshore_forecast",
         "Wind Offshore": "wind_offshore_forecast",
     }
-    data = client.query_wind_and_solar_forecast(area, start=start, end=end)
-    data.columns = pd.MultiIndex.from_tuples([(area, vre_names[c]) for c in data.columns])
+    data.columns = pd.MultiIndex.from_tuples([(area, res_names[c]) for c in data.columns])
     return data
 
 
 def fetch_generation(client, area, start, end):
+    data = client.query_generation(area, start=start, end=end)
+    if data.columns.nlevels == 2:
+        data.columns = ["_".join(col) for col in data.columns.values]
+    else:
+        data.columns = ["_".join([col, "Actual Aggregated"]) for col in data.columns]
+    cons_cols = data.filter(regex="Consumption$", axis=1).columns
+    data.loc[:, cons_cols] = data.loc[:, cons_cols] * -1
+
     gen_names = {
         "Biomass": "biomass",
         "Energy storage": "energy_storage",
@@ -91,13 +99,6 @@ def fetch_generation(client, area, start, end):
     rename_map = {k + "_Actual Aggregated": v for k, v in gen_names.items()}
     rename_map |= {k + "_Actual Consumption": v + "_cons" for k, v in gen_names.items()}
 
-    data = client.query_generation(area, start=start, end=end)
-    if data.columns.nlevels == 2:
-        data.columns = ["_".join(col) for col in data.columns.values]
-    else:
-        data.columns = ["_".join([col, "Actual Aggregated"]) for col in data.columns]
-    cons_cols = data.filter(regex="Consumption$", axis=1).columns
-    data.loc[:, cons_cols] = data.loc[:, cons_cols] * -1
     data.columns = pd.MultiIndex.from_tuples([(area, rename_map[c]) for c in data.columns])
     return data
 
@@ -123,7 +124,7 @@ FETCHERS = {
     "prices": fetch_prices,
     "load_forecast": fetch_load_forecast,
     "load_actual": fetch_load_actual,
-    "vre": fetch_vre,
+    "res": fetch_res,
     "generation": fetch_generation,
     "crossborder": fetch_crossborder,
 }

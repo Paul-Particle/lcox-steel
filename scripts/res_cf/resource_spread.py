@@ -39,6 +39,9 @@ import xarray as xr
 import atlite
 import geopandas as gpd
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 CUTOUT_DIR = Path("cutouts")
 REGIONS_PATH = Path("resources/shapes/regions.geojson")
 NATIONAL_CF_DIR = Path("resources/res_cf")

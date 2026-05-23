@@ -2,13 +2,15 @@ from pathlib import Path
 import geopandas as gpd
 import yaml
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
 
 EEZ_SHP      = Path("data/shapes/eez/eez_v12.shp")
 OUT_GEOJSON  = Path("resources/shapes/offshore_regions.geojson")
 LAND_REGIONS = Path("resources/shapes/regions.geojson")
 
 
-def _read_offshore_max_distance_km() -> float:
+def read_offshore_max_distance_km() -> float:
     with open("config/config.yaml", "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     return float(cfg["res_cf"]["offshore_max_distance_km"])
@@ -17,9 +19,9 @@ def _read_offshore_max_distance_km() -> float:
 if "snakemake" in dir():
     OUT_GEOJSON  = Path(snakemake.output[0])
     LAND_REGIONS = Path(snakemake.input.regions)
-    _OFFSHORE_MAX_KM = float(snakemake.config["res_cf"]["offshore_max_distance_km"])
+    OFFSHORE_MAX_KM = float(snakemake.config["res_cf"]["offshore_max_distance_km"])
 else:
-    _OFFSHORE_MAX_KM = None  # resolved in main() via _read_offshore_max_distance_km()
+    OFFSHORE_MAX_KM = None  # resolved in main() via read_offshore_max_distance_km()
 
 
 ISO3_TO_REGION = {
@@ -32,7 +34,7 @@ ISO3_TO_REGION = {
 
 
 def main():
-    max_distance_km = _OFFSHORE_MAX_KM if _OFFSHORE_MAX_KM is not None else _read_offshore_max_distance_km()
+    max_distance_km = OFFSHORE_MAX_KM if OFFSHORE_MAX_KM is not None else read_offshore_max_distance_km()
     print(f"Configured offshore distance limit: {max_distance_km} km")
 
     if not EEZ_SHP.exists():

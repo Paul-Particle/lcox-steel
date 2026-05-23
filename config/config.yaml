@@ -64,7 +64,7 @@ entsoe:
     TR:      { desc: "Turkey (not coupled)", enabled: false }
     UA:      { desc: "Ukraine (not coupled, just synchronized?)", enabled: false }
     XK:      { desc: "Kosovo (not coupled)", enabled: false }
-  data_types: [prices, load_forecast, load_actual, vre, generation, crossborder]
+  data_types: [prices, load_forecast, load_actual, res, generation, crossborder]
   # Date range that ends up in resources/entsoe/{area}/{data_type}.feather.
   # The download script caches per-month in data/entsoe_cache/; once a month is
   # cached it is never re-fetched. To force a refresh, delete the relevant cache

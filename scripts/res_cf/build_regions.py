@@ -20,6 +20,9 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 # ---- paths ----
 NE_SHP = Path("data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp")
 OUT_GEOJSON = Path("resources/shapes/regions.geojson")
@@ -28,7 +31,7 @@ if "snakemake" in dir():
     OUT_GEOJSON = Path(snakemake.output[0])
 
 
-def _one_country(world: gpd.GeoDataFrame, iso_a3: str) -> gpd.GeoSeries:
+def one_country(world: gpd.GeoDataFrame, iso_a3: str) -> gpd.GeoSeries:
     # Natural Earth: ISO_A3 can be -99; ADM0_A3 / SOV_A3 are more reliable
     for col in ["ADM0_A3", "SOV_A3", "ISO_A3"]:
         if col in world.columns:
@@ -39,7 +42,7 @@ def _one_country(world: gpd.GeoDataFrame, iso_a3: str) -> gpd.GeoSeries:
 
     raise ValueError(f"Code '{iso_a3}' not found in columns ADM0_A3/SOV_A3/ISO_A3.")
 
-def _fr_mainland_only(fr_geom):
+def fr_mainland_only(fr_geom):
     parts = list(fr_geom.geoms) if fr_geom.geom_type == "MultiPolygon" else [fr_geom]
 
     # keep only polygons whose centroid is in metropolitan Europe
@@ -67,11 +70,11 @@ def main() -> None:
     world = gpd.read_file(NE_SHP).to_crs(4326)
 
     geoms = {
-        "DE": _one_country(world, "DEU"),
-        "FR": _fr_mainland_only(_one_country(world, "FRA")), #Only European landmass
-        "ES": _one_country(world, "ESP"),
-        "AUS": _one_country(world, "AUS"),
-        "BRA": _one_country(world, "BRA"),
+        "DE": one_country(world, "DEU"),
+        "FR": fr_mainland_only(one_country(world, "FRA")), #Only European landmass
+        "ES": one_country(world, "ESP"),
+        "AUS": one_country(world, "AUS"),
+        "BRA": one_country(world, "BRA"),
     }
 
     #de_lu = geoms["DE"].union(geoms["LU"])

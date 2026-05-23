@@ -32,7 +32,7 @@ def load_yaml(path: Path) -> dict:
         return yaml.safe_load(f)
 
 
-def load_cf_dataframe(country: str, year: int, variant: str, cf_dir: Path) -> pd.DataFrame:
+def load_cf_timeseries(country: str, year: int, variant: str, cf_dir: Path) -> pd.DataFrame:
     """
     Load the atlite CF CSV and return a DataFrame with a DatetimeIndex.
     Columns are tech names (wind_onshore, solar, ...) without the '_cf' suffix.
@@ -69,7 +69,7 @@ def run_scenario(
 ) -> dict:
     """Build, solve, and return summary for one project+scenario."""
     cf_dir = REPO_ROOT / data_cfg["cf_dir"]
-    cf_df = load_cf_dataframe(
+    cf_timeseries = load_cf_timeseries(
         country=project_cfg["country"],
         year=project_cfg["year"],
         variant=project_cfg["cf_variant"],
@@ -78,10 +78,10 @@ def run_scenario(
 
     # Keep only the techs requested for this scenario
     techs = scenario_cfg["techs"]
-    missing = [t for t in techs if t not in cf_df.columns]
+    missing = [t for t in techs if t not in cf_timeseries.columns]
     if missing:
-        raise KeyError(f"Techs {missing} not found in CF file columns: {list(cf_df.columns)}")
-    cf_df = cf_df[techs]
+        raise KeyError(f"Techs {missing} not found in CF file columns: {list(cf_timeseries.columns)}")
+    cf_timeseries = cf_timeseries[techs]
 
     # Load prices if grid-connected
     price_series = None
@@ -93,14 +93,14 @@ def run_scenario(
             processed_path=processed_path,
         )
         # Align to CF index
-        price_series = raw_prices.reindex(cf_df.index)
+        price_series = raw_prices.reindex(cf_timeseries.index)
         if price_series.isna().any():
             raise ValueError(
                 f"Price series has {price_series.isna().sum()} missing values after aligning to CF index. "
                 "Check that entsoe_processed.feather covers the same year and hourly resolution as the CF file."
             )
 
-    n = build_network(project_cfg, assumptions, cf_df, price_series)
+    n = build_network(project_cfg, assumptions, cf_timeseries, price_series)
     n.optimize(solver_name="highs")
 
     project_name = project_cfg["name"]

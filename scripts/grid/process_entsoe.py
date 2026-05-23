@@ -11,7 +11,7 @@ from pathlib import Path
 import pandas as pd
 
 if "snakemake" not in globals():
-    from _stubs import snakemake
+    from common._stubs import snakemake
 
 
 def load_per_data_type(input_paths):
@@ -37,7 +37,7 @@ def process_data(snakemake):
     df_price          = by_dt["prices"].ffill(limit=3).fillna(0.0)
     df_load_forecast  = by_dt["load_forecast"].ffill(limit=3).fillna(0.0)
     df_load_actual    = by_dt["load_actual"].ffill(limit=3).fillna(0.0)
-    df_vre_forecast   = by_dt["vre"].ffill(limit=3).fillna(0.0)
+    df_res_forecast   = by_dt["res"].ffill(limit=3).fillna(0.0)
     df_generation     = by_dt["generation"].ffill(limit=3).fillna(0.0)
     df_crossborder    = by_dt["crossborder"].ffill(limit=3).fillna(0.0)
 
@@ -52,7 +52,7 @@ def process_data(snakemake):
     df_d_ac = df_load_actual.copy()
     df_d_ac.columns = pd.MultiIndex.from_tuples([(col, 'load') for col in df_d_ac.columns])
 
-    df_EU = pd.concat([df_p, df_d_fc, df_d_ac, df_vre_forecast, df_generation, df_crossborder], axis=1)
+    df_EU = pd.concat([df_p, df_d_fc, df_d_ac, df_res_forecast, df_generation, df_crossborder], axis=1)
 
     dfs_EU = {}
     for area in [col for col in df_EU.columns.get_level_values(0).unique() if col in AREAS]:
@@ -61,11 +61,11 @@ def process_data(snakemake):
         df_area_processed = (df_area_data
             .sort_index(axis=1)
             .assign(wind_forecast = lambda x: x.get('wind_onshore_foreacast', 0) + x.get('wind_offshore_forecast', 0))
-            .assign(vre_forecast  = lambda x: x.get('wind_forecast', 0) + x.get('solar_forecast', 0))
-            .assign(residual_forecast = lambda x: x.get('load_forecast', 0) - x.get('vre_forecast', 0))
+            .assign(res_forecast  = lambda x: x.get('wind_forecast', 0) + x.get('solar_forecast', 0))
+            .assign(residual_forecast = lambda x: x.get('load_forecast', 0) - x.get('res_forecast', 0))
             .assign(wind = lambda x: x.get('wind_onshore', 0) + x.get('wind_offshore', 0))
-            .assign(vre  = lambda x: x.get('wind', 0) + x.get('solar', 0))
-            .assign(residual = lambda x: x.get('load', 0) - x.get('vre', 0))
+            .assign(res  = lambda x: x.get('wind', 0) + x.get('solar', 0))
+            .assign(residual = lambda x: x.get('load', 0) - x.get('res', 0))
             .ffill(limit=3)
         )
 

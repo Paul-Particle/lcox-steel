@@ -24,6 +24,9 @@ Checks:
 from pathlib import Path
 import pandas as pd
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 INDIR  = Path("resources/res_cf/quarterly")
 OUTDIR = Path("resources/res_cf/annual")
 YEAR = 2023

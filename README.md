@@ -11,7 +11,7 @@ lcox-steel/
 │   ├── config.yaml         # Snakemake pipeline config (dates, countries, CF parameters)
 │   ├── assumptions.yaml    # Techno-economic defaults (CAPEX, OPEX, WACC, lifetimes)
 │   └── projects.yaml       # Project + scenario definitions for PyPSA runs
-├── _paths.py               # Canonical repo path roots (DATA, RESOURCES, CUTOUTS, …)
+├── common/                 # Shared helpers (_paths.py, _stubs.py)
 ├── environment.yaml        # Conda environment (lcox-steel)
 ├── data/                   # Raw / external / expensive (not produced by this repo)
 │   ├── entsoe_cache/       # Internal ENTSO-E monthly cache (area/year-month/data_type) — gitignored
@@ -146,7 +146,7 @@ Edit `config/projects.yaml` to add projects and scenarios. Edit `config/assumpti
 
 ## Data formats
 
-**Grid data** (`resources/entsoe_processed.feather`): pandas DataFrame with a UTC hourly DatetimeIndex and MultiIndex columns `(area_code, metric)`. Metrics include `price`, `load_actual`, `load_forecast`, `vre`, `generation`, `crossborder`.
+**Grid data** (`resources/entsoe_processed.feather`): pandas DataFrame with a UTC hourly DatetimeIndex and MultiIndex columns `(area_code, metric)`. Metrics include `price`, `load_actual`, `load_forecast`, `res`, `generation`, `crossborder`.
 
 **Capacity factors** (`resources/res_cf/<cc>_cf_<year>.csv`): hourly CSV with a `time` column and columns `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
 

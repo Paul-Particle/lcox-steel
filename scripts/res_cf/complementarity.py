@@ -45,6 +45,9 @@ import numpy as np
 import pandas as pd
 import yaml
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 # ── Import reusable functions from make_bestsite_cf ──────────────────────────
 _spec = importlib.util.spec_from_file_location(
     "bestsite",

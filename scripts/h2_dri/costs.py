@@ -13,7 +13,7 @@ H2_LHV_MWH_PER_KG = 33.33 / 1000  # LHV of hydrogen in MWh/kg
 
 def compute_lcoh(n: pypsa.Network) -> float:
     """LCOH in €/kg H2."""
-    return _annual_cost(n) / _h2_produced_kg(n)
+    return annual_cost(n) / h2_produced_kg(n)
 
 
 def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> dict:
@@ -22,8 +22,8 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         "project": project_name,
         "scenario": scenario_name,
         "lcoh_eur_per_kg": compute_lcoh(n),
-        "total_annual_cost_eur": _annual_cost(n),
-        "h2_produced_kg": _h2_produced_kg(n),
+        "total_annual_cost_eur": annual_cost(n),
+        "h2_produced_kg": h2_produced_kg(n),
     }
 
     # Optimal generator capacities (extendable only)
@@ -47,7 +47,7 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     return summary
 
 
-def _annual_cost(n: pypsa.Network) -> float:
+def annual_cost(n: pypsa.Network) -> float:
     """
     Annualized capital costs + variable grid import costs (scaled to annual).
 
@@ -87,7 +87,7 @@ def _annual_cost(n: pypsa.Network) -> float:
     return float(cost)
 
 
-def _h2_produced_kg(n: pypsa.Network) -> float:
+def h2_produced_kg(n: pypsa.Network) -> float:
     """Annual H2 production in kg, scaled from the simulation period to 8760 h."""
     t_hours = len(n.snapshots)
     h2_mwh_lhv = float(n.loads_t.p["dri_load"].sum()) * (8760.0 / t_hours)

@@ -56,6 +56,9 @@ import atlite
 import geopandas as gpd
 from shapely.geometry import box
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 YEAR      = 2023
 OUTDIR    = Path("resources/res_cf")
 COUNTRIES = ["de", "fr", "es", "aus", "bra"]  # lowercase to match filenames; standalone default
