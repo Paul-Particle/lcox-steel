@@ -140,7 +140,7 @@ def build_cf_year(country_upper: str, tech: str) -> xr.DataArray:
 
     return xr.concat(parts, dim="time")
 
-def load_land_geometry(iso2: str):
+def _load_land_geometry(iso2: str):
     gdf = gpd.read_file(REGIONS_PATH)
     row = gdf.loc[gdf["region"] == iso2]
     if row.empty:
@@ -148,7 +148,7 @@ def load_land_geometry(iso2: str):
     return row.geometry.iloc[0]
 
 
-def load_offshore_geometry(iso2: str):
+def _load_offshore_geometry(iso2: str):
     gdf = gpd.read_file(OFFSHORE_REGIONS_PATH)
     row = gdf.loc[gdf["region"] == iso2]
     if row.empty:
@@ -156,7 +156,7 @@ def load_offshore_geometry(iso2: str):
     return row.geometry.iloc[0]
 
 def geometry_for_tech(iso2: str, tech: str):
-    return load_offshore_geometry(iso2) if tech == "wind_offshore" else load_land_geometry(iso2)
+    return _load_offshore_geometry(iso2) if tech == "wind_offshore" else _load_land_geometry(iso2)
 
 
 def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
@@ -167,7 +167,7 @@ def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
     inside = points.within(geom) | points.touches(geom)
     return inside.values.reshape(cell_mean.shape)
 
-def find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
+def _find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
     """
     Identify the representative P95 grid cell based on annual mean CF.
 
@@ -194,7 +194,7 @@ def find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
 
     return int(y_idx), int(x_idx)
 
-def to_cf_series(x, name="cf"):
+def _to_cf_series(x, name="cf"):
     obj = x.to_pandas()
 
     if isinstance(obj, pd.DataFrame):
@@ -232,7 +232,7 @@ def main() -> None:
             cf_national = cf_year.where(mask).mean(dim=("y", "x"))
             nat_mean = float(cf_national.mean().item())
 
-            y_idx, x_idx = find_p95_cell(cf_year, geom)
+            y_idx, x_idx = _find_p95_cell(cf_year, geom)
 
             ts = extract_cell_timeseries(cf_year, y_idx, x_idx, tech)
 
