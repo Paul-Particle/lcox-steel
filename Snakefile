@@ -17,7 +17,7 @@ CF_TOP_N     = config["res_cf"]["top_n"]
 rule all:
     input:
         # Grid pipeline
-        "resources/processed_data.feather",
+        "resources/entsoe_processed.feather",
         "resources/nem_processed.feather",
         expand("resources/entsoe/{area}/{data_type}.feather",
                area=enabled_areas,
@@ -34,7 +34,7 @@ rule all:
 
 # ── Grid pipeline ──────────────────────────────────────────────────────────────
 
-rule download_entsoe_data:
+rule download_entsoe:
     output:
         "resources/entsoe/{area}/{data_type}.feather"
     params:
@@ -46,17 +46,17 @@ rule download_entsoe_data:
     script:
         "scripts/grid/download_entsoe.py"
 
-rule download_nem_data:
+rule download_nem:
     output:
         "resources/nem_processed.feather"
     params:
         start_date=config["nem_download"]["start_date"],
         end_date=config["nem_download"]["end_date"],
-        nemosis_cache_dir=config["nem_download"]["nemosis_cache_dir"],
+        cache_dir=config["nem_download"]["cache_dir"],
         rebuild=config["nem_download"]["rebuild"]
     script: "scripts/grid/download_nem.py"
 
-rule process_data:
+rule process_entsoe:
     input:
         entsoe=expand("resources/entsoe/{area}/{data_type}.feather",
                       area=enabled_areas,
@@ -64,7 +64,7 @@ rule process_data:
     params:
         areas=enabled_areas
     output:
-        "resources/processed_data.feather",
+        "resources/entsoe_processed.feather",
     script:
         "scripts/grid/process_entsoe.py"
 
@@ -87,7 +87,7 @@ rule make_cutout:
     input:
         regions="resources/shapes/regions.geojson"
     output: "cutouts/{country}_{year}_{quarter}.nc"
-    script: "scripts/res_cf/make_cutouts.py"
+    script: "scripts/res_cf/make_cutout.py"
 
 rule build_cf_timeseries:
     input:
@@ -139,7 +139,7 @@ rule make_bestsite_cf:
         regions="resources/shapes/regions.geojson",
         offshore_regions="resources/shapes/offshore_regions.geojson"
     output: f"resources/res_cf/{{country}}_cf_{CF_YEAR}_bestsite_p95.csv"
-    script: "scripts/res_cf/make_bestsite_cf_timeseries.py"
+    script: "scripts/res_cf/make_bestsite_cf.py"
 
 rule complementarity:
     input:

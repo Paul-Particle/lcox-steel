@@ -161,7 +161,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
 - `scripts/res_cf/build_offshore_regions.py`  
   Builds `resources/shapes/offshore_regions.geojson` from EEZ polygons restricted to a near-shore deployment band.
 
-- `scripts/res_cf/make_cutouts.py`  
+- `scripts/res_cf/make_cutout.py`  
   Creates ERA5 cutouts (`cutouts/*.nc`) for a given country and time segment
   (Q1–Q4). For large domains (AUS/BRA), uses coarser grid (`dx=0.5`, `dy=0.5`)
   to avoid CDS job failures and reduce runtime/memory.
@@ -188,7 +188,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   Outputs:
   - `resources/res_cf/resource_spread_2023.csv`
 
-- `scripts/res_cf/make_bestsite_cf_timeseries.py`  
+- `scripts/res_cf/make_bestsite_cf.py`  
 
   ### Updated behaviour:
   Generates “best-site” hourly CF time series by **direct extraction from Atlite CF grids**.

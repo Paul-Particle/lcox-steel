@@ -51,7 +51,7 @@ def load_cf_dataframe(country: str, year: int, variant: str, cf_dir: Path) -> pd
 
 def load_price_series(area: str, year: int, processed_path: Path) -> pd.Series:
     """
-    Load hourly electricity prices for one area and year from processed_data.feather.
+    Load hourly electricity prices for one area and year from entsoe_processed.feather.
     Returns a Series with DatetimeIndex (timezone-naive, UTC).
     """
     df = pd.read_feather(processed_path)
@@ -97,7 +97,7 @@ def run_scenario(
         if price_series.isna().any():
             raise ValueError(
                 f"Price series has {price_series.isna().sum()} missing values after aligning to CF index. "
-                "Check that processed_data.feather covers the same year and hourly resolution as the CF file."
+                "Check that entsoe_processed.feather covers the same year and hourly resolution as the CF file."
             )
 
     n = build_network(project_cfg, assumptions, cf_df, price_series)

@@ -1,5 +1,5 @@
 """
-07_make_bestsite_cf_timeseries.py
+make_bestsite_cf.py
 
 Purpose
 -------

@@ -2,7 +2,7 @@
 
 Inputs: a flat list of resources/entsoe/{area}/{data_type}.feather paths
         (each file already covers the full date range for its area+data_type).
-Output: resources/processed_data.feather — wide DataFrame, columns = (area, metric).
+Output: resources/entsoe_processed.feather — wide DataFrame, columns = (area, metric).
 """
 
 from collections import defaultdict

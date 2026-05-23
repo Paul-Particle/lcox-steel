@@ -269,7 +269,7 @@ def download_crossborder_data(start_time, end_time, cache_dir, rebuild):
 
 
 def download_data(snakemake):
-    cache_dir = Path(snakemake.params.nemosis_cache_dir)
+    cache_dir = Path(snakemake.params.cache_dir)
     rebuild = snakemake.params.get("rebuild", False) # pyright: ignore[reportGeneralTypeIssues]
     start_time = datetime.strptime(snakemake.params.start_date, "%Y%m%d")
     start_time = start_time.strftime("%Y/%m/%d") + " 00:00:00"

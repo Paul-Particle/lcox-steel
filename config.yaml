@@ -75,7 +75,7 @@ entsoe:
 nem_download:
   start_date: "20230101" # format as YYYYMMDD
   end_date: "20230131"
-  nemosis_cache_dir: "data/nemosis_cache"
+  cache_dir: "data/nem_cache"
   rebuild: false
 
 res_cf:

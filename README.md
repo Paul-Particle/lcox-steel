@@ -15,11 +15,11 @@ lcox-steel/
 ├── environment.yaml        # Conda environment (lcox-steel)
 ├── data/                   # Raw / external / expensive (not produced by this repo)
 │   ├── entsoe_cache/       # Internal ENTSO-E monthly cache (area/year-month/data_type) — gitignored
-│   ├── nemosis_cache/      # Internal AEMO NEMOSIS cache — gitignored
+│   ├── nem_cache/          # Internal AEMO NEMOSIS cache — gitignored
 │   └── shapes/             # Raw shapefiles: ne_110m_admin_0_countries/, eez/ (gitignored — see below)
 ├── resources/              # Derived / Snakemake-tracked outputs (reproducible)
 │   ├── entsoe/{area}/{data_type}.feather  # Stitched per-area, per-data_type ENTSO-E series
-│   ├── processed_data.feather             # Wide hourly grid dataset (MultiIndex columns)
+│   ├── entsoe_processed.feather             # Wide hourly grid dataset (MultiIndex columns)
 │   ├── nem_processed.feather              # Australian NEM equivalent
 │   ├── shapes/             # Derived geojsons (regions, offshore_regions — committed in git)
 │   └── res_cf/
@@ -38,12 +38,12 @@ lcox-steel/
     │   ├── check_external_data.py  # Validate required external files
     │   ├── build_regions.py
     │   ├── build_offshore_regions.py
-    │   ├── make_cutouts.py
+    │   ├── make_cutout.py
     │   ├── build_cf_timeseries.py
     │   ├── concat_quarters.py
     │   ├── combine_techs.py
     │   ├── resource_spread.py
-    │   ├── make_bestsite_cf_timeseries.py
+    │   ├── make_bestsite_cf.py
     │   ├── complementarity.py
     │   └── diag_*.py               # Diagnostic and QC scripts
     ├── h2_dri/             # PyPSA investment model
@@ -108,10 +108,10 @@ snakemake --cores 4   # execute
 ### Grid data only
 
 ```bash
-snakemake resources/processed_data.feather --cores 4 --resources entsoe_api=4
+snakemake resources/entsoe_processed.feather --cores 4 --resources entsoe_api=4
 ```
 
-Downloads and stitches ENTSO-E data into `resources/processed_data.feather` (MultiIndex columns `(area, metric)`, hourly UTC DatetimeIndex). The `download_entsoe_data` rule manages a per-month cache in `data/entsoe_cache/` internally; once a month is cached it is never re-fetched.
+Downloads and stitches ENTSO-E data into `resources/entsoe_processed.feather` (MultiIndex columns `(area, metric)`, hourly UTC DatetimeIndex). The `download_entsoe` rule manages a per-month cache in `data/entsoe_cache/` internally; once a month is cached it is never re-fetched.
 
 `--resources entsoe_api=N` caps concurrent ENTSO-E API calls (their rate limit is ~400/min globally per API key — without throttling, a cold-cache build can exhaust the quota).
 
@@ -146,7 +146,7 @@ Edit `config/projects.yaml` to add projects and scenarios. Edit `config/assumpti
 
 ## Data formats
 
-**Grid data** (`resources/processed_data.feather`): pandas DataFrame with a UTC hourly DatetimeIndex and MultiIndex columns `(area_code, metric)`. Metrics include `price`, `load_actual`, `load_forecast`, `vre`, `generation`, `crossborder`.
+**Grid data** (`resources/entsoe_processed.feather`): pandas DataFrame with a UTC hourly DatetimeIndex and MultiIndex columns `(area_code, metric)`. Metrics include `price`, `load_actual`, `load_forecast`, `vre`, `generation`, `crossborder`.
 
 **Capacity factors** (`resources/res_cf/<cc>_cf_<year>.csv`): hourly CSV with a `time` column and columns `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
 

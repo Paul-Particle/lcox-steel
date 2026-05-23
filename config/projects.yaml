@@ -1,5 +1,5 @@
 data:
-  processed_path: "resources/processed_data.feather"
+  processed_path: "resources/entsoe_processed.feather"
   cf_dir: "resources/res_cf"
 
 projects:
@@ -24,4 +24,4 @@ projects:
       - name: grid_connected
         grid_connected: true
         techs: [wind_onshore, solar]
-        grid_price_area: DE_LU  # key in processed_data.feather
+        grid_price_area: DE_LU  # key in entsoe_processed.feather

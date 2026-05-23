@@ -17,13 +17,13 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-CF_DIR       = PROJECT_ROOT / "data" / "res_cf"
+CF_DIR       = PROJECT_ROOT / "resources" / "res_cf"
 PLOT_DIR     = PROJECT_ROOT / "results" / "plots"
 
-# ── Import reusable functions from make_bestsite_cf_timeseries ───────────────
+# ── Import reusable functions from make_bestsite_cf ──────────────────────────
 _spec = importlib.util.spec_from_file_location(
     "bestsite",
-    Path(__file__).parent / "make_bestsite_cf_timeseries.py"
+    Path(__file__).parent / "make_bestsite_cf.py"
 )
 _bestsite = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_bestsite)
