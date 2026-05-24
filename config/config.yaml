@@ -110,9 +110,29 @@ res_cf:
   year: 2025
   top_n: 10
   offshore_max_distance_km: 200
+
+  # Wind CF computation flags — passed to atlite.Cutout.wind() in
+  # build_cf_timeseries, make_bestsite_cf, resource_spread.
+  # smooth=True             smooths the turbine power curve
+  # add_cutout_windspeed    preserves atlite's built-in 25 m/s cutoff during smoothing
+  # spatial_avg_window      odd-N square window of cells averaged for wind site CFs
+  #                         (used in make_bestsite_cf to approximate wind farm scale)
+  wind_cf:
+    smooth: true
+    add_cutout_windspeed: true
+    spatial_avg_window: 3
+
+  # Atlite cutout build settings.
+  # bbox_pad_deg            degrees of padding added around country/region bounds.
+  cutout:
+    bbox_pad_deg: 1.0
+
   complementarity:
     coincidence_threshold: 0.20
     w_coincidence: 0.6
     w_correlation: 0.4
     max_radius_km: 300.0
     quality_floor: 0.90
+    # Triplet count threshold above which complementarity.py switches from
+    # exhaustive brute-force screening to greedy + neighbourhood search.
+    max_triplets_brute_force: 500000

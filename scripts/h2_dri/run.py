@@ -1,12 +1,17 @@
 """
-CLI runner for the DRI-hydrogen PyPSA optimisation.
+PyPSA DRI-hydrogen optimisation entry point.
 
-Usage (from repo root):
-    python scripts/h2_dri/run.py --project DE_2023_baseline --scenario dedicated_res
-    python scripts/h2_dri/run.py --project DE_2023_baseline  # runs all scenarios
+Invoked by Snakemake's `script:` directive (one rule fires per
+(project, scenario) wildcard pair). The hardcoded fallback at the top of the
+file lets you also run it standalone for ad-hoc dev work — same convention as
+the res_cf scripts.
+
+Standalone invocation:
+    python scripts/h2_dri/run.py
 """
 
-import argparse
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 
@@ -18,13 +23,38 @@ pd.options.mode.string_storage = "python"
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).parent))
 from network import build_network
 from costs import compute_lcoh, extract_summary
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
 
-REPO_ROOT = Path(__file__).parent.parent.parent
-CONFIG_DIR = REPO_ROOT / "config"
-RESULTS_DIR = REPO_ROOT / "results"
+from common._paths import REPO_ROOT
+
+
+# ── Defaults for standalone runs (mirror DE_2023_baseline / dedicated_res) ──
+PROJECT_NAME    = "DE_2023_baseline"
+SCENARIO_NAME   = "dedicated_res"
+CF_PATH         = REPO_ROOT / "resources/res_cf/de_cf_2023.csv"
+PRICES_PATH     = REPO_ROOT / "resources/entsoe_processed.feather"
+ASSUMPTIONS_PATH = REPO_ROOT / "config/assumptions.yaml"
+PROJECTS_PATH   = REPO_ROOT / "config/projects.yaml"
+OUT_NETWORK     = REPO_ROOT / "results" / PROJECT_NAME / f"{SCENARIO_NAME}.nc"
+OUT_SUMMARY     = REPO_ROOT / "results" / PROJECT_NAME / f"{SCENARIO_NAME}_summary.csv"
+
+if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
+    PROJECT_NAME    = snakemake.wildcards.project
+    SCENARIO_NAME   = snakemake.wildcards.scenario
+    CF_PATH         = Path(snakemake.input.cf)
+    try:
+        PRICES_PATH = Path(snakemake.input.prices)
+    except AttributeError:
+        PRICES_PATH = None
+    ASSUMPTIONS_PATH = Path(snakemake.input.assumptions)
+    PROJECTS_PATH   = Path(snakemake.input.projects)
+    OUT_NETWORK     = Path(snakemake.output.network)
+    OUT_SUMMARY     = Path(snakemake.output.summary)
 
 
 def load_yaml(path: Path) -> dict:
@@ -32,17 +62,13 @@ def load_yaml(path: Path) -> dict:
         return yaml.safe_load(f)
 
 
-def load_cf_timeseries(country: str, year: int, variant: str, cf_dir: Path) -> pd.DataFrame:
+def load_cf_timeseries(path: Path) -> pd.DataFrame:
     """
     Load the atlite CF CSV and return a DataFrame with a DatetimeIndex.
     Columns are tech names (wind_onshore, solar, ...) without the '_cf' suffix.
     """
-    cc = country.lower()
-    filename = f"{cc}_cf_{year}.csv" if variant == "avg" else f"{cc}_cf_{year}_{variant}.csv"
-    path = cf_dir / filename
     if not path.exists():
         raise FileNotFoundError(f"CF file not found: {path}")
-
     df = pd.read_csv(path, parse_dates=["time"], index_col="time")
     df.index.name = None
     df.columns = [c.replace("_cf", "") for c in df.columns]
@@ -61,38 +87,50 @@ def load_price_series(area: str, year: int, processed_path: Path) -> pd.Series:
     return prices
 
 
-def run_scenario(
-    project_cfg: dict,
-    scenario_cfg: dict,
-    assumptions: dict,
-    data_cfg: dict,
-) -> dict:
-    """Build, solve, and return summary for one project+scenario."""
-    cf_dir = REPO_ROOT / data_cfg["cf_dir"]
-    cf_timeseries = load_cf_timeseries(
-        country=project_cfg["country"],
-        year=project_cfg["year"],
-        variant=project_cfg["cf_variant"],
-        cf_dir=cf_dir,
-    )
+def _find(items: list[dict], name: str, kind: str) -> dict:
+    for it in items:
+        if it["name"] == name:
+            return it
+    raise KeyError(f"{kind} '{name}' not found")
 
-    # Keep only the techs requested for this scenario
+
+def run(
+    project_name: str,
+    scenario_name: str,
+    cf_path: Path,
+    prices_path: Path | None,
+    assumptions: dict,
+    projects_cfg: dict,
+    out_network: Path,
+    out_summary: Path,
+) -> dict:
+    project_cfg  = _find(projects_cfg["projects"], project_name, "Project")
+    scenario_cfg = _find(project_cfg["scenarios"], scenario_name, "Scenario")
+    h2_lhv_kwh_per_kg = assumptions["h2"]["lhv_kwh_per_kg"]
+
+    cf_timeseries = load_cf_timeseries(cf_path)
+
     techs = scenario_cfg["techs"]
     missing = [t for t in techs if t not in cf_timeseries.columns]
     if missing:
         raise KeyError(f"Techs {missing} not found in CF file columns: {list(cf_timeseries.columns)}")
-    cf_timeseries = cf_timeseries[techs]
+    cf_timeseries = cf_timeseries[techs] if techs else cf_timeseries.iloc[:, :0]
 
-    # Load prices if grid-connected
     price_series = None
     if scenario_cfg.get("grid_connected", False):
-        processed_path = REPO_ROOT / data_cfg["processed_path"]
+        if prices_path is None:
+            raise ValueError(
+                f"Scenario '{scenario_name}' is grid_connected but no prices input was provided."
+            )
+        if "grid_price_area" not in scenario_cfg:
+            raise KeyError(
+                f"Scenario '{scenario_name}' is grid_connected but lacks 'grid_price_area' in projects.yaml."
+            )
         raw_prices = load_price_series(
             area=scenario_cfg["grid_price_area"],
             year=project_cfg["year"],
-            processed_path=processed_path,
+            processed_path=prices_path,
         )
-        # Align to CF index
         price_series = raw_prices.reindex(cf_timeseries.index)
         if price_series.isna().any():
             raise ValueError(
@@ -103,61 +141,42 @@ def run_scenario(
     n = build_network(project_cfg, assumptions, cf_timeseries, price_series)
     n.optimize(solver_name="highs")
 
-    project_name = project_cfg["name"]
-    scenario_name = scenario_cfg["name"]
+    out_network.parent.mkdir(parents=True, exist_ok=True)
+    n.export_to_netcdf(out_network)
 
-    out_dir = RESULTS_DIR / project_name
-    out_dir.mkdir(parents=True, exist_ok=True)
-    n.export_to_netcdf(out_dir / f"{scenario_name}.nc")
-
-    summary = extract_summary(n, project_name, scenario_name)
-    pd.DataFrame([summary]).to_csv(out_dir / f"{scenario_name}_summary.csv", index=False)
+    summary = extract_summary(n, project_name, scenario_name, h2_lhv_kwh_per_kg)
+    pd.DataFrame([summary]).to_csv(out_summary, index=False)
 
     return summary
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run DRI-hydrogen PyPSA optimisation")
-    parser.add_argument("--project", help="Project name from projects.yaml (default: first project)")
-    parser.add_argument("--scenario", help="Scenario name (default: all scenarios in project)")
-    args = parser.parse_args()
+    assumptions  = load_yaml(ASSUMPTIONS_PATH)
+    projects_cfg = load_yaml(PROJECTS_PATH)
 
-    assumptions = load_yaml(CONFIG_DIR / "assumptions.yaml")
-    projects_cfg = load_yaml(CONFIG_DIR / "projects.yaml")
-    data_cfg = projects_cfg["data"]
+    summary = run(
+        project_name=PROJECT_NAME,
+        scenario_name=SCENARIO_NAME,
+        cf_path=CF_PATH,
+        prices_path=PRICES_PATH,
+        assumptions=assumptions,
+        projects_cfg=projects_cfg,
+        out_network=OUT_NETWORK,
+        out_summary=OUT_SUMMARY,
+    )
 
-    projects = projects_cfg["projects"]
-    if args.project:
-        projects = [p for p in projects if p["name"] == args.project]
-        if not projects:
-            print(f"Error: project '{args.project}' not found in projects.yaml", file=sys.stderr)
-            sys.exit(1)
-
-    for project_cfg in projects:
-        scenarios = project_cfg["scenarios"]
-        if args.scenario:
-            scenarios = [s for s in scenarios if s["name"] == args.scenario]
-            if not scenarios:
-                print(f"Error: scenario '{args.scenario}' not in project '{project_cfg['name']}'", file=sys.stderr)
-                sys.exit(1)
-
-        for scenario_cfg in scenarios:
-            label = f"{project_cfg['name']} / {scenario_cfg['name']}"
-            print(f"\n{'='*60}\nRunning: {label}\n{'='*60}")
-
-            summary = run_scenario(project_cfg, scenario_cfg, assumptions, data_cfg)
-
-            print(f"  LCOH:             {summary['lcoh_eur_per_kg']:.3f} €/kg H₂")
-            print(f"  Total cost/yr:    {summary['total_annual_cost_eur']:,.0f} €")
-            for k, v in summary.items():
-                if k.endswith("_mw_opt"):
-                    print(f"  {k:<30} {v:,.1f} MW")
-            if "battery_mwh_opt" in summary:
-                print(f"  {'battery_mwh_opt':<30} {summary['battery_mwh_opt']:,.1f} MWh")
-            if "h2_buffer_mwh_lhv_opt" in summary:
-                print(f"  {'h2_buffer_mwh_lhv_opt':<30} {summary['h2_buffer_mwh_lhv_opt']:,.1f} MWh LHV")
-
-            print(f"\n  Results saved to results/{project_cfg['name']}/{scenario_cfg['name']}.*")
+    label = f"{PROJECT_NAME} / {SCENARIO_NAME}"
+    print(f"\n{'=' * 60}\nRan: {label}\n{'=' * 60}")
+    print(f"  LCOH:             {summary['lcoh_eur_per_kg']:.3f} €/kg H₂")
+    print(f"  Total cost/yr:    {summary['total_annual_cost_eur']:,.0f} €")
+    for k, v in summary.items():
+        if k.endswith("_mw_opt"):
+            print(f"  {k:<30} {v:,.1f} MW")
+    if "battery_mwh_opt" in summary:
+        print(f"  {'battery_mwh_opt':<30} {summary['battery_mwh_opt']:,.1f} MWh")
+    if "h2_buffer_mwh_lhv_opt" in summary:
+        print(f"  {'h2_buffer_mwh_lhv_opt':<30} {summary['h2_buffer_mwh_lhv_opt']:,.1f} MWh LHV")
+    print(f"\n  Results saved to {OUT_NETWORK} / {OUT_SUMMARY}")
 
 
 if __name__ == "__main__":

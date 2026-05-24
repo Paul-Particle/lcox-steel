@@ -12,8 +12,9 @@ emits:
   results/vic_2025/price_series.csv VIC1 hourly EUR price series used (for the price-distribution viz)
   results/vic_2025/{loc}_{scen}.nc 12 solved PyPSA networks
 
-Currency: NEM prices are AUD-native. Converted to EUR inline using EUR_PER_AUD = 0.61
-(rough mid-2025 ballpark). Bump if you need real accuracy.
+Currency: NEM prices are AUD-native. Converted to EUR inline using the
+top-level `fx.eur_per_aud` rate in config/projects.yaml. Bump that if you
+need real accuracy.
 """
 
 from __future__ import annotations
@@ -38,7 +39,6 @@ from shapely.geometry import box
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from common._paths import REPO_ROOT, CUTOUTS, RESULTS, SHAPES_RES  # noqa: E402
 
-EUR_PER_AUD = 0.61
 SEED = 42
 NEM_REGION = "VIC1"
 
@@ -103,6 +103,7 @@ def main() -> None:
     assumptions = yaml.safe_load(open(REPO_ROOT / "config/assumptions.yaml"))
     projects    = yaml.safe_load(open(REPO_ROOT / "config/projects.yaml"))
     year        = int(cfg["res_cf"]["year"])
+    eur_per_aud = float(projects["fx"]["eur_per_aud"])
 
     bestsite = load_bestsite_module()
     # Override standalone defaults in case they were picked up before our config was applied
@@ -145,7 +146,7 @@ def main() -> None:
     nem        = pd.read_feather(REPO_ROOT / "resources/nem_processed.feather")
     price_aud  = nem[(NEM_REGION, "price")]
     price_aud  = price_aud[price_aud.index.year == year]
-    price_eur  = (price_aud * EUR_PER_AUD).reindex(cell_cfs["wind_p95"].index)
+    price_eur  = (price_aud * eur_per_aud).reindex(cell_cfs["wind_p95"].index)
     if price_eur.isna().any():
         n_nan = int(price_eur.isna().sum())
         print(f"WARNING: filling {n_nan} NaN prices (post-reindex) with the median.")
@@ -177,7 +178,8 @@ def main() -> None:
             n = build_network(project_cfg, assumptions, cf_ts, price_series=price)
             n.optimize(solver_name="highs")
 
-            row = extract_summary(n, "vic_2025", f"{loc_name}_{sc_name}")
+            row = extract_summary(n, "vic_2025", f"{loc_name}_{sc_name}",
+                                  assumptions["h2"]["lhv_kwh_per_kg"])
             row["location"] = loc_name
             row["scenario"] = sc_name
 

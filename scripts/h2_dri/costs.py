@@ -8,22 +8,25 @@ across PyPSA versions and to always include the fixed electrolyser capex.
 import pandas as pd
 import pypsa
 
-H2_LHV_MWH_PER_KG = 33.33 / 1000  # LHV of hydrogen in MWh/kg
 
-
-def compute_lcoh(n: pypsa.Network) -> float:
+def compute_lcoh(n: pypsa.Network, h2_lhv_kwh_per_kg: float) -> float:
     """LCOH in €/kg H2."""
-    return _annual_cost(n) / _h2_produced_kg(n)
+    return _annual_cost(n) / _h2_produced_kg(n, h2_lhv_kwh_per_kg)
 
 
-def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> dict:
+def extract_summary(
+    n: pypsa.Network,
+    project_name: str,
+    scenario_name: str,
+    h2_lhv_kwh_per_kg: float,
+) -> dict:
     """Key sizing and cost metrics as a flat dict (suitable for a one-row CSV)."""
     summary = {
         "project": project_name,
         "scenario": scenario_name,
-        "lcoh_eur_per_kg": compute_lcoh(n),
+        "lcoh_eur_per_kg": compute_lcoh(n, h2_lhv_kwh_per_kg),
         "total_annual_cost_eur": _annual_cost(n),
-        "_h2_produced_kg": _h2_produced_kg(n),
+        "_h2_produced_kg": _h2_produced_kg(n, h2_lhv_kwh_per_kg),
     }
 
     # Optimal generator capacities (extendable only)
@@ -87,8 +90,9 @@ def _annual_cost(n: pypsa.Network) -> float:
     return float(cost)
 
 
-def _h2_produced_kg(n: pypsa.Network) -> float:
+def _h2_produced_kg(n: pypsa.Network, h2_lhv_kwh_per_kg: float) -> float:
     """Annual H2 production in kg, scaled from the simulation period to 8760 h."""
     t_hours = len(n.snapshots)
     h2_mwh_lhv = float(n.loads_t.p["dri_load"].sum()) * (8760.0 / t_hours)
-    return h2_mwh_lhv / H2_LHV_MWH_PER_KG
+    h2_lhv_mwh_per_kg = h2_lhv_kwh_per_kg / 1000.0
+    return h2_mwh_lhv / h2_lhv_mwh_per_kg

@@ -1,6 +1,11 @@
 finance:
   default_wacc: 0.07
 
+h2:
+  # Lower heating value of hydrogen. Used to convert between MW (PyPSA bus
+  # convention) and kg H2 in network.py / costs.py / sizing.py.
+  lhv_kwh_per_kg: 33.33
+
 res:
   wind_onshore:
     capex_per_mw_eur: 1_000_000

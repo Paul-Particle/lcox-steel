@@ -3,10 +3,10 @@ Build a PyPSA network for a single DRI-hydrogen project scenario.
 
 Bus unit convention: MW throughout.
   electricity bus: MW AC
-  hydrogen bus:    MW H2 LHV  (1 MWh H2 LHV ≈ 30 kg H2, since LHV ≈ 33.33 kWh/kg)
+  hydrogen bus:    MW H2 LHV  (1 MWh H2 LHV ≈ 30 kg H2 at LHV ≈ 33.33 kWh/kg)
 
-Electrolyser efficiency is therefore:
-  efficiency = H2_LHV_MWH_PER_KG * 1000 / efficiency_kwh_per_kg
+Electrolyser efficiency is:
+  efficiency = h2_lhv_kwh_per_kg / efficiency_kwh_per_kg
              = 33.33 / 55 ≈ 0.606 (MW H2 LHV per MW electricity)
 """
 
@@ -18,8 +18,6 @@ import pypsa
 
 sys.path.insert(0, str(Path(__file__).parent))
 from sizing import annuity_factor, dri_to_el_mw
-
-H2_LHV_MWH_PER_KG = 33.33 / 1000  # LHV of hydrogen in MWh/kg
 
 
 def build_network(
@@ -33,12 +31,13 @@ def build_network(
 
     project_cfg: one entry from projects.yaml (with 'plant' and 'scenarios' resolved)
     assumptions: full assumptions.yaml dict
-    cf_timeseries:       DataFrame indexed by DatetimeIndex, columns = tech names in assumptions.res
+    cf_timeseries: DataFrame indexed by DatetimeIndex, columns = tech names in assumptions.res
     price_series: optional hourly price Series (€/MWh), same index as cf_timeseries
     """
     wacc = assumptions["finance"]["default_wacc"]
     el_cfg = assumptions["electrolyser"]
     plant = project_cfg["plant"]
+    h2_lhv_kwh_per_kg = assumptions["h2"]["lhv_kwh_per_kg"]
 
     el_mw = dri_to_el_mw(
         dri_mt_per_year=plant["dri_mt_per_year"],
@@ -46,7 +45,7 @@ def build_network(
         efficiency_kwh_per_kg=el_cfg["efficiency_kwh_per_kg"],
         availability_target=plant["availability_target"],
     )
-    el_efficiency = H2_LHV_MWH_PER_KG * 1000 / el_cfg["efficiency_kwh_per_kg"]
+    el_efficiency = h2_lhv_kwh_per_kg / el_cfg["efficiency_kwh_per_kg"]
 
     n = pypsa.Network()
     n.set_snapshots(cf_timeseries.index)

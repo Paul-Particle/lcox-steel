@@ -2,6 +2,12 @@ data:
   processed_path: "resources/entsoe_processed.feather"
   cf_dir: "resources/res_cf"
 
+# FX rates for converting non-EUR price feeds. Used by orchestrators that
+# load non-EUR prices (e.g. NEM AUD prices in scripts/tests/vic_2025_lcoh.py).
+# Keys: eur_per_<iso3>. Bump if you need real accuracy.
+fx:
+  eur_per_aud: 0.61
+
 projects:
   - name: DE_2023_baseline
     country: DE

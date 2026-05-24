@@ -59,13 +59,13 @@ from shapely.geometry import box
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-import yaml
-from common._paths import CUTOUTS, RES_CF, SHAPES_RES, REPO_ROOT
-
-
-def load_res_cf_cfg() -> dict:
-    with open(REPO_ROOT / "config/config.yaml") as f:
-        return yaml.safe_load(f)["res_cf"]
+from common._paths import RES_CF, SHAPES_RES
+from scripts.res_cf._helpers import (
+    QUARTERS,
+    cutout_path,
+    haversine_distance_km,  # noqa: F401  — re-exported for legacy callers
+    load_res_cf_cfg,
+)
 
 
 RES_CF_CFG = load_res_cf_cfg()
@@ -78,24 +78,33 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     YEAR       = int(snakemake.config["res_cf"]["year"])
     RES_CF_CFG = snakemake.config["res_cf"]
 
-CUTOUT_DIR            = CUTOUTS
 REGIONS_PATH          = SHAPES_RES / "regions.geojson"
 OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
 
-QUARTERS              = ["q1", "q2", "q3", "q4"]
 TECHS                 = ["wind_onshore", "wind_offshore", "solar"]
 WIND_ONSHORE_TURBINE  = RES_CF_CFG["wind_onshore_turbine"]
 WIND_OFFSHORE_TURBINE = RES_CF_CFG["wind_offshore_turbine"]
 PV_PANEL              = RES_CF_CFG["pv_panel"]
 PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
+WIND_CF_CFG           = RES_CF_CFG.get("wind_cf", {})
+WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
+WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
+SPATIAL_AVG_WINDOW    = int(WIND_CF_CFG.get("spatial_avg_window", 3))
 
 
-def extract_cell_timeseries(cf_year: xr.DataArray, y_idx: int, x_idx: int, tech: str) -> pd.Series:
+def extract_cell_timeseries(
+    cf_year: xr.DataArray,
+    y_idx: int,
+    x_idx: int,
+    tech: str,
+    window: int = SPATIAL_AVG_WINDOW,
+) -> pd.Series:
 
     if tech.startswith("wind"):
+        half = window // 2
         ts = cf_year.isel(
-            y=slice(max(0, y_idx-1), y_idx+2),
-            x=slice(max(0, x_idx-1), x_idx+2)
+            y=slice(max(0, y_idx - half), y_idx + half + 1),
+            x=slice(max(0, x_idx - half), x_idx + half + 1),
         ).mean(dim=("y", "x"))
     else:
         ts = cf_year.isel(y=y_idx, x=x_idx)
@@ -110,22 +119,21 @@ def build_cf_year(country_upper: str, tech: str) -> xr.DataArray:
     parts = []
 
     for seg in QUARTERS:
-        cutout_path = CUTOUT_DIR / f"{country_upper.lower()}_{YEAR}_{seg}.nc"
-        co = atlite.Cutout(path=str(cutout_path))
+        co = atlite.Cutout(path=str(cutout_path(country_upper, YEAR, seg)))
 
         if tech == "wind_onshore":
             cf = co.wind(
                 turbine=WIND_ONSHORE_TURBINE,
                 capacity_factor_timeseries=True,
-                smooth=True,
-                add_cutout_windspeed=True,
+                smooth=WIND_SMOOTH,
+                add_cutout_windspeed=WIND_ADD_CUTOUT_WS,
             )
         elif tech == "wind_offshore":
             cf = co.wind(
                 turbine=WIND_OFFSHORE_TURBINE,
                 capacity_factor_timeseries=True,
-                smooth=True,
-                add_cutout_windspeed=True,
+                smooth=WIND_SMOOTH,
+                add_cutout_windspeed=WIND_ADD_CUTOUT_WS,
             )
         elif tech == "solar":
             cf = co.pv(
@@ -169,38 +177,6 @@ def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
     points = gpd.GeoSeries(gpd.points_from_xy(xx.ravel(), yy.ravel()), crs=4326)
     inside = points.within(geom) | points.touches(geom)
     return inside.values.reshape(cell_mean.shape)
-
-
-def haversine_distance_km(
-    lon1: float,
-    lat1: float,
-    lon2: np.ndarray,
-    lat2: np.ndarray,
-) -> np.ndarray:
-    """
-    Compute great-circle distance in km between one target point and arrays of points.
-
-    lon1, lat1: target point in degrees
-    lon2, lat2: arrays of candidate point coordinates in degrees
-    """
-    earth_radius_km = 6371.0
-
-    lon1_rad = np.deg2rad(lon1)
-    lat1_rad = np.deg2rad(lat1)
-    lon2_rad = np.deg2rad(lon2)
-    lat2_rad = np.deg2rad(lat2)
-
-    dlon = lon2_rad - lon1_rad
-    dlat = lat2_rad - lat1_rad
-
-    a = (
-        np.sin(dlat / 2.0) ** 2
-        + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon / 2.0) ** 2
-    )
-
-    c = 2.0 * np.arcsin(np.sqrt(a))
-
-    return earth_radius_km * c
 
 
 def _find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:

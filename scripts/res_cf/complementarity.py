@@ -46,6 +46,7 @@ import pandas as pd
 import yaml
 
 from common._paths import REPO_ROOT, RES_CF
+from scripts.res_cf._helpers import haversine_distance_km
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -61,7 +62,6 @@ _spec.loader.exec_module(_bestsite)
 build_cf_year           = _bestsite.build_cf_year
 extract_cell_timeseries = _bestsite.extract_cell_timeseries
 geometry_for_tech       = _bestsite.geometry_for_tech
-haversine_distance_km   = _bestsite.haversine_distance_km
 mask_cells_inside       = _bestsite.mask_cells_inside
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -70,8 +70,6 @@ CF_DIR = RES_CF
 
 YEAR  = 2023
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
-
-MAX_TRIPLETS_BRUTE_FORCE = 500_000
 
 # Module-level country variable set in main loop
 _current_country: str = ""
@@ -104,6 +102,7 @@ def load_cfg() -> dict:
         "w_correlation":         comp.get("w_correlation", 0.4),
         "max_radius_km":         float(comp.get("max_radius_km", 300.0)),
         "quality_floor":         float(comp.get("quality_floor", 0.90)),
+        "max_triplets_brute_force": int(comp.get("max_triplets_brute_force", 500_000)),
     }
 
 
@@ -582,7 +581,7 @@ def main() -> None:
             top_n=cfg["top_n"],
         )
 
-        if n_triplets <= MAX_TRIPLETS_BRUTE_FORCE:
+        if n_triplets <= cfg["max_triplets_brute_force"]:
             top_records = brute_force_screen(**screen_kwargs)
         else:
             top_records = greedy_screen(**screen_kwargs)

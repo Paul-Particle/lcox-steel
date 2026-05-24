@@ -1,3 +1,7 @@
+import subprocess
+import sys
+import yaml
+
 configfile: "config/config.yaml"
 
 enabled_areas = [code for code, info in config["entsoe"]["areas"].items() if info.get("enabled")]
@@ -5,6 +9,36 @@ CF_COUNTRIES  = [code for code, info in config["res_cf"]["countries"].items() if
 CF_YEAR       = config["res_cf"]["year"]
 CF_QUARTERS   = ["q1", "q2", "q3", "q4"]
 CF_TOP_N      = config["res_cf"]["top_n"]
+
+# h2_dri target expansion — driven by projects.yaml (one optimization per
+# (project, scenario) pair). Adding a project/scenario is a config edit, not a
+# Snakefile edit.
+with open("config/projects.yaml") as _f:
+    PROJECTS_CFG = yaml.safe_load(_f)
+
+H2_TARGETS = [
+    f"results/{p['name']}/{s['name']}_summary.csv"
+    for p in PROJECTS_CFG["projects"]
+    for s in p["scenarios"]
+]
+
+# Constrain `year` globally to 4 digits so that e.g. `combine_techs`
+# (output: {country}_cf_{year}.csv) does not greedily match a bestsite_p95
+# filename and collide with the dedicated `make_bestsite_cf` rule.
+wildcard_constraints:
+    year=r"\d{4}",
+    quarter=r"q[1-4]",
+
+
+onstart:
+    # Refuse to start if required external shapefiles are missing. The check
+    # script also auto-extracts any ZIPs found in the data/shapes/* dirs.
+    rc = subprocess.call([sys.executable, "scripts/res_cf/check_external_data.py"])
+    if rc != 0:
+        raise WorkflowError(
+            "External data check failed. Drop the EEZ and Natural Earth ZIPs "
+            "into data/shapes/<dataset>/ and re-run."
+        )
 
 
 rule all:
@@ -23,6 +57,8 @@ rule all:
         f"resources/res_cf/resource_spread_{CF_YEAR}.csv",
         expand("resources/res_cf/{country}_complementarity_top{n}_{year}.csv",
                country=CF_COUNTRIES, n=CF_TOP_N, year=CF_YEAR),
+        # h2_dri pipeline (one (project, scenario) per target)
+        H2_TARGETS,
 
 
 # ── Grid pipeline ──────────────────────────────────────────────────────────────
@@ -146,3 +182,43 @@ rule complementarity:
         top=f"resources/res_cf/{{country}}_complementarity_top{CF_TOP_N}_{CF_YEAR}.csv",
         avg=f"resources/res_cf/{{country}}_average_profiles_{CF_YEAR}.csv"
     script: "scripts/res_cf/complementarity.py"
+
+
+# ── h2_dri pipeline ─────────────────────────────────────────────────────────────
+
+def _find(items, name):
+    for it in items:
+        if it["name"] == name:
+            return it
+    raise KeyError(name)
+
+
+def h2_dri_inputs(wildcards):
+    """Resolve CF + (optional) prices inputs from projects.yaml for a (project, scenario).
+
+    Single-cell shape today; the (project, scenario) wildcard pair is the seam
+    where per-location wildcards land later without restructuring rules.
+    """
+    proj = _find(PROJECTS_CFG["projects"], wildcards.project)
+    scen = _find(proj["scenarios"], wildcards.scenario)
+
+    cc = proj["country"].lower()
+    variant = proj.get("cf_variant", "avg")
+    cf_name = f"{cc}_cf_{proj['year']}.csv" if variant == "avg" else f"{cc}_cf_{proj['year']}_{variant}.csv"
+
+    inputs = {
+        "cf":          f"resources/res_cf/{cf_name}",
+        "assumptions": "config/assumptions.yaml",
+        "projects":    "config/projects.yaml",
+    }
+    if scen.get("grid_connected"):
+        inputs["prices"] = "resources/entsoe_processed.feather"
+    return inputs
+
+
+rule h2_dri_optimize:
+    input: unpack(h2_dri_inputs)
+    output:
+        network = "results/{project}/{scenario}.nc",
+        summary = "results/{project}/{scenario}_summary.csv",
+    script: "scripts/h2_dri/run.py"

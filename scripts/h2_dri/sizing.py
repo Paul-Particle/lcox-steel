@@ -24,6 +24,9 @@ def dri_to_el_mw(
     """
     Size the electrolyser (MW) required to supply a DRI plant continuously.
 
+    efficiency_kwh_per_kg already encodes the electrolyser's MWh-electricity
+    per kg-H2 conversion, so the H2 LHV does not appear here.
+
     availability_target = fraction of 8760 h the plant is assumed to run (e.g. 1.0).
     Returns nameplate MW of electricity input capacity needed.
     """

@@ -1,11 +1,11 @@
-import yaml
 from pathlib import Path
 
 import atlite
 import geopandas as gpd
 import pandas as pd
 
-from common._paths import CUTOUTS, RES_CF, SHAPES_RES, REPO_ROOT
+from common._paths import CUTOUTS, RES_CF, SHAPES_RES
+from scripts.res_cf._helpers import load_res_cf_cfg
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -13,11 +13,6 @@ if "snakemake" not in globals():
 REGIONS_PATH          = SHAPES_RES / "regions.geojson"
 OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
 OUTDIR                = RES_CF / "quarterly"
-
-
-def load_res_cf_cfg() -> dict:
-    with open(REPO_ROOT / "config/config.yaml") as f:
-        return yaml.safe_load(f)["res_cf"]
 
 
 # --- defaults for standalone use ---
@@ -39,6 +34,9 @@ WIND_ONSHORE_TURBINE  = RES_CF_CFG["wind_onshore_turbine"]
 WIND_OFFSHORE_TURBINE = RES_CF_CFG["wind_offshore_turbine"]
 PV_PANEL              = RES_CF_CFG["pv_panel"]
 PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
+WIND_CF_CFG           = RES_CF_CFG.get("wind_cf", {})
+WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
+WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
 
 
 def to_cf_series(x, name: str = "cf") -> pd.Series:
@@ -78,16 +76,13 @@ def main() -> None:
     cutout = atlite.Cutout(str(CUTOUT_PATH))
     matrix = cutout.indicatormatrix(gdf)
 
-    # smooth=True + add_cutout_windspeed=True: smooth the turbine power curve and
-    # preserve its built-in 25 m/s cutoff during smoothing. Used for consistency
-    # with make_bestsite_cf.py and resource_spread.py.
     wind_cf = cutout.wind(
         matrix=matrix,
         turbine=WIND_ONSHORE_TURBINE,
         capacity_factor=False,
         per_unit=True,
-        smooth=True,
-        add_cutout_windspeed=True,
+        smooth=WIND_SMOOTH,
+        add_cutout_windspeed=WIND_ADD_CUTOUT_WS,
     )
 
     solar_cf = cutout.pv(
@@ -120,8 +115,8 @@ def main() -> None:
             turbine=WIND_OFFSHORE_TURBINE,
             capacity_factor=False,
             per_unit=True,
-            smooth=True,
-            add_cutout_windspeed=True,
+            smooth=WIND_SMOOTH,
+            add_cutout_windspeed=WIND_ADD_CUTOUT_WS,
         )
         offshore_wind_cf = to_cf_series(offshore_wind_cf)
     else:

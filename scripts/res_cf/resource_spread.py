@@ -41,16 +41,10 @@ import geopandas as gpd
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-import yaml
-from common._paths import CUTOUTS, RES_CF, SHAPES_RES, REPO_ROOT
+from common._paths import RES_CF, SHAPES_RES
+from scripts.res_cf._helpers import QUARTERS, cutout_path, load_res_cf_cfg
 
 
-def load_res_cf_cfg() -> dict:
-    with open(REPO_ROOT / "config/config.yaml") as f:
-        return yaml.safe_load(f)["res_cf"]
-
-
-CUTOUT_DIR            = CUTOUTS
 REGIONS_PATH          = SHAPES_RES / "regions.geojson"
 OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
 NATIONAL_CF_DIR       = RES_CF
@@ -64,7 +58,6 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     OUT_PATH   = Path(snakemake.output[0])
     RES_CF_CFG = snakemake.config["res_cf"]
 
-QUARTERS = ["q1", "q2", "q3", "q4"]
 COUNTRIES = {info["region"]: QUARTERS for info in RES_CF_CFG["countries"].values() if info.get("enabled")}
 
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
@@ -73,6 +66,9 @@ WIND_ONSHORE_TURBINE  = RES_CF_CFG["wind_onshore_turbine"]
 WIND_OFFSHORE_TURBINE = RES_CF_CFG["wind_offshore_turbine"]
 PV_PANEL              = RES_CF_CFG["pv_panel"]
 PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
+WIND_CF_CFG           = RES_CF_CFG.get("wind_cf", {})
+WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
+WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
 
 def weighted_percentile(values: np.ndarray, weights: np.ndarray, q: float) -> float:
     """
@@ -114,11 +110,6 @@ def load_offshore_geometry(iso2: str):
         raise ValueError(f"Country {iso2} not found in {OFFSHORE_REGIONS_PATH}")
     return row.geometry.iloc[0]
 
-def cutout_path(iso2: str, seg: str) -> Path:
-    # Adjust to your actual naming convention
-    # Examples seen in your project: de_2023_h1.nc, fr_2023_q1.nc, etc.
-    return CUTOUT_DIR / f"{iso2.lower()}_{YEAR}_{seg}.nc"
-
 def compute_cf_grid(cutout: atlite.Cutout, tech: str) -> xr.DataArray:
     """
     Returns CF grid with dims (time, y, x).
@@ -126,11 +117,11 @@ def compute_cf_grid(cutout: atlite.Cutout, tech: str) -> xr.DataArray:
     """
     if tech == "wind_onshore":
         cf = cutout.wind(turbine=WIND_ONSHORE_TURBINE, capacity_factor=True,
-                         smooth=True, add_cutout_windspeed=True)
+                         smooth=WIND_SMOOTH, add_cutout_windspeed=WIND_ADD_CUTOUT_WS)
 
     elif tech == "wind_offshore":
         cf = cutout.wind(turbine=WIND_OFFSHORE_TURBINE, capacity_factor=True,
-                         smooth=True, add_cutout_windspeed=True)
+                         smooth=WIND_SMOOTH, add_cutout_windspeed=WIND_ADD_CUTOUT_WS)
 
     elif tech == "solar":
         cf = cutout.pv(panel=PV_PANEL, orientation=PV_ORIENTATION, capacity_factor=True)
@@ -211,12 +202,12 @@ def main():
         for tech in TECHS:
             # Build full-year CF grid by concatenating segments along time
             geom = load_offshore_geometry(iso2) if tech == "wind_offshore" else regions_geom_cache[iso2]
-            first_cutout = atlite.Cutout(path=str(cutout_path(iso2, segments[0])))
+            first_cutout = atlite.Cutout(path=str(cutout_path(iso2, YEAR, segments[0])))
             weights = build_weights(first_cutout, geom)
             w = weights.values.ravel()
             cf_parts = []
             for seg in segments:
-                p = cutout_path(iso2, seg)
+                p = cutout_path(iso2, YEAR, seg)
                 if not p.exists():
                     raise FileNotFoundError(f"Missing cutout: {p}")
                 co = atlite.Cutout(path=str(p))

@@ -12,9 +12,9 @@ The iso3 → region mapping is read from config["res_cf"]["countries"][cc].
 from pathlib import Path
 
 import geopandas as gpd
-import yaml
 
-from common._paths import DATA, SHAPES_RES, REPO_ROOT
+from common._paths import DATA, SHAPES_RES
+from scripts.res_cf._helpers import load_res_cf_cfg
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -24,20 +24,15 @@ LAND_REGIONS   = SHAPES_RES / "regions.geojson"
 OUT_GEOJSON    = SHAPES_RES / "offshore_regions.geojson"
 
 
-def load_cfg() -> dict:
-    with open(REPO_ROOT / "config/config.yaml") as f:
-        return yaml.safe_load(f)
-
-
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     OUT_GEOJSON     = Path(snakemake.output[0])
     LAND_REGIONS    = Path(snakemake.input.regions)
     OFFSHORE_MAX_KM = float(snakemake.config["res_cf"]["offshore_max_distance_km"])
     COUNTRIES_CFG   = snakemake.config["res_cf"]["countries"]
 else:
-    _cfg            = load_cfg()
-    OFFSHORE_MAX_KM = float(_cfg["res_cf"]["offshore_max_distance_km"])
-    COUNTRIES_CFG   = _cfg["res_cf"]["countries"]
+    _rc             = load_res_cf_cfg()
+    OFFSHORE_MAX_KM = float(_rc["offshore_max_distance_km"])
+    COUNTRIES_CFG   = _rc["countries"]
 
 
 def main() -> None:
