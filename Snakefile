@@ -46,6 +46,7 @@ rule download_nem:
         start_date=config["nem_download"]["start_date"],
         end_date=config["nem_download"]["end_date"],
         cache_dir=config["nem_download"]["cache_dir"],
+        resample_freq=config["nem_download"].get("resample_freq"),
         rebuild=config["nem_download"]["rebuild"]
     script: "scripts/grid/download_nem.py"
 

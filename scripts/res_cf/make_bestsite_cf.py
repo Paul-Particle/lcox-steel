@@ -68,10 +68,10 @@ def load_res_cf_cfg() -> dict:
         return yaml.safe_load(f)["res_cf"]
 
 
-YEAR       = 2023
+RES_CF_CFG = load_res_cf_cfg()
+YEAR       = int(RES_CF_CFG["year"])  # standalone default from config
 OUTDIR     = RES_CF
 COUNTRIES  = ["de"]  # lowercase to match filenames; standalone default
-RES_CF_CFG = load_res_cf_cfg()
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     COUNTRIES  = [snakemake.wildcards.country.lower()]

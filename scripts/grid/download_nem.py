@@ -316,10 +316,19 @@ def download_data(snakemake) -> None:
 
     # Keys become the top level (Region), Columns become the second level (Variable)
     df_final = pd.concat(frames.values(), axis=1, keys=frames.keys())
-    
-    df_final.index = df_final.index.tz_localize(None) # pyright: ignore[reportAttributeAccessIssue]
-    df_final.to_feather(snakemake.output[0])
 
+    df_final.index = df_final.index.tz_localize(None)  # pyright: ignore[reportAttributeAccessIssue]
+
+    # Optional downsample. NEM is MW-instantaneous at 5-min boundaries, so the
+    # mean over the window is the right way to coarsen prices, loads, generation,
+    # and flows alike — all are MW quantities.
+    resample_freq = snakemake.params.get("resample_freq")  # pyright: ignore[reportGeneralTypeIssues]
+    if resample_freq:
+        before, _step = len(df_final), df_final.index.to_series().diff().median()
+        df_final = df_final.resample(resample_freq).mean()
+        print(f"Resampled {before} rows (~{_step}) → {len(df_final)} rows at {resample_freq}.")
+
+    df_final.to_feather(snakemake.output[0])
     print(f"Successfully saved NEM data to {snakemake.output[0]}")
 
 

@@ -73,9 +73,10 @@ entsoe:
   end_date:   "20241231"
 
 nem_download:
-  start_date: "20230101" # format as YYYYMMDD
-  end_date: "20230131"
-  cache_dir: "data/nem_cache"
+  start_date: "20250101" # format as YYYYMMDD
+  end_date:   "20251231"
+  cache_dir:  "data/nem_cache"
+  resample_freq: "1h"   # null or omitted = native 5-min; "1h" downsamples (mean)
   rebuild: false
 
 res_cf:
@@ -90,11 +91,14 @@ res_cf:
   #   mainland_bbox:  optional [lon_min, lon_max, lat_min, lat_max] — keeps only
   #                   polygon parts whose centroid falls inside the box. Used
   #                   to drop overseas territories (e.g. metropolitan France).
+  #   vic_bbox:       AUS-only; approximates NEM zone VIC1 for sub-national tests
+  #                   (Natural Earth 1:110m has no state boundaries, so we use a
+  #                   bbox).
   countries:
     de:  { enabled: true,  iso3: DEU, region: DE,  coarse: false }
     fr:  { enabled: false, iso3: FRA, region: FR,  coarse: false, mainland_bbox: [-10, 15, 41, 52] }
     es:  { enabled: false, iso3: ESP, region: ES,  coarse: false }
-    aus: { enabled: false, iso3: AUS, region: AUS, coarse: true  }
+    aus: { enabled: true,  iso3: AUS, region: AUS, coarse: true,  vic_bbox: [140.96, 149.97, -39.16, -34.00] }
     bra: { enabled: false, iso3: BRA, region: BRA, coarse: true  }
 
   # atlite technology settings (passed to cutout.wind / cutout.pv).
@@ -103,7 +107,7 @@ res_cf:
   pv_panel:              CSi
   pv_orientation:        latitude_optimal
 
-  year: 2023
+  year: 2025
   top_n: 10
   offshore_max_distance_km: 200
   complementarity:
