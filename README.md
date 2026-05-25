@@ -43,7 +43,7 @@ lcox-steel/
 ├── environment.yaml        # Conda environment (lcox-steel)
 ├── data/                   # Raw / external / expensive (not produced by this repo)
 │   ├── entsoe_cache/       # Internal ENTSO-E monthly cache (area/year-month/data_type) — gitignored
-│   ├── nem_cache/          # Internal AEMO NEMOSIS cache — gitignored
+│   ├── nem_cache/          # AEMO NEMOSIS cache — CSV/feather gitignored; one committed XLSX (see §External data files)
 │   └── shapes/             # Raw shapefiles: ne_110m_admin_0_countries/, eez/ (gitignored — see below)
 ├── resources/              # Derived / Snakemake-tracked outputs (reproducible)
 │   ├── entsoe/{area}/{data_type}.feather  # Stitched per-area, per-data_type ENTSO-E series
@@ -87,6 +87,8 @@ mkdir -p data/shapes/eez data/shapes/ne_110m_admin_0_countries
 ```
 
 (A shapefile is a `.shp` + `.shx` + `.dbf` + `.prj` suite that has to travel together — the extract rule handles flattening if the ZIP nests the components under a subfolder.)
+
+**NEM Registration and Exemption List** — AEMO-maintained generator metadata, refreshed by AEMO every so often. A snapshot is **committed** to the repo at `data/nem_cache/NEM Registration and Exemption List.xlsx`. It's small (~1 MB) and AEMO's hosting is flaky enough — they 403 NEMOSIS's default User-Agent, hence the monkey-patch in `download_nem.py` — that a checked-in copy makes bootstrapping much more reliable than relying on the live download. If the file is missing, `download_nem.py` falls back to `nemosis.static_table("Generators and Scheduled Loads", ...)` (which inherits the same UA patch). If that also fails, fetch manually from https://www.aemo.com.au/-/media/Files/Electricity/NEM/Participant_Information/NEM-Registration-and-Exemption-List.xls (served as XLSX despite the extension) and drop it into `data/nem_cache/` as either `.xls` or `.xlsx`. Caveat: when AEMO blocks NEMOSIS this way, the rest of the NEM downloader (MMSDM dispatch tables) is probably also broken via the same gating — better than nothing, but expect to debug.
 
 ### 3. API keys
 

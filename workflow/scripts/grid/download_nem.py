@@ -1,6 +1,5 @@
 import http.client
 import io
-import os
 import ssl
 import zipfile
 from datetime import datetime
@@ -68,15 +67,41 @@ def download_price_data(start_time: str, end_time: str, cache_dir: Path, rebuild
     prices.index.name = None
     return prices
 
+def _resolve_generator_excel(cache_dir: Path) -> Path:
+    """Return path to the NEM Registration and Exemption List, fetching via NEMOSIS if absent.
+
+    A snapshot is committed to the repo as .xlsx; NEMOSIS saves it as .xls (its
+    historical filename) even though AEMO now serves XLSX content. Either extension
+    is accepted and read with engine='openpyxl' downstream.
+    """
+    stem = "NEM Registration and Exemption List"
+    for ext in (".xlsx", ".xls"):
+        candidate = cache_dir / f"{stem}{ext}"
+        if candidate.exists():
+            return candidate
+
+    from nemosis import defaults as _nemosis_defaults
+    from nemosis.data_fetch_methods import static_downloader_map
+
+    table_name = "Generators and Scheduled Loads"
+    target = cache_dir / _nemosis_defaults.names[table_name]
+    url = _nemosis_defaults.static_table_url[table_name]
+    print(f"Generator excel not found; downloading via NEMOSIS to {target}...")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        static_downloader_map[table_name](url, str(target))
+    except Exception as e:
+        raise FileNotFoundError(
+            f"NEMOSIS download of {stem!r} failed: {e}. "
+            f"Fetch manually from {url} (served as XLSX) and place it in "
+            f"{cache_dir} as .xls or .xlsx — see README §External data files."
+        ) from e
+    return target
+
+
 def download_generation_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads and processes generation data."""
-    generator_file_path = cache_dir / "NEM Registration and Exemption List.xlsx"
-
-    if not os.path.exists(generator_file_path):
-        print(f"Please ensure the generator excel file is at: {generator_file_path}")
-        raise FileNotFoundError(
-            "Missing manual excel config file. See readme for download instructions."
-        )
+    generator_file_path = _resolve_generator_excel(cache_dir)
 
     generator_info = pd.read_excel(
         generator_file_path, sheet_name="PU and Scheduled Loads", engine="openpyxl"
