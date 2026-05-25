@@ -26,24 +26,24 @@ rule build_regions:
     input:
         "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp"
     output:
-        "resources/shapes/regions.geojson"
+        "resources/shapes/regions.parquet"
     script:
         "../scripts/res_cf/build_regions.py"
 
 
 rule build_offshore_regions:
     input:
-        regions="resources/shapes/regions.geojson",
+        regions="resources/shapes/regions.parquet",
         eez="data/shapes/eez/eez_v12.shp"
     output:
-        "resources/shapes/offshore_regions.geojson"
+        "resources/shapes/offshore_regions.parquet"
     script:
         "../scripts/res_cf/build_offshore_regions.py"
 
 
 rule make_cutout:
     input:
-        regions="resources/shapes/regions.geojson"
+        regions="resources/shapes/regions.parquet"
     output:
         "cutouts/{country}_{year}_{quarter}.nc"
     script:
@@ -53,7 +53,7 @@ rule make_cutout:
 rule build_cf_timeseries:
     input:
         cutout="cutouts/{country}_{year}_{quarter}.nc",
-        regions="resources/shapes/regions.geojson"
+        regions="resources/shapes/regions.parquet"
     output:
         wind_onshore="resources/res_cf/quarterly/{country}_wind_onshore_{year}_{quarter}.parquet",
         wind_offshore="resources/res_cf/quarterly/{country}_wind_offshore_{year}_{quarter}.parquet",
@@ -95,8 +95,8 @@ rule resource_spread:
                        country=CF_COUNTRIES, quarter=CF_QUARTERS),
         national_cfs=expand("resources/res_cf/{country}_cf_{{year}}.parquet",
                             country=CF_COUNTRIES),
-        regions="resources/shapes/regions.geojson",
-        offshore_regions="resources/shapes/offshore_regions.geojson"
+        regions="resources/shapes/regions.parquet",
+        offshore_regions="resources/shapes/offshore_regions.parquet"
     output:
         "resources/res_cf/resource_spread_{year}.parquet"
     script:
@@ -107,8 +107,8 @@ rule make_bestsite_cf:
     input:
         cutouts=expand("cutouts/{{country}}_{{year}}_{quarter}.nc",
                        quarter=CF_QUARTERS),
-        regions="resources/shapes/regions.geojson",
-        offshore_regions="resources/shapes/offshore_regions.geojson"
+        regions="resources/shapes/regions.parquet",
+        offshore_regions="resources/shapes/offshore_regions.parquet"
     output:
         "resources/res_cf/{country}_cf_{year}_bestsite_p95.parquet"
     script:
@@ -120,8 +120,8 @@ rule complementarity:
         national_cf="resources/res_cf/{country}_cf_{year}.parquet",
         cutouts=expand("cutouts/{{country}}_{{year}}_{quarter}.nc",
                        quarter=CF_QUARTERS),
-        regions="resources/shapes/regions.geojson",
-        offshore_regions="resources/shapes/offshore_regions.geojson"
+        regions="resources/shapes/regions.parquet",
+        offshore_regions="resources/shapes/offshore_regions.parquet"
     output:
         # top_n is interpolated as a literal (not a wildcard) because the
         # paired `avg` output doesn't depend on N — Snakemake requires all

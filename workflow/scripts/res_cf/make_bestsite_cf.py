@@ -78,8 +78,8 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     YEAR       = int(snakemake.config["res_cf"]["year"])
     RES_CF_CFG = snakemake.config["res_cf"]
 
-REGIONS_PATH          = SHAPES_RES / "regions.geojson"
-OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
+REGIONS_PATH          = SHAPES_RES / "regions.parquet"
+OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"
 
 TECHS                 = ["wind_onshore", "wind_offshore", "solar"]
 WIND_ONSHORE_TURBINE  = RES_CF_CFG["wind_onshore_turbine"]
@@ -152,7 +152,7 @@ def build_cf_year(country_upper: str, tech: str) -> xr.DataArray:
     return xr.concat(parts, dim="time")
 
 def _load_land_geometry(iso2: str):
-    gdf = gpd.read_file(REGIONS_PATH)
+    gdf = gpd.read_parquet(REGIONS_PATH)
     row = gdf.loc[gdf["region"] == iso2]
     if row.empty:
         raise ValueError(f"{iso2} not found in {REGIONS_PATH}")
@@ -160,7 +160,7 @@ def _load_land_geometry(iso2: str):
 
 
 def _load_offshore_geometry(iso2: str):
-    gdf = gpd.read_file(OFFSHORE_REGIONS_PATH)
+    gdf = gpd.read_parquet(OFFSHORE_REGIONS_PATH)
     row = gdf.loc[gdf["region"] == iso2]
     if row.empty:
         raise ValueError(f"{iso2} not found in {OFFSHORE_REGIONS_PATH}")

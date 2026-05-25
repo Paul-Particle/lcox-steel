@@ -25,7 +25,7 @@ resources/*.parquet
 resources/entsoe/
 resources/res_cf/
 # Derived shape files are committed (small, reproducible outputs):
-# resources/shapes/*.geojson are tracked
+!resources/shapes/*.parquet
 
 # Log files
 logs/

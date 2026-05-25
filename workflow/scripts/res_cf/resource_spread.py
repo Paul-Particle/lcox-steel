@@ -45,8 +45,8 @@ from common._paths import RES_CF, SHAPES_RES
 from scripts.res_cf._helpers import QUARTERS, cutout_path, load_res_cf_cfg
 
 
-REGIONS_PATH          = SHAPES_RES / "regions.geojson"
-OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
+REGIONS_PATH          = SHAPES_RES / "regions.parquet"
+OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"
 NATIONAL_CF_DIR       = RES_CF
 
 YEAR        = 2023
@@ -97,14 +97,14 @@ def weighted_percentile(values: np.ndarray, weights: np.ndarray, q: float) -> fl
     return float(v[idx])
 
 def load_country_geometry(iso2: str):
-    gdf = gpd.read_file(REGIONS_PATH)
+    gdf = gpd.read_parquet(REGIONS_PATH)
     row = gdf.loc[gdf["region"] == iso2]
     if row.empty:
         raise ValueError(f"Country {iso2} not found in {REGIONS_PATH}")
     return row.geometry.iloc[0]
 
 def load_offshore_geometry(iso2: str):
-    gdf = gpd.read_file(OFFSHORE_REGIONS_PATH)
+    gdf = gpd.read_parquet(OFFSHORE_REGIONS_PATH)
     row = gdf.loc[gdf["region"] == iso2]
     if row.empty:
         raise ValueError(f"Country {iso2} not found in {OFFSHORE_REGIONS_PATH}")

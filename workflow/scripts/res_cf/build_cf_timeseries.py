@@ -10,8 +10,8 @@ from scripts.res_cf._helpers import load_res_cf_cfg
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-REGIONS_PATH          = SHAPES_RES / "regions.geojson"
-OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
+REGIONS_PATH          = SHAPES_RES / "regions.parquet"
+OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"
 OUTDIR                = RES_CF / "quarterly"
 
 
@@ -60,7 +60,7 @@ def to_cf_series(x, name: str = "cf") -> pd.Series:
 
 
 def get_region_gdf(path: Path, region_tag: str) -> gpd.GeoDataFrame:
-    gdf = gpd.read_file(path).to_crs(4326)
+    gdf = gpd.read_parquet(path).to_crs(4326)
     gdf = gdf.loc[gdf["region"] == region_tag, ["region", "geometry"]].copy()
     if gdf.empty:
         raise ValueError(f"Region '{region_tag}' not found in {path}")

@@ -24,7 +24,7 @@ LAT_MIN     = 46.0
 LAT_MAX     = 56.0
 # ----------------------
 
-REGIONS_PATH = SHAPES_RES / "regions.geojson"
+REGIONS_PATH = SHAPES_RES / "regions.parquet"
 
 
 def main():
@@ -58,7 +58,7 @@ def main():
     # country outline for context
     shapes = []
     if REGIONS_PATH.exists():
-        regions = gpd.read_file(REGIONS_PATH)
+        regions = gpd.read_parquet(REGIONS_PATH)
         de = regions.loc[regions["region"] == "DE", "geometry"].iloc[0]
         if de.geom_type == "Polygon":
             coords = [de.exterior.coords]

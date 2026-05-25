@@ -30,8 +30,8 @@ import pandas as pd
 from common._paths import RES_CF, SHAPES_RES
 
 CUTOUT_DIR = Path("cutouts")
-REGIONS_PATH = SHAPES_RES / "regions.geojson"
-OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
+REGIONS_PATH = SHAPES_RES / "regions.parquet"
+OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"
 
 OUTDIR = Path("results/plots/bestsite_locations")
 OUTDIR.mkdir(parents=True, exist_ok=True)
@@ -83,7 +83,7 @@ def land_mask(cell_mean):
     )
 
 def load_land_geometry(iso2: str):
-    gdf = gpd.read_file(REGIONS_PATH)
+    gdf = gpd.read_parquet(REGIONS_PATH)
     row = gdf.loc[gdf["region"] == iso2]
     if row.empty:
         raise ValueError(f"{iso2} not found in {REGIONS_PATH}")
@@ -91,7 +91,7 @@ def load_land_geometry(iso2: str):
 
 
 def load_offshore_geometry(iso2: str):
-    gdf = gpd.read_file(OFFSHORE_REGIONS_PATH)
+    gdf = gpd.read_parquet(OFFSHORE_REGIONS_PATH)
     row = gdf.loc[gdf["region"] == iso2]
     if row.empty:
         raise ValueError(f"{iso2} not found in {OFFSHORE_REGIONS_PATH}")

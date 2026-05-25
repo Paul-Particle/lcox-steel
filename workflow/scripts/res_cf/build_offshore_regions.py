@@ -19,13 +19,13 @@ from scripts.res_cf._helpers import load_res_cf_cfg
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-EEZ_SHAPE      = DATA / "shapes/eez/eez_v12.shp"
-LAND_REGIONS   = SHAPES_RES / "regions.geojson"
-OUT_GEOJSON    = SHAPES_RES / "offshore_regions.geojson"
+EEZ_SHAPE     = DATA / "shapes/eez/eez_v12.shp"
+LAND_REGIONS  = SHAPES_RES / "regions.parquet"
+OUT_PATH      = SHAPES_RES / "offshore_regions.parquet"
 
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    OUT_GEOJSON     = Path(snakemake.output[0])
+    OUT_PATH        = Path(snakemake.output[0])
     LAND_REGIONS    = Path(snakemake.input.regions)
     OFFSHORE_MAX_KM = float(snakemake.config["res_cf"]["offshore_max_distance_km"])
     COUNTRIES_CFG   = snakemake.config["res_cf"]["countries"]
@@ -45,7 +45,7 @@ def main() -> None:
     if not LAND_REGIONS.exists():
         raise FileNotFoundError(f"Cannot find land regions file at: {LAND_REGIONS}")
 
-    OUT_GEOJSON.parent.mkdir(parents=True, exist_ok=True)
+    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     eez = gpd.read_file(EEZ_SHAPE).to_crs(4326)
 
@@ -58,7 +58,7 @@ def main() -> None:
     gdf["region"] = gdf["ISO_TER1"].map(iso3_to_region)
     gdf = gdf[["region", "geometry"]].dissolve(by="region", as_index=False)
 
-    land = gpd.read_file(LAND_REGIONS).to_crs(4326)
+    land = gpd.read_parquet(LAND_REGIONS).to_crs(4326)
 
     land_buffer = land.to_crs(6933).copy()
     land_buffer["geometry"] = land_buffer.buffer(OFFSHORE_MAX_KM * 1000)
@@ -79,12 +79,12 @@ def main() -> None:
         print("Warning: some offshore geometries are invalid")
 
     gdf = gdf.set_crs(4326)
-    gdf.to_file(OUT_GEOJSON, driver="GeoJSON")
+    gdf.to_parquet(OUT_PATH)
 
     gdf_area = gdf.to_crs(6933).copy()
     gdf_area["area_km2"] = gdf_area.geometry.area / 1e6
 
-    print("Wrote:", OUT_GEOJSON)
+    print("Wrote:", OUT_PATH)
     print(gdf_area[["region", "area_km2"]].sort_values("region").to_string(index=False))
 
 

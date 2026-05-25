@@ -100,7 +100,7 @@ Wind-specific post-processing:
      - EU countries use default resolution (no `dx/dy` override)
 
 2. **Spatial aggregation**
-   - Country geometry from `regions.geojson`
+   - Country geometry from `regions.parquet`
    - Area-weighted aggregation using Atlite **indicator matrix**
    - Resulting CFs represent **national, climate-driven availability**
 
@@ -156,10 +156,10 @@ Best-site CFs represent **resource-optimised project locations** and should be i
 # Scripts (pipeline overview)
 
 - `scripts/res_cf/build_regions.py`  
-  Builds `resources/shapes/regions.geojson` from Natural Earth country geometries.
+  Builds `resources/shapes/regions.parquet` from Natural Earth country geometries.
 
 - `scripts/res_cf/build_offshore_regions.py`  
-  Builds `resources/shapes/offshore_regions.geojson` from EEZ polygons restricted to a near-shore deployment band.
+  Builds `resources/shapes/offshore_regions.parquet` from EEZ polygons restricted to a near-shore deployment band.
 
 - `scripts/res_cf/make_cutout.py`  
   Creates ERA5 cutouts (`cutouts/*.nc`) for a given country and time segment

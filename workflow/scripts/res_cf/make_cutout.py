@@ -14,8 +14,8 @@ from scripts.res_cf._helpers import QUARTER_DATES, cutout_path, load_res_cf_cfg
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-REGIONS_PATH          = SHAPES_RES / "regions.geojson"
-OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
+REGIONS_PATH          = SHAPES_RES / "regions.parquet"
+OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"
 
 
 # Defaults for standalone use
@@ -38,10 +38,10 @@ BBOX_PAD_DEG  = RES_CF_CFG.get("cutout", {}).get("bbox_pad_deg", 1.0)
 
 def get_bounds(country: str, pad: float = BBOX_PAD_DEG) -> tuple[slice, slice]:
     region_tag = COUNTRIES_CFG[country]["region"]
-    regions = gpd.read_file(REGIONS_PATH).to_crs(4326)
+    regions = gpd.read_parquet(REGIONS_PATH).to_crs(4326)
     geoms = list(regions.loc[regions["region"] == region_tag, "geometry"])
     if OFFSHORE_REGIONS_PATH.exists():
-        offshore = gpd.read_file(OFFSHORE_REGIONS_PATH).to_crs(4326)
+        offshore = gpd.read_parquet(OFFSHORE_REGIONS_PATH).to_crs(4326)
         geoms += list(offshore.loc[offshore["region"] == region_tag, "geometry"])
     geom = gpd.GeoSeries(geoms, crs=4326).union_all()
     minx, miny, maxx, maxy = geom.bounds

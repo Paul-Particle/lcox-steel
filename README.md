@@ -49,7 +49,7 @@ lcox-steel/
 │   ├── entsoe/{area}/{data_type}.parquet  # Stitched per-area, per-data_type ENTSO-E series
 │   ├── entsoe_processed.parquet           # Wide hourly grid dataset (MultiIndex columns)
 │   ├── nem_processed.parquet              # Australian NEM equivalent
-│   ├── shapes/             # Derived geojsons (regions, offshore_regions — committed in git)
+│   ├── shapes/             # Derived GeoParquet (regions, offshore_regions — committed in git)
 │   └── res_cf/
 │       ├── quarterly/      # Per-tech CF time series by quarter (intermediate)
 │       ├── annual/         # Per-tech CF time series full-year (intermediate)

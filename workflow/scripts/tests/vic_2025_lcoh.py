@@ -57,7 +57,7 @@ def build_vic_geom(cfg: dict):
     """AUS land polygon ∩ vic_bbox → VIC-approximating geometry."""
     aus = cfg["res_cf"]["countries"]["aus"]
     lon_min, lon_max, lat_min, lat_max = aus["vic_bbox"]
-    regions = gpd.read_file(SHAPES_RES / "regions.geojson")
+    regions = gpd.read_parquet(SHAPES_RES / "regions.parquet")
     aus_geom = regions.loc[regions["region"] == "AUS", "geometry"].iloc[0]
     return aus_geom.intersection(box(lon_min, lat_min, lon_max, lat_max))
 
