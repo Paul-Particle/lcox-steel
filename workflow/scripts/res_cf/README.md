@@ -41,11 +41,11 @@ The “best-site” methodology has been **fundamentally revised**.
 
 ## National-average CFs
 
-- `de_cf_2023.csv`
-- `fr_cf_2023.csv`
-- `es_cf_2023.csv`
-- `aus_cf_2023.csv`
-- `bra_cf_2023.csv`
+- `de_cf_2023.parquet`
+- `fr_cf_2023.parquet`
+- `es_cf_2023.parquet`
+- `aus_cf_2023.parquet`
+- `bra_cf_2023.parquet`
 
 Each file contains:
 
@@ -64,7 +64,7 @@ Annual hourly CF time series aggregated at country level from Atlite cutouts usi
 
 ## Best-site P95 CFs
 
-- `resources/res_cf/<cc>_cf_2023_bestsite_p95.csv`
+- `resources/res_cf/<cc>_cf_2023_bestsite_p95.parquet`
 
 ### Definition
 **Best-site P95 CFs**:  
@@ -169,15 +169,15 @@ Best-site CFs represent **resource-optimised project locations** and should be i
 - `scripts/res_cf/build_cf_timeseries.py`  
   Computes per-unit hourly CF time series (wind onshore + solar) from a single cutout
   using indicator-matrix aggregation over the country geometry. Outputs per-segment CSVs
-  (e.g. `*_q1.csv`).
+  (e.g. `*_q1.parquet`).
 
 - `scripts/res_cf/concat_quarters.py`  
   Concatenates quarterly outputs (Q1–Q4) into full-year per-technology series:
-  `*_wind_onshore_cf_2023.csv`, `*_solar_cf_2023.csv`, `*_wind_offshore_cf_2023.csv` (8760 hours).
+  `*_wind_onshore_cf_2023.parquet`, `*_solar_cf_2023.parquet`, `*_wind_offshore_cf_2023.parquet` (8760 hours).
 
 - `scripts/res_cf/combine_techs.py`  
   Merges yearly wind + solar into the final modelling inputs:
-  `*_cf_2023.csv` with columns `time`, `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
+  `*_cf_2023.parquet` with columns `time`, `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
 
 - `scripts/res_cf/resource_spread.py`  
   Computes intra-country spatial resource distribution metrics from the existing Atlite cutouts.  
@@ -186,7 +186,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   - calculates area-weighted spatial statistics (mean, P90, P95, max)
   - computes uplift factors relative to the national mean  
   Outputs:
-  - `resources/res_cf/resource_spread_2023.csv`
+  - `resources/res_cf/resource_spread_2023.parquet`
 
 - `scripts/res_cf/make_bestsite_cf.py`  
 
@@ -200,7 +200,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   - applies 3×3 spatial averaging (wind only)
 
   Outputs:
-  - `resources/res_cf/<cc>_cf_2023_bestsite_p95.csv`
+  - `resources/res_cf/<cc>_cf_2023_bestsite_p95.parquet`
 
   No longer:
   - multiplies national CF by uplift factors
@@ -282,8 +282,8 @@ python -c "import pandas as pd; from pathlib import Path;
 countries=['de','fr','es','aus','bra'];
 
 for c in countries:
-    nat=pd.read_csv(f'resources/res_cf/{c}_cf_2023.csv');
-    best=pd.read_csv(f'resources/res_cf/{c}_cf_2023_bestsite_p95.csv');
+    nat=pd.read_parquet(f'resources/res_cf/{c}_cf_2023.parquet');
+    best=pd.read_parquet(f'resources/res_cf/{c}_cf_2023_bestsite_p95.parquet');
 
     print('\n' + c.upper());
 

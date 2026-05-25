@@ -34,14 +34,14 @@ extract_cell_timeseries = _bestsite.extract_cell_timeseries
 
 def plot_best_triplet(country: str, year: int) -> None:
     cc = country.lower()
-    comp_path = CF_DIR / f"{cc}_complementarity_top10_{year}.csv"
+    comp_path = CF_DIR / f"{cc}_complementarity_top10_{year}.parquet"
     if not comp_path.exists():
         raise FileNotFoundError(
             f"Complementarity results not found: {comp_path}\n"
             "Run complementarity.py first."
         )
 
-    df   = pd.read_csv(comp_path)
+    df   = pd.read_parquet(comp_path)
     best = df.iloc[0]
 
     print(f"Loading CF grids for {country} {year}...")

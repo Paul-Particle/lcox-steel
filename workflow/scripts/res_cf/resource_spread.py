@@ -26,7 +26,7 @@ Important
 
 Output
 ------
-resources/res_cf/resource_spread_2023.csv
+resources/res_cf/resource_spread_2023.parquet
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.geojson"
 NATIONAL_CF_DIR       = RES_CF
 
 YEAR        = 2023
-OUT_PATH    = RES_CF / f"resource_spread_{YEAR}.csv"
+OUT_PATH    = RES_CF / f"resource_spread_{YEAR}.parquet"
 RES_CF_CFG  = load_res_cf_cfg()
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
@@ -177,10 +177,10 @@ def build_weights(cutout: atlite.Cutout, country_geom) -> xr.DataArray:
 
 
 def national_mean_from_csv(iso2: str, tech: str) -> float:
-    p = NATIONAL_CF_DIR / f"{iso2.lower()}_cf_{YEAR}.csv"
+    p = NATIONAL_CF_DIR / f"{iso2.lower()}_cf_{YEAR}.parquet"
     if not p.exists():
         return np.nan
-    df = pd.read_csv(p)
+    df = pd.read_parquet(p)
     if tech == "wind_onshore":
         col = "wind_onshore_cf"
     elif tech == "wind_offshore":
@@ -254,7 +254,7 @@ def main():
 
     out = pd.DataFrame(rows)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    out.to_csv(OUT_PATH, index=False)
+    out.to_parquet(OUT_PATH, index=False)
     print(f"Wrote {OUT_PATH}")
 
 if __name__ == "__main__":

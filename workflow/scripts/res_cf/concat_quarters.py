@@ -1,19 +1,18 @@
 """
 Concatenate quarterly (Q1–Q4) RES capacity factor time series into a full-year series.
 
-Inputs (CSV, hourly; produced by Script 03):
-- resources/res_cf/<cc>_wind_onshore_cf_<year>_q1.csv
-- resources/res_cf/<cc>_wind_onshore_cf_<year>_q2.csv
-- resources/res_cf/<cc>_wind_onshore_cf_<year>_q3.csv
-- resources/res_cf/<cc>_wind_onshore_cf_<year>_q4.csv
-(and same for solar)
+Inputs (parquet, hourly; produced by build_cf_timeseries):
+- resources/res_cf/quarterly/<cc>_wind_onshore_<year>_q{1..4}.parquet
+- resources/res_cf/quarterly/<cc>_wind_offshore_<year>_q{1..4}.parquet
+- resources/res_cf/quarterly/<cc>_solar_<year>_q{1..4}.parquet
 
 Expected input format:
-- Columns: time, cf
+- DatetimeIndex 'time', column 'cf'
 
-Outputs (CSV, hourly):
-- resources/res_cf/<cc>_wind_onshore_cf_<year>.csv
-- resources/res_cf/<cc>_solar_cf_<year>.csv
+Outputs (parquet, hourly):
+- resources/res_cf/annual/<cc>_wind_onshore_<year>.parquet
+- resources/res_cf/annual/<cc>_wind_offshore_<year>.parquet
+- resources/res_cf/annual/<cc>_solar_<year>.parquet
 
 Checks:
 - Hourly continuity (1h steps)
@@ -39,10 +38,8 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     YEAR      = int(snakemake.wildcards.year)
 
 def read_series(path: Path) -> pd.Series:
-    df = pd.read_csv(path)
-    df["time"] = pd.to_datetime(df["time"])
-    df = df.sort_values("time")
-    return pd.Series(df["cf"].values, index=df["time"], name="cf")
+    df = pd.read_parquet(path)
+    return df["cf"].sort_index()
 
 def stitch_quarters(paths, expected_hours=8760) -> pd.Series:
     s = pd.concat([read_series(p) for p in paths]).sort_index()
@@ -61,21 +58,21 @@ def stitch_quarters(paths, expected_hours=8760) -> pd.Series:
     return s
 
 def run_for_country(cc: str):
-    wind_q    = [INDIR / f"{cc}_wind_onshore_{YEAR}_q{i}.csv"  for i in [1,2,3,4]]
-    offshore_q = [INDIR / f"{cc}_wind_offshore_{YEAR}_q{i}.csv" for i in [1,2,3,4]]
-    solar_q   = [INDIR / f"{cc}_solar_{YEAR}_q{i}.csv"          for i in [1,2,3,4]]
+    wind_q     = [INDIR / f"{cc}_wind_onshore_{YEAR}_q{i}.parquet"  for i in [1,2,3,4]]
+    offshore_q = [INDIR / f"{cc}_wind_offshore_{YEAR}_q{i}.parquet" for i in [1,2,3,4]]
+    solar_q    = [INDIR / f"{cc}_solar_{YEAR}_q{i}.parquet"         for i in [1,2,3,4]]
 
     wind = stitch_quarters(wind_q)
     offshore = stitch_quarters(offshore_q)
     solar = stitch_quarters(solar_q)
 
-    wind_out     = OUTDIR / f"{cc}_wind_onshore_{YEAR}.csv"
-    offshore_out = OUTDIR / f"{cc}_wind_offshore_{YEAR}.csv"
-    solar_out    = OUTDIR / f"{cc}_solar_{YEAR}.csv"
+    wind_out     = OUTDIR / f"{cc}_wind_onshore_{YEAR}.parquet"
+    offshore_out = OUTDIR / f"{cc}_wind_offshore_{YEAR}.parquet"
+    solar_out    = OUTDIR / f"{cc}_solar_{YEAR}.parquet"
 
-    wind.reset_index().rename(columns={"index":"time"}).to_csv(wind_out, index=False)
-    offshore.reset_index().rename(columns={"index":"time"}).to_csv(offshore_out, index=False)
-    solar.reset_index().rename(columns={"index":"time"}).to_csv(solar_out, index=False)
+    wind.to_frame().to_parquet(wind_out, index=True)
+    offshore.to_frame().to_parquet(offshore_out, index=True)
+    solar.to_frame().to_parquet(solar_out, index=True)
 
     print("Wrote:")
     print(" -", wind_out)

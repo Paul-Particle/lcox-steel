@@ -55,36 +55,36 @@ rule build_cf_timeseries:
         cutout="cutouts/{country}_{year}_{quarter}.nc",
         regions="resources/shapes/regions.geojson"
     output:
-        wind_onshore="resources/res_cf/quarterly/{country}_wind_onshore_{year}_{quarter}.csv",
-        wind_offshore="resources/res_cf/quarterly/{country}_wind_offshore_{year}_{quarter}.csv",
-        solar="resources/res_cf/quarterly/{country}_solar_{year}_{quarter}.csv"
+        wind_onshore="resources/res_cf/quarterly/{country}_wind_onshore_{year}_{quarter}.parquet",
+        wind_offshore="resources/res_cf/quarterly/{country}_wind_offshore_{year}_{quarter}.parquet",
+        solar="resources/res_cf/quarterly/{country}_solar_{year}_{quarter}.parquet"
     script:
         "../scripts/res_cf/build_cf_timeseries.py"
 
 
 rule concat_quarters:
     input:
-        wind_onshore=expand("resources/res_cf/quarterly/{{country}}_wind_onshore_{{year}}_{quarter}.csv",
+        wind_onshore=expand("resources/res_cf/quarterly/{{country}}_wind_onshore_{{year}}_{quarter}.parquet",
                             quarter=CF_QUARTERS),
-        wind_offshore=expand("resources/res_cf/quarterly/{{country}}_wind_offshore_{{year}}_{quarter}.csv",
+        wind_offshore=expand("resources/res_cf/quarterly/{{country}}_wind_offshore_{{year}}_{quarter}.parquet",
                              quarter=CF_QUARTERS),
-        solar=expand("resources/res_cf/quarterly/{{country}}_solar_{{year}}_{quarter}.csv",
+        solar=expand("resources/res_cf/quarterly/{{country}}_solar_{{year}}_{quarter}.parquet",
                      quarter=CF_QUARTERS),
     output:
-        wind_onshore="resources/res_cf/annual/{country}_wind_onshore_{year}.csv",
-        wind_offshore="resources/res_cf/annual/{country}_wind_offshore_{year}.csv",
-        solar="resources/res_cf/annual/{country}_solar_{year}.csv"
+        wind_onshore="resources/res_cf/annual/{country}_wind_onshore_{year}.parquet",
+        wind_offshore="resources/res_cf/annual/{country}_wind_offshore_{year}.parquet",
+        solar="resources/res_cf/annual/{country}_solar_{year}.parquet"
     script:
         "../scripts/res_cf/concat_quarters.py"
 
 
 rule combine_techs:
     input:
-        wind_onshore="resources/res_cf/annual/{country}_wind_onshore_{year}.csv",
-        wind_offshore="resources/res_cf/annual/{country}_wind_offshore_{year}.csv",
-        solar="resources/res_cf/annual/{country}_solar_{year}.csv"
+        wind_onshore="resources/res_cf/annual/{country}_wind_onshore_{year}.parquet",
+        wind_offshore="resources/res_cf/annual/{country}_wind_offshore_{year}.parquet",
+        solar="resources/res_cf/annual/{country}_solar_{year}.parquet"
     output:
-        "resources/res_cf/{country}_cf_{year}.csv"
+        "resources/res_cf/{country}_cf_{year}.parquet"
     script:
         "../scripts/res_cf/combine_techs.py"
 
@@ -93,12 +93,12 @@ rule resource_spread:
     input:
         cutouts=expand("cutouts/{country}_{{year}}_{quarter}.nc",
                        country=CF_COUNTRIES, quarter=CF_QUARTERS),
-        national_cfs=expand("resources/res_cf/{country}_cf_{{year}}.csv",
+        national_cfs=expand("resources/res_cf/{country}_cf_{{year}}.parquet",
                             country=CF_COUNTRIES),
         regions="resources/shapes/regions.geojson",
         offshore_regions="resources/shapes/offshore_regions.geojson"
     output:
-        "resources/res_cf/resource_spread_{year}.csv"
+        "resources/res_cf/resource_spread_{year}.parquet"
     script:
         "../scripts/res_cf/resource_spread.py"
 
@@ -110,14 +110,14 @@ rule make_bestsite_cf:
         regions="resources/shapes/regions.geojson",
         offshore_regions="resources/shapes/offshore_regions.geojson"
     output:
-        "resources/res_cf/{country}_cf_{year}_bestsite_p95.csv"
+        "resources/res_cf/{country}_cf_{year}_bestsite_p95.parquet"
     script:
         "../scripts/res_cf/make_bestsite_cf.py"
 
 
 rule complementarity:
     input:
-        national_cf="resources/res_cf/{country}_cf_{year}.csv",
+        national_cf="resources/res_cf/{country}_cf_{year}.parquet",
         cutouts=expand("cutouts/{{country}}_{{year}}_{quarter}.nc",
                        quarter=CF_QUARTERS),
         regions="resources/shapes/regions.geojson",
@@ -126,7 +126,7 @@ rule complementarity:
         # top_n is interpolated as a literal (not a wildcard) because the
         # paired `avg` output doesn't depend on N — Snakemake requires all
         # outputs of a rule to share the same wildcards.
-        top=f"resources/res_cf/{{country}}_complementarity_top{CF_TOP_N}_{{year}}.csv",
-        avg="resources/res_cf/{country}_average_profiles_{year}.csv"
+        top=f"resources/res_cf/{{country}}_complementarity_top{CF_TOP_N}_{{year}}.parquet",
+        avg="resources/res_cf/{country}_average_profiles_{year}.parquet"
     script:
         "../scripts/res_cf/complementarity.py"

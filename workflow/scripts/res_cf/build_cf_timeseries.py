@@ -96,17 +96,17 @@ def main() -> None:
     wind_cf  = to_cf_series(wind_cf)
     solar_cf = to_cf_series(solar_cf)
 
-    wind_out  = OUTDIR / f"{COUNTRY}_wind_onshore_{YEAR}_{QUARTER}.csv"
-    solar_out = OUTDIR / f"{COUNTRY}_solar_{YEAR}_{QUARTER}.csv"
+    wind_out  = OUTDIR / f"{COUNTRY}_wind_onshore_{YEAR}_{QUARTER}.parquet"
+    solar_out = OUTDIR / f"{COUNTRY}_solar_{YEAR}_{QUARTER}.parquet"
 
-    wind_cf.to_csv(wind_out)
-    solar_cf.to_csv(solar_out)
+    wind_cf.to_frame().to_parquet(wind_out, index=True)
+    solar_cf.to_frame().to_parquet(solar_out, index=True)
 
     print("Wrote:")
     print(" -", wind_out)
     print(" -", solar_out)
 
-    offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_{YEAR}_{QUARTER}.csv"
+    offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_{YEAR}_{QUARTER}.parquet"
     if has_offshore:
         offshore_gdf = get_region_gdf(OFFSHORE_REGIONS_PATH, REGION_TAG)
         offshore_matrix = cutout.indicatormatrix(offshore_gdf)
@@ -124,7 +124,7 @@ def main() -> None:
         offshore_wind_cf = pd.Series(0.0, index=wind_cf.index, name="cf")
         offshore_wind_cf.index.name = "time"
         print("No offshore regions file — writing zero placeholder for offshore wind.")
-    offshore_wind_cf.to_csv(offshore_wind_out)
+    offshore_wind_cf.to_frame().to_parquet(offshore_wind_out, index=True)
     print(" -", offshore_wind_out)
 
 

@@ -27,9 +27,9 @@ DATA_DIR = RES_CF
 
 def load_cf(country: str, variant: str, year: int) -> pd.DataFrame:
     if variant == "bestsite_p95":
-        path = DATA_DIR / f"{country}_cf_{year}_bestsite_p95.csv"
+        path = DATA_DIR / f"{country}_cf_{year}_bestsite_p95.parquet"
     elif variant == "avg":
-        path = DATA_DIR / f"{country}_cf_{year}.csv"
+        path = DATA_DIR / f"{country}_cf_{year}.parquet"
     else:
         raise ValueError(f"Unknown variant: {variant!r}")
 
@@ -39,7 +39,7 @@ def load_cf(country: str, variant: str, year: int) -> pd.DataFrame:
             "Run scripts 01–07 first to generate the data."
         )
 
-    df = pd.read_csv(path, parse_dates=["time"])
+    df = pd.read_parquet(path)
     df = df.sort_values("time").set_index("time")
     return df
 

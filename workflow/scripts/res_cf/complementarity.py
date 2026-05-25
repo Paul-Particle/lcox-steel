@@ -30,8 +30,8 @@ For each country:
 
 Outputs
 -------
-resources/res_cf/<cc>_complementarity_top{N}_2023.csv
-resources/res_cf/<cc>_average_profiles_2023.csv
+resources/res_cf/<cc>_complementarity_top{N}_2023.parquet
+resources/res_cf/<cc>_average_profiles_2023.parquet
 """
 
 from __future__ import annotations
@@ -487,12 +487,12 @@ def greedy_screen(
 # ── Average profiles ──────────────────────────────────────────────────────────
 
 def save_average_profiles(cc: str, year: int) -> None:
-    src = CF_DIR / f"{cc.lower()}_cf_{year}.csv"
-    dst = _SM_AVG_OUT if _SM_AVG_OUT is not None else CF_DIR / f"{cc.lower()}_average_profiles_{year}.csv"
+    src = CF_DIR / f"{cc.lower()}_cf_{year}.parquet"
+    dst = _SM_AVG_OUT if _SM_AVG_OUT is not None else CF_DIR / f"{cc.lower()}_average_profiles_{year}.parquet"
     if not src.exists():
         raise FileNotFoundError(f"National mean CF file not found: {src}")
-    df = pd.read_csv(src, parse_dates=["time"])
-    df.to_csv(dst, index=False)
+    df = pd.read_parquet(src)
+    df.to_parquet(dst, index=False)
     print(f"  Saved average profiles → {dst.name}")
 
 
@@ -595,8 +595,8 @@ def main() -> None:
         df.insert(0, "rank",    range(1, len(df) + 1))
         df.insert(1, "country", _current_country)
 
-        out_path = _SM_TOP_OUT if _SM_TOP_OUT is not None else OUTDIR / f"{cc}_complementarity_top{cfg['top_n']}_{cfg['year']}.csv"
-        df.to_csv(out_path, index=False)
+        out_path = _SM_TOP_OUT if _SM_TOP_OUT is not None else OUTDIR / f"{cc}_complementarity_top{cfg['top_n']}_{cfg['year']}.parquet"
+        df.to_parquet(out_path, index=False)
 
         print(f"\n  Top {len(df)} complementary triplets → {out_path.name}")
         print(f"  Best score: {df['score'].iloc[0]:.4f}  "

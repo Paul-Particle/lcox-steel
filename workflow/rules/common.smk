@@ -63,7 +63,7 @@ def h2_dri_inputs(wildcards):
     cf_stem = f"{cc}_cf_{proj['year']}" if variant == "avg" else f"{cc}_cf_{proj['year']}_{variant}"
 
     inputs = {
-        "cf":          f"resources/res_cf/{cf_stem}.csv",
+        "cf":          f"resources/res_cf/{cf_stem}.parquet",
         "assumptions": "config/assumptions.yaml",
         "projects":    "config/projects.yaml",
     }

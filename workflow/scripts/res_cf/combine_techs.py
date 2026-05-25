@@ -1,13 +1,13 @@
 """
 Combine yearly per-technology CF time series into a single country-year file.
 
-Inputs (yearly, hourly; produced by Script 04):
-- resources/res_cf/de_wind_onshore_cf_2023.csv   (columns: time, cf)
-- resources/res_cf/de_wind_offshore_cf_2023.csv  (columns: time, cf)
-- resources/res_cf/de_solar_cf_2023.csv          (columns: time, cf)
+Inputs (yearly, hourly; produced by concat_quarters):
+- resources/res_cf/annual/de_wind_onshore_2023.parquet   (DatetimeIndex 'time', column 'cf')
+- resources/res_cf/annual/de_wind_offshore_2023.parquet  (same)
+- resources/res_cf/annual/de_solar_2023.parquet          (same)
 
 Output:
-- resources/res_cf/de_cf_2023.csv
+- resources/res_cf/de_cf_2023.parquet
   columns: time, wind_onshore_cf, wind_offshore_cf, solar_cf
 
 Notes:
@@ -39,15 +39,14 @@ def expected_hours(year: int) -> int:
 
 
 def read_cf(path: Path) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    df["time"] = pd.to_datetime(df["time"])
+    df = pd.read_parquet(path).reset_index()
     return df.sort_values("time")
 
 
 def build_country(country: str) -> None:
-    wind_path     = INDIR / f"{country}_wind_onshore_{YEAR}.csv"
-    offshore_path = INDIR / f"{country}_wind_offshore_{YEAR}.csv"
-    solar_path    = INDIR / f"{country}_solar_{YEAR}.csv"
+    wind_path     = INDIR / f"{country}_wind_onshore_{YEAR}.parquet"
+    offshore_path = INDIR / f"{country}_wind_offshore_{YEAR}.parquet"
+    solar_path    = INDIR / f"{country}_solar_{YEAR}.parquet"
 
     wind     = read_cf(wind_path).rename(columns={"cf": "wind_onshore_cf"})
     offshore = read_cf(offshore_path).rename(columns={"cf": "wind_offshore_cf"})
@@ -65,8 +64,8 @@ def build_country(country: str) -> None:
     if not (diffs == pd.Timedelta(hours=1)).all():
         raise ValueError(f"{country}: Non-hourly continuity detected.")
 
-    out = OUTDIR / f"{country}_cf_{YEAR}.csv"
-    df.to_csv(out, index=False)
+    out = OUTDIR / f"{country}_cf_{YEAR}.parquet"
+    df.to_parquet(out, index=False)
     print("Wrote:", out)
 
 

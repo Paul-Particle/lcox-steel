@@ -54,8 +54,8 @@ PV_PANEL = "CSi"
 PV_ORIENTATION = "latitude_optimal"
 
 def get_national_mean_from_csv(iso2: str, tech: str) -> float:
-    path = RES_CF / f"{iso2.lower()}_cf_2023.csv"
-    df = pd.read_csv(path)
+    path = RES_CF / f"{iso2.lower()}_cf_2023.parquet"
+    df = pd.read_parquet(path)
 
     col_map = {
         "wind_onshore": "wind_onshore_cf",

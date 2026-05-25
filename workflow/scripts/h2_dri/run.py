@@ -64,12 +64,12 @@ def load_yaml(path: Path) -> dict:
 
 def load_cf_timeseries(path: Path) -> pd.DataFrame:
     """
-    Load the atlite CF CSV and return a DataFrame with a DatetimeIndex.
+    Load the atlite CF parquet and return a DataFrame with a DatetimeIndex.
     Columns are tech names (wind_onshore, solar, ...) without the '_cf' suffix.
     """
     if not path.exists():
         raise FileNotFoundError(f"CF file not found: {path}")
-    df = pd.read_csv(path, parse_dates=["time"], index_col="time")
+    df = pd.read_parquet(path).set_index("time")
     df.index.name = None
     df.columns = [c.replace("_cf", "") for c in df.columns]
     return df

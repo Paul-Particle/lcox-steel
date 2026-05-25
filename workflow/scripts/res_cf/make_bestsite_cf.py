@@ -264,8 +264,8 @@ def main() -> None:
             "solar_cf": results["solar"].values,
         })
 
-        out_p95 = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95.csv"
-        df_p95.to_csv(out_p95, index=False)
+        out_p95 = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95.parquet"
+        df_p95.to_parquet(out_p95, index=False)
 
         print(f"{country_upper}: wrote {out_p95.name}")
 

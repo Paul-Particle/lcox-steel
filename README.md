@@ -53,10 +53,10 @@ lcox-steel/
 │   └── res_cf/
 │       ├── quarterly/      # Per-tech CF time series by quarter (intermediate)
 │       ├── annual/         # Per-tech CF time series full-year (intermediate)
-│       ├── <cc>_cf_<year>.csv              # Combined national CF
-│       ├── <cc>_cf_<year>_bestsite_p95.csv # P95 best-site profiles
-│       ├── resource_spread_<year>.csv      # Spatial resource statistics
-│       └── <cc>_complementarity_top<N>_<year>.csv
+│       ├── <cc>_cf_<year>.parquet              # Combined national CF
+│       ├── <cc>_cf_<year>_bestsite_p95.parquet # P95 best-site profiles
+│       ├── resource_spread_<year>.parquet      # Spatial resource statistics
+│       └── <cc>_complementarity_top<N>_<year>.parquet
 ├── cutouts/                # Atlite ERA5 cutout files (gitignored)
 ├── .atlite-cache/          # Atlite scratch working dir (gitignored)
 └── results/                # PyPSA optimization outputs (.nc + summary CSVs)
@@ -136,7 +136,7 @@ Months that fail (transient ENTSO-E errors, network blips) are retried 3× with 
 ### res_cf pipeline for one country
 
 ```bash
-snakemake "resources/res_cf/de_cf_2023.csv" --cores 4
+snakemake "resources/res_cf/de_cf_2023.parquet" --cores 4
 ```
 
 This chains: `build_regions` → `build_offshore_regions` → `make_cutout` (4 quarters, ERA5) → `build_cf_timeseries` → `concat_quarters` → `combine_techs`.
@@ -156,8 +156,8 @@ Edit `config/projects.yaml` to add projects and scenarios. Edit `config/assumpti
 
 **Grid data** (`resources/entsoe_processed.parquet`): pandas DataFrame with a UTC hourly DatetimeIndex and MultiIndex columns `(area_code, metric)`. Metrics include `price`, `load_actual`, `load_forecast`, `res`, `generation`, `crossborder`.
 
-**Capacity factors** (`resources/res_cf/<cc>_cf_<year>.csv`): hourly CSV with a `time` column and columns `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
+**Capacity factors** (`resources/res_cf/<cc>_cf_<year>.parquet`): hourly parquet with a `time` column and columns `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
 
-**Best-site profiles** (`resources/res_cf/<cc>_cf_<year>_bestsite_p95.csv`): same format; P95 grid cell extracted directly from the Atlite CF grid with 3×3 spatial averaging for wind.
+**Best-site profiles** (`resources/res_cf/<cc>_cf_<year>_bestsite_p95.parquet`): same format; P95 grid cell extracted directly from the Atlite CF grid with 3×3 spatial averaging for wind.
 
-**Complementarity results** (`resources/res_cf/<cc>_complementarity_top<N>_<year>.csv`): ranked triplets of (onshore, offshore, solar) grid cells with score, coincidence, correlation, distance, and coordinates.
+**Complementarity results** (`resources/res_cf/<cc>_complementarity_top<N>_<year>.parquet`): ranked triplets of (onshore, offshore, solar) grid cells with score, coincidence, correlation, distance, and coordinates.
