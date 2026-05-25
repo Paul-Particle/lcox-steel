@@ -46,9 +46,6 @@ output_for_gemini
 .antigravitycli
 .claude
 
-# Conda environment
-fca_env/
-
 # Git attributes
 * text=auto eol=lf
 
@@ -72,3 +69,7 @@ data/debug/
 # Model outputs
 results/
 results.zip
+
+# other
+HANDOFF.md
+snakemake_advice.md

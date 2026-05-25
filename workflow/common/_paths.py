@@ -4,15 +4,16 @@ Scripts import this with:
 
     from common._paths import DATA, RESOURCES, RES_CF, CUTOUTS
 
-This works because the repo root is on sys.path under Snakemake (it runs from
-the Snakefile's directory) and when running standalone the conventional cwd is
-the repo root. For standalone runs from elsewhere, add `sys.path.insert(0, "<repo>")`
-first.
+This works because `workflow/` is on sys.path (added by
+`workflow/rules/common.smk` under Snakemake; scripts that run standalone add it
+themselves). For standalone runs from elsewhere, add
+`sys.path.insert(0, "<repo>/workflow")` first.
 """
 
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+# workflow/common/_paths.py → workflow/common/ → workflow/ → repo root
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Raw / external / expensive (won't be re-fetched on rebuild)
 DATA = REPO_ROOT / "data"

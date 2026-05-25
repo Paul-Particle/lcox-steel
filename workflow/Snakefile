@@ -1,0 +1,26 @@
+configfile: "config/config.yaml"
+configfile: "config/projects.yaml"
+
+
+include: "rules/common.smk"
+include: "rules/grid.smk"
+include: "rules/res_cf.smk"
+include: "rules/h2_dri.smk"
+
+
+rule all:
+    input:
+        "resources/entsoe_processed.feather",
+        "resources/nem_processed.feather",
+        expand("resources/entsoe/{area}/{data_type}.feather",
+               area=enabled_areas,
+               data_type=config["entsoe"]["data_types"]),
+        expand("resources/res_cf/{country}_cf_{year}.csv",
+               country=CF_COUNTRIES, year=CF_YEAR),
+        expand("resources/res_cf/{country}_cf_{year}_bestsite_p95.csv",
+               country=CF_COUNTRIES, year=CF_YEAR),
+        expand("resources/res_cf/resource_spread_{year}.csv",
+               year=CF_YEAR),
+        expand("resources/res_cf/{country}_complementarity_top{n}_{year}.csv",
+               country=CF_COUNTRIES, n=CF_TOP_N, year=CF_YEAR),
+        h2_dri_targets(),

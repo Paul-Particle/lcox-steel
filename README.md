@@ -6,12 +6,40 @@ This project calculates the levelized cost of hydrogen (LCOH) for green-steel DR
 
 ```
 lcox-steel/
-├── Snakefile               # End-to-end workflow (grid + res_cf pipelines)
+├── workflow/               # Snakemake workflow (standard layout)
+│   ├── Snakefile           # Thin index: configfiles + includes + rule all
+│   ├── rules/
+│   │   ├── common.smk      # Constants, wildcard_constraints, helpers
+│   │   ├── grid.smk        # download_entsoe, download_nem, process_entsoe
+│   │   ├── res_cf.smk      # extract + atlite CF pipeline
+│   │   └── h2_dri.smk      # PyPSA optimisation rule
+│   ├── scripts/
+│   │   ├── grid/           # Grid data pipeline (ENTSO-E + NEM)
+│   │   ├── res_cf/         # Atlite capacity factor pipeline
+│   │   │   ├── extract_shapefile.py # Generic zip→shp extractor
+│   │   │   ├── build_regions.py
+│   │   │   ├── build_offshore_regions.py
+│   │   │   ├── make_cutout.py
+│   │   │   ├── build_cf_timeseries.py
+│   │   │   ├── concat_quarters.py
+│   │   │   ├── combine_techs.py
+│   │   │   ├── resource_spread.py
+│   │   │   ├── make_bestsite_cf.py
+│   │   │   ├── complementarity.py
+│   │   │   └── diag_*.py               # Diagnostic and QC scripts
+│   │   ├── h2_dri/         # PyPSA investment model
+│   │   │   ├── run.py      # CLI entry point
+│   │   │   ├── network.py  # PyPSA network builder
+│   │   │   ├── costs.py    # LCOH post-solve accounting
+│   │   │   └── sizing.py   # Electrolyser sizing + annuity factor utilities
+│   │   ├── viz/utils.py    # Shared plotting helpers
+│   │   └── tests/          # End-to-end smoke tests
+│   ├── notebooks/          # API exploration notebooks (entsoe, nem)
+│   └── common/             # Shared helpers (_paths.py, _stubs.py)
 ├── config/
 │   ├── config.yaml         # Snakemake pipeline config (dates, countries, CF parameters)
 │   ├── assumptions.yaml    # Techno-economic defaults (CAPEX, OPEX, WACC, lifetimes)
 │   └── projects.yaml       # Project + scenario definitions for PyPSA runs
-├── common/                 # Shared helpers (_paths.py, _stubs.py)
 ├── environment.yaml        # Conda environment (lcox-steel)
 ├── data/                   # Raw / external / expensive (not produced by this repo)
 │   ├── entsoe_cache/       # Internal ENTSO-E monthly cache (area/year-month/data_type) — gitignored
@@ -31,29 +59,10 @@ lcox-steel/
 │       └── <cc>_complementarity_top<N>_<year>.csv
 ├── cutouts/                # Atlite ERA5 cutout files (gitignored)
 ├── .atlite-cache/          # Atlite scratch working dir (gitignored)
-├── results/                # PyPSA optimization outputs (.nc + summary CSVs)
-└── scripts/
-    ├── grid/               # Grid data pipeline (ENTSO-E + NEM)
-    ├── res_cf/             # Atlite capacity factor pipeline
-    │   ├── check_external_data.py  # Validate required external files
-    │   ├── build_regions.py
-    │   ├── build_offshore_regions.py
-    │   ├── make_cutout.py
-    │   ├── build_cf_timeseries.py
-    │   ├── concat_quarters.py
-    │   ├── combine_techs.py
-    │   ├── resource_spread.py
-    │   ├── make_bestsite_cf.py
-    │   ├── complementarity.py
-    │   └── diag_*.py               # Diagnostic and QC scripts
-    ├── h2_dri/             # PyPSA investment model
-    │   ├── run.py          # CLI entry point
-    │   ├── network.py      # PyPSA network builder
-    │   ├── costs.py        # LCOH post-solve accounting
-    │   └── sizing.py       # Electrolyser sizing + annuity factor utilities
-    └── viz/
-        └── utils.py        # Shared plotting helpers
+└── results/                # PyPSA optimization outputs (.nc + summary CSVs)
 ```
+
+Snakemake commands are invoked from this repo root — `snakemake` auto-discovers `workflow/Snakefile`.
 
 ## Setup
 
@@ -66,19 +75,18 @@ conda activate lcox-steel
 
 ### 2. External data files
 
-Two large geographic datasets must be downloaded manually. Run the check script — it creates the target dirs and extracts any ZIP it finds in them:
+Two large geographic datasets must be downloaded manually. Snakemake has two `extract_*_shapefile` rules that handle unzipping — just put the ZIPs at the canonical paths below (create the directories first) and the pipeline will extract them when it needs them.
+
+**World EEZ v12** — https://www.marineregions.org/downloads.php (free registration). Choose "World EEZ v12 (2023)" → Shapefile. Save (or rename) the download as `data/shapes/eez/eez_v12.zip`. Any v11 or v12 works; needs `ISO_TER1` and `POL_TYPE` columns.
+
+**Natural Earth 1:110m Admin-0 countries** — https://www.naturalearthdata.com/downloads/110m-cultural-vectors/. Save as `data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip`.
 
 ```bash
-python scripts/res_cf/check_external_data.py
+mkdir -p data/shapes/eez data/shapes/ne_110m_admin_0_countries
+# then drop the two ZIPs into those directories with the names above
 ```
 
-Then drop the ZIPs into the directories it printed and re-run:
-
-**World EEZ v12** — https://www.marineregions.org/downloads.php (free registration). Choose "World EEZ v12 (2023)" → Shapefile. Drop the ZIP into `data/shapes/eez/`. Any v11 or v12 works; needs `ISO_TER1` and `POL_TYPE` columns.
-
-**Natural Earth 1:110m Admin-0 countries** — https://www.naturalearthdata.com/downloads/110m-cultural-vectors/. Drop the ZIP into `data/shapes/ne_110m_admin_0_countries/`.
-
-(A shapefile is a `.shp` + `.shx` + `.dbf` + `.prj` suite that has to travel together — the auto-extract handles that.)
+(A shapefile is a `.shp` + `.shx` + `.dbf` + `.prj` suite that has to travel together — the extract rule handles flattening if the ZIP nests the components under a subfolder.)
 
 ### 3. API keys
 
@@ -134,8 +142,8 @@ This chains: `build_regions` → `build_offshore_regions` → `make_cutout` (4 q
 ### PyPSA investment optimization
 
 ```bash
-python scripts/h2_dri/run.py --project DE_2023_baseline --scenario dedicated_res
-python scripts/h2_dri/run.py --project DE_2023_baseline   # all scenarios
+python workflow/scripts/h2_dri/run.py --project DE_2023_baseline --scenario dedicated_res
+python workflow/scripts/h2_dri/run.py --project DE_2023_baseline   # all scenarios
 ```
 
 Results are written to `results/<project_name>/` as `.nc` (full PyPSA network) and `_summary.csv` (LCOH + optimal capacities).
