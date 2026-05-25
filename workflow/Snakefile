@@ -10,9 +10,9 @@ include: "rules/h2_dri.smk"
 
 rule all:
     input:
-        "resources/entsoe_processed.feather",
-        "resources/nem_processed.feather",
-        expand("resources/entsoe/{area}/{data_type}.feather",
+        "resources/entsoe_processed.parquet",
+        "resources/nem_processed.parquet",
+        expand("resources/entsoe/{area}/{data_type}.parquet",
                area=enabled_areas,
                data_type=config["entsoe"]["data_types"]),
         expand("resources/res_cf/{country}_cf_{year}.csv",

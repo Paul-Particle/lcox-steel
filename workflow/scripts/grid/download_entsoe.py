@@ -189,10 +189,10 @@ def download_data(snakemake) -> None:
     for ym, month_start, month_end in iter_months(start_date, end_date):
         n_total += 1
         month_cache_dir = area_cache_dir / ym
-        cache_path = month_cache_dir / f"{data_type}.feather"
+        cache_path = month_cache_dir / f"{data_type}.parquet"
 
         if cache_path.exists():
-            successful_dfs.append(pd.read_feather(cache_path))
+            successful_dfs.append(pd.read_parquet(cache_path))
             n_cached += 1
             continue
 
@@ -208,7 +208,7 @@ def download_data(snakemake) -> None:
             continue
 
         month_cache_dir.mkdir(parents=True, exist_ok=True)
-        df.to_feather(cache_path)
+        df.to_parquet(cache_path, index=True)
         successful_dfs.append(df)
         n_fetched += 1
 
@@ -221,7 +221,7 @@ def download_data(snakemake) -> None:
     combined = pd.concat(successful_dfs, axis=0)
     combined = combined[~combined.index.duplicated(keep="last")]
     combined = combined.sort_index()
-    combined.to_feather(output_path)
+    combined.to_parquet(output_path, index=True)
     log.info(
         f"{area}/{data_type}: wrote {output_path} "
         f"(cached={n_cached}, fetched={n_fetched}, failed={n_failed}, total={n_total})"

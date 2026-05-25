@@ -353,7 +353,7 @@ def download_data(snakemake) -> None:
         df_final = df_final.resample(resample_freq).mean()
         print(f"Resampled {before} rows (~{_step}) → {len(df_final)} rows at {resample_freq}.")
 
-    df_final.to_feather(snakemake.output[0])
+    df_final.to_parquet(snakemake.output[0], index=True)
     print(f"Successfully saved NEM data to {snakemake.output[0]}")
 
 

@@ -143,7 +143,7 @@ def main() -> None:
         cell_cfs[name] = df
 
     # ── Price series ──
-    nem        = pd.read_feather(REPO_ROOT / "resources/nem_processed.feather")
+    nem        = pd.read_parquet(REPO_ROOT / "resources/nem_processed.parquet")
     price_aud  = nem[(NEM_REGION, "price")]
     price_aud  = price_aud[price_aud.index.year == year]
     price_eur  = (price_aud * eur_per_aud).reindex(cell_cfs["wind_p95"].index)

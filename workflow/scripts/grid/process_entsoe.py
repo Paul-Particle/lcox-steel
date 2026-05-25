@@ -1,8 +1,8 @@
-"""Process per-(area, data_type) ENTSO-E feathers into a single hourly EU dataset.
+"""Process per-(area, data_type) ENTSO-E parquets into a single hourly EU dataset.
 
-Inputs: a flat list of resources/entsoe/{area}/{data_type}.feather paths
+Inputs: a flat list of resources/entsoe/{area}/{data_type}.parquet paths
         (each file already covers the full date range for its area+data_type).
-Output: resources/entsoe_processed.feather — wide DataFrame, columns = (area, metric).
+Output: resources/entsoe_processed.parquet — wide DataFrame, columns = (area, metric).
 """
 
 from collections import defaultdict
@@ -23,7 +23,7 @@ def load_per_data_type(input_paths: list[str]) -> dict[str, pd.DataFrame]:
 
     result = {}
     for dt, paths in by_dt.items():
-        dfs = [pd.read_feather(p) for p in sorted(paths)]
+        dfs = [pd.read_parquet(p) for p in sorted(paths)]
         result[dt] = pd.concat(dfs, axis=1).sort_index()
     return result
 
@@ -74,7 +74,7 @@ def process_data(snakemake) -> None:
 
     df_EU_all = pd.concat(dfs_EU.values(), axis=1)
     df_EU_all.index = df_EU_all.index.tz_localize(None)  # pyright: ignore[reportAttributeAccessIssue]
-    df_EU_all.to_feather(snakemake.output[0])
+    df_EU_all.to_parquet(snakemake.output[0], index=True)
     print(f"Successfully saved processed data to {snakemake.output[0]}")
 
 

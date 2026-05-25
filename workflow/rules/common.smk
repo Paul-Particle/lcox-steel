@@ -68,5 +68,5 @@ def h2_dri_inputs(wildcards):
         "projects":    "config/projects.yaml",
     }
     if scen.get("grid_connected"):
-        inputs["prices"] = "resources/entsoe_processed.feather"
+        inputs["prices"] = "resources/entsoe_processed.parquet"
     return inputs

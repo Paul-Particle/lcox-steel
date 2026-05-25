@@ -1,6 +1,6 @@
 rule download_entsoe:
     output:
-        "resources/entsoe/{area}/{data_type}.feather"
+        "resources/entsoe/{area}/{data_type}.parquet"
     params:
         start_date=config["entsoe"]["start_date"],
         end_date=config["entsoe"]["end_date"],
@@ -13,7 +13,7 @@ rule download_entsoe:
 
 rule download_nem:
     output:
-        "resources/nem_processed.feather"
+        "resources/nem_processed.parquet"
     params:
         start_date=config["nem_download"]["start_date"],
         end_date=config["nem_download"]["end_date"],
@@ -26,12 +26,12 @@ rule download_nem:
 
 rule process_entsoe:
     input:
-        entsoe=expand("resources/entsoe/{area}/{data_type}.feather",
+        entsoe=expand("resources/entsoe/{area}/{data_type}.parquet",
                       area=enabled_areas,
                       data_type=config["entsoe"]["data_types"])
     params:
         areas=enabled_areas
     output:
-        "resources/entsoe_processed.feather"
+        "resources/entsoe_processed.parquet"
     script:
         "../scripts/grid/process_entsoe.py"

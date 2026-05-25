@@ -77,10 +77,10 @@ def load_cf_timeseries(path: Path) -> pd.DataFrame:
 
 def load_price_series(area: str, year: int, processed_path: Path) -> pd.Series:
     """
-    Load hourly electricity prices for one area and year from entsoe_processed.feather.
+    Load hourly electricity prices for one area and year from entsoe_processed.parquet.
     Returns a Series with DatetimeIndex (timezone-naive, UTC).
     """
-    df = pd.read_feather(processed_path)
+    df = pd.read_parquet(processed_path)
     prices = df[(area, "price")]
     prices = prices[prices.index.year == year]
     prices.index = prices.index.tz_localize(None) if prices.index.tz is not None else prices.index

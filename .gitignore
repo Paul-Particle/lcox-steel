@@ -14,12 +14,14 @@ venv/
 .env
 
 # Data files
+*.parquet
+# NEMOSIS still manages its own feather cache under data/nem_cache/
 *.feather
 *.CSV
 entsoe_cache/
 
 # Derived workflow outputs (rebuilt by snakemake)
-resources/*.feather
+resources/*.parquet
 resources/entsoe/
 resources/res_cf/
 # Derived shape files are committed (small, reproducible outputs):
