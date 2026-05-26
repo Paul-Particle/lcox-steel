@@ -1,0 +1,59 @@
+area,description
+DE_LU,"German bidding zone (+ Luxemburg), since 2018"
+DK_1,
+DK_2,
+FR,
+ES,
+AL,Albania
+AT,
+BY,Belarus
+BE,
+BA,Bosnia Herzegovina
+BG,
+HR,
+CY,Cyprus
+CZ,
+DE_AT_LU,old German zone
+CZ_DE_SK,old German zone
+EE,Estonia
+FI,
+MK,Macedonia
+GR,
+IS,Iceland
+HU,
+IE_SEM,Ireland and Northern Ireland
+IT_CNOR,Italy has lots of virtual zones to manage congestion
+IT_CSUD,Italy has lots of virtual zones to manage congestion
+IT_NORD,Italy has lots of virtual zones to manage congestion
+IT_SARD,Italy has lots of virtual zones to manage congestion
+IT_SICI,Italy has lots of virtual zones to manage congestion
+IT_SUD,Italy has lots of virtual zones to manage congestion
+RU_KGD,Kaliningrad (Russia)
+LV,
+LT,
+MT,Malta
+ME,Montenegro (not coupled?)
+GB,No(t much?) data since Brexit
+GE,Georgia (not coupled?)
+NL,
+NO_1,Norway has 5 zones
+NO_2,Norway has 5 zones
+NO_3,Norway has 5 zones
+NO_4,Norway has 5 zones
+NO_5,Norway has 5 zones
+PL,
+PT,
+MD,Moldova
+RO,
+RU,Russia
+SE_1,
+SE_2,
+SE_3,
+SE_4,
+RS,Serbia (not coupled?)
+SK,Slovakia
+SI,Slovenia
+CH,
+TR,Turkey (not coupled)
+UA,"Ukraine (not coupled, just synchronized?)"
+XK,Kosovo (not coupled)

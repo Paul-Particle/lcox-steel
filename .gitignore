@@ -18,7 +18,8 @@ venv/
 # NEMOSIS still manages its own feather cache under data/nem_cache/
 *.feather
 *.CSV
-entsoe_cache/
+data/entsoe_cache/*
+!data/entsoe_cache/entsoe_bidding_zones.csv
 
 # Derived workflow outputs (rebuilt by snakemake)
 resources/*.parquet
