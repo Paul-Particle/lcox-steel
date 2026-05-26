@@ -110,25 +110,27 @@ def run(
 
     cf_timeseries = load_cf_timeseries(cf_path)
 
-    techs = scenario_cfg["techs"]
-    missing = [t for t in techs if t not in cf_timeseries.columns]
+    re_techs = [t for t in scenario_cfg["techs"] if t != "grid"]
+    missing = [t for t in re_techs if t not in cf_timeseries.columns]
     if missing:
         raise KeyError(f"Techs {missing} not found in CF file columns: {list(cf_timeseries.columns)}")
-    cf_timeseries = cf_timeseries[techs] if techs else cf_timeseries.iloc[:, :0]
+    cf_timeseries = cf_timeseries[re_techs] if re_techs else cf_timeseries.iloc[:, :0]
 
     price_series = None
-    if scenario_cfg.get("grid_connected", False):
+    if "grid" in scenario_cfg.get("techs", []):
         if prices_path is None:
             raise ValueError(
-                f"Scenario '{scenario_name}' is grid_connected but no prices input was provided."
+                f"Scenario '{scenario_name}' includes grid but no prices input was provided."
             )
-        if "grid_price_area" not in scenario_cfg:
+        if "bidding_zone" not in project_cfg:
             raise KeyError(
-                f"Scenario '{scenario_name}' is grid_connected but lacks 'grid_price_area' in projects.yaml."
+                f"Scenario '{scenario_name}' includes grid but project '{project_name}' "
+                "lacks 'bidding_zone' in projects.yaml."
             )
+        year = int(project_cfg["time_period"]["start_date"][:4])
         raw_prices = load_price_series(
-            area=scenario_cfg["grid_price_area"],
-            year=project_cfg["year"],
+            area=project_cfg["bidding_zone"],
+            year=year,
             processed_path=prices_path,
         )
         price_series = raw_prices.reindex(cf_timeseries.index)

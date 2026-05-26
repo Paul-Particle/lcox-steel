@@ -58,15 +58,17 @@ def h2_dri_inputs(wildcards):
     proj = _find_project(wildcards.project)
     scen = _find_scenario(proj, wildcards.scenario)
 
-    cc = proj["country"].lower()
-    variant = proj.get("cf_variant", "avg")
-    cf_stem = f"{cc}_cf_{proj['year']}" if variant == "avg" else f"{cc}_cf_{proj['year']}_{variant}"
+    cc   = proj["cf_area"]
+    year = proj["time_period"]["start_date"][:4]
+    sel  = scen.get("site_selection", "country-average")
+    suffix   = "" if sel == "country-average" else f"_{sel}"
+    cf_stem  = f"{cc}_cf_{year}{suffix}"
 
     inputs = {
         "cf":          f"resources/res_cf/{cf_stem}.parquet",
         "assumptions": "config/assumptions.yaml",
         "projects":    "config/projects.yaml",
     }
-    if scen.get("grid_connected"):
+    if "grid" in scen.get("techs", []):
         inputs["prices"] = "resources/entsoe_processed.parquet"
     return inputs

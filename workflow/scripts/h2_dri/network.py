@@ -29,14 +29,14 @@ def build_network(
     """
     Build (but do not solve) a PyPSA network.
 
-    project_cfg: one entry from projects.yaml (with 'plant' and 'scenarios' resolved)
-    assumptions: full assumptions.yaml dict
+    project_cfg: one entry from projects.yaml
+    assumptions: full assumptions.yaml dict (must include 'plant' and 'finance' keys)
     cf_timeseries: DataFrame indexed by DatetimeIndex, columns = tech names in assumptions.res
     price_series: optional hourly price Series (€/MWh), same index as cf_timeseries
     """
     wacc = assumptions["finance"]["default_wacc"]
     el_cfg = assumptions["electrolyser"]
-    plant = project_cfg["plant"]
+    plant = assumptions["plant"]
     h2_lhv_kwh_per_kg = assumptions["h2"]["lhv_kwh_per_kg"]
 
     el_mw = dri_to_el_mw(

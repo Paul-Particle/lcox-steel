@@ -1,33 +1,23 @@
-data:
-  processed_path: "resources/entsoe_processed.feather"
-  cf_dir: "resources/res_cf"
-
-# FX rates for converting non-EUR price feeds. Used by orchestrators that
-# load non-EUR prices (e.g. NEM AUD prices in scripts/tests/vic_2025_lcoh.py).
-# Keys: eur_per_<iso3>. Bump if you need real accuracy.
-fx:
-  eur_per_aud: 0.61
-
 projects:
   - name: DE_2023_baseline
-    country: DE
-    year: 2023
-    cf_variant: avg           # avg | bestsite_p95
-    plant:
-      dri_mt_per_year: 2.0
-      h2_intensity_kg_per_t_dri: 50.0
-      availability_target: 1.0
+    time_period:
+      start_date: "20230101"
+      end_date:   "20231231"
+    bidding_zone: DE_LU     # ENTSO-E zone key; used when any scenario includes grid
+    cf_area: de             # key in config.res_cf.countries
     scenarios:
       - name: dedicated_res
-        grid_connected: false
+        # techs: future additions — grid, hvac, hvdc, heat_storage, and others
         techs: [wind_onshore, solar]
+        # site_selection: one of pypsa-optimized, random, complementarity-optimized,
+        #   country-average, wind-p95, solar-p95, coordinates
+        site_selection: country-average
       - name: wind_only
-        grid_connected: false
         techs: [wind_onshore]
+        site_selection: country-average
       - name: solar_only
-        grid_connected: false
         techs: [solar]
+        site_selection: country-average
       - name: grid_connected
-        grid_connected: true
-        techs: [wind_onshore, solar]
-        grid_price_area: DE_LU  # key in entsoe_processed.feather
+        techs: [wind_onshore, solar, grid]
+        site_selection: country-average
