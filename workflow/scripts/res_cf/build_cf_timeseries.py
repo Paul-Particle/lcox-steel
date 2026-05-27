@@ -19,9 +19,9 @@ CF_AREA       = "de"
 START_DATE    = "20230101"
 END_DATE      = "20231231"
 CUTOUT_PATH   = CUTOUTS / f"{CF_AREA}_{START_DATE}_{END_DATE}.nc"
-WIND_ON_OUT   = RES_CF / f"{CF_AREA}_wind_onshore_{START_DATE}_{END_DATE}.parquet"
-WIND_OFF_OUT  = RES_CF / f"{CF_AREA}_wind_offshore_{START_DATE}_{END_DATE}.parquet"
-SOLAR_OUT     = RES_CF / f"{CF_AREA}_solar_{START_DATE}_{END_DATE}.parquet"
+WIND_ON_OUT   = RES_CF / f"{CF_AREA}_wind_onshore_country-average_{START_DATE}_{END_DATE}.parquet"
+WIND_OFF_OUT  = RES_CF / f"{CF_AREA}_wind_offshore_country-average_{START_DATE}_{END_DATE}.parquet"
+SOLAR_OUT     = RES_CF / f"{CF_AREA}_solar_country-average_{START_DATE}_{END_DATE}.parquet"
 RES_CF_CFG    = load_res_cf_cfg()
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):

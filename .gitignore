@@ -18,6 +18,7 @@ venv/
 # NEMOSIS still manages its own feather cache under data/nem_cache/
 *.feather
 *.CSV
+!config/projects.csv
 data/entsoe_cache/*
 !data/entsoe_cache/entsoe_bidding_zones.csv
 

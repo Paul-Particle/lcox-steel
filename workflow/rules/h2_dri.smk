@@ -1,9 +1,9 @@
 rule compile_report:
     input:
-        networks=lambda wc: [
-            f"results/{wc.project}/{s}.nc"
-            for s in config["projects"][wc.project]["scenarios"]
-        ],
+        networks=collect(
+            "results/{item.project}/{item.scenario}.nc",
+            item=lookup(query="project == '{project}'", within=projects_df),
+        ),
         assumptions="config/assumptions.yaml",
     output:
         "results/report_{project}.csv",
@@ -13,15 +13,15 @@ rule compile_report:
 
 rule h2_dri_optimize:
     input:
-        # Map each scenario tech to its resolved registry path (order preserved so
-        # run.py can zip techs ↔ files). tech_inputs templates were pre-resolved
-        # per project in common.smk.
-        tech_inputs=lambda wc: [
-            config["projects"][wc.project]["tech_inputs"][tech]
-            for tech in config["projects"][wc.project]["scenarios"][wc.scenario]["techs"]
-        ],
+        # One row per (project, scenario, tech) in projects.csv; collect builds
+        # each tech's input path from the row's columns. Order is preserved so
+        # run.py can zip techs ↔ files.
+        tech_inputs=collect(
+            "resources/{item.pipeline}/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}.parquet",
+            item=lookup(query="project == '{project}' and scenario == '{scenario}'", within=projects_df),
+        ),
         assumptions="config/assumptions.yaml",
-        projects="config/projects.yaml",
+        projects="config/projects.csv",
     output:
         network="results/{project}/{scenario}.nc",
         summary="results/{project}/{scenario}_summary.csv",

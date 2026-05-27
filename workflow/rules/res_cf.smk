@@ -59,8 +59,8 @@ rule build_cf_timeseries:
         regions="resources/shapes/regions.parquet",
         offshore_regions="resources/shapes/offshore_regions.parquet",
     output:
-        wind_onshore= "resources/res_cf/{cf_area}_wind_onshore_{start_date}_{end_date}.parquet",
-        wind_offshore="resources/res_cf/{cf_area}_wind_offshore_{start_date}_{end_date}.parquet",
-        solar=        "resources/res_cf/{cf_area}_solar_{start_date}_{end_date}.parquet",
+        wind_onshore= "resources/res_cf/{cf_area}_wind_onshore_country-average_{start_date}_{end_date}.parquet",
+        wind_offshore="resources/res_cf/{cf_area}_wind_offshore_country-average_{start_date}_{end_date}.parquet",
+        solar=        "resources/res_cf/{cf_area}_solar_country-average_{start_date}_{end_date}.parquet",
     script:
         "../scripts/res_cf/build_cf_timeseries.py"

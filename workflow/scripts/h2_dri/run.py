@@ -35,11 +35,11 @@ from common._paths import REPO_ROOT
 PROJECT_NAME      = "DE_2023_baseline"
 SCENARIO_NAME     = "dedicated_res"
 TECH_INPUT_FILES  = [
-    REPO_ROOT / "resources/res_cf/de_wind_onshore_20230101_20231231.parquet",
-    REPO_ROOT / "resources/res_cf/de_solar_20230101_20231231.parquet",
+    REPO_ROOT / "resources/res_cf/de_wind_onshore_country-average_20230101_20231231.parquet",
+    REPO_ROOT / "resources/res_cf/de_solar_country-average_20230101_20231231.parquet",
 ]
 ASSUMPTIONS_PATH  = REPO_ROOT / "config/assumptions.yaml"
-PROJECTS_PATH     = REPO_ROOT / "config/projects.yaml"
+PROJECTS_PATH     = REPO_ROOT / "config/projects.csv"
 OUT_NETWORK       = REPO_ROOT / "results" / PROJECT_NAME / f"{SCENARIO_NAME}.nc"
 OUT_SUMMARY       = REPO_ROOT / "results" / PROJECT_NAME / f"{SCENARIO_NAME}_summary.csv"
 
@@ -91,16 +91,18 @@ def run(
     scenario_name: str,
     tech_input_files: list[str | Path],
     assumptions: dict,
-    projects_cfg: dict,
+    projects_df: pd.DataFrame,
     out_network: Path,
     out_summary: Path,
 ) -> dict:
-    project_cfg  = projects_cfg["projects"][project_name]
-    scenario_cfg = project_cfg["scenarios"][scenario_name]
     h2_lhv_kwh_per_kg = assumptions["h2"]["lhv_kwh_per_kg"]
 
-    # Map each tech to its resolved input file (collect preserves list order).
-    techs = list(scenario_cfg["techs"])
+    # Techs for this (project, scenario) in projects.csv row order — the same
+    # order collect() produced tech_input_files in, so we can zip them.
+    rows = projects_df.query(
+        "project == @project_name and scenario == @scenario_name"
+    )
+    techs = rows["tech"].tolist()
     tech_file_map = dict(zip(techs, [Path(f) for f in tech_input_files]))
 
     cf_files   = {t: f for t, f in tech_file_map.items() if t != "grid"}
@@ -132,15 +134,15 @@ def run(
 
 
 def main() -> None:
-    assumptions  = load_yaml(ASSUMPTIONS_PATH)
-    projects_cfg = load_yaml(PROJECTS_PATH)
+    assumptions = load_yaml(ASSUMPTIONS_PATH)
+    projects_df = pd.read_csv(PROJECTS_PATH, dtype={"start_date": str, "end_date": str})
 
     summary = run(
         project_name=PROJECT_NAME,
         scenario_name=SCENARIO_NAME,
         tech_input_files=TECH_INPUT_FILES,
         assumptions=assumptions,
-        projects_cfg=projects_cfg,
+        projects_df=projects_df,
         out_network=OUT_NETWORK,
         out_summary=OUT_SUMMARY,
     )

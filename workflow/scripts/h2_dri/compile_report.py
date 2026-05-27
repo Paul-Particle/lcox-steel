@@ -25,7 +25,9 @@ h2_lhv_kwh_per_kg = assumptions["h2"]["lhv_kwh_per_kg"]
 project_name = snakemake.wildcards.project
 
 rows = []
-for nc_path in snakemake.input.networks:
+# networks may contain duplicates (collect fans out per tech row); dedupe
+# while preserving order so each scenario appears once.
+for nc_path in dict.fromkeys(snakemake.input.networks):
     nc_path = Path(nc_path)
     scenario_name = nc_path.stem
     n = pypsa.Network()

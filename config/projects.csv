@@ -1,0 +1,8 @@
+project,scenario,tech,variant,pipeline,area,start_date,end_date
+DE_2023_baseline,dedicated_res,wind_onshore,country-average,res_cf,de,20230101,20231231
+DE_2023_baseline,dedicated_res,solar,country-average,res_cf,de,20230101,20231231
+DE_2023_baseline,wind_only,wind_onshore,country-average,res_cf,de,20230101,20231231
+DE_2023_baseline,solar_only,solar,country-average,res_cf,de,20230101,20231231
+DE_2023_baseline,grid_connected,wind_onshore,country-average,res_cf,de,20230101,20231231
+DE_2023_baseline,grid_connected,solar,country-average,res_cf,de,20230101,20231231
+DE_2023_baseline,grid_connected,grid,dayahead,entsoe,DE_LU,20230101,20231231

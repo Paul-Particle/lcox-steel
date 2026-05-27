@@ -1,6 +1,6 @@
 # Download date range covers the union of all project periods.
-_dl_start = min(p["start_date"] for p in config["projects"].values())
-_dl_end   = max(p["end_date"]   for p in config["projects"].values())
+_dl_start = projects_df["start_date"].min()
+_dl_end   = projects_df["end_date"].max()
 
 
 rule download_entsoe:
@@ -27,8 +27,8 @@ rule process_entsoe:
         start_date="{start_date}",
         end_date="{end_date}",
     output:
-        prices="resources/entsoe/{bidding_zone}_{start_date}_{end_date}.parquet",
-        full="resources/entsoe/{bidding_zone}_{start_date}_{end_date}_full.parquet",
+        prices="resources/entsoe/{bidding_zone}_grid_dayahead_{start_date}_{end_date}.parquet",
+        full="resources/entsoe/{bidding_zone}_grid_dayahead_{start_date}_{end_date}_full.parquet",
     script:
         "../scripts/grid/process_entsoe.py"
 
