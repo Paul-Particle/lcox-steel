@@ -7,11 +7,10 @@ This project calculates the levelized cost of hydrogen (LCOH) for green-steel DR
 ```
 lcox-steel/
 ├── workflow/               # Snakemake workflow (standard layout)
-│   ├── Snakefile           # Thin index: configfiles + includes + rule all
+│   ├── Snakefile           # configfiles + sys.path + includes + rule all
 │   ├── rules/
-│   │   ├── common.smk      # Constants, wildcard_constraints, helpers
-│   │   ├── grid.smk        # download_entsoe, download_nem, process_entsoe
-│   │   ├── res_cf.smk      # extract + atlite CF pipeline
+│   │   ├── grid.smk        # ENTSO-E + NEM download/process rules
+│   │   ├── res_cf.smk      # extract shapefiles + atlite CF pipeline
 │   │   └── h2_dri.smk      # PyPSA optimisation rule
 │   ├── scripts/
 │   │   ├── grid/           # Grid data pipeline (ENTSO-E + NEM)
@@ -21,8 +20,6 @@ lcox-steel/
 │   │   │   ├── build_offshore_regions.py
 │   │   │   ├── make_cutout.py
 │   │   │   ├── build_cf_timeseries.py
-│   │   │   ├── concat_quarters.py
-│   │   │   ├── combine_techs.py
 │   │   │   ├── resource_spread.py
 │   │   │   ├── make_bestsite_cf.py
 │   │   │   ├── complementarity.py
@@ -37,26 +34,24 @@ lcox-steel/
 │   ├── notebooks/          # API exploration notebooks (entsoe, nem)
 │   └── common/             # Shared helpers (_paths.py, _stubs.py)
 ├── config/
-│   ├── config.yaml         # Snakemake pipeline config (dates, countries, CF parameters)
+│   ├── config.yaml         # Pipeline knobs (countries, turbine specs, CF parameters)
 │   ├── assumptions.yaml    # Techno-economic defaults (CAPEX, OPEX, WACC, lifetimes)
-│   └── projects.yaml       # Project + scenario definitions for PyPSA runs
+│   └── projects.csv        # Project + scenario definitions — one row per (project, scenario, tech)
 ├── environment.yaml        # Conda environment (lcox-steel)
 ├── data/                   # Raw / external / expensive (not produced by this repo)
 │   ├── entsoe_cache/       # Internal ENTSO-E monthly cache (area/year-month/data_type) — gitignored
 │   ├── nem_cache/          # AEMO NEMOSIS cache — CSV/parquet gitignored; one committed XLSX (see §External data files)
 │   └── shapes/             # Raw shapefiles: ne_110m_admin_0_countries/, eez/ (gitignored — see below)
 ├── resources/              # Derived / Snakemake-tracked outputs (reproducible)
-│   ├── entsoe/{area}/{data_type}.parquet  # Stitched per-area, per-data_type ENTSO-E series
-│   ├── entsoe_processed.parquet           # Wide hourly grid dataset (MultiIndex columns)
-│   ├── nem_processed.parquet              # Australian NEM equivalent
-│   ├── shapes/             # Derived GeoParquet (regions, offshore_regions — committed in git)
-│   └── res_cf/
-│       ├── quarterly/      # Per-tech CF time series by quarter (intermediate)
-│       ├── annual/         # Per-tech CF time series full-year (intermediate)
-│       ├── <cc>_cf_<year>.parquet              # Combined national CF
-│       ├── <cc>_cf_<year>_bestsite_p95.parquet # P95 best-site profiles
-│       ├── resource_spread_<year>.parquet      # Spatial resource statistics
-│       └── <cc>_complementarity_top<N>_<year>.parquet
+│   ├── entsoe/{area}/{data_type}_{start}_{end}.parquet  # Raw per-type ENTSO-E downloads
+│   ├── entsoe/{area}_grid_dayahead_{start}_{end}.parquet  # Hourly day-ahead price (EUR/MWh)
+│   ├── entsoe/{area}_grid_full_{start}_{end}.parquet      # All 6 data types, native resolution
+│   ├── nem/raw/{table}_{start}_{end}.parquet              # Raw AEMO MMSDM dispatch tables
+│   ├── nem/{area}_grid_dayahead_{start}_{end}.parquet     # Hourly price (AUD→EUR, 1h mean)
+│   ├── nem/{area}_grid_full_{start}_{end}.parquet         # All tables + derived columns, 5-min
+│   ├── shapes/{cf_area}_geo.parquet                       # Onshore country geometry (GeoParquet)
+│   ├── shapes/{cf_area}_offshore_geo.parquet              # EEZ-clipped offshore geometry
+│   └── res_cf/{cf_area}_{tech}_country-average_{start}_{end}.parquet  # Hourly CF time series
 ├── cutouts/                # Atlite ERA5 cutout files (gitignored)
 ├── .atlite-cache/          # Atlite scratch working dir (gitignored)
 └── results/                # PyPSA optimization outputs (.nc + summary CSVs)
@@ -77,12 +72,12 @@ conda activate lcox-steel
 
 Two large geographic datasets must be downloaded manually. Snakemake has two `extract_*_shapefile` rules that handle unzipping — just put the ZIPs at the canonical paths below (create the directories first) and the pipeline will extract them when it needs them.
 
-**World EEZ v12** — https://www.marineregions.org/downloads.php (free registration). Choose "World EEZ v12 (2023)" → Shapefile. Save (or rename) the download as `data/shapes/eez/eez_v12.zip`. Any v11 or v12 works; needs `ISO_TER1` and `POL_TYPE` columns.
+**World EEZ v12** — https://www.marineregions.org/downloads.php (free registration). Choose "World EEZ v12 (2023)" → Shapefile. Save (or rename) the download as `data/shapes/offshore_zones/eez_v12.zip`. Any v11 or v12 works; needs `ISO_TER1` and `POL_TYPE` columns.
 
 **Natural Earth 1:110m Admin-0 countries** — https://www.naturalearthdata.com/downloads/110m-cultural-vectors/. Save as `data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip`.
 
 ```bash
-mkdir -p data/shapes/eez data/shapes/ne_110m_admin_0_countries
+mkdir -p data/shapes/offshore_zones data/shapes/ne_110m_admin_0_countries
 # then drop the two ZIPs into those directories with the names above
 ```
 
@@ -104,7 +99,7 @@ Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` follow
 
 ## Running the pipelines
 
-Both pipelines are managed by Snakemake. `config/config.yaml` controls which countries and years are processed.
+All pipelines are managed by Snakemake. `config/projects.csv` drives the full DAG — each row is one `(project, scenario, tech)` input, and adding a project means adding rows, not editing the Snakefile.
 
 ### Full workflow (dry-run first)
 
@@ -113,50 +108,54 @@ snakemake -n          # preview what would run
 snakemake --cores 4   # execute
 ```
 
-### Grid data only
+### Grid data for one area
 
 ```bash
-snakemake resources/entsoe_processed.parquet --cores 4 --resources entsoe_api=4
+# ENTSO-E day-ahead prices (e.g. DE_LU, 2023):
+snakemake resources/entsoe/DE_LU_grid_dayahead_20230101_20231231.parquet --cores 4 --resources entsoe_api=4
+
+# NEM day-ahead prices (e.g. VIC1, 2025):
+snakemake resources/nem/VIC1_grid_dayahead_20250101_20251231.parquet --cores 4
 ```
 
-Downloads and stitches ENTSO-E data into `resources/entsoe_processed.parquet` (MultiIndex columns `(area, metric)`, hourly UTC DatetimeIndex). The `download_entsoe` rule manages a per-month cache in `data/entsoe_cache/` internally; once a month is cached it is never re-fetched.
+The `download_entsoe` rule manages a per-month cache in `data/entsoe_cache/`; once a month is cached it is never re-fetched. `--resources entsoe_api=N` caps concurrent ENTSO-E API calls (their rate limit is ~400/min per key).
 
-`--resources entsoe_api=N` caps concurrent ENTSO-E API calls (their rate limit is ~400/min globally per API key — without throttling, a cold-cache build can exhaust the quota).
-
-To force a refresh, delete the relevant cache files then re-run snakemake:
+To force a refresh, delete the relevant cache files then re-run:
 
 ```bash
 rm -rf data/entsoe_cache/DE_LU/2024-12   # one month for one area
 rm -rf data/entsoe_cache/*/2024-12       # one month for all areas
-rm resources/entsoe/DE_LU/prices.parquet # force the rule to re-run too
 ```
 
-Months that fail (transient ENTSO-E errors, network blips) are retried 3× with exponential backoff inside the rule. Months that still fail are logged and skipped; the rule writes a partial output covering only the successful months and fails only if zero months succeeded. The next run will automatically re-attempt the missing months.
+Months that fail (transient ENTSO-E errors, network blips) are retried 3× with exponential backoff inside the rule. Months that still fail are logged and skipped; the rule writes partial output and fails only if zero months succeeded. The next run re-attempts the missing months automatically.
 
-### res_cf pipeline for one country
+### res_cf pipeline for one area + tech
 
 ```bash
-snakemake "resources/res_cf/de_cf_2023.parquet" --cores 4
+# wind onshore CF for Germany, 2023:
+snakemake resources/res_cf/de_wind_onshore_country-average_20230101_20231231.parquet --cores 4
 ```
 
-This chains: `build_regions` → `build_offshore_regions` → `make_cutout` (4 quarters, ERA5) → `build_cf_timeseries` → `concat_quarters` → `combine_techs`.
+This chains: `build_regions` → `build_offshore_regions` → `make_cutout` (ERA5) → `build_cf_timeseries`. The `{tech}` wildcard accepts `wind_onshore`, `wind_offshore`, or `solar`.
 
 ### PyPSA investment optimization
+
+Snakemake runs this automatically as part of `rule all`. For ad-hoc runs:
 
 ```bash
 python workflow/scripts/h2_dri/run.py --project DE_2023_baseline --scenario dedicated_res
 python workflow/scripts/h2_dri/run.py --project DE_2023_baseline   # all scenarios
 ```
 
-Results are written to `results/<project_name>/` as `.nc` (full PyPSA network) and `_summary.csv` (LCOH + optimal capacities).
+Results are written to `results/<project>/` as `.nc` (full PyPSA network) and `_summary.csv` (LCOH + optimal capacities).
 
-Edit `config/projects.yaml` to add projects and scenarios. Edit `config/assumptions.yaml` to change techno-economic defaults.
+Edit `config/projects.csv` to add projects and scenarios. Edit `config/assumptions.yaml` to change techno-economic defaults.
 
 ## Data formats
 
-**Grid data** (`resources/entsoe_processed.parquet`): pandas DataFrame with a UTC hourly DatetimeIndex and MultiIndex columns `(area_code, metric)`. Metrics include `price`, `load_actual`, `load_forecast`, `res`, `generation`, `crossborder`.
+**Grid data** (`resources/entsoe/{area}_grid_dayahead_{start}_{end}.parquet`): pandas DataFrame with a UTC hourly DatetimeIndex and a single `price` column (EUR/MWh). The `_full` variant has MultiIndex columns `(area_code, metric)` covering all six ENTSO-E data types at native resolution. NEM equivalents live under `resources/nem/` with the same naming.
 
-**Capacity factors** (`resources/res_cf/<cc>_cf_<year>.parquet`): hourly parquet with a `time` column and columns `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
+**Capacity factors** (`resources/res_cf/{cf_area}_{tech}_country-average_{start}_{end}.parquet`): hourly parquet, DatetimeIndex named `time`, single column `cf` in [0, 1]. One file per `(area, tech, date range)`; `{tech}` is `wind_onshore`, `wind_offshore`, or `solar`.
 
 **Best-site profiles** (`resources/res_cf/<cc>_cf_<year>_bestsite_p95.parquet`): same format; P95 grid cell extracted directly from the Atlite CF grid with 3×3 spatial averaging for wind.
 

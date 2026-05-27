@@ -1,18 +1,23 @@
-rule extract_eez_shapefile:
+wildcard_constraints:
+    cf_area=r"[a-z]{2,3}",
+    tech=r"wind_onshore|wind_offshore|solar",
+
+
+rule extract_offshore_zone_shapefile:
     input:
-        "data/shapes/eez/eez_v12.zip"
+        "data/shapes/offshore_zones/eez_v12.zip",
     output:
-        shp="data/shapes/eez/eez_v12.shp",
-        shx="data/shapes/eez/eez_v12.shx",
-        dbf="data/shapes/eez/eez_v12.dbf",
-        prj="data/shapes/eez/eez_v12.prj",
+        shp="data/shapes/offshore_zones/eez_v12.shp",
+        shx="data/shapes/offshore_zones/eez_v12.shx",
+        dbf="data/shapes/offshore_zones/eez_v12.dbf",
+        prj="data/shapes/offshore_zones/eez_v12.prj",
     script:
         "../scripts/res_cf/extract_shapefile.py"
 
 
 rule extract_ne_countries_shapefile:
     input:
-        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"
+        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
     output:
         shp="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp",
         shx="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shx",
@@ -24,109 +29,68 @@ rule extract_ne_countries_shapefile:
 
 rule build_regions:
     input:
-        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp"
+        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp",
     output:
-        "resources/shapes/regions.parquet"
+        "resources/shapes/{cf_area}_geo.parquet",
+    params:
+        iso3=lookup(dpath="res_cf/countries/{cf_area}/iso3", within=config),
+        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
+        mainland_bbox=lookup(
+            dpath="res_cf/countries/{cf_area}/mainland_bbox",
+            within=config,
+            default=None,
+        ),
     script:
         "../scripts/res_cf/build_regions.py"
 
 
 rule build_offshore_regions:
     input:
-        regions="resources/shapes/regions.parquet",
-        eez="data/shapes/eez/eez_v12.shp"
+        regions="resources/shapes/{cf_area}_geo.parquet",
+        offshore_zone="data/shapes/offshore_zones/eez_v12.shp",
     output:
-        "resources/shapes/offshore_regions.parquet"
+        "resources/shapes/{cf_area}_offshore_geo.parquet",
+    params:
+        iso3=lookup(dpath="res_cf/countries/{cf_area}/iso3", within=config),
+        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
+        offshore_max_distance_km=lookup(
+            dpath="res_cf/offshore_max_distance_km", within=config
+        ),
     script:
         "../scripts/res_cf/build_offshore_regions.py"
 
 
 rule make_cutout:
     input:
-        regions="resources/shapes/regions.parquet"
+        regions="resources/shapes/{cf_area}_geo.parquet",
     output:
-        "cutouts/{country}_{year}_{quarter}.nc"
+        protected("cutouts/{cf_area}_{start_date}_{end_date}.nc"),
+    params:
+        coarse=lookup(
+            dpath="res_cf/countries/{cf_area}/coarse", within=config, default=False
+        ),
+        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
+        bbox_pad_deg=lookup(dpath="res_cf/cutout/bbox_pad_deg", within=config),
+        monthly_requests=lookup(dpath="res_cf/cutout/monthly_requests", within=config),
     script:
         "../scripts/res_cf/make_cutout.py"
 
 
 rule build_cf_timeseries:
     input:
-        cutout="cutouts/{country}_{year}_{quarter}.nc",
-        regions="resources/shapes/regions.parquet"
+        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/{cf_area}_geo.parquet",
+        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
     output:
-        wind_onshore="resources/res_cf/quarterly/{country}_wind_onshore_{year}_{quarter}.parquet",
-        wind_offshore="resources/res_cf/quarterly/{country}_wind_offshore_{year}_{quarter}.parquet",
-        solar="resources/res_cf/quarterly/{country}_solar_{year}_{quarter}.parquet"
+        "resources/res_cf/{cf_area}_{tech}_country-average_{start_date}_{end_date}.parquet",
+    params:
+        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
+        wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
+        wind_offshore_turbine=lookup(
+            dpath="res_cf/wind_offshore_turbine", within=config
+        ),
+        pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
+        pv_orientation=lookup(dpath="res_cf/pv_orientation", within=config),
+        wind_cf=lookup(dpath="res_cf/wind_cf", within=config),
     script:
         "../scripts/res_cf/build_cf_timeseries.py"
-
-
-rule concat_quarters:
-    input:
-        wind_onshore=expand("resources/res_cf/quarterly/{{country}}_wind_onshore_{{year}}_{quarter}.parquet",
-                            quarter=CF_QUARTERS),
-        wind_offshore=expand("resources/res_cf/quarterly/{{country}}_wind_offshore_{{year}}_{quarter}.parquet",
-                             quarter=CF_QUARTERS),
-        solar=expand("resources/res_cf/quarterly/{{country}}_solar_{{year}}_{quarter}.parquet",
-                     quarter=CF_QUARTERS),
-    output:
-        wind_onshore="resources/res_cf/annual/{country}_wind_onshore_{year}.parquet",
-        wind_offshore="resources/res_cf/annual/{country}_wind_offshore_{year}.parquet",
-        solar="resources/res_cf/annual/{country}_solar_{year}.parquet"
-    script:
-        "../scripts/res_cf/concat_quarters.py"
-
-
-rule combine_techs:
-    input:
-        wind_onshore="resources/res_cf/annual/{country}_wind_onshore_{year}.parquet",
-        wind_offshore="resources/res_cf/annual/{country}_wind_offshore_{year}.parquet",
-        solar="resources/res_cf/annual/{country}_solar_{year}.parquet"
-    output:
-        "resources/res_cf/{country}_cf_{year}.parquet"
-    script:
-        "../scripts/res_cf/combine_techs.py"
-
-
-rule resource_spread:
-    input:
-        cutouts=expand("cutouts/{country}_{{year}}_{quarter}.nc",
-                       country=CF_COUNTRIES, quarter=CF_QUARTERS),
-        national_cfs=expand("resources/res_cf/{country}_cf_{{year}}.parquet",
-                            country=CF_COUNTRIES),
-        regions="resources/shapes/regions.parquet",
-        offshore_regions="resources/shapes/offshore_regions.parquet"
-    output:
-        "resources/res_cf/resource_spread_{year}.parquet"
-    script:
-        "../scripts/res_cf/resource_spread.py"
-
-
-rule make_bestsite_cf:
-    input:
-        cutouts=expand("cutouts/{{country}}_{{year}}_{quarter}.nc",
-                       quarter=CF_QUARTERS),
-        regions="resources/shapes/regions.parquet",
-        offshore_regions="resources/shapes/offshore_regions.parquet"
-    output:
-        "resources/res_cf/{country}_cf_{year}_bestsite_p95.parquet"
-    script:
-        "../scripts/res_cf/make_bestsite_cf.py"
-
-
-rule complementarity:
-    input:
-        national_cf="resources/res_cf/{country}_cf_{year}.parquet",
-        cutouts=expand("cutouts/{{country}}_{{year}}_{quarter}.nc",
-                       quarter=CF_QUARTERS),
-        regions="resources/shapes/regions.parquet",
-        offshore_regions="resources/shapes/offshore_regions.parquet"
-    output:
-        # top_n is interpolated as a literal (not a wildcard) because the
-        # paired `avg` output doesn't depend on N — Snakemake requires all
-        # outputs of a rule to share the same wildcards.
-        top=f"resources/res_cf/{{country}}_complementarity_top{CF_TOP_N}_{{year}}.parquet",
-        avg="resources/res_cf/{country}_average_profiles_{year}.parquet"
-    script:
-        "../scripts/res_cf/complementarity.py"

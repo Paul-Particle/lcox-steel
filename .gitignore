@@ -15,17 +15,16 @@ venv/
 
 # Data files
 *.parquet
-# NEMOSIS still manages its own feather cache under data/nem_cache/
 *.feather
 *.CSV
-entsoe_cache/
+!config/projects.csv
+# data/nem_cache/ and data/entsoe_cache/ cache files are caught by the extension rules above;
+# only the committed reference files (NEM Registration xlsx, entsoe_bidding_zones.csv) escape them.
 
 # Derived workflow outputs (rebuilt by snakemake)
 resources/*.parquet
 resources/entsoe/
 resources/res_cf/
-# Derived shape files are committed (small, reproducible outputs):
-!resources/shapes/*.parquet
 
 # Log files
 logs/
@@ -56,7 +55,7 @@ cutouts/
 *.nc
 
 # Raw/large geodata (download manually — see README)
-data/shapes/eez/
+data/shapes/offshore_zones/
 data/shapes/ne_110m_admin_0_countries/
 data/shapes/*.zip
 

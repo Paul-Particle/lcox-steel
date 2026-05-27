@@ -134,14 +134,22 @@ FETCHERS = {
 # ── Month iteration & retry helpers ──────────────────────────────────────────
 
 def iter_months(start_date_str: str, end_date_str: str):
-    """Yield (YYYY-MM, month_start_ts, month_end_ts) for each month in [start, end]."""
+    """Yield (YYYY-MM, month_start_ts, next_month_start_ts) for each month that
+    overlaps [start, end].
+
+    The query end is the *next* month's start: ENTSO-E treats the end as
+    exclusive, so this fetches the full final day of each month (using MonthEnd
+    landed on the last day at 00:00, dropping the last day). Starting the range
+    at the first of start's month keeps a mid-month start_date from skipping it.
+    """
     start = pd.to_datetime(start_date_str, format="%Y%m%d")
     end = pd.to_datetime(end_date_str, format="%Y%m%d")
-    for ts in pd.date_range(start, end, freq="MS"):
+    first_month = start.to_period("M").to_timestamp()
+    for ts in pd.date_range(first_month, end, freq="MS"):
         ym = ts.strftime("%Y-%m")
         month_start = pd.Timestamp(ts, tz="Europe/Brussels")
-        month_end = month_start + pd.offsets.MonthEnd(0)
-        yield ym, month_start, month_end
+        next_month_start = month_start + pd.offsets.MonthBegin(1)
+        yield ym, month_start, next_month_start
 
 
 def fetch_with_retry(
@@ -171,9 +179,9 @@ def download_data(snakemake) -> None:
     area = snakemake.wildcards.area
     data_type = snakemake.wildcards.data_type
     output_path = Path(snakemake.output[0])
-    cache_dir = Path(snakemake.params.cache_dir)
-    start_date = snakemake.params.start_date
-    end_date = snakemake.params.end_date
+    cache_dir = Path("data/entsoe_cache")
+    start_date = snakemake.wildcards.start_date
+    end_date = snakemake.wildcards.end_date
 
     if data_type not in FETCHERS:
         raise ValueError(f"unknown data_type {data_type!r}")

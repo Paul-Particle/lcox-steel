@@ -1,68 +1,69 @@
 """
-Create one Atlite ERA5 cutout for a given country, year, and quarter.
+Create one Atlite ERA5 cutout for a given area and date range.
 
-Output: cutouts/{country}_{year}_{quarter}.nc
+Output: cutouts/{cf_area}_{start_date}_{end_date}.nc
 """
+
 from pathlib import Path
 
 import atlite
 import geopandas as gpd
 
-from common._paths import SHAPES_RES, ATLITE_CACHE
-from scripts.res_cf._helpers import QUARTER_DATES, cutout_path, load_res_cf_cfg
+from common._paths import ATLITE_CACHE, CUTOUTS, SHAPES_RES
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-REGIONS_PATH          = SHAPES_RES / "regions.parquet"
-OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"
-
-
-# Defaults for standalone use
-COUNTRY     = "de"
-YEAR        = 2023
-QUARTER     = "q1"
-OUTPUT_PATH = cutout_path(COUNTRY, YEAR, QUARTER)
-RES_CF_CFG  = load_res_cf_cfg()
+# Standalone defaults
+_REGIONS_PATH = SHAPES_RES / "de_geo.parquet"
+_CF_AREA = "de"
+_START_DATE = "20230101"
+_END_DATE = "20231231"
+_OUTPUT_PATH = CUTOUTS / "de_20230101_20231231.nc"
+_COARSE = False
+_REGION = "DE"
+_BBOX_PAD_DEG = 1.0
+_MONTHLY_REQUESTS = False
+_ATLITE_CACHE = ATLITE_CACHE
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    COUNTRY     = snakemake.wildcards.country.lower()
-    YEAR        = int(snakemake.wildcards.year)
-    QUARTER     = snakemake.wildcards.quarter
-    OUTPUT_PATH = Path(snakemake.output[0])
-    RES_CF_CFG  = snakemake.config["res_cf"]
+    _REGIONS_PATH = Path(snakemake.input.regions)
+    _CF_AREA = snakemake.wildcards.cf_area
+    _START_DATE = snakemake.wildcards.start_date
+    _END_DATE = snakemake.wildcards.end_date
+    _OUTPUT_PATH = Path(snakemake.output[0])
+    _COARSE = snakemake.params.coarse
+    _REGION = snakemake.params.region
+    _BBOX_PAD_DEG = snakemake.params.bbox_pad_deg
+    _MONTHLY_REQUESTS = snakemake.params.monthly_requests
 
-COUNTRIES_CFG = RES_CF_CFG["countries"]
-BBOX_PAD_DEG  = RES_CF_CFG.get("cutout", {}).get("bbox_pad_deg", 1.0)
+
+def _iso(yyyymmdd: str) -> str:
+    return f"{yyyymmdd[:4]}-{yyyymmdd[4:6]}-{yyyymmdd[6:8]}"
 
 
-def get_bounds(country: str, pad: float = BBOX_PAD_DEG) -> tuple[slice, slice]:
-    region_tag = COUNTRIES_CFG[country]["region"]
-    regions = gpd.read_parquet(REGIONS_PATH).to_crs(4326)
-    geoms = list(regions.loc[regions["region"] == region_tag, "geometry"])
-    if OFFSHORE_REGIONS_PATH.exists():
-        offshore = gpd.read_parquet(OFFSHORE_REGIONS_PATH).to_crs(4326)
-        geoms += list(offshore.loc[offshore["region"] == region_tag, "geometry"])
-    geom = gpd.GeoSeries(geoms, crs=4326).union_all()
+def get_bounds(pad: float) -> tuple[slice, slice]:
+    regions = gpd.read_parquet(_REGIONS_PATH).to_crs(4326)
+    geom = regions.loc[regions["region"] == _REGION, "geometry"].union_all()
     minx, miny, maxx, maxy = geom.bounds
     return slice(minx - pad, maxx + pad), slice(miny - pad, maxy + pad)
 
 
 def main() -> None:
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    ATLITE_CACHE.mkdir(parents=True, exist_ok=True)
+    _OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _ATLITE_CACHE.mkdir(parents=True, exist_ok=True)
 
-    x, y = get_bounds(COUNTRY)
-    start_suffix, end_suffix = QUARTER_DATES[QUARTER]
-    time_range = slice(f"{YEAR}{start_suffix}", f"{YEAR}{end_suffix}")
+    x, y = get_bounds(_BBOX_PAD_DEG)
+    # End at 23:00 so the full final day of hourly data is included.
+    time_range = slice(_iso(_START_DATE), f"{_iso(_END_DATE)} 23:00")
 
-    kwargs = dict(path=str(OUTPUT_PATH), module="era5", x=x, y=y, time=time_range)
-    if COUNTRIES_CFG[COUNTRY].get("coarse"):
+    kwargs = dict(path=str(_OUTPUT_PATH), module="era5", x=x, y=y, time=time_range)
+    if _COARSE:
         kwargs.update(dx=0.5, dy=0.5)
 
     cutout = atlite.Cutout(**kwargs)
-    cutout.prepare(tmpdir=str(ATLITE_CACHE), concurrent_requests=1)
-    print(f"Prepared: {OUTPUT_PATH}")
+    cutout.prepare(tmpdir=str(_ATLITE_CACHE), monthly_requests=_MONTHLY_REQUESTS)
+    print(f"Prepared: {_OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

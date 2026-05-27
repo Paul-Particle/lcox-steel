@@ -1,10 +1,15 @@
+# FX rates for converting non-EUR price feeds.
+# Keys: eur_per_<iso3>. Bump if you need real accuracy.
+fx:
+  eur_per_aud: 0.61
+
 finance:
   default_wacc: 0.07
 
-h2:
-  # Lower heating value of hydrogen. Used to convert between MW (PyPSA bus
-  # convention) and kg H2 in network.py / costs.py / sizing.py.
-  lhv_kwh_per_kg: 33.33
+plant:
+  dri_mt_per_year: 2.0
+  h2_intensity_kg_per_t_dri: 50.0
+  availability_target: 1.0
 
 res:
   wind_onshore:

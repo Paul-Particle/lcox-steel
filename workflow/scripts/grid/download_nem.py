@@ -303,59 +303,46 @@ def download_crossborder_data(start_time: str, end_time: str, cache_dir: Path, r
     return crossborder
 
 
-def download_data(snakemake) -> None:
-    cache_dir = Path(snakemake.params.cache_dir)
-    rebuild = snakemake.params.get("rebuild", False) # pyright: ignore[reportGeneralTypeIssues]
-    start_time = datetime.strptime(snakemake.params.start_date, "%Y%m%d")
-    start_time = start_time.strftime("%Y/%m/%d") + " 00:00:00"
-    end_time = datetime.strptime(snakemake.params.end_date, "%Y%m%d")
-    end_time = end_time.strftime("%Y/%m/%d") + " 23:59:59"
-    
-    prices = download_price_data(start_time, end_time, cache_dir, rebuild)
-    generation = download_generation_data(start_time, end_time, cache_dir, rebuild)
-    load = download_load_data(start_time, end_time, cache_dir, rebuild)
-    crossborder = download_crossborder_data(start_time, end_time, cache_dir, rebuild)
+TABLE_FETCHERS = {
+    "price": download_price_data,
+    "generation": download_generation_data,
+    "load": download_load_data,
+    "crossborder": download_crossborder_data,
+}
 
-    df_combined = pd.concat([prices, load, generation, crossborder], axis=1)
 
-    # Calculate Region-Specific Variables using a dictionary
-    # This is faster and cleaner than the manual list append loop
-    areas = ["NSW1", "VIC1", "QLD1", "SA1", "TAS1"]
-    frames = {}
+def download_table(snakemake) -> None:
+    """Fetch one NEM table (national, all regions) for a date range and write it
+    to resources/nem/raw/{nem_table}_{start}_{end}.parquet.
 
-    for a in areas:
-        if (a, 'load') in df_combined.columns:
-            # Extract Demand and Generation
-            d = df_combined[(a, 'load')]
-            # Use .get() to handle cases where a region might miss a fuel type (e.g., no solar in TAS1 historically)
-            w = df_combined.get((a, "wind_onshore"), pd.Series(0, index=df_combined.index))
-            s = df_combined.get((a, "solar"), pd.Series(0, index=df_combined.index))
+    NEMOSIS caches the underlying MMSDM files under data/nem_cache; refresh by
+    deleting those. process_nem / process_nem_full consume these raw tables, so
+    a price-only build never triggers the heavy generation (SCADA) fetch.
+    """
+    cache_dir = Path("data/nem_cache")
+    nem_table = snakemake.wildcards.nem_table
+    start_time = (
+        datetime.strptime(snakemake.wildcards.start_date, "%Y%m%d").strftime("%Y/%m/%d")
+        + " 00:00:00"
+    )
+    end_time = (
+        datetime.strptime(snakemake.wildcards.end_date, "%Y%m%d").strftime("%Y/%m/%d")
+        + " 23:59:59"
+    )
 
-            # Create a DataFrame for this region
-            region_df = pd.DataFrame(index=generation.index)
-            region_df["wind"] = w 
-            region_df["residual"] = d - (w + s)
+    df = TABLE_FETCHERS[nem_table](start_time, end_time, cache_dir, rebuild=False)
+    # AEMO writes SETTLEMENTDATE in NEM time (AEST = fixed UTC+10, no DST).
+    # Shift to UTC so NEM outputs align with ERA5 CF series and ENTSO-E prices.
+    if df.index.tz is not None:
+        df.index = df.index.tz_convert("UTC").tz_localize(None)
+    else:
+        df.index = df.index.tz_localize("Australia/Brisbane").tz_convert("UTC").tz_localize(None)
 
-            # Combine with other data for the region
-            frames[a] = pd.concat([df_combined[a], region_df], axis=1)
-
-    # Keys become the top level (Region), Columns become the second level (Variable)
-    df_final = pd.concat(frames.values(), axis=1, keys=frames.keys())
-
-    df_final.index = df_final.index.tz_localize(None)  # pyright: ignore[reportAttributeAccessIssue]
-
-    # Optional downsample. NEM is MW-instantaneous at 5-min boundaries, so the
-    # mean over the window is the right way to coarsen prices, loads, generation,
-    # and flows alike — all are MW quantities.
-    resample_freq = snakemake.params.get("resample_freq")  # pyright: ignore[reportGeneralTypeIssues]
-    if resample_freq:
-        before, _step = len(df_final), df_final.index.to_series().diff().median()
-        df_final = df_final.resample(resample_freq).mean()
-        print(f"Resampled {before} rows (~{_step}) → {len(df_final)} rows at {resample_freq}.")
-
-    df_final.to_parquet(snakemake.output[0], index=True)
-    print(f"Successfully saved NEM data to {snakemake.output[0]}")
+    out = Path(snakemake.output[0])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(out, index=True)
+    print(f"Wrote {out} ({df.shape[0]} rows × {df.shape[1]} cols)")
 
 
 if __name__ == "__main__":
-    download_data(snakemake)
+    download_table(snakemake)

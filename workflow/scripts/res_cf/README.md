@@ -228,7 +228,7 @@ Downloaded package used:
 - `World EEZ v12` → `Shapefile`
 
 Stored locally as:
-- `data/shapes/eez/eez_v12.shp`
+- `data/shapes/offshore_zones/eez_v12.shp`
 
 ### Baseline filtering logic
 
