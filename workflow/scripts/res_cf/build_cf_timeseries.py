@@ -12,24 +12,30 @@ if "snakemake" not in globals():
 
 REGIONS_PATH          = SHAPES_RES / "regions.parquet"
 OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"
-OUTDIR                = RES_CF / "quarterly"
 
 
 # --- defaults for standalone use ---
-CUTOUT_PATH = CUTOUTS / "de_2023_q1.nc"
-QUARTER     = "q1"
-YEAR        = 2023
-COUNTRY     = "de"
-RES_CF_CFG  = load_res_cf_cfg()
+CF_AREA       = "de"
+START_DATE    = "20230101"
+END_DATE      = "20231231"
+CUTOUT_PATH   = CUTOUTS / f"{CF_AREA}_{START_DATE}_{END_DATE}.nc"
+WIND_ON_OUT   = RES_CF / f"{CF_AREA}_wind_onshore_{START_DATE}_{END_DATE}.parquet"
+WIND_OFF_OUT  = RES_CF / f"{CF_AREA}_wind_offshore_{START_DATE}_{END_DATE}.parquet"
+SOLAR_OUT     = RES_CF / f"{CF_AREA}_solar_{START_DATE}_{END_DATE}.parquet"
+RES_CF_CFG    = load_res_cf_cfg()
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    COUNTRY     = snakemake.wildcards.country.lower()
-    YEAR        = int(snakemake.wildcards.year)
-    QUARTER     = snakemake.wildcards.quarter
-    CUTOUT_PATH = snakemake.input.cutout
-    RES_CF_CFG  = snakemake.config["res_cf"]
+    CF_AREA               = snakemake.wildcards.cf_area.lower()
+    START_DATE            = snakemake.wildcards.start_date
+    END_DATE              = snakemake.wildcards.end_date
+    CUTOUT_PATH           = snakemake.input.cutout
+    OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
+    WIND_ON_OUT           = Path(snakemake.output.wind_onshore)
+    WIND_OFF_OUT          = Path(snakemake.output.wind_offshore)
+    SOLAR_OUT             = Path(snakemake.output.solar)
+    RES_CF_CFG            = snakemake.config["res_cf"]
 
-REGION_TAG            = RES_CF_CFG["countries"][COUNTRY]["region"]
+REGION_TAG            = RES_CF_CFG["countries"][CF_AREA]["region"]
 WIND_ONSHORE_TURBINE  = RES_CF_CFG["wind_onshore_turbine"]
 WIND_OFFSHORE_TURBINE = RES_CF_CFG["wind_offshore_turbine"]
 PV_PANEL              = RES_CF_CFG["pv_panel"]
@@ -68,7 +74,7 @@ def get_region_gdf(path: Path, region_tag: str) -> gpd.GeoDataFrame:
 
 
 def main() -> None:
-    OUTDIR.mkdir(parents=True, exist_ok=True)
+    WIND_ON_OUT.parent.mkdir(parents=True, exist_ok=True)
 
     gdf = get_region_gdf(REGIONS_PATH, REGION_TAG)
     has_offshore = OFFSHORE_REGIONS_PATH.exists()
@@ -96,17 +102,13 @@ def main() -> None:
     wind_cf  = to_cf_series(wind_cf)
     solar_cf = to_cf_series(solar_cf)
 
-    wind_out  = OUTDIR / f"{COUNTRY}_wind_onshore_{YEAR}_{QUARTER}.parquet"
-    solar_out = OUTDIR / f"{COUNTRY}_solar_{YEAR}_{QUARTER}.parquet"
-
-    wind_cf.to_frame().to_parquet(wind_out, index=True)
-    solar_cf.to_frame().to_parquet(solar_out, index=True)
+    wind_cf.to_frame().to_parquet(WIND_ON_OUT, index=True)
+    solar_cf.to_frame().to_parquet(SOLAR_OUT, index=True)
 
     print("Wrote:")
-    print(" -", wind_out)
-    print(" -", solar_out)
+    print(" -", WIND_ON_OUT)
+    print(" -", SOLAR_OUT)
 
-    offshore_wind_out = OUTDIR / f"{COUNTRY}_wind_offshore_{YEAR}_{QUARTER}.parquet"
     if has_offshore:
         offshore_gdf = get_region_gdf(OFFSHORE_REGIONS_PATH, REGION_TAG)
         offshore_matrix = cutout.indicatormatrix(offshore_gdf)
@@ -124,8 +126,8 @@ def main() -> None:
         offshore_wind_cf = pd.Series(0.0, index=wind_cf.index, name="cf")
         offshore_wind_cf.index.name = "time"
         print("No offshore regions file — writing zero placeholder for offshore wind.")
-    offshore_wind_cf.to_frame().to_parquet(offshore_wind_out, index=True)
-    print(" -", offshore_wind_out)
+    offshore_wind_cf.to_frame().to_parquet(WIND_OFF_OUT, index=True)
+    print(" -", WIND_OFF_OUT)
 
 
 if __name__ == "__main__":

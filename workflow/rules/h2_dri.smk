@@ -13,20 +13,13 @@ rule compile_report:
 
 rule h2_dri_optimize:
     input:
-        tech_inputs=collect(
-            lookup(
-                dpath="projects/{project}/scenarios/{scenario}/tech_inputs/{tech}",
-                within=projects,
-                default=lookup(
-                    dpath="projects/{project}/tech_inputs/{tech}",
-                    within=projects,
-                ),
-            ),
-            tech=lookup(
-                dpath="projects/{project}/scenarios/{scenario}/techs",
-                within=projects,
-            ),
-        ),
+        # Map each scenario tech to its resolved registry path (order preserved so
+        # run.py can zip techs ↔ files). tech_inputs templates were pre-resolved
+        # per project in common.smk.
+        tech_inputs=lambda wc: [
+            projects["projects"][wc.project]["tech_inputs"][tech]
+            for tech in projects["projects"][wc.project]["scenarios"][wc.scenario]["techs"]
+        ],
         assumptions="config/assumptions.yaml",
         projects="config/projects.yaml",
     output:
