@@ -1,5 +1,5 @@
 """
-Build a PyPSA network for a single DRI-hydrogen project scenario.
+Build and solve a PyPSA network for a single DRI-hydrogen project scenario.
 
 Bus unit convention: MW throughout.
   electricity bus: MW AC
@@ -13,7 +13,12 @@ Electrolyser efficiency is:
 import sys
 from pathlib import Path
 
+# pandas 3.0 defaults to ArrowStringArray for strings; xarray (used by PyPSA
+# internally) doesn't support it. Set python-native strings before any import
+# that touches pandas string data.
 import pandas as pd
+pd.options.mode.string_storage = "python"
+
 import pypsa
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -28,7 +33,7 @@ def build_network(
     """
     Build (but do not solve) a PyPSA network.
 
-    assumptions: full assumptions.yaml dict
+    assumptions: full assumptions dict (from snakemake.config)
     cf_timeseries: DataFrame indexed by DatetimeIndex, columns = tech names in assumptions.res
     price_series: optional hourly price Series (€/MWh), same index as cf_timeseries
     """
@@ -169,3 +174,42 @@ def _add_grid_import(n: pypsa.Network, price_series: pd.Series) -> None:
         marginal_cost=price_series,
         capital_cost=0.0,
     )
+
+
+def main() -> None:
+    project  = snakemake.wildcards.project
+    scenario = snakemake.wildcards.scenario
+    techs    = list(snakemake.params.techs)
+    out_path = Path(snakemake.output.network)
+
+    tech_files = dict(zip(techs, [Path(p) for p in snakemake.input.tech_inputs]))
+    cf_files   = {t: p for t, p in tech_files.items() if t != "grid"}
+    grid_path  = tech_files.get("grid")
+
+    price_series = pd.read_parquet(grid_path).iloc[:, 0] if grid_path is not None else None
+
+    if cf_files:
+        cf_timeseries = pd.DataFrame({t: pd.read_parquet(p).iloc[:, 0] for t, p in cf_files.items()})
+    elif price_series is not None:
+        cf_timeseries = pd.DataFrame(index=price_series.index)
+    else:
+        raise ValueError(f"{project}/{scenario}: no CF techs and no grid input")
+
+    if price_series is not None:
+        price_series = price_series.reindex(cf_timeseries.index)
+        if price_series.isna().any():
+            raise ValueError(
+                f"Price series has {price_series.isna().sum()} missing values after "
+                "aligning to CF index. Check that the grid file covers the same period."
+            )
+
+    n = build_network(snakemake.config, cf_timeseries, price_series)
+    n.optimize(solver_name="highs")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    n.export_to_netcdf(out_path)
+    print(f"Network saved to {out_path}")
+
+
+if __name__ == "__main__":
+    main()

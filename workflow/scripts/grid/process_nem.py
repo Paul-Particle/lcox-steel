@@ -18,10 +18,8 @@ def process_data(snakemake) -> None:
     area = snakemake.wildcards.area
     eur_per_aud = snakemake.params.eur_per_aud
 
+    # NEMOSIS writes tz-naive timestamps in NEM local time (AEST/AEDT, UTC+10/+11).
     prices = pd.read_parquet(snakemake.input[0])
-    if prices.index.tz is not None:
-        prices.index = prices.index.tz_localize(None)
-
     price = (prices[(area, "price")].resample("1h").mean() * eur_per_aud).rename("price")
     price.index.name = "time"
 

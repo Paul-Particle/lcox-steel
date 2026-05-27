@@ -35,4 +35,4 @@ rule h2_dri_optimize:
     output:
         network="results/{project}/{scenario}.nc",
     script:
-        "../scripts/h2_dri/run.py"
+        "../scripts/h2_dri/network.py"
