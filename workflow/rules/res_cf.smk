@@ -71,6 +71,7 @@ rule make_cutout:
         ),
         region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
         bbox_pad_deg=lookup(dpath="res_cf/cutout/bbox_pad_deg", within=config),
+        monthly_requests=lookup(dpath="res_cf/cutout/monthly_requests", within=config),
     script:
         "../scripts/res_cf/make_cutout.py"
 

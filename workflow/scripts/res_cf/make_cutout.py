@@ -23,6 +23,7 @@ _OUTPUT_PATH = CUTOUTS / "de_20230101_20231231.nc"
 _COARSE = False
 _REGION = "DE"
 _BBOX_PAD_DEG = 1.0
+_MONTHLY_REQUESTS = False
 _ATLITE_CACHE = ATLITE_CACHE
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
@@ -34,6 +35,7 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _COARSE = snakemake.params.coarse
     _REGION = snakemake.params.region
     _BBOX_PAD_DEG = snakemake.params.bbox_pad_deg
+    _MONTHLY_REQUESTS = snakemake.params.monthly_requests
 
 
 def _iso(yyyymmdd: str) -> str:
@@ -60,7 +62,7 @@ def main() -> None:
         kwargs.update(dx=0.5, dy=0.5)
 
     cutout = atlite.Cutout(**kwargs)
-    cutout.prepare(tmpdir=str(_ATLITE_CACHE), monthly_requests=True, concurrent_requests=1)
+    cutout.prepare(tmpdir=str(_ATLITE_CACHE), monthly_requests=_MONTHLY_REQUESTS)
     print(f"Prepared: {_OUTPUT_PATH}")
 
 

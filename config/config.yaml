@@ -52,8 +52,12 @@ res_cf:
 
   # Atlite cutout build settings.
   # bbox_pad_deg            degrees of padding added around country/region bounds.
+  # monthly_requests        split CDS download into one request per month; reduces
+  #                         individual request size but multiplies queue wait times
+  #                         (6000+ jobs in the global queue is common — use sparingly).
   cutout:
     bbox_pad_deg: 1.0
+    monthly_requests: false
 
   complementarity:
     coincidence_threshold: 0.20
