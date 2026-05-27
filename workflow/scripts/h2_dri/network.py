@@ -21,7 +21,6 @@ from sizing import annuity_factor, dri_to_el_mw
 
 
 def build_network(
-    project_cfg: dict,
     assumptions: dict,
     cf_timeseries: pd.DataFrame,
     price_series: pd.Series | None = None,
@@ -29,8 +28,7 @@ def build_network(
     """
     Build (but do not solve) a PyPSA network.
 
-    project_cfg: one entry from projects.yaml
-    assumptions: full assumptions.yaml dict (must include 'plant' and 'finance' keys)
+    assumptions: full assumptions.yaml dict
     cf_timeseries: DataFrame indexed by DatetimeIndex, columns = tech names in assumptions.res
     price_series: optional hourly price Series (€/MWh), same index as cf_timeseries
     """

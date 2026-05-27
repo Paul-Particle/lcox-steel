@@ -33,28 +33,26 @@ if "snakemake" not in globals():
 from common._paths import REPO_ROOT
 
 
-# ── Defaults for standalone runs (mirror DE_2023_baseline / dedicated_res) ──
-PROJECT_NAME    = "DE_2023_baseline"
-SCENARIO_NAME   = "dedicated_res"
-CF_PATH         = REPO_ROOT / "resources/res_cf/de_cf_2023.csv"
-PRICES_PATH     = REPO_ROOT / "resources/entsoe_processed.feather"
-ASSUMPTIONS_PATH = REPO_ROOT / "config/assumptions.yaml"
-PROJECTS_PATH   = REPO_ROOT / "config/projects.yaml"
-OUT_NETWORK     = REPO_ROOT / "results" / PROJECT_NAME / f"{SCENARIO_NAME}.nc"
-OUT_SUMMARY     = REPO_ROOT / "results" / PROJECT_NAME / f"{SCENARIO_NAME}_summary.csv"
+# ── Defaults for standalone runs (DE_2023_baseline / dedicated_res) ──────────
+PROJECT_NAME      = "DE_2023_baseline"
+SCENARIO_NAME     = "dedicated_res"
+TECH_INPUT_FILES  = [
+    REPO_ROOT / "resources/res_cf/de_wind_onshore_20230101_20231231.parquet",
+    REPO_ROOT / "resources/res_cf/de_solar_20230101_20231231.parquet",
+]
+ASSUMPTIONS_PATH  = REPO_ROOT / "config/assumptions.yaml"
+PROJECTS_PATH     = REPO_ROOT / "config/projects.yaml"
+OUT_NETWORK       = REPO_ROOT / "results" / PROJECT_NAME / f"{SCENARIO_NAME}.nc"
+OUT_SUMMARY       = REPO_ROOT / "results" / PROJECT_NAME / f"{SCENARIO_NAME}_summary.csv"
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    PROJECT_NAME    = snakemake.wildcards.project
-    SCENARIO_NAME   = snakemake.wildcards.scenario
-    CF_PATH         = Path(snakemake.input.cf)
-    try:
-        PRICES_PATH = Path(snakemake.input.prices)
-    except AttributeError:
-        PRICES_PATH = None
+    PROJECT_NAME     = snakemake.wildcards.project
+    SCENARIO_NAME    = snakemake.wildcards.scenario
+    TECH_INPUT_FILES = list(snakemake.input.tech_inputs)
     ASSUMPTIONS_PATH = Path(snakemake.input.assumptions)
-    PROJECTS_PATH   = Path(snakemake.input.projects)
-    OUT_NETWORK     = Path(snakemake.output.network)
-    OUT_SUMMARY     = Path(snakemake.output.summary)
+    PROJECTS_PATH    = Path(snakemake.input.projects)
+    OUT_NETWORK      = Path(snakemake.output.network)
+    OUT_SUMMARY      = Path(snakemake.output.summary)
 
 
 def load_yaml(path: Path) -> dict:
@@ -62,85 +60,68 @@ def load_yaml(path: Path) -> dict:
         return yaml.safe_load(f)
 
 
-def load_cf_timeseries(path: Path) -> pd.DataFrame:
-    """
-    Load the atlite CF parquet and return a DataFrame with a DatetimeIndex.
-    Columns are tech names (wind_onshore, solar, ...) without the '_cf' suffix.
-    """
-    if not path.exists():
-        raise FileNotFoundError(f"CF file not found: {path}")
-    df = pd.read_parquet(path).set_index("time")
+def load_cf_timeseries(tech_files: dict[str, Path]) -> pd.DataFrame:
+    """Load per-tech CF parquets and return a single DataFrame (tech columns)."""
+    frames = {}
+    for tech, path in tech_files.items():
+        if not path.exists():
+            raise FileNotFoundError(f"CF file not found: {path}")
+        df = pd.read_parquet(path)
+        if "time" in df.columns:
+            df = df.set_index("time")
+        df.index.name = None
+        frames[tech] = df.iloc[:, 0]
+    result = pd.DataFrame(frames)
+    result.index = pd.to_datetime(result.index)
+    return result
+
+
+def load_price_series(path: Path) -> pd.Series:
+    """Load a processed grid price parquet; return timezone-naive UTC series."""
+    df = pd.read_parquet(path)
+    if "time" in df.columns:
+        df = df.set_index("time")
     df.index.name = None
-    df.columns = [c.replace("_cf", "") for c in df.columns]
-    return df
-
-
-def load_price_series(area: str, year: int, processed_path: Path) -> pd.Series:
-    """
-    Load hourly electricity prices for one area and year from entsoe_processed.parquet.
-    Returns a Series with DatetimeIndex (timezone-naive, UTC).
-    """
-    df = pd.read_parquet(processed_path)
-    prices = df[(area, "price")]
-    prices = prices[prices.index.year == year]
-    prices.index = prices.index.tz_localize(None) if prices.index.tz is not None else prices.index
+    prices = df.iloc[:, 0]
+    if prices.index.tz is not None:
+        prices.index = prices.index.tz_convert("UTC").tz_localize(None)
     return prices
-
-
-def _find(items: list[dict], name: str, kind: str) -> dict:
-    for it in items:
-        if it["name"] == name:
-            return it
-    raise KeyError(f"{kind} '{name}' not found")
 
 
 def run(
     project_name: str,
     scenario_name: str,
-    cf_path: Path,
-    prices_path: Path | None,
+    tech_input_files: list[str | Path],
     assumptions: dict,
     projects_cfg: dict,
     out_network: Path,
     out_summary: Path,
 ) -> dict:
-    project_cfg  = _find(projects_cfg["projects"], project_name, "Project")
-    scenario_cfg = _find(project_cfg["scenarios"], scenario_name, "Scenario")
+    project_cfg  = projects_cfg["projects"][project_name]
+    scenario_cfg = project_cfg["scenarios"][scenario_name]
     h2_lhv_kwh_per_kg = assumptions["h2"]["lhv_kwh_per_kg"]
 
-    cf_timeseries = load_cf_timeseries(cf_path)
+    # Map each tech to its resolved input file (collect preserves list order).
+    techs = list(scenario_cfg["techs"])
+    tech_file_map = dict(zip(techs, [Path(f) for f in tech_input_files]))
 
-    re_techs = [t for t in scenario_cfg["techs"] if t != "grid"]
-    missing = [t for t in re_techs if t not in cf_timeseries.columns]
-    if missing:
-        raise KeyError(f"Techs {missing} not found in CF file columns: {list(cf_timeseries.columns)}")
-    cf_timeseries = cf_timeseries[re_techs] if re_techs else cf_timeseries.iloc[:, :0]
+    cf_files   = {t: f for t, f in tech_file_map.items() if t != "grid"}
+    prices_path = tech_file_map.get("grid")
+
+    cf_timeseries = load_cf_timeseries(cf_files)
 
     price_series = None
-    if "grid" in scenario_cfg.get("techs", []):
-        if prices_path is None:
-            raise ValueError(
-                f"Scenario '{scenario_name}' includes grid but no prices input was provided."
-            )
-        if "bidding_zone" not in project_cfg:
-            raise KeyError(
-                f"Scenario '{scenario_name}' includes grid but project '{project_name}' "
-                "lacks 'bidding_zone' in projects.yaml."
-            )
-        year = int(project_cfg["time_period"]["start_date"][:4])
-        raw_prices = load_price_series(
-            area=project_cfg["bidding_zone"],
-            year=year,
-            processed_path=prices_path,
-        )
+    if prices_path is not None:
+        raw_prices = load_price_series(prices_path)
         price_series = raw_prices.reindex(cf_timeseries.index)
         if price_series.isna().any():
             raise ValueError(
-                f"Price series has {price_series.isna().sum()} missing values after aligning to CF index. "
-                "Check that entsoe_processed.feather covers the same year and hourly resolution as the CF file."
+                f"Price series has {price_series.isna().sum()} missing values after "
+                "aligning to CF index. Check that the entsoe processed file covers "
+                "the same period as the CF data."
             )
 
-    n = build_network(project_cfg, assumptions, cf_timeseries, price_series)
+    n = build_network(assumptions, cf_timeseries, price_series)
     n.optimize(solver_name="highs")
 
     out_network.parent.mkdir(parents=True, exist_ok=True)
@@ -159,8 +140,7 @@ def main() -> None:
     summary = run(
         project_name=PROJECT_NAME,
         scenario_name=SCENARIO_NAME,
-        cf_path=CF_PATH,
-        prices_path=PRICES_PATH,
+        tech_input_files=TECH_INPUT_FILES,
         assumptions=assumptions,
         projects_cfg=projects_cfg,
         out_network=OUT_NETWORK,

@@ -45,88 +45,22 @@ rule make_cutout:
     input:
         regions="resources/shapes/regions.parquet"
     output:
-        "cutouts/{country}_{year}_{quarter}.nc"
+        "cutouts/{cf_area}_{start_date}_{end_date}.nc"
+    params:
+        start_date="{start_date}",
+        end_date="{end_date}",
     script:
         "../scripts/res_cf/make_cutout.py"
 
 
 rule build_cf_timeseries:
     input:
-        cutout="cutouts/{country}_{year}_{quarter}.nc",
-        regions="resources/shapes/regions.parquet"
+        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/regions.parquet",
+        offshore_regions="resources/shapes/offshore_regions.parquet",
     output:
-        wind_onshore="resources/res_cf/quarterly/{country}_wind_onshore_{year}_{quarter}.parquet",
-        wind_offshore="resources/res_cf/quarterly/{country}_wind_offshore_{year}_{quarter}.parquet",
-        solar="resources/res_cf/quarterly/{country}_solar_{year}_{quarter}.parquet"
+        wind_onshore= "resources/res_cf/{cf_area}_wind_onshore_{start_date}_{end_date}.parquet",
+        wind_offshore="resources/res_cf/{cf_area}_wind_offshore_{start_date}_{end_date}.parquet",
+        solar=        "resources/res_cf/{cf_area}_solar_{start_date}_{end_date}.parquet",
     script:
         "../scripts/res_cf/build_cf_timeseries.py"
-
-
-rule concat_quarters:
-    input:
-        wind_onshore=expand("resources/res_cf/quarterly/{{country}}_wind_onshore_{{year}}_{quarter}.parquet",
-                            quarter=CF_QUARTERS),
-        wind_offshore=expand("resources/res_cf/quarterly/{{country}}_wind_offshore_{{year}}_{quarter}.parquet",
-                             quarter=CF_QUARTERS),
-        solar=expand("resources/res_cf/quarterly/{{country}}_solar_{{year}}_{quarter}.parquet",
-                     quarter=CF_QUARTERS),
-    output:
-        wind_onshore="resources/res_cf/annual/{country}_wind_onshore_{year}.parquet",
-        wind_offshore="resources/res_cf/annual/{country}_wind_offshore_{year}.parquet",
-        solar="resources/res_cf/annual/{country}_solar_{year}.parquet"
-    script:
-        "../scripts/res_cf/concat_quarters.py"
-
-
-rule combine_techs:
-    input:
-        wind_onshore="resources/res_cf/annual/{country}_wind_onshore_{year}.parquet",
-        wind_offshore="resources/res_cf/annual/{country}_wind_offshore_{year}.parquet",
-        solar="resources/res_cf/annual/{country}_solar_{year}.parquet"
-    output:
-        "resources/res_cf/{country}_cf_{year}.parquet"
-    script:
-        "../scripts/res_cf/combine_techs.py"
-
-
-rule resource_spread:
-    input:
-        cutouts=expand("cutouts/{country}_{{year}}_{quarter}.nc",
-                       country=CF_COUNTRIES, quarter=CF_QUARTERS),
-        national_cfs=expand("resources/res_cf/{country}_cf_{{year}}.parquet",
-                            country=CF_COUNTRIES),
-        regions="resources/shapes/regions.parquet",
-        offshore_regions="resources/shapes/offshore_regions.parquet"
-    output:
-        "resources/res_cf/resource_spread_{year}.parquet"
-    script:
-        "../scripts/res_cf/resource_spread.py"
-
-
-rule make_bestsite_cf:
-    input:
-        cutouts=expand("cutouts/{{country}}_{{year}}_{quarter}.nc",
-                       quarter=CF_QUARTERS),
-        regions="resources/shapes/regions.parquet",
-        offshore_regions="resources/shapes/offshore_regions.parquet"
-    output:
-        "resources/res_cf/{country}_cf_{year}_bestsite_p95.parquet"
-    script:
-        "../scripts/res_cf/make_bestsite_cf.py"
-
-
-rule complementarity:
-    input:
-        national_cf="resources/res_cf/{country}_cf_{year}.parquet",
-        cutouts=expand("cutouts/{{country}}_{{year}}_{quarter}.nc",
-                       quarter=CF_QUARTERS),
-        regions="resources/shapes/regions.parquet",
-        offshore_regions="resources/shapes/offshore_regions.parquet"
-    output:
-        # top_n is interpolated as a literal (not a wildcard) because the
-        # paired `avg` output doesn't depend on N — Snakemake requires all
-        # outputs of a rule to share the same wildcards.
-        top=f"resources/res_cf/{{country}}_complementarity_top{CF_TOP_N}_{{year}}.parquet",
-        avg="resources/res_cf/{country}_average_profiles_{year}.parquet"
-    script:
-        "../scripts/res_cf/complementarity.py"

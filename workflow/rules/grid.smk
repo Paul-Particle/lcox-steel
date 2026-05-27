@@ -1,14 +1,35 @@
+# Download date range covers the union of all project periods.
+_dl_start = min(p["start_date"] for p in projects["projects"].values())
+_dl_end   = max(p["end_date"]   for p in projects["projects"].values())
+
+
 rule download_entsoe:
     output:
         "resources/entsoe/{area}/{data_type}.parquet"
     params:
-        start_date=config["entsoe"]["start_date"],
-        end_date=config["entsoe"]["end_date"],
+        start_date=_dl_start,
+        end_date=_dl_end,
         cache_dir="data/entsoe_cache",
     resources:
         entsoe_api=2
     script:
         "../scripts/grid/download_entsoe.py"
+
+
+rule process_entsoe:
+    input:
+        lambda wc: expand(
+            "resources/entsoe/{area}/{data_type}.parquet",
+            area=wc.bidding_zone,
+            data_type=config["entsoe"]["data_types"],
+        )
+    params:
+        start_date="{start_date}",
+        end_date="{end_date}",
+    output:
+        "resources/entsoe/{bidding_zone}_{start_date}_{end_date}.parquet"
+    script:
+        "../scripts/grid/process_entsoe.py"
 
 
 rule download_nem:
@@ -22,16 +43,3 @@ rule download_nem:
         rebuild=config["nem_download"]["rebuild"]
     script:
         "../scripts/grid/download_nem.py"
-
-
-rule process_entsoe:
-    input:
-        entsoe=expand("resources/entsoe/{area}/{data_type}.parquet",
-                      area=enabled_areas,
-                      data_type=config["entsoe"]["data_types"])
-    params:
-        areas=enabled_areas
-    output:
-        "resources/entsoe_processed.parquet"
-    script:
-        "../scripts/grid/process_entsoe.py"

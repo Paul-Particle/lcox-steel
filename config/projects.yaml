@@ -1,23 +1,32 @@
+# Input file registry: one entry per tech.
+# Values are path templates resolved per-project in common.smk using
+# cf_area, start_date, end_date, and bidding_zone from the project config.
+# A scenario may add a tech_inputs: section to override individual entries.
+tech_inputs:
+  wind_onshore:  "resources/res_cf/{cf_area}_wind_onshore_{start_date}_{end_date}.parquet"
+  wind_offshore: "resources/res_cf/{cf_area}_wind_offshore_{start_date}_{end_date}.parquet"
+  solar:         "resources/res_cf/{cf_area}_solar_{start_date}_{end_date}.parquet"
+  grid:          "resources/entsoe/{bidding_zone}_{start_date}_{end_date}.parquet"
+
 projects:
-  - name: DE_2023_baseline
-    time_period:
-      start_date: "20230101"
-      end_date:   "20231231"
-    bidding_zone: DE_LU     # ENTSO-E zone key; used when any scenario includes grid
-    cf_area: de             # key in config.res_cf.countries
+  DE_2023_baseline:
+    start_date: "20230101"
+    end_date:   "20231231"
+    cf_area: de
+    bidding_zone: DE_LU
     scenarios:
-      - name: dedicated_res
-        # techs: future additions — grid, hvac, hvdc, heat_storage, and others
+      dedicated_res:
         techs: [wind_onshore, solar]
         # site_selection: one of pypsa-optimized, random, complementarity-optimized,
         #   country-average, wind-p95, solar-p95, coordinates
         site_selection: country-average
-      - name: wind_only
+      wind_only:
         techs: [wind_onshore]
         site_selection: country-average
-      - name: solar_only
+      solar_only:
         techs: [solar]
         site_selection: country-average
-      - name: grid_connected
+      grid_connected:
+        # techs: future additions — hvac, hvdc, heat_storage, and others
         techs: [wind_onshore, solar, grid]
         site_selection: country-average
