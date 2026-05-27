@@ -24,7 +24,6 @@ rule h2_dri_optimize:
                 within=projects_df,
             ),
         ),
-        assumptions="config/assumptions.yaml",
     params:
         techs=collect(
             "{item.tech}",

@@ -14,8 +14,6 @@ from pathlib import Path
 import pandas as pd
 pd.options.mode.string_storage = "python"
 
-import yaml
-
 sys.path.insert(0, str(Path(__file__).parent))
 from network import build_network
 
@@ -39,8 +37,7 @@ def main() -> None:
     techs    = list(snakemake.params.techs)
     out_path = Path(snakemake.output.network)
 
-    with Path(snakemake.input.assumptions).open(encoding="utf-8") as f:
-        assumptions = yaml.safe_load(f)
+    assumptions = snakemake.config
 
     tech_files  = dict(zip(techs, [Path(p) for p in snakemake.input.tech_inputs]))
     cf_files    = {t: p for t, p in tech_files.items() if t != "grid"}
