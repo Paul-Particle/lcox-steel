@@ -18,7 +18,6 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
 from network import build_network
-from costs import compute_lcoh, extract_summary
 
 
 PROJECT_NAME      = snakemake.wildcards.project
@@ -27,7 +26,6 @@ TECH_INPUT_FILES  = list(snakemake.input.tech_inputs)
 ASSUMPTIONS_PATH  = Path(snakemake.input.assumptions)
 PROJECTS_PATH     = Path(snakemake.input.projects)
 OUT_NETWORK       = Path(snakemake.output.network)
-OUT_SUMMARY       = Path(snakemake.output.summary)
 
 
 def load_yaml(path: Path) -> dict:
@@ -70,10 +68,7 @@ def run(
     assumptions: dict,
     projects_df: pd.DataFrame,
     out_network: Path,
-    out_summary: Path,
-) -> dict:
-    h2_lhv_kwh_per_kg = assumptions["h2"]["lhv_kwh_per_kg"]
-
+) -> None:
     # Techs for this (project, scenario) in projects.csv row order — the same
     # order collect() produced tech_input_files in, so we can zip them.
     rows = projects_df.query(
@@ -113,38 +108,21 @@ def run(
     out_network.parent.mkdir(parents=True, exist_ok=True)
     n.export_to_netcdf(out_network)
 
-    summary = extract_summary(n, project_name, scenario_name, h2_lhv_kwh_per_kg)
-    pd.DataFrame([summary]).to_csv(out_summary, index=False)
-
-    return summary
-
 
 def main() -> None:
     assumptions = load_yaml(ASSUMPTIONS_PATH)
     projects_df = pd.read_csv(PROJECTS_PATH, dtype={"start_date": str, "end_date": str})
 
-    summary = run(
+    run(
         project_name=PROJECT_NAME,
         scenario_name=SCENARIO_NAME,
         tech_input_files=TECH_INPUT_FILES,
         assumptions=assumptions,
         projects_df=projects_df,
         out_network=OUT_NETWORK,
-        out_summary=OUT_SUMMARY,
     )
 
-    label = f"{PROJECT_NAME} / {SCENARIO_NAME}"
-    print(f"\n{'=' * 60}\nRan: {label}\n{'=' * 60}")
-    print(f"  LCOH:             {summary['lcoh_eur_per_kg']:.3f} €/kg H₂")
-    print(f"  Total cost/yr:    {summary['total_annual_cost_eur']:,.0f} €")
-    for k, v in summary.items():
-        if k.endswith("_mw_opt"):
-            print(f"  {k:<30} {v:,.1f} MW")
-    if "battery_mwh_opt" in summary:
-        print(f"  {'battery_mwh_opt':<30} {summary['battery_mwh_opt']:,.1f} MWh")
-    if "h2_buffer_mwh_lhv_opt" in summary:
-        print(f"  {'h2_buffer_mwh_lhv_opt':<30} {summary['h2_buffer_mwh_lhv_opt']:,.1f} MWh LHV")
-    print(f"\n  Results saved to {OUT_NETWORK} / {OUT_SUMMARY}")
+    print(f"Network saved to {OUT_NETWORK}")
 
 
 if __name__ == "__main__":

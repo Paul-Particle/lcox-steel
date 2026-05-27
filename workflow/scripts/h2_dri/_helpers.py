@@ -1,6 +1,5 @@
 """
-Electrolyser and DRI plant sizing utilities.
-These are pure financial/engineering functions with no side effects.
+Financial and sizing utilities for the DRI-hydrogen model.
 """
 
 

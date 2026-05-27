@@ -4,24 +4,90 @@ Compile per-scenario summaries into a single project-level report CSV.
 Invoked by Snakemake's `script:` directive (compile_report rule).
 """
 
-import sys
 from pathlib import Path
 
 import pandas as pd
 import pypsa
-import yaml
-
-sys.path.insert(0, str(Path(__file__).parent))
-from costs import extract_summary
 
 if "snakemake" not in globals():
     raise RuntimeError("compile_report.py must be run via Snakemake")
 
-assumptions_path = Path(snakemake.input.assumptions)
-with assumptions_path.open("r", encoding="utf-8") as f:
-    assumptions = yaml.safe_load(f)
+H2_LHV_KWH_PER_KG = 33.33  # physical constant; lower heating value of hydrogen
 
-h2_lhv_kwh_per_kg = assumptions["h2"]["lhv_kwh_per_kg"]
+
+def _h2_produced_kg(n: pypsa.Network) -> float:
+    """Annual H2 production in kg, scaled from the simulation period to 8760 h."""
+    t_hours = len(n.snapshots)
+    h2_mwh_lhv = float(n.loads_t.p["dri_load"].sum()) * (8760.0 / t_hours)
+    return h2_mwh_lhv / (H2_LHV_KWH_PER_KG / 1000.0)
+
+
+def _annual_cost(n: pypsa.Network) -> float:
+    """
+    Annualized capital costs + variable grid import costs (scaled to annual).
+
+    Capital costs are always per-year (annualized CAPEX × p_nom_opt).
+    Variable costs from grid import are scaled from simulation period to 8760 h
+    so that LCOH is meaningful even when running with partial-year data.
+    """
+    t_hours = len(n.snapshots)
+    annual_scale = 8760.0 / t_hours
+
+    cost = 0.0
+
+    mask = n.generators.p_nom_extendable
+    cost += (n.generators.loc[mask, "capital_cost"] * n.generators.loc[mask, "p_nom_opt"]).sum()
+
+    mask = n.storage_units.p_nom_extendable
+    cost += (n.storage_units.loc[mask, "capital_cost"] * n.storage_units.loc[mask, "p_nom_opt"]).sum()
+
+    cost += n.links.at["electrolyser", "capital_cost"] * n.links.at["electrolyser", "p_nom"]
+
+    mask = n.stores.e_nom_extendable
+    cost += (n.stores.loc[mask, "capital_cost"] * n.stores.loc[mask, "e_nom_opt"]).sum()
+
+    if "grid_import" in n.generators.index:
+        p = n.generators_t.p.get("grid_import", pd.Series(0.0, index=n.snapshots))
+        if "grid_import" in n.generators_t.marginal_cost.columns:
+            mc = n.generators_t.marginal_cost["grid_import"]
+        else:
+            mc = n.generators.at["grid_import", "marginal_cost"]
+        cost += float((p * mc).sum()) * annual_scale
+
+    return float(cost)
+
+
+def _compute_lcoh(n: pypsa.Network) -> float:
+    return _annual_cost(n) / _h2_produced_kg(n)
+
+
+def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> dict:
+    """Key sizing and cost metrics as a flat dict (suitable for a one-row CSV)."""
+    summary = {
+        "project": project_name,
+        "scenario": scenario_name,
+        "lcoh_eur_per_kg": _compute_lcoh(n),
+        "total_annual_cost_eur": _annual_cost(n),
+        "_h2_produced_kg": _h2_produced_kg(n),
+    }
+
+    for gen in n.generators.index[n.generators.p_nom_extendable]:
+        summary[f"{gen}_mw_opt"] = n.generators.at[gen, "p_nom_opt"]
+
+    if "battery" in n.storage_units.index:
+        p_opt = n.storage_units.at["battery", "p_nom_opt"]
+        summary["battery_mw_opt"] = p_opt
+        summary["battery_mwh_opt"] = p_opt * n.storage_units.at["battery", "max_hours"]
+
+    if "h2_buffer" in n.stores.index:
+        summary["h2_buffer_mwh_lhv_opt"] = n.stores.at["h2_buffer", "e_nom_opt"]
+
+    if "electrolyser" in n.links.index:
+        summary["electrolyser_mw"] = n.links.at["electrolyser", "p_nom"]
+
+    return summary
+
+
 project_name = snakemake.wildcards.project
 
 rows = []
@@ -32,7 +98,7 @@ for nc_path in dict.fromkeys(snakemake.input.networks):
     scenario_name = nc_path.stem
     n = pypsa.Network()
     n.import_from_netcdf(nc_path)
-    rows.append(extract_summary(n, project_name, scenario_name, h2_lhv_kwh_per_kg))
+    rows.append(extract_summary(n, project_name, scenario_name))
 
 out_path = Path(snakemake.output[0])
 out_path.parent.mkdir(parents=True, exist_ok=True)

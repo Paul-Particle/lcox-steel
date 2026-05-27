@@ -9,7 +9,6 @@ rule compile_report:
             "results/{item.project}/{item.scenario}.nc",
             item=lookup(query="project == '{project}'", within=projects_df),
         ),
-        assumptions="config/assumptions.yaml",
     output:
         "results/report_{project}.csv",
     script:
@@ -29,6 +28,5 @@ rule h2_dri_optimize:
         projects="config/projects.csv",
     output:
         network="results/{project}/{scenario}.nc",
-        summary="results/{project}/{scenario}_summary.csv",
     script:
         "../scripts/h2_dri/run.py"

@@ -17,7 +17,7 @@ import pandas as pd
 import pypsa
 
 sys.path.insert(0, str(Path(__file__).parent))
-from sizing import annuity_factor, dri_to_el_mw
+from _helpers import annuity_factor, dri_to_el_mw
 
 
 def build_network(
@@ -35,7 +35,7 @@ def build_network(
     wacc = assumptions["finance"]["default_wacc"]
     el_cfg = assumptions["electrolyser"]
     plant = assumptions["plant"]
-    h2_lhv_kwh_per_kg = assumptions["h2"]["lhv_kwh_per_kg"]
+    h2_lhv_kwh_per_kg = 33.33  # kWh/kg H2 (LHV, physical constant)
 
     el_mw = dri_to_el_mw(
         dri_mt_per_year=plant["dri_mt_per_year"],
