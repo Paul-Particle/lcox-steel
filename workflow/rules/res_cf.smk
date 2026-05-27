@@ -64,7 +64,7 @@ rule make_cutout:
     input:
         regions="resources/shapes/{cf_area}_geo.parquet",
     output:
-        "cutouts/{cf_area}_{start_date}_{end_date}.nc",
+        protected("cutouts/{cf_area}_{start_date}_{end_date}.nc"),
     params:
         coarse=lookup(
             dpath="res_cf/countries/{cf_area}/coarse", within=config, default=False
