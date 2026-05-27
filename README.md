@@ -66,6 +66,7 @@ Snakemake commands are invoked from this repo root — `snakemake` auto-discover
 ```bash
 conda env create -f environment.yaml
 conda activate lcox-steel
+git config core.hooksPath .githooks
 ```
 
 ### 2. External data files
