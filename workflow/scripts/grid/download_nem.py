@@ -303,44 +303,44 @@ def download_crossborder_data(start_time: str, end_time: str, cache_dir: Path, r
     return crossborder
 
 
-def download_data(snakemake) -> None:
+def download_and_combine_data(snakemake) -> None:
     cache_dir = Path(snakemake.params.cache_dir)
     rebuild = snakemake.params.get("rebuild", False) # pyright: ignore[reportGeneralTypeIssues]
     start_time = datetime.strptime(snakemake.params.start_date, "%Y%m%d")
     start_time = start_time.strftime("%Y/%m/%d") + " 00:00:00"
     end_time = datetime.strptime(snakemake.params.end_date, "%Y%m%d")
     end_time = end_time.strftime("%Y/%m/%d") + " 23:59:59"
-    
-    prices = download_price_data(start_time, end_time, cache_dir, rebuild)
-    generation = download_generation_data(start_time, end_time, cache_dir, rebuild)
-    load = download_load_data(start_time, end_time, cache_dir, rebuild)
+
+    prices      = download_price_data(      start_time, end_time, cache_dir, rebuild)
+    generation  = download_generation_data( start_time, end_time, cache_dir, rebuild)
+    load        = download_load_data(       start_time, end_time, cache_dir, rebuild)
     crossborder = download_crossborder_data(start_time, end_time, cache_dir, rebuild)
 
     df_combined = pd.concat([prices, load, generation, crossborder], axis=1)
 
     # Calculate Region-Specific Variables using a dictionary
-    # This is faster and cleaner than the manual list append loop
-    areas = ["NSW1", "VIC1", "QLD1", "SA1", "TAS1"]
-    frames = {}
+    nem_areas = ["NSW1", "VIC1", "QLD1", "SA1", "TAS1"]
+    area_dfs = {}
 
-    for a in areas:
-        if (a, 'load') in df_combined.columns:
+    for area in nem_areas:
+        if (area, 'load') in df_combined.columns:
             # Extract Demand and Generation
-            d = df_combined[(a, 'load')]
+            load = df_combined[(area, 'load')]
             # Use .get() to handle cases where a region might miss a fuel type (e.g., no solar in TAS1 historically)
-            w = df_combined.get((a, "wind_onshore"), pd.Series(0, index=df_combined.index))
-            s = df_combined.get((a, "solar"), pd.Series(0, index=df_combined.index))
+            # TODO find out what's going on with offshore
+            wind = df_combined.get((area, "wind_onshore"), pd.Series(0, index=df_combined.index))
+            solar = df_combined.get((area, "solar"), pd.Series(0, index=df_combined.index))
 
             # Create a DataFrame for this region
-            region_df = pd.DataFrame(index=generation.index)
-            region_df["wind"] = w 
-            region_df["residual"] = d - (w + s)
+            area_df_derived_values = pd.DataFrame(index=generation.index)
+            area_df_derived_values["wind"] = wind # currently no offshore, so just a copy
+            area_df_derived_values["residual"] = load - (wind + solar)
 
             # Combine with other data for the region
-            frames[a] = pd.concat([df_combined[a], region_df], axis=1)
+            area_dfs[area] = pd.concat([df_combined[area], area_df_derived_values], axis=1)
 
     # Keys become the top level (Region), Columns become the second level (Variable)
-    df_final = pd.concat(frames.values(), axis=1, keys=frames.keys())
+    df_final = pd.concat(area_dfs.values(), axis=1, keys=area_dfs.keys())
 
     df_final.index = df_final.index.tz_localize(None)  # pyright: ignore[reportAttributeAccessIssue]
 
@@ -358,4 +358,4 @@ def download_data(snakemake) -> None:
 
 
 if __name__ == "__main__":
-    download_data(snakemake)
+    download_and_combine_data(snakemake)
