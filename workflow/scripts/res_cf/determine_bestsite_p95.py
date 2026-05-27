@@ -1,5 +1,5 @@
 """
-make_bestsite_cf.py
+determine_bestsite_p95.py
 
 Purpose
 -------

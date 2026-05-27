@@ -24,6 +24,9 @@ import pypsa
 sys.path.insert(0, str(Path(__file__).parent))
 from _helpers import annuity_factor, dri_to_el_mw
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 
 def build_network(
     assumptions: dict,

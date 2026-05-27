@@ -21,8 +21,8 @@ lcox-steel/
 │   │   │   ├── make_cutout.py
 │   │   │   ├── build_cf_timeseries.py
 │   │   │   ├── resource_spread.py
-│   │   │   ├── make_bestsite_cf.py
-│   │   │   ├── complementarity.py
+│   │   │   ├── determine_bestsite_p95.py
+│   │   │   ├── determine_complementarity.py
 │   │   │   └── diag_*.py               # Diagnostic and QC scripts
 │   │   ├── h2_dri/         # PyPSA investment model
 │   │   │   ├── run.py      # CLI entry point
@@ -66,6 +66,7 @@ Snakemake commands are invoked from this repo root — `snakemake` auto-discover
 ```bash
 conda env create -f environment.yaml
 conda activate lcox-steel
+git config core.hooksPath .githooks
 ```
 
 ### 2. External data files

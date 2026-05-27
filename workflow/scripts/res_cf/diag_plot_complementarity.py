@@ -2,7 +2,7 @@
 diag_plot_complementarity.py
 
 Plots a 2-week sample of the best complementarity triplet's time series for a
-given country, as a visual sanity check on the complementarity.py output.
+given country, as a visual sanity check on the determine_complementarity.py output.
 
 Usage:
     python scripts/res_cf/diag_plot_complementarity.py --country DE --year 2023
@@ -20,10 +20,10 @@ from common._paths import RES_CF, RESULTS
 CF_DIR   = RES_CF
 PLOT_DIR = RESULTS / "plots"
 
-# ── Import reusable functions from make_bestsite_cf ──────────────────────────
+# ── Import reusable functions from determine_bestsite_p95 ────────────────────
 _spec = importlib.util.spec_from_file_location(
     "bestsite",
-    Path(__file__).parent / "make_bestsite_cf.py"
+    Path(__file__).parent / "determine_bestsite_p95.py"
 )
 _bestsite = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_bestsite)
@@ -38,7 +38,7 @@ def plot_best_triplet(country: str, year: int) -> None:
     if not comp_path.exists():
         raise FileNotFoundError(
             f"Complementarity results not found: {comp_path}\n"
-            "Run complementarity.py first."
+            "Run determine_complementarity.py first."
         )
 
     df   = pd.read_parquet(comp_path)
