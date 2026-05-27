@@ -69,6 +69,9 @@ conda activate lcox-steel
 git config core.hooksPath .githooks
 ```
 
+> [!TIP]
+> **Bypassing Git Hooks:** A local git hook is configured above to automatically remove email addresses from commit messages for privacy. If you ever need to bypass this hook for a single commit, you can use the `--no-verify` flag: `git commit --no-verify`
+
 ### 2. External data files
 
 Two large geographic datasets must be downloaded manually. Snakemake has two `extract_*_shapefile` rules that handle unzipping — just put the ZIPs at the canonical paths below (create the directories first) and the pipeline will extract them when it needs them.
