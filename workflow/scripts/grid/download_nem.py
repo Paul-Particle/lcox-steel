@@ -303,14 +303,24 @@ def download_crossborder_data(start_time: str, end_time: str, cache_dir: Path, r
     return crossborder
 
 
-def process_area(snakemake) -> None:
-    """Build one NEM region's price (hourly) + full (native 5-min) parquets.
+TABLE_FETCHERS = {
+    "price": download_price_data,
+    "generation": download_generation_data,
+    "load": download_load_data,
+    "crossborder": download_crossborder_data,
+}
 
-    NEMOSIS caches the national MMSDM tables under data/nem_cache; refresh by
-    deleting those files. Dates/area come from output-path wildcards.
+
+def download_table(snakemake) -> None:
+    """Fetch one NEM table (national, all regions) for a date range and write it
+    to resources/nem/raw/{nem_table}_{start}_{end}.parquet.
+
+    NEMOSIS caches the underlying MMSDM files under data/nem_cache; refresh by
+    deleting those. process_nem / process_nem_full consume these raw tables, so
+    a price-only build never triggers the heavy generation (SCADA) fetch.
     """
     cache_dir = Path("data/nem_cache")
-    area = snakemake.wildcards.area
+    nem_table = snakemake.wildcards.nem_table
     start_time = (
         datetime.strptime(snakemake.wildcards.start_date, "%Y%m%d").strftime("%Y/%m/%d")
         + " 00:00:00"
@@ -320,40 +330,15 @@ def process_area(snakemake) -> None:
         + " 23:59:59"
     )
 
-    prices      = download_price_data(      start_time, end_time, cache_dir, rebuild=False)
-    generation  = download_generation_data( start_time, end_time, cache_dir, rebuild=False)
-    load        = download_load_data(       start_time, end_time, cache_dir, rebuild=False)
-    crossborder = download_crossborder_data(start_time, end_time, cache_dir, rebuild=False)
+    df = TABLE_FETCHERS[nem_table](start_time, end_time, cache_dir, rebuild=False)
+    if df.index.tz is not None:
+        df.index = df.index.tz_localize(None)
 
-    df_combined = pd.concat([prices, load, generation, crossborder], axis=1)
-    if df_combined.index.tz is not None:
-        df_combined.index = df_combined.index.tz_localize(None)
-
-    # Single-region rich frame (native 5-min): this region's metrics + derived residual.
-    load_s = df_combined[(area, "load")]
-    wind = df_combined.get((area, "wind_onshore"), pd.Series(0, index=df_combined.index))
-    solar = df_combined.get((area, "solar"), pd.Series(0, index=df_combined.index))
-    derived = pd.DataFrame(index=df_combined.index)
-    derived["wind"] = wind  # NEM has no offshore, so wind == onshore
-    derived["residual"] = load_s - (wind + solar)
-    full = pd.concat([df_combined[area], derived], axis=1)
-    full.index.name = "time"
-
-    # Price (model input): hourly mean of the 5-min RRP, converted AUD→EUR so it
-    # matches the EUR-denominated ENTSO-E prices the optimisation consumes.
-    # (The _full frame stays raw AUD.)
-    eur_per_aud = snakemake.params.eur_per_aud
-    price = (df_combined[(area, "price")].resample("1h").mean() * eur_per_aud).rename("price")
-    price.index.name = "time"
-
-    full_out = Path(snakemake.output.full)
-    full_out.parent.mkdir(parents=True, exist_ok=True)
-    full.to_parquet(full_out, index=True)
-    price.to_frame().to_parquet(snakemake.output.prices, index=True)
-    print(f"Wrote {snakemake.output.prices} ({len(price)} hourly prices, "
-          f"{price.index.min()} .. {price.index.max()})")
-    print(f"Wrote {full_out} ({full.shape[0]} rows × {full.shape[1]} cols)")
+    out = Path(snakemake.output[0])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(out, index=True)
+    print(f"Wrote {out} ({df.shape[0]} rows × {df.shape[1]} cols)")
 
 
 if __name__ == "__main__":
-    process_area(snakemake)
+    download_table(snakemake)

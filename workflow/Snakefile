@@ -23,6 +23,6 @@ rule all:
             "results/report_{project}.csv",
             project=projects_df["project"].unique().tolist(),
         ),
-        # Full ENTSO-E dataset (non-price metrics) for the German archive — a
+        # Full ENTSO-E dataset (grid variant=full) for the German archive — a
         # top-level target for now until something downstream consumes it.
-        "resources/entsoe/DE_LU_grid_dayahead_20230101_20231231_full.parquet",
+        "resources/entsoe/DE_LU_grid_full_20230101_20231231.parquet",

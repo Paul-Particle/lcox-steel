@@ -9,23 +9,52 @@ rule download_entsoe:
 
 rule process_entsoe:
     input:
+        "resources/entsoe/{area}/prices_{start_date}_{end_date}.parquet",
+    output:
+        prices="resources/entsoe/{area}_grid_dayahead_{start_date}_{end_date}.parquet",
+    script:
+        "../scripts/grid/process_entsoe.py"
+
+
+rule process_entsoe_full:
+    input:
         expand(
             "resources/entsoe/{area}/{data_type}_{start_date}_{end_date}.parquet",
             data_type=config["entsoe"]["data_types"],
             allow_missing=True,
         ),
     output:
-        prices="resources/entsoe/{area}_grid_dayahead_{start_date}_{end_date}.parquet",
-        full="resources/entsoe/{area}_grid_dayahead_{start_date}_{end_date}_full.parquet",
+        "resources/entsoe/{area}_grid_full_{start_date}_{end_date}.parquet",
     script:
-        "../scripts/grid/process_entsoe.py"
+        "../scripts/grid/process_entsoe_full.py"
+
+
+rule download_nem:
+    output:
+        "resources/nem/raw/{nem_table}_{start_date}_{end_date}.parquet",
+    script:
+        "../scripts/grid/download_nem.py"
 
 
 rule process_nem:
+    input:
+        "resources/nem/raw/price_{start_date}_{end_date}.parquet",
     output:
         prices="resources/nem/{area}_grid_dayahead_{start_date}_{end_date}.parquet",
-        full="resources/nem/{area}_grid_dayahead_{start_date}_{end_date}_full.parquet",
     params:
         eur_per_aud=config["fx"]["eur_per_aud"],
     script:
-        "../scripts/grid/download_nem.py"
+        "../scripts/grid/process_nem.py"
+
+
+rule process_nem_full:
+    input:
+        expand(
+            "resources/nem/raw/{nem_table}_{start_date}_{end_date}.parquet",
+            nem_table=["price", "load", "generation", "crossborder"],
+            allow_missing=True,
+        ),
+    output:
+        "resources/nem/{area}_grid_full_{start_date}_{end_date}.parquet",
+    script:
+        "../scripts/grid/process_nem_full.py"
