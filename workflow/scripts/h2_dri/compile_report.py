@@ -10,7 +10,7 @@ import pandas as pd
 import pypsa
 
 if "snakemake" not in globals():
-    raise RuntimeError("compile_report.py must be run via Snakemake")
+    from common._stubs import snakemake
 
 H2_LHV_KWH_PER_KG = 33.33  # physical constant; lower heating value of hydrogen
 
