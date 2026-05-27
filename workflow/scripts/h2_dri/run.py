@@ -1,13 +1,8 @@
 """
 PyPSA DRI-hydrogen optimisation entry point.
 
-Invoked by Snakemake's `script:` directive (one rule fires per
-(project, scenario) wildcard pair). The hardcoded fallback at the top of the
-file lets you also run it standalone for ad-hoc dev work — same convention as
-the res_cf scripts.
-
-Standalone invocation:
-    python scripts/h2_dri/run.py
+Invoked by Snakemake's `script:` directive; one rule fires per
+(project, scenario) wildcard pair.
 """
 
 import sys
@@ -25,32 +20,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 from network import build_network
 from costs import compute_lcoh, extract_summary
 
-if "snakemake" not in globals():
-    from common._stubs import snakemake
 
-from common._paths import REPO_ROOT
-
-
-# ── Defaults for standalone runs (DE_2023_baseline / dedicated_res) ──────────
-PROJECT_NAME      = "DE_2023_baseline"
-SCENARIO_NAME     = "dedicated_res"
-TECH_INPUT_FILES  = [
-    REPO_ROOT / "resources/res_cf/de_wind_onshore_country-average_20230101_20231231.parquet",
-    REPO_ROOT / "resources/res_cf/de_solar_country-average_20230101_20231231.parquet",
-]
-ASSUMPTIONS_PATH  = REPO_ROOT / "config/assumptions.yaml"
-PROJECTS_PATH     = REPO_ROOT / "config/projects.csv"
-OUT_NETWORK       = REPO_ROOT / "results" / PROJECT_NAME / f"{SCENARIO_NAME}.nc"
-OUT_SUMMARY       = REPO_ROOT / "results" / PROJECT_NAME / f"{SCENARIO_NAME}_summary.csv"
-
-if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    PROJECT_NAME     = snakemake.wildcards.project
-    SCENARIO_NAME    = snakemake.wildcards.scenario
-    TECH_INPUT_FILES = list(snakemake.input.tech_inputs)
-    ASSUMPTIONS_PATH = Path(snakemake.input.assumptions)
-    PROJECTS_PATH    = Path(snakemake.input.projects)
-    OUT_NETWORK      = Path(snakemake.output.network)
-    OUT_SUMMARY      = Path(snakemake.output.summary)
+PROJECT_NAME      = snakemake.wildcards.project
+SCENARIO_NAME     = snakemake.wildcards.scenario
+TECH_INPUT_FILES  = list(snakemake.input.tech_inputs)
+ASSUMPTIONS_PATH  = Path(snakemake.input.assumptions)
+PROJECTS_PATH     = Path(snakemake.input.projects)
+OUT_NETWORK       = Path(snakemake.output.network)
+OUT_SUMMARY       = Path(snakemake.output.summary)
 
 
 def load_yaml(path: Path) -> dict:
