@@ -7,6 +7,7 @@ enabled_areas = [
     code for code, info in config["entsoe"]["areas"].items() if info.get("enabled")
 ]
 
+
 wildcard_constraints:
     start_date=r"\d{8}",
     end_date=r"\d{8}",

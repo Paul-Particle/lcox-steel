@@ -1,9 +1,8 @@
 configfile: "config/config.yaml"
 
+
 import pandas as pd
 
-# Flat project registry: one row per (project, scenario, tech). All rules query
-# this with Snakemake's lookup(); no per-project Python beyond this read.
 projects_df = pd.read_csv(
     "config/projects.csv", dtype={"start_date": str, "end_date": str}
 )

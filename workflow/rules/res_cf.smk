@@ -1,6 +1,6 @@
 rule extract_eez_shapefile:
     input:
-        "data/shapes/eez/eez_v12.zip"
+        "data/shapes/eez/eez_v12.zip",
     output:
         shp="data/shapes/eez/eez_v12.shp",
         shx="data/shapes/eez/eez_v12.shx",
@@ -12,7 +12,7 @@ rule extract_eez_shapefile:
 
 rule extract_ne_countries_shapefile:
     input:
-        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"
+        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
     output:
         shp="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp",
         shx="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shx",
@@ -24,9 +24,9 @@ rule extract_ne_countries_shapefile:
 
 rule build_regions:
     input:
-        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp"
+        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp",
     output:
-        "resources/shapes/regions.parquet"
+        "resources/shapes/regions.parquet",
     script:
         "../scripts/res_cf/build_regions.py"
 
@@ -34,18 +34,18 @@ rule build_regions:
 rule build_offshore_regions:
     input:
         regions="resources/shapes/regions.parquet",
-        eez="data/shapes/eez/eez_v12.shp"
+        eez="data/shapes/eez/eez_v12.shp",
     output:
-        "resources/shapes/offshore_regions.parquet"
+        "resources/shapes/offshore_regions.parquet",
     script:
         "../scripts/res_cf/build_offshore_regions.py"
 
 
 rule make_cutout:
     input:
-        regions="resources/shapes/regions.parquet"
+        regions="resources/shapes/regions.parquet",
     output:
-        "cutouts/{cf_area}_{start_date}_{end_date}.nc"
+        "cutouts/{cf_area}_{start_date}_{end_date}.nc",
     params:
         start_date="{start_date}",
         end_date="{end_date}",
@@ -59,8 +59,8 @@ rule build_cf_timeseries:
         regions="resources/shapes/regions.parquet",
         offshore_regions="resources/shapes/offshore_regions.parquet",
     output:
-        wind_onshore= "resources/res_cf/{cf_area}_wind_onshore_country-average_{start_date}_{end_date}.parquet",
+        wind_onshore="resources/res_cf/{cf_area}_wind_onshore_country-average_{start_date}_{end_date}.parquet",
         wind_offshore="resources/res_cf/{cf_area}_wind_offshore_country-average_{start_date}_{end_date}.parquet",
-        solar=        "resources/res_cf/{cf_area}_solar_country-average_{start_date}_{end_date}.parquet",
+        solar="resources/res_cf/{cf_area}_solar_country-average_{start_date}_{end_date}.parquet",
     script:
         "../scripts/res_cf/build_cf_timeseries.py"

@@ -18,7 +18,10 @@ rule h2_dri_optimize:
         # run.py can zip techs ↔ files.
         tech_inputs=collect(
             "resources/{item.pipeline}/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}.parquet",
-            item=lookup(query="project == '{project}' and scenario == '{scenario}'", within=projects_df),
+            item=lookup(
+                query="project == '{project}' and scenario == '{scenario}'",
+                within=projects_df,
+            ),
         ),
         assumptions="config/assumptions.yaml",
         projects="config/projects.csv",
