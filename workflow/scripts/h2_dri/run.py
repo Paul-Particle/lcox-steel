@@ -10,8 +10,6 @@ Standalone invocation:
     python scripts/h2_dri/run.py
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

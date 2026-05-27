@@ -4,8 +4,6 @@ Compile per-scenario summaries into a single project-level report CSV.
 Invoked by Snakemake's `script:` directive (compile_report rule).
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 
