@@ -60,7 +60,7 @@ def main() -> None:
         kwargs.update(dx=0.5, dy=0.5)
 
     cutout = atlite.Cutout(**kwargs)
-    cutout.prepare(tmpdir=str(_ATLITE_CACHE), concurrent_requests=1)
+    cutout.prepare(tmpdir=str(_ATLITE_CACHE), monthly_requests=True, concurrent_requests=1)
     print(f"Prepared: {_OUTPUT_PATH}")
 
 
