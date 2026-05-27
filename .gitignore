@@ -15,12 +15,11 @@ venv/
 
 # Data files
 *.parquet
-# NEMOSIS still manages its own feather cache under data/nem_cache/
 *.feather
 *.CSV
 !config/projects.csv
-data/entsoe_cache/*
-!data/entsoe_cache/entsoe_bidding_zones.csv
+# data/nem_cache/ and data/entsoe_cache/ cache files are caught by the extension rules above;
+# only the committed reference files (NEM Registration xlsx, entsoe_bidding_zones.csv) escape them.
 
 # Derived workflow outputs (rebuilt by snakemake)
 resources/*.parquet
