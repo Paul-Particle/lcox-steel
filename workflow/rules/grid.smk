@@ -27,7 +27,8 @@ rule process_entsoe:
         start_date="{start_date}",
         end_date="{end_date}",
     output:
-        "resources/entsoe/{bidding_zone}_{start_date}_{end_date}.parquet"
+        prices="resources/entsoe/{bidding_zone}_{start_date}_{end_date}.parquet",
+        full="resources/entsoe/{bidding_zone}_{start_date}_{end_date}_full.parquet",
     script:
         "../scripts/grid/process_entsoe.py"
 

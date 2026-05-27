@@ -1,15 +1,15 @@
-"""Extract a single bidding zone's day-ahead price series for one date range.
+"""Process one bidding zone's ENTSO-E data for a single date range.
 
-Mirrors the res_cf CF outputs: one value per hourly timestamp, "time" index.
+Two outputs:
+  prices: single column "price" (€/MWh), gap-filled for use as a model input.
+          Mirrors the res_cf CF outputs (one value per hourly timestamp).
+  full:   wide per-zone frame with price, load, RES forecasts, generation,
+          crossborder flows and derived residual-load columns — kept for
+          ad-hoc analysis (not consumed by the optimisation yet).
 
-Input:  resources/entsoe/{bidding_zone}/{data_type}.parquet  (only prices is used;
-        the other data_types are still downloaded and available for ad-hoc work).
-Output: resources/entsoe/{bidding_zone}_{start_date}_{end_date}.parquet
-        single column "price" (€/MWh), tz-naive UTC index named "time".
-
-ENTSO-E day-ahead prices are indexed in Europe/Brussels local time. atlite CF
-series are UTC-naive, so we convert to UTC here; run.py then aligns prices to the
-CF index directly.
+Both are tz-naive UTC: ENTSO-E indexes day-ahead prices in Europe/Brussels
+local time, while atlite CF series are UTC-naive, so we convert here and
+run.py aligns prices to the CF index directly.
 """
 
 from pathlib import Path
@@ -25,39 +25,73 @@ def iso(yyyymmdd: str) -> str:
     return f"{yyyymmdd[:4]}-{yyyymmdd[4:6]}-{yyyymmdd[6:8]}"
 
 
-def prices_input(input_paths: list[str]) -> Path:
-    for p in input_paths:
-        if Path(p).stem == "prices":
-            return Path(p)
-    raise FileNotFoundError(f"No 'prices' parquet among inputs: {list(input_paths)}")
+def to_utc_naive(obj):
+    """Convert a tz-aware (Europe/Brussels) index to tz-naive UTC and sort."""
+    if obj.index.tz is not None:
+        obj.index = obj.index.tz_convert("UTC").tz_localize(None)
+    return obj.sort_index()
+
+
+def read_inputs(input_paths: list[str]) -> dict[str, pd.DataFrame]:
+    """Map data_type (file stem) -> its single-zone DataFrame."""
+    return {Path(p).stem: pd.read_parquet(p) for p in input_paths}
+
+
+def build_full_frame(by_dt: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Wide per-zone frame: base metrics + derived residual-load columns."""
+    price   = by_dt["prices"].iloc[:, 0].rename("price")
+    load_fc = by_dt["load_forecast"].iloc[:, 0].rename("load_forecast")
+    load    = by_dt["load_actual"].iloc[:, 0].rename("load")
+
+    # res / generation / crossborder come MultiIndexed as (area, metric); the
+    # inputs are single-zone, so drop the area level down to metric columns.
+    res = by_dt["res"].copy();         res.columns = res.columns.droplevel(0)
+    gen = by_dt["generation"].copy();  gen.columns = gen.columns.droplevel(0)
+    xb  = by_dt["crossborder"].copy(); xb.columns  = xb.columns.droplevel(0)
+
+    df = pd.concat([price, load_fc, load, res, gen, xb], axis=1)
+    df = to_utc_naive(df).ffill(limit=3).fillna(0.0)
+
+    # Derived forecasts (fix the original 'wind_onshore_foreacast' typo that
+    # silently zeroed the onshore contribution).
+    df["wind_forecast"]     = df.get("wind_onshore_forecast", 0) + df.get("wind_offshore_forecast", 0)
+    df["res_forecast"]      = df["wind_forecast"] + df.get("solar_forecast", 0)
+    df["residual_forecast"] = df["load_forecast"] - df["res_forecast"]
+    # Derived actuals from generation.
+    df["wind"]     = df.get("wind_onshore", 0) + df.get("wind_offshore", 0)
+    df["res"]      = df["wind"] + df.get("solar", 0)
+    df["residual"] = df["load"] - df["res"]
+
+    return df.sort_index(axis=1)
+
+
+def build_price_series(prices_df: pd.DataFrame) -> pd.Series:
+    """Model-ready price: bridge small gaps but never zero-fill (a fake €0 would
+    distort the optimisation); larger gaps stay NaN so run.py fails loudly."""
+    price = to_utc_naive(prices_df.iloc[:, 0])
+    return price.ffill(limit=3).bfill(limit=3).rename("price")
 
 
 def process_data(snakemake) -> None:
     start_date = snakemake.params.start_date
     end_date = snakemake.params.end_date
+    window = slice(iso(start_date), f"{iso(end_date)} 23:00")
 
-    df = pd.read_parquet(prices_input(list(snakemake.input)))
-    prices = df.iloc[:, 0]  # single area column from download_entsoe
+    by_dt = read_inputs(list(snakemake.input))
 
-    if prices.index.tz is not None:
-        prices.index = prices.index.tz_convert("UTC").tz_localize(None)
-    prices = prices.sort_index()
+    full = build_full_frame(by_dt).loc[window]
+    full.index.name = "time"
+    full_out = Path(snakemake.output.full)
+    full_out.parent.mkdir(parents=True, exist_ok=True)
+    full.to_parquet(full_out, index=True)
+    print(f"Wrote {full_out} ({full.shape[0]} rows × {full.shape[1]} cols)")
 
-    # End at 23:00 so the full final day of hourly data is included.
-    prices = prices.loc[iso(start_date):f"{iso(end_date)} 23:00"]
-
-    # Bridge small gaps (DST hours, occasional missing values); leave larger gaps
-    # as NaN so run.py's coverage check fails loudly rather than silently.
-    prices = prices.ffill(limit=3).bfill(limit=3)
-
-    prices = prices.rename("price")
-    prices.index.name = "time"
-
-    out_path = Path(snakemake.output[0])
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    prices.to_frame().to_parquet(out_path, index=True)
-    print(f"Wrote {out_path} ({len(prices)} hourly prices, "
-          f"{prices.index.min()} .. {prices.index.max()})")
+    price = build_price_series(by_dt["prices"]).loc[window]
+    price.index.name = "time"
+    price_out = Path(snakemake.output.prices)
+    price.to_frame().to_parquet(price_out, index=True)
+    print(f"Wrote {price_out} ({len(price)} hourly prices, "
+          f"{price.index.min()} .. {price.index.max()})")
 
 
 if __name__ == "__main__":

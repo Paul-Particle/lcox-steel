@@ -17,4 +17,11 @@ rule all:
         expand(
             "results/report_{project}.csv",
             project=lookup(dpath="projects", within=projects),
-        )
+        ),
+        # Full per-zone ENTSO-E dataset (non-price metrics) — a top-level target
+        # for now until something downstream consumes it.
+        [
+            f"resources/entsoe/{p['bidding_zone']}_{p['start_date']}_{p['end_date']}_full.parquet"
+            for p in projects["projects"].values()
+            if p.get("bidding_zone")
+        ],
