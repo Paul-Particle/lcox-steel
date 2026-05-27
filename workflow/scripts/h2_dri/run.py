@@ -108,11 +108,20 @@ def run(
     cf_files   = {t: f for t, f in tech_file_map.items() if t != "grid"}
     prices_path = tech_file_map.get("grid")
 
-    cf_timeseries = load_cf_timeseries(cf_files)
+    raw_prices = load_price_series(prices_path) if prices_path is not None else None
+
+    if cf_files:
+        cf_timeseries = load_cf_timeseries(cf_files)
+    elif raw_prices is not None:
+        # Grid-only scenario (no CF techs): the snapshots come from the price series.
+        cf_timeseries = pd.DataFrame(index=raw_prices.index)
+    else:
+        raise ValueError(
+            f"{project_name}/{scenario_name}: scenario has no CF techs and no grid input"
+        )
 
     price_series = None
-    if prices_path is not None:
-        raw_prices = load_price_series(prices_path)
+    if raw_prices is not None:
         price_series = raw_prices.reindex(cf_timeseries.index)
         if price_series.isna().any():
             raise ValueError(

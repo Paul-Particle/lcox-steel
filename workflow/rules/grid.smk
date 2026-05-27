@@ -1,46 +1,29 @@
-# Download date range covers the union of all project periods.
-_dl_start = projects_df["start_date"].min()
-_dl_end = projects_df["end_date"].max()
-
-
 rule download_entsoe:
     output:
-        "resources/entsoe/{area}/{data_type}.parquet",
+        "resources/entsoe/{area}/{data_type}_{start_date}_{end_date}.parquet",
     resources:
         entsoe_api=2,
-    params:
-        start_date=_dl_start,
-        end_date=_dl_end,
-        cache_dir="data/entsoe_cache",
     script:
         "../scripts/grid/download_entsoe.py"
 
 
 rule process_entsoe:
     input:
-        lambda wc: expand(
-            "resources/entsoe/{area}/{data_type}.parquet",
-            area=wc.bidding_zone,
+        expand(
+            "resources/entsoe/{area}/{data_type}_{start_date}_{end_date}.parquet",
             data_type=config["entsoe"]["data_types"],
+            allow_missing=True,
         ),
     output:
-        prices="resources/entsoe/{bidding_zone}_grid_dayahead_{start_date}_{end_date}.parquet",
-        full="resources/entsoe/{bidding_zone}_grid_dayahead_{start_date}_{end_date}_full.parquet",
-    params:
-        start_date="{start_date}",
-        end_date="{end_date}",
+        prices="resources/entsoe/{area}_grid_dayahead_{start_date}_{end_date}.parquet",
+        full="resources/entsoe/{area}_grid_dayahead_{start_date}_{end_date}_full.parquet",
     script:
         "../scripts/grid/process_entsoe.py"
 
 
-rule download_nem:
+rule process_nem:
     output:
-        "resources/nem_processed.parquet",
-    params:
-        start_date=config["nem_download"]["start_date"],
-        end_date=config["nem_download"]["end_date"],
-        cache_dir=config["nem_download"]["cache_dir"],
-        resample_freq=config["nem_download"].get("resample_freq"),
-        rebuild=config["nem_download"]["rebuild"],
+        prices="resources/nem/{area}_grid_dayahead_{start_date}_{end_date}.parquet",
+        full="resources/nem/{area}_grid_dayahead_{start_date}_{end_date}_full.parquet",
     script:
         "../scripts/grid/download_nem.py"

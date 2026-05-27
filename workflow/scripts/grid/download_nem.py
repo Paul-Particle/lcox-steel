@@ -303,59 +303,54 @@ def download_crossborder_data(start_time: str, end_time: str, cache_dir: Path, r
     return crossborder
 
 
-def download_and_combine_data(snakemake) -> None:
-    cache_dir = Path(snakemake.params.cache_dir)
-    rebuild = snakemake.params.get("rebuild", False) # pyright: ignore[reportGeneralTypeIssues]
-    start_time = datetime.strptime(snakemake.params.start_date, "%Y%m%d")
-    start_time = start_time.strftime("%Y/%m/%d") + " 00:00:00"
-    end_time = datetime.strptime(snakemake.params.end_date, "%Y%m%d")
-    end_time = end_time.strftime("%Y/%m/%d") + " 23:59:59"
+def process_area(snakemake) -> None:
+    """Build one NEM region's price (hourly) + full (native 5-min) parquets.
 
-    prices      = download_price_data(      start_time, end_time, cache_dir, rebuild)
-    generation  = download_generation_data( start_time, end_time, cache_dir, rebuild)
-    load        = download_load_data(       start_time, end_time, cache_dir, rebuild)
-    crossborder = download_crossborder_data(start_time, end_time, cache_dir, rebuild)
+    NEMOSIS caches the national MMSDM tables under data/nem_cache; refresh by
+    deleting those files. Dates/area come from output-path wildcards.
+    """
+    cache_dir = Path("data/nem_cache")
+    area = snakemake.wildcards.area
+    start_time = (
+        datetime.strptime(snakemake.wildcards.start_date, "%Y%m%d").strftime("%Y/%m/%d")
+        + " 00:00:00"
+    )
+    end_time = (
+        datetime.strptime(snakemake.wildcards.end_date, "%Y%m%d").strftime("%Y/%m/%d")
+        + " 23:59:59"
+    )
+
+    prices      = download_price_data(      start_time, end_time, cache_dir, rebuild=False)
+    generation  = download_generation_data( start_time, end_time, cache_dir, rebuild=False)
+    load        = download_load_data(       start_time, end_time, cache_dir, rebuild=False)
+    crossborder = download_crossborder_data(start_time, end_time, cache_dir, rebuild=False)
 
     df_combined = pd.concat([prices, load, generation, crossborder], axis=1)
+    if df_combined.index.tz is not None:
+        df_combined.index = df_combined.index.tz_localize(None)
 
-    # Calculate Region-Specific Variables using a dictionary
-    nem_areas = ["NSW1", "VIC1", "QLD1", "SA1", "TAS1"]
-    area_dfs = {}
+    # Single-region rich frame (native 5-min): this region's metrics + derived residual.
+    load_s = df_combined[(area, "load")]
+    wind = df_combined.get((area, "wind_onshore"), pd.Series(0, index=df_combined.index))
+    solar = df_combined.get((area, "solar"), pd.Series(0, index=df_combined.index))
+    derived = pd.DataFrame(index=df_combined.index)
+    derived["wind"] = wind  # NEM has no offshore, so wind == onshore
+    derived["residual"] = load_s - (wind + solar)
+    full = pd.concat([df_combined[area], derived], axis=1)
+    full.index.name = "time"
 
-    for area in nem_areas:
-        if (area, 'load') in df_combined.columns:
-            # Extract Demand and Generation
-            load = df_combined[(area, 'load')]
-            # Use .get() to handle cases where a region might miss a fuel type (e.g., no solar in TAS1 historically)
-            # TODO find out what's going on with offshore
-            wind = df_combined.get((area, "wind_onshore"), pd.Series(0, index=df_combined.index))
-            solar = df_combined.get((area, "solar"), pd.Series(0, index=df_combined.index))
+    # Price (model input): variant=dayahead ⇒ hourly mean of the 5-min RRP (AUD/MWh).
+    price = df_combined[(area, "price")].resample("1h").mean().rename("price")
+    price.index.name = "time"
 
-            # Create a DataFrame for this region
-            area_df_derived_values = pd.DataFrame(index=generation.index)
-            area_df_derived_values["wind"] = wind # currently no offshore, so just a copy
-            area_df_derived_values["residual"] = load - (wind + solar)
-
-            # Combine with other data for the region
-            area_dfs[area] = pd.concat([df_combined[area], area_df_derived_values], axis=1)
-
-    # Keys become the top level (Region), Columns become the second level (Variable)
-    df_final = pd.concat(area_dfs.values(), axis=1, keys=area_dfs.keys())
-
-    df_final.index = df_final.index.tz_localize(None)  # pyright: ignore[reportAttributeAccessIssue]
-
-    # Optional downsample. NEM is MW-instantaneous at 5-min boundaries, so the
-    # mean over the window is the right way to coarsen prices, loads, generation,
-    # and flows alike — all are MW quantities.
-    resample_freq = snakemake.params.get("resample_freq")  # pyright: ignore[reportGeneralTypeIssues]
-    if resample_freq:
-        before, _step = len(df_final), df_final.index.to_series().diff().median()
-        df_final = df_final.resample(resample_freq).mean()
-        print(f"Resampled {before} rows (~{_step}) → {len(df_final)} rows at {resample_freq}.")
-
-    df_final.to_parquet(snakemake.output[0], index=True)
-    print(f"Successfully saved NEM data to {snakemake.output[0]}")
+    full_out = Path(snakemake.output.full)
+    full_out.parent.mkdir(parents=True, exist_ok=True)
+    full.to_parquet(full_out, index=True)
+    price.to_frame().to_parquet(snakemake.output.prices, index=True)
+    print(f"Wrote {snakemake.output.prices} ({len(price)} hourly prices, "
+          f"{price.index.min()} .. {price.index.max()})")
+    print(f"Wrote {full_out} ({full.shape[0]} rows × {full.shape[1]} cols)")
 
 
 if __name__ == "__main__":
-    download_and_combine_data(snakemake)
+    process_area(snakemake)

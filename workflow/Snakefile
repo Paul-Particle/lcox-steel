@@ -22,9 +22,6 @@ rule all:
             "results/report_{project}.csv",
             project=projects_df["project"].unique().tolist(),
         ),
-        # Full per-zone ENTSO-E dataset (non-price metrics) — a top-level target
-        # for now until something downstream consumes it.
-        collect(
-            "resources/{item.pipeline}/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}_full.parquet",
-            item=lookup(query="tech == 'grid'", within=projects_df),
-        ),
+        # Full ENTSO-E dataset (non-price metrics) for the German archive — a
+        # top-level target for now until something downstream consumes it.
+        "resources/entsoe/DE_LU_grid_dayahead_20230101_20231231_full.parquet",

@@ -13,9 +13,6 @@ rule compile_report:
 
 rule h2_dri_optimize:
     input:
-        # One row per (project, scenario, tech) in projects.csv; collect builds
-        # each tech's input path from the row's columns. Order is preserved so
-        # run.py can zip techs ↔ files.
         tech_inputs=collect(
             "resources/{item.pipeline}/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}.parquet",
             item=lookup(

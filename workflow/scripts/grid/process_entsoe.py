@@ -33,8 +33,14 @@ def to_utc_naive(obj):
 
 
 def read_inputs(input_paths: list[str]) -> dict[str, pd.DataFrame]:
-    """Map data_type (file stem) -> its single-zone DataFrame."""
-    return {Path(p).stem: pd.read_parquet(p) for p in input_paths}
+    """Map data_type -> its single-zone DataFrame.
+
+    Filenames are ``{data_type}_{start_date}_{end_date}.parquet``; strip the two
+    trailing date segments to recover the data_type key.
+    """
+    return {
+        Path(p).stem.rsplit("_", 2)[0]: pd.read_parquet(p) for p in input_paths
+    }
 
 
 def build_full_frame(by_dt: dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -69,12 +75,14 @@ def build_price_series(prices_df: pd.DataFrame) -> pd.Series:
     """Model-ready price: bridge small gaps but never zero-fill (a fake €0 would
     distort the optimisation); larger gaps stay NaN so run.py fails loudly."""
     price = to_utc_naive(prices_df.iloc[:, 0])
-    return price.ffill(limit=3).bfill(limit=3).rename("price")
+    # variant=dayahead ⇒ hourly resolution: no-op for hourly zones, averages
+    # sub-hourly ones (e.g. post-2025 15-min MTU markets) to the hour.
+    return price.ffill(limit=3).bfill(limit=3).resample("1h").mean().rename("price")
 
 
 def process_data(snakemake) -> None:
-    start_date = snakemake.params.start_date
-    end_date = snakemake.params.end_date
+    start_date = snakemake.wildcards.start_date
+    end_date = snakemake.wildcards.end_date
     window = slice(iso(start_date), f"{iso(end_date)} 23:00")
 
     by_dt = read_inputs(list(snakemake.input))

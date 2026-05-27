@@ -179,9 +179,9 @@ def download_data(snakemake) -> None:
     area = snakemake.wildcards.area
     data_type = snakemake.wildcards.data_type
     output_path = Path(snakemake.output[0])
-    cache_dir = Path(snakemake.params.cache_dir)
-    start_date = snakemake.params.start_date
-    end_date = snakemake.params.end_date
+    cache_dir = Path("data/entsoe_cache")
+    start_date = snakemake.wildcards.start_date
+    end_date = snakemake.wildcards.end_date
 
     if data_type not in FETCHERS:
         raise ValueError(f"unknown data_type {data_type!r}")

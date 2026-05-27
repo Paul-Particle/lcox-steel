@@ -3,81 +3,9 @@
 scheduler: greedy
 
 entsoe:
-  # ENTSO-E bidding-zone catalog. Flip enabled to add/drop areas from downloads.
-  # See https://transparency.entsoe.eu/ for available zones.
-  areas:
-    DE_LU:   { desc: "German bidding zone (+ Luxemburg), since 2018", enabled: true }
-    DK_1:    { enabled: true }
-    DK_2:    { enabled: true }
-    FR:      { enabled: true }
-    ES:      { enabled: true }
-    AL:      { desc: "Albania", enabled: false }
-    AT:      { enabled: false }
-    BY:      { desc: "Belarus", enabled: false }
-    BE:      { enabled: false }
-    BA:      { desc: "Bosnia Herzegovina", enabled: false }
-    BG:      { enabled: false }
-    HR:      { enabled: false }
-    CY:      { desc: "Cyprus", enabled: false }
-    CZ:      { enabled: false }
-    DE_AT_LU: { desc: "old German zone", enabled: false }
-    CZ_DE_SK: { desc: "old German zone", enabled: false }
-    EE:      { desc: "Estonia", enabled: false }
-    FI:      { enabled: false }
-    MK:      { desc: "Macedonia", enabled: false }
-    GR:      { enabled: false }
-    IS:      { desc: "Iceland", enabled: false }
-    HU:      { enabled: false }
-    IE_SEM:  { desc: "Ireland and Northern Ireland", enabled: false }
-    IT_CNOR: { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
-    IT_CSUD: { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
-    IT_NORD: { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
-    IT_SARD: { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
-    IT_SICI: { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
-    IT_SUD:  { desc: "Italy has lots of virtual zones to manage congestion", enabled: false }
-    RU_KGD:  { desc: "Kaliningrad (Russia)", enabled: false }
-    LV:      { enabled: false }
-    LT:      { enabled: false }
-    MT:      { desc: "Malta", enabled: false }
-    ME:      { desc: "Montenegro (not coupled?)", enabled: false }
-    GB:      { desc: "No(t much?) data since Brexit", enabled: false }
-    GE:      { desc: "Georgia (not coupled?)", enabled: false }
-    NL:      { enabled: false }
-    NO_1:    { desc: "Norway has 5 zones", enabled: false }
-    NO_2:    { desc: "Norway has 5 zones", enabled: false }
-    NO_3:    { desc: "Norway has 5 zones", enabled: false }
-    NO_4:    { desc: "Norway has 5 zones", enabled: false }
-    NO_5:    { desc: "Norway has 5 zones", enabled: false }
-    PL:      { enabled: false }
-    PT:      { enabled: false }
-    MD:      { desc: "Moldova", enabled: false }
-    RO:      { enabled: false }
-    RU:      { desc: "Russia", enabled: false }
-    SE_1:    { enabled: false }
-    SE_2:    { enabled: false }
-    SE_3:    { enabled: false }
-    SE_4:    { enabled: false }
-    RS:      { desc: "Serbia (not coupled?)", enabled: false }
-    SK:      { desc: "Slovakia", enabled: false }
-    SI:      { desc: "Slovenia", enabled: false }
-    CH:      { enabled: false }
-    TR:      { desc: "Turkey (not coupled)", enabled: false }
-    UA:      { desc: "Ukraine (not coupled, just synchronized?)", enabled: false }
-    XK:      { desc: "Kosovo (not coupled)", enabled: false }
+  # Per-(area, data_type) downloads are pulled on demand by config/projects.csv;
+  # the bidding-zone catalog lives in data/entsoe_cache/entsoe_bidding_zones.csv.
   data_types: [prices, load_forecast, load_actual, res, generation, crossborder]
-  # Date range that ends up in resources/entsoe/{area}/{data_type}.feather.
-  # The download script caches per-month in data/entsoe_cache/; once a month is
-  # cached it is never re-fetched. To force a refresh, delete the relevant cache
-  # files (e.g. `rm -rf data/entsoe_cache/DE_LU/2024-12`) then re-run snakemake.
-  start_date: "20230101" # format as YYYYMMDD
-  end_date:   "20241231"
-
-nem_download:
-  start_date: "20250101" # format as YYYYMMDD
-  end_date:   "20251231"
-  cache_dir:  "data/nem_cache"
-  resample_freq: "1h"   # null or omitted = native 5-min; "1h" downsamples (mean)
-  rebuild: false
 
 res_cf:
   # Per-country metadata for the atlite + capacity factor pipeline.
