@@ -31,9 +31,6 @@ def process_data(snakemake) -> None:
     df = pd.concat(
         [raw["price"], raw["load"], raw["generation"], raw["crossborder"]], axis=1
     )
-    if df.index.tz is not None:
-        df.index = df.index.tz_localize(None)
-
     load_s = df[(area, "load")]
     wind = df.get((area, "wind_onshore"), pd.Series(0, index=df.index))
     solar = df.get((area, "solar"), pd.Series(0, index=df.index))

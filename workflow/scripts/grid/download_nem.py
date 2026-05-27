@@ -331,8 +331,12 @@ def download_table(snakemake) -> None:
     )
 
     df = TABLE_FETCHERS[nem_table](start_time, end_time, cache_dir, rebuild=False)
+    # AEMO writes SETTLEMENTDATE in NEM time (AEST = fixed UTC+10, no DST).
+    # Shift to UTC so NEM outputs align with ERA5 CF series and ENTSO-E prices.
     if df.index.tz is not None:
-        df.index = df.index.tz_localize(None)
+        df.index = df.index.tz_convert("UTC").tz_localize(None)
+    else:
+        df.index = df.index.tz_localize("Australia/Brisbane").tz_convert("UTC").tz_localize(None)
 
     out = Path(snakemake.output[0])
     out.parent.mkdir(parents=True, exist_ok=True)
