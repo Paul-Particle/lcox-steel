@@ -2,6 +2,11 @@ configfile: "config/config.yaml"
 configfile: "config/assumptions.yaml"
 
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(workflow.basedir)))
+
 import pandas as pd
 
 projects_df = pd.read_csv(
@@ -9,7 +14,6 @@ projects_df = pd.read_csv(
 )
 
 
-include: "rules/common.smk"
 include: "rules/grid.smk"
 include: "rules/res_cf.smk"
 include: "rules/h2_dri.smk"

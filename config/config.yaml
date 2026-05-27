@@ -23,11 +23,11 @@ res_cf:
   #                   (Natural Earth 1:110m has no state boundaries, so we use a
   #                   bbox).
   countries:
-    de:  { enabled: true,  iso3: DEU, region: DE,  coarse: false }
-    fr:  { enabled: false, iso3: FRA, region: FR,  coarse: false, mainland_bbox: [-10, 15, 41, 52] }
-    es:  { enabled: false, iso3: ESP, region: ES,  coarse: false }
-    aus: { enabled: true,  iso3: AUS, region: AUS, coarse: true,  vic_bbox: [140.96, 149.97, -39.16, -34.00] }
-    bra: { enabled: false, iso3: BRA, region: BRA, coarse: true  }
+    de:  { iso3: DEU, region: DE,  coarse: false }
+    fr:  { iso3: FRA, region: FR,  coarse: false, mainland_bbox: [-10, 15, 41, 52] }
+    es:  { iso3: ESP, region: ES,  coarse: false }
+    aus: { iso3: AUS, region: AUS, coarse: true,  vic_bbox: [140.96, 149.97, -39.16, -34.00] }
+    bra: { iso3: BRA, region: BRA, coarse: true  }
 
   # atlite technology settings (passed to cutout.wind / cutout.pv).
   wind_onshore_turbine:  Vestas_V112_3MW

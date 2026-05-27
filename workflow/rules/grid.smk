@@ -1,3 +1,10 @@
+wildcard_constraints:
+    start_date=r"\d{8}",
+    end_date=r"\d{8}",
+    data_type=r"prices|load_forecast|load_actual|res|generation|crossborder",
+    nem_table=r"price|generation|load|crossborder",
+
+
 rule download_entsoe:
     output:
         "resources/entsoe/{area}/{data_type}_{start_date}_{end_date}.parquet",

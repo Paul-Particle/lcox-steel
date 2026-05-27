@@ -1,3 +1,8 @@
+wildcard_constraints:
+    project=r"[^/]+",
+    scenario=r"[^/]+",
+
+
 rule compile_report:
     input:
         networks=collect(
