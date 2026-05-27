@@ -1,4 +1,5 @@
 configfile: "config/config.yaml"
+configfile: "config/assumptions.yaml"
 
 
 import pandas as pd

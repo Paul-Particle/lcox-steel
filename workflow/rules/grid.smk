@@ -25,5 +25,7 @@ rule process_nem:
     output:
         prices="resources/nem/{area}_grid_dayahead_{start_date}_{end_date}.parquet",
         full="resources/nem/{area}_grid_dayahead_{start_date}_{end_date}_full.parquet",
+    params:
+        eur_per_aud=config["fx"]["eur_per_aud"],
     script:
         "../scripts/grid/download_nem.py"

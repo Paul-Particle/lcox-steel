@@ -339,8 +339,11 @@ def process_area(snakemake) -> None:
     full = pd.concat([df_combined[area], derived], axis=1)
     full.index.name = "time"
 
-    # Price (model input): variant=dayahead ⇒ hourly mean of the 5-min RRP (AUD/MWh).
-    price = df_combined[(area, "price")].resample("1h").mean().rename("price")
+    # Price (model input): hourly mean of the 5-min RRP, converted AUD→EUR so it
+    # matches the EUR-denominated ENTSO-E prices the optimisation consumes.
+    # (The _full frame stays raw AUD.)
+    eur_per_aud = snakemake.params.eur_per_aud
+    price = (df_combined[(area, "price")].resample("1h").mean() * eur_per_aud).rename("price")
     price.index.name = "time"
 
     full_out = Path(snakemake.output.full)
