@@ -1,5 +1,5 @@
 """
-complementarity.py
+determine_complementarity.py
 
 Purpose
 -------
@@ -51,10 +51,10 @@ from scripts.res_cf._helpers import haversine_distance_km
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-# ── Import reusable functions from make_bestsite_cf ──────────────────────────
+# ── Import reusable functions from determine_bestsite_p95 ────────────────────
 _spec = importlib.util.spec_from_file_location(
     "bestsite",
-    Path(__file__).parent / "make_bestsite_cf.py"
+    Path(__file__).parent / "determine_bestsite_p95.py"
 )
 _bestsite = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_bestsite)

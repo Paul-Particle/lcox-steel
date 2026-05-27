@@ -40,11 +40,11 @@ res_cf:
   offshore_max_distance_km: 200
 
   # Wind CF computation flags — passed to atlite.Cutout.wind() in
-  # build_cf_timeseries, make_bestsite_cf, resource_spread.
+  # build_cf_timeseries, determine_bestsite_p95, resource_spread.
   # smooth=True             smooths the turbine power curve
   # add_cutout_windspeed    preserves atlite's built-in 25 m/s cutoff during smoothing
   # spatial_avg_window      odd-N square window of cells averaged for wind site CFs
-  #                         (used in make_bestsite_cf to approximate wind farm scale)
+  #                         (used in determine_bestsite_p95 to approximate wind farm scale)
   wind_cf:
     smooth: true
     add_cutout_windspeed: true
@@ -65,6 +65,6 @@ res_cf:
     w_correlation: 0.4
     max_radius_km: 300.0
     quality_floor: 0.90
-    # Triplet count threshold above which complementarity.py switches from
+    # Triplet count threshold above which determine_complementarity.py switches from
     # exhaustive brute-force screening to greedy + neighbourhood search.
     max_triplets_brute_force: 500000

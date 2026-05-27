@@ -188,7 +188,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   Outputs:
   - `resources/res_cf/resource_spread_2023.parquet`
 
-- `scripts/res_cf/make_bestsite_cf.py`  
+- `scripts/res_cf/determine_bestsite_p95.py`  
 
   ### Updated behaviour:
   Generates “best-site” hourly CF time series by **direct extraction from Atlite CF grids**.
@@ -206,7 +206,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   - multiplies national CF by uplift factors
   - uses resource_spread outputs for time series generation
 
-- `scripts/res_cf/complementarity.py`  
+- `scripts/res_cf/determine_complementarity.py`  
   Screens all valid (onshore, offshore, solar) grid-cell triplets per country and ranks them
   by a complementarity score (coincidence - correlation). Outputs top-N triplets and national
   mean profiles for use in PyPSA scenarios.
