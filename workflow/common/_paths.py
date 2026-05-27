@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Raw / external / expensive (won't be re-fetched on rebuild)
 DATA = REPO_ROOT / "data"
-SHAPES_RAW = DATA / "shapes"                   # ne_110m, eez
+SHAPES_RAW = DATA / "shapes"                   # ne_110m, offshore_zone (eez_v12)
 
 # Derived (Snakemake-tracked, reproducible from raw + scripts + config)
 RESOURCES = REPO_ROOT / "resources"

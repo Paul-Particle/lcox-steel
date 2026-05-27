@@ -18,7 +18,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 # Standalone defaults
-_EEZ_SHP = DATA / "shapes/eez/eez_v12.shp"
+_OFFSHORE_ZONE_SHP = DATA / "shapes/offshore_zones/eez_v12.shp"
 _LAND_REGIONS = SHAPES_RES / "de_geo.parquet"
 _OUT = SHAPES_RES / "de_offshore_geo.parquet"
 _ISO3 = "DEU"
@@ -26,7 +26,7 @@ _REGION = "DE"
 _OFFSHORE_MAX_KM = 200.0
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    _EEZ_SHP = Path(snakemake.input.eez)
+    _OFFSHORE_ZONE_SHP = Path(snakemake.input.offshore_zone)
     _LAND_REGIONS = Path(snakemake.input.regions)
     _OUT = Path(snakemake.output[0])
     _ISO3 = snakemake.params.iso3
@@ -35,17 +35,17 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
 
 
 def main() -> None:
-    if not _EEZ_SHP.exists():
-        raise FileNotFoundError(f"EEZ shapefile not found: {_EEZ_SHP}")
+    if not _OFFSHORE_ZONE_SHP.exists():
+        raise FileNotFoundError(f"Offshore zone shapefile not found: {_OFFSHORE_ZONE_SHP}")
     if not _LAND_REGIONS.exists():
         raise FileNotFoundError(f"Land regions file not found: {_LAND_REGIONS}")
 
     _OUT.parent.mkdir(parents=True, exist_ok=True)
     print(f"Building offshore region for {_REGION} (ISO3={_ISO3}, max {_OFFSHORE_MAX_KM} km)")
 
-    eez = gpd.read_file(_EEZ_SHP).to_crs(4326)
-    gdf = eez.loc[
-        (eez["ISO_TER1"] == _ISO3) & (eez["POL_TYPE"] == "200NM"),
+    offshore_zone = gpd.read_file(_OFFSHORE_ZONE_SHP).to_crs(4326)
+    gdf = offshore_zone.loc[
+        (offshore_zone["ISO_TER1"] == _ISO3) & (offshore_zone["POL_TYPE"] == "200NM"),
         ["ISO_TER1", "geometry"],
     ].copy()
     gdf["region"] = _REGION
@@ -57,11 +57,11 @@ def main() -> None:
     land_m["geometry"] = land_m["geometry"].buffer(_OFFSHORE_MAX_KM * 1000)
     land_buffer = land_m.to_crs(4326)
 
-    eez_geom = gdf.loc[gdf["region"] == _REGION, "geometry"].iloc[0]
+    offshore_zone_geom = gdf.loc[gdf["region"] == _REGION, "geometry"].iloc[0]
     land_geom = land.loc[land["region"] == _REGION, "geometry"].iloc[0]
     buf_geom = land_buffer.loc[land_buffer["region"] == _REGION, "geometry"].iloc[0]
 
-    offshore_geom = eez_geom.difference(land_geom).intersection(buf_geom)
+    offshore_geom = offshore_zone_geom.difference(land_geom).intersection(buf_geom)
 
     result = gpd.GeoDataFrame({"region": [_REGION], "geometry": [offshore_geom]}, crs=4326)
     result["geometry"] = result["geometry"].buffer(0)

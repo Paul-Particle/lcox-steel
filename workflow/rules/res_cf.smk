@@ -3,14 +3,14 @@ wildcard_constraints:
     tech=r"wind_onshore|wind_offshore|solar",
 
 
-rule extract_eez_shapefile:
+rule extract_offshore_zone_shapefile:
     input:
-        "data/shapes/eez/eez_v12.zip",
+        "data/shapes/offshore_zones/eez_v12.zip",
     output:
-        shp="data/shapes/eez/eez_v12.shp",
-        shx="data/shapes/eez/eez_v12.shx",
-        dbf="data/shapes/eez/eez_v12.dbf",
-        prj="data/shapes/eez/eez_v12.prj",
+        shp="data/shapes/offshore_zones/eez_v12.shp",
+        shx="data/shapes/offshore_zones/eez_v12.shx",
+        dbf="data/shapes/offshore_zones/eez_v12.dbf",
+        prj="data/shapes/offshore_zones/eez_v12.prj",
     script:
         "../scripts/res_cf/extract_shapefile.py"
 
@@ -47,7 +47,7 @@ rule build_regions:
 rule build_offshore_regions:
     input:
         regions="resources/shapes/{cf_area}_geo.parquet",
-        eez="data/shapes/eez/eez_v12.shp",
+        offshore_zone="data/shapes/offshore_zones/eez_v12.shp",
     output:
         "resources/shapes/{cf_area}_offshore_geo.parquet",
     params:
