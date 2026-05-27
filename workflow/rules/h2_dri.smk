@@ -25,7 +25,14 @@ rule h2_dri_optimize:
             ),
         ),
         assumptions="config/assumptions.yaml",
-        projects="config/projects.csv",
+    params:
+        techs=collect(
+            "{item.tech}",
+            item=lookup(
+                query="project == '{project}' and scenario == '{scenario}'",
+                within=projects_df,
+            ),
+        ),
     output:
         network="results/{project}/{scenario}.nc",
     script:
