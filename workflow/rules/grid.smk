@@ -1,6 +1,6 @@
 # Download date range covers the union of all project periods.
-_dl_start = min(p["start_date"] for p in projects["projects"].values())
-_dl_end   = max(p["end_date"]   for p in projects["projects"].values())
+_dl_start = min(p["start_date"] for p in config["projects"].values())
+_dl_end   = max(p["end_date"]   for p in config["projects"].values())
 
 
 rule download_entsoe:

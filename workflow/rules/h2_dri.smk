@@ -2,7 +2,7 @@ rule compile_report:
     input:
         networks=lambda wc: [
             f"results/{wc.project}/{s}.nc"
-            for s in projects["projects"][wc.project]["scenarios"]
+            for s in config["projects"][wc.project]["scenarios"]
         ],
         assumptions="config/assumptions.yaml",
     output:
@@ -17,8 +17,8 @@ rule h2_dri_optimize:
         # run.py can zip techs ↔ files). tech_inputs templates were pre-resolved
         # per project in common.smk.
         tech_inputs=lambda wc: [
-            projects["projects"][wc.project]["tech_inputs"][tech]
-            for tech in projects["projects"][wc.project]["scenarios"][wc.scenario]["techs"]
+            config["projects"][wc.project]["tech_inputs"][tech]
+            for tech in config["projects"][wc.project]["scenarios"][wc.scenario]["techs"]
         ],
         assumptions="config/assumptions.yaml",
         projects="config/projects.yaml",

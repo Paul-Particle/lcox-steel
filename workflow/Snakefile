@@ -1,9 +1,9 @@
 configfile: "config/config.yaml"
+configfile: "config/projects.yaml"
 
-import yaml
-with open("config/projects.yaml") as _f:
-    projects = yaml.safe_load(_f)
-
+# import yaml
+# with open("config/projects.yaml") as _f:
+#     projects = yaml.safe_load(_f)
 
 include: "rules/common.smk"
 include: "rules/grid.smk"
@@ -16,12 +16,18 @@ rule all:
     input:
         expand(
             "results/report_{project}.csv",
-            project=lookup(dpath="projects", within=projects),
+            project=lookup(dpath="projects", within=config),
         ),
         # Full per-zone ENTSO-E dataset (non-price metrics) — a top-level target
         # for now until something downstream consumes it.
-        [
-            f"resources/entsoe/{p['bidding_zone']}_{p['start_date']}_{p['end_date']}_full.parquet"
-            for p in projects["projects"].values()
-            if p.get("bidding_zone")
-        ],
+        # [
+        #     f"resources/entsoe/{p['bidding_zone']}_{p['start_date']}_{p['end_date']}_full.parquet"
+        #     for p in projects["projects"].values()
+        #     if p.get("bidding_zone")
+        # ],
+        expand(
+            "resources/entsoe/{bidding_zone}_{start_date}_{end_date}_full.parquet",
+            bidding_zone=lookup(dpath="projects/DE_2023_baseline/bidding_zone", within=config),
+            start_date=lookup(dpath="projects/DE_2023_baseline/start_date", within=config),
+            end_date=lookup(dpath="projects/DE_2023_baseline/end_date", within=config),
+        ),
