@@ -68,7 +68,6 @@ mask_cells_inside       = _bestsite.mask_cells_inside
 OUTDIR = RES_CF
 CF_DIR = RES_CF
 
-YEAR  = 2023
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
 
 # Module-level country variable set in main loop
@@ -83,7 +82,7 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _SM_COUNTRY = snakemake.wildcards.country.upper()
     _SM_TOP_OUT = Path(snakemake.output.top)
     _SM_AVG_OUT = Path(snakemake.output.avg)
-    YEAR        = int(snakemake.config["res_cf"]["year"])
+
 
 
 # ── Config ────────────────────────────────────────────────────────────────────

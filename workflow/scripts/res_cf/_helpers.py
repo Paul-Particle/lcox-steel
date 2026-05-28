@@ -23,13 +23,6 @@ def load_res_cf_cfg() -> dict:
     with open(REPO_ROOT / "config/config.yaml") as f:
         return yaml.safe_load(f)["res_cf"]
 
-QUARTER_DATES = {
-    "q1": ("-01-01", "-03-31 23:00"),
-    "q2": ("-04-01", "-06-30 23:00"),
-    "q3": ("-07-01", "-09-30 23:00"),
-    "q4": ("-10-01", "-12-31 23:00"),
-}
-
 
 def cutout_path(country: str, year: int, quarter: str) -> Path:
     """Canonical path to an atlite cutout."""
