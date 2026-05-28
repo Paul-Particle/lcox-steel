@@ -28,7 +28,7 @@ lcox-steel/
 │   │   │   ├── build_and_solve_network.py  # PyPSA network builder + solver
 │   │   │   ├── compile_report.py           # Post-solve LCOH accounting → CSV
 │   │   │   └── _helpers.py                 # annuity factor + electrolyser sizing
-│   │   ├── viz/utils.py    # Shared plotting helpers
+│   │   ├── viz/_helpers.py # Shared plotting helpers
 │   │   └── tests/          # End-to-end smoke tests
 │   ├── notebooks/          # API exploration notebooks (entsoe, nem)
 │   └── common/             # Shared helpers (_paths.py, _stubs.py)
