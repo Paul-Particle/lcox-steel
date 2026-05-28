@@ -18,7 +18,7 @@ lcox-steel/
 │   │   │   ├── extract_shapefile.py # Generic zip→shp extractor
 │   │   │   ├── build_regions.py
 │   │   │   ├── build_offshore_regions.py
-│   │   │   ├── make_cutout.py
+│   │   │   ├── download_cutout.py
 │   │   │   ├── build_cf_timeseries.py
 │   │   │   ├── resource_spread.py
 │   │   │   ├── determine_bestsite_p95.py
@@ -139,7 +139,7 @@ Months that fail (transient ENTSO-E errors, network blips) are retried 3× with 
 snakemake resources/res_cf/de_wind_onshore_country-average_20230101_20231231.parquet --cores 4
 ```
 
-This chains: `build_regions` → `build_offshore_regions` → `make_cutout` (ERA5) → `build_cf_timeseries`. The `{tech}` wildcard accepts `wind_onshore`, `wind_offshore`, or `solar`.
+This chains: `build_regions` → `build_offshore_regions` → `download_cutout` (ERA5) → `build_cf_timeseries`. The `{tech}` wildcard accepts `wind_onshore`, `wind_offshore`, or `solar`.
 
 ### PyPSA investment optimization
 

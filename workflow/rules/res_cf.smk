@@ -60,7 +60,7 @@ rule build_offshore_regions:
         "../scripts/res_cf/build_offshore_regions.py"
 
 
-rule make_cutout:
+rule download_cutout:
     input:
         regions="resources/shapes/{cf_area}_geo.parquet",
     output:
@@ -73,7 +73,7 @@ rule make_cutout:
         bbox_pad_deg=lookup(dpath="res_cf/cutout/bbox_pad_deg", within=config),
         monthly_requests=lookup(dpath="res_cf/cutout/monthly_requests", within=config),
     script:
-        "../scripts/res_cf/make_cutout.py"
+        "../scripts/res_cf/download_cutout.py"
 
 
 rule build_cf_timeseries:

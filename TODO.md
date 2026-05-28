@@ -3,7 +3,7 @@
 ## CDS download monitoring
 
 Atlite ERA5 cutout downloads go through the CDS API. With `monthly_requests=True`
-(set in `make_cutout.py`), atlite submits one CDS job per month — up to 12 jobs
+(set in `download_cutout.py`), atlite submits one CDS job per month — up to 12 jobs
 for a full year. Each job queues independently; global queue depths of 5000+ are
 common and waits of several hours are normal.
 
