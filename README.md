@@ -25,10 +25,9 @@ lcox-steel/
 │   │   │   ├── determine_complementarity.py
 │   │   │   └── diag_*.py               # Diagnostic and QC scripts
 │   │   ├── h2_dri/         # PyPSA investment model
-│   │   │   ├── run.py      # CLI entry point
-│   │   │   ├── network.py  # PyPSA network builder
-│   │   │   ├── costs.py    # LCOH post-solve accounting
-│   │   │   └── sizing.py   # Electrolyser sizing + annuity factor utilities
+│   │   │   ├── build_and_solve_network.py  # PyPSA network builder + solver
+│   │   │   ├── compile_report.py           # Post-solve LCOH accounting → CSV
+│   │   │   └── _helpers.py                 # annuity factor + electrolyser sizing
 │   │   ├── viz/utils.py    # Shared plotting helpers
 │   │   └── tests/          # End-to-end smoke tests
 │   ├── notebooks/          # API exploration notebooks (entsoe, nem)
