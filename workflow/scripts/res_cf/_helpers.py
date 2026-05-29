@@ -2,7 +2,7 @@
 Thematic helpers shared across res_cf pipeline scripts.
 
 Lives next to its consumers (download_cutout, determine_bestsite_p95, determine_complementarity,
-determine_resource_spread, diag_plot_bestsite_p95_locations) rather than in a top-level
+determine_resource_spread, diag_plot_bestsite_p95) rather than in a top-level
 common/ module — the helpers are specific to the atlite/quarterly-cutout
 workflow.
 """
