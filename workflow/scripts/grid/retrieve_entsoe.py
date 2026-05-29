@@ -102,6 +102,7 @@ def process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame:
     xb      = to_utc_naive(xb_raw.copy());  xb.columns  = xb.columns.droplevel(0)
 
     df = pd.concat([price, load_fc, load, res, gen, xb], axis=1, sort=False)
+    df = df.ffill(limit=3).fillna(0.0)
 
     df["wind_forecast"]     = df.get("wind_onshore_forecast", 0) + df.get("wind_offshore_forecast", 0)
     df["res_forecast"]      = df["wind_forecast"] + df.get("solar_forecast", 0)
@@ -152,10 +153,11 @@ def retrieve(snakemake) -> None:
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:00")
     out_df = cached[area].loc[window]
-    if variant == "dayahead":
-        out_df = out_df.ffill(limit=3).bfill(limit=3)
-    else:
-        out_df = out_df.ffill(limit=3).fillna(0.0)
+    # Cross-month boundary gaps: forward-fill only (bfill would propagate future data backward).
+    # Per-month processing already handles within-month gaps including start-of-month.
+    out_df = out_df.ffill(limit=3)
+    if variant == "full":
+        out_df = out_df.fillna(0.0)
     out_df.index.name = "time"
 
     out_path = Path(snakemake.output[0])
