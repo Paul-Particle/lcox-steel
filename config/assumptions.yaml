@@ -9,7 +9,9 @@ finance:
 plant:
   dri_mt_per_year: 2.0
   h2_intensity_kg_per_t_dri: 50.0
-  availability_target: 1.0
+  # Floor for electrolyser sizing — the optimiser may grow it further when the
+  # extra capacity earns its capex via buffer-mediated arbitrage of cheap RES.
+  availability_target: 0.95
 
 res:
   wind_onshore:

@@ -47,7 +47,7 @@ def _annual_cost(n: pypsa.Network) -> float:
     mask = n.storage_units.p_nom_extendable
     cost += (n.storage_units.loc[mask, "capital_cost"] * n.storage_units.loc[mask, "p_nom_opt"]).sum()
 
-    cost += n.links.at["electrolyser", "capital_cost"] * n.links.at["electrolyser", "p_nom"]
+    cost += n.links.at["electrolyser", "capital_cost"] * n.links.at["electrolyser", "p_nom_opt"]
 
     mask = n.stores.e_nom_extendable
     cost += (n.stores.loc[mask, "capital_cost"] * n.stores.loc[mask, "e_nom_opt"]).sum()
@@ -89,7 +89,7 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         summary["h2_buffer_mwh_lhv_opt"] = n.stores.at["h2_buffer", "e_nom_opt"]
 
     if "electrolyser" in n.links.index:
-        summary["electrolyser_mw"] = n.links.at["electrolyser", "p_nom"]
+        summary["electrolyser_mw"] = n.links.at["electrolyser", "p_nom_opt"]
 
     return summary
 
