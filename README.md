@@ -18,18 +18,17 @@ lcox-steel/
 │   │   │   ├── extract_shapefile.py # Generic zip→shp extractor
 │   │   │   ├── build_regions.py
 │   │   │   ├── build_offshore_regions.py
-│   │   │   ├── make_cutout.py
+│   │   │   ├── download_cutout.py
 │   │   │   ├── build_cf_timeseries.py
-│   │   │   ├── resource_spread.py
+│   │   │   ├── determine_resource_spread.py
 │   │   │   ├── determine_bestsite_p95.py
 │   │   │   ├── determine_complementarity.py
 │   │   │   └── diag_*.py               # Diagnostic and QC scripts
 │   │   ├── h2_dri/         # PyPSA investment model
-│   │   │   ├── run.py      # CLI entry point
-│   │   │   ├── network.py  # PyPSA network builder
-│   │   │   ├── costs.py    # LCOH post-solve accounting
-│   │   │   └── sizing.py   # Electrolyser sizing + annuity factor utilities
-│   │   ├── viz/utils.py    # Shared plotting helpers
+│   │   │   ├── build_and_solve_network.py  # PyPSA network builder + solver
+│   │   │   ├── compile_report.py           # Post-solve LCOH accounting → CSV
+│   │   │   └── _helpers.py                 # annuity factor + electrolyser sizing
+│   │   ├── viz/_helpers.py # Shared plotting helpers
 │   │   └── tests/          # End-to-end smoke tests
 │   ├── notebooks/          # API exploration notebooks (entsoe, nem)
 │   └── common/             # Shared helpers (_paths.py, _stubs.py)
@@ -140,7 +139,7 @@ Months that fail (transient ENTSO-E errors, network blips) are retried 3× with 
 snakemake resources/res_cf/de_wind_onshore_country-average_20230101_20231231.parquet --cores 4
 ```
 
-This chains: `build_regions` → `build_offshore_regions` → `make_cutout` (ERA5) → `build_cf_timeseries`. The `{tech}` wildcard accepts `wind_onshore`, `wind_offshore`, or `solar`.
+This chains: `build_regions` → `build_offshore_regions` → `download_cutout` (ERA5) → `build_cf_timeseries`. The `{tech}` wildcard accepts `wind_onshore`, `wind_offshore`, or `solar`.
 
 ### PyPSA investment optimization
 

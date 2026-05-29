@@ -161,7 +161,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
 - `scripts/res_cf/build_offshore_regions.py`  
   Builds `resources/shapes/offshore_regions.parquet` from EEZ polygons restricted to a near-shore deployment band.
 
-- `scripts/res_cf/make_cutout.py`  
+- `scripts/res_cf/download_cutout.py`  
   Creates ERA5 cutouts (`cutouts/*.nc`) for a given country and time segment
   (Q1–Q4). For large domains (AUS/BRA), uses coarser grid (`dx=0.5`, `dy=0.5`)
   to avoid CDS job failures and reduce runtime/memory.
@@ -179,7 +179,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   Merges yearly wind + solar into the final modelling inputs:
   `*_cf_2023.parquet` with columns `time`, `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
 
-- `scripts/res_cf/resource_spread.py`  
+- `scripts/res_cf/determine_resource_spread.py`  
   Computes intra-country spatial resource distribution metrics from the existing Atlite cutouts.  
   For each country and technology:
   - derives annual mean CF per grid cell (no national aggregation)

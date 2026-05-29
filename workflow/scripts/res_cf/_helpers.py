@@ -1,8 +1,8 @@
 """
 Thematic helpers shared across res_cf pipeline scripts.
 
-Lives next to its consumers (make_cutout, determine_bestsite_p95, determine_complementarity,
-resource_spread, diag_plot_bestsite_locations) rather than in a top-level
+Lives next to its consumers (download_cutout, determine_bestsite_p95, determine_complementarity,
+determine_resource_spread, diag_plot_bestsite_p95) rather than in a top-level
 common/ module — the helpers are specific to the atlite/quarterly-cutout
 workflow.
 """
@@ -22,13 +22,6 @@ def load_res_cf_cfg() -> dict:
     Snakemake-driven runs go through snakemake.config instead."""
     with open(REPO_ROOT / "config/config.yaml") as f:
         return yaml.safe_load(f)["res_cf"]
-
-QUARTER_DATES = {
-    "q1": ("-01-01", "-03-31 23:00"),
-    "q2": ("-04-01", "-06-30 23:00"),
-    "q3": ("-07-01", "-09-30 23:00"),
-    "q4": ("-10-01", "-12-31 23:00"),
-}
 
 
 def cutout_path(country: str, year: int, quarter: str) -> Path:
