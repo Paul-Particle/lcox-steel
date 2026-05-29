@@ -62,7 +62,7 @@ rule build_offshore_regions:
 
 rule download_cutout:
     input:
-        regions="resources/shapes/{cf_area}_geo.parquet",
+        regions=ancient("resources/shapes/{cf_area}_geo.parquet"),
     output:
         protected("cutouts/{cf_area}_{start_date}_{end_date}.nc"),
     params:
