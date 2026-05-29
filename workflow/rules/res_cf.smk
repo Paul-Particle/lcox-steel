@@ -62,10 +62,16 @@ rule build_offshore_regions:
 
 rule download_cutout:
     input:
-        regions=ancient("resources/shapes/{cf_area}_geo.parquet"),
+        ne_shp="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp",
     output:
         protected("cutouts/{cf_area}_{start_date}_{end_date}.nc"),
     params:
+        iso3=lookup(dpath="res_cf/countries/{cf_area}/iso3", within=config),
+        mainland_bbox=lookup(
+            dpath="res_cf/countries/{cf_area}/mainland_bbox",
+            within=config,
+            default=None,
+        ),
         coarse=lookup(
             dpath="res_cf/countries/{cf_area}/coarse", within=config, default=False
         ),
