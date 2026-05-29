@@ -15,7 +15,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 # Standalone defaults
-_NE_SHP = SHAPES_RAW / "ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp"
+_NE_ZIP = SHAPES_RAW / "ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"
 _CF_AREA = "de"
 _ISO3 = "DEU"
 _MAINLAND_BBOX = None
@@ -29,7 +29,7 @@ _MONTHLY_REQUESTS = False
 _ATLITE_CACHE = ATLITE_CACHE
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    _NE_SHP = Path(snakemake.input.ne_shp)
+    _NE_ZIP = Path(snakemake.input.ne_zip)
     _CF_AREA = snakemake.wildcards.cf_area
     _ISO3 = snakemake.params.iso3
     _MAINLAND_BBOX = snakemake.params.mainland_bbox
@@ -47,7 +47,7 @@ def _iso(yyyymmdd: str) -> str:
 
 
 def get_bounds(pad: float) -> tuple[slice, slice]:
-    world = gpd.read_file(_NE_SHP).to_crs(4326)
+    world = gpd.read_file(str(_NE_ZIP)).to_crs(4326)
     for col in ["ADM0_A3", "SOV_A3", "ISO_A3"]:
         if col in world.columns:
             sel = world.loc[world[col] == _ISO3, "geometry"]

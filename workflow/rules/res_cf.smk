@@ -62,7 +62,7 @@ rule build_offshore_regions:
 
 rule download_cutout:
     input:
-        ne_shp="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp",
+        ne_zip="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
     output:
         protected("cutouts/{cf_area}_{start_date}_{end_date}.nc"),
     params:
