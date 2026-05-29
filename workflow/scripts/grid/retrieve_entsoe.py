@@ -98,7 +98,7 @@ def process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame:
     gen     = to_utc_naive(gen_raw.copy());  gen.columns = gen.columns.droplevel(0)
     xb      = to_utc_naive(xb_raw.copy());  xb.columns  = xb.columns.droplevel(0)
 
-    df = pd.concat([price, load_fc, load, res, gen, xb], axis=1)
+    df = pd.concat([price, load_fc, load, res, gen, xb], axis=1, sort=False)
 
     df["wind_forecast"]     = df.get("wind_onshore_forecast", 0) + df.get("wind_offshore_forecast", 0)
     df["res_forecast"]      = df["wind_forecast"] + df.get("solar_forecast", 0)
