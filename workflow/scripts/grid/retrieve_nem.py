@@ -82,6 +82,9 @@ def retrieve(snakemake) -> None:
     processed_cache_dir  = Path("resources/nem")
     processed_cache_path = processed_cache_dir / f"{variant}.parquet"
 
+    if variant not in ("dayahead", "full"):
+        raise ValueError(f"Unknown variant {variant!r}. Expected 'dayahead' or 'full'.")
+
     cached = pd.read_parquet(processed_cache_path) if processed_cache_path.exists() else None
 
     months = [

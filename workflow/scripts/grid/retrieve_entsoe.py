@@ -112,6 +112,9 @@ def retrieve(snakemake) -> None:
     processed_cache_dir  = Path("resources/entsoe")
     processed_cache_path = processed_cache_dir / f"{variant}.parquet"
 
+    if variant not in ("dayahead", "full"):
+        raise ValueError(f"Unknown variant {variant!r}. Expected 'dayahead' or 'full'.")
+
     valid_zones = _load_bidding_zones(raw_cache_dir)
     if area not in valid_zones:
         raise ValueError(
