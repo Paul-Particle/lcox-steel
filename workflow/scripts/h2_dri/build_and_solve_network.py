@@ -152,8 +152,11 @@ def _add_electrolyser(
         bus0="electricity",
         bus1="hydrogen",
         carrier="electrolyser",
-        p_nom=el_mw,
-        p_nom_extendable=False,
+        p_nom_extendable=True,
+        # Floor sized by dri_to_el_mw to meet annual demand at availability_target.
+        # Optimiser may grow beyond this when the headroom pays for itself via
+        # buffer-mediated arbitrage of cheap RES hours.
+        p_nom_min=el_mw,
         efficiency=el_efficiency,
         capital_cost=cap_cost,
         marginal_cost=0.0,
