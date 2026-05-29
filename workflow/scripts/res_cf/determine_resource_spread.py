@@ -1,5 +1,5 @@
 """
-06_resource_spread.py
+06_determine_resource_spread.py
 
 Purpose
 -------

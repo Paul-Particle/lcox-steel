@@ -179,7 +179,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   Merges yearly wind + solar into the final modelling inputs:
   `*_cf_2023.parquet` with columns `time`, `wind_onshore_cf`, `wind_offshore_cf`, `solar_cf`.
 
-- `scripts/res_cf/resource_spread.py`  
+- `scripts/res_cf/determine_resource_spread.py`  
   Computes intra-country spatial resource distribution metrics from the existing Atlite cutouts.  
   For each country and technology:
   - derives annual mean CF per grid cell (no national aggregation)

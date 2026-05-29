@@ -20,7 +20,7 @@ lcox-steel/
 │   │   │   ├── build_offshore_regions.py
 │   │   │   ├── download_cutout.py
 │   │   │   ├── build_cf_timeseries.py
-│   │   │   ├── resource_spread.py
+│   │   │   ├── determine_resource_spread.py
 │   │   │   ├── determine_bestsite_p95.py
 │   │   │   ├── determine_complementarity.py
 │   │   │   └── diag_*.py               # Diagnostic and QC scripts
