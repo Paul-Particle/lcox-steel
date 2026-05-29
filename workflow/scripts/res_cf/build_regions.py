@@ -8,6 +8,7 @@ If mainland_bbox is given, only polygon parts whose centroid falls inside
 [lon_min, lon_max, lat_min, lat_max] are kept (drops overseas territories).
 """
 
+import logging
 from pathlib import Path
 
 import geopandas as gpd
@@ -17,6 +18,11 @@ from common._paths import DATA, SHAPES_RES
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
+
+from common._logging import configure_logging
+
+configure_logging(snakemake)
+log = logging.getLogger(__name__)
 
 # Standalone defaults
 _NE_ZIP = DATA / "shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"
@@ -71,7 +77,7 @@ def main() -> None:
     out = gpd.GeoDataFrame({"region": [_REGION], "geometry": [geom]}, crs=4326)
     out["geometry"] = out["geometry"].buffer(0)
     out.to_parquet(_OUT)
-    print(f"Wrote: {_OUT}  ({_CF_AREA} → {_REGION})")
+    log.info("wrote %s (%s → %s)", _OUT, _CF_AREA, _REGION)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ Electrolyser efficiency is:
              = 33.33 / 55 ≈ 0.606 (MW H2 LHV per MW electricity)
 """
 
+import logging
 import sys
 from pathlib import Path
 
@@ -25,9 +26,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 from _helpers import annuity_factor, dri_to_el_mw
 
 from common._constants import H2_LHV_KWH_PER_KG
+from common._logging import configure_logging
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
+
+configure_logging(snakemake)
+log = logging.getLogger(__name__)
 
 
 def build_network(
@@ -206,12 +211,17 @@ def main() -> None:
                 "aligning to CF index. Check that the grid file covers the same period."
             )
 
+    log.info(
+        "building network for project=%s scenario=%s techs=%s",
+        project, scenario, techs,
+    )
     n = build_network(snakemake.config, cf_timeseries, price_series)
+    log.info("optimising with HiGHS (snapshots=%d)", len(n.snapshots))
     n.optimize(solver_name="highs")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     n.export_to_netcdf(out_path)
-    print(f"Network saved to {out_path}")
+    log.info("network saved to %s", out_path)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,15 @@
 
 scheduler: greedy
 
+logging:
+  # Root level for the project's own loggers. Set to DEBUG for verbose runs.
+  # Override on the CLI: snakemake --config 'logging={level: DEBUG}'.
+  level: INFO
+  # Level for noisy upstream libraries (atlite, cdsapi, pypsa, ...).
+  third_party_level: WARNING
+  # Stick to %-style; no f-strings in log calls.
+  format: "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
+
 entsoe:
   # Per-(area, data_type) downloads are pulled on demand by config/projects.csv;
   # the bidding-zone catalog lives in data/entsoe_cache/entsoe_bidding_zones.csv.

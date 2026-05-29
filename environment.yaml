@@ -35,6 +35,7 @@ dependencies:
   # Config & workflow
   - pyyaml
   - jupyter
+  - tqdm
 
   - pip:
       - nemosis

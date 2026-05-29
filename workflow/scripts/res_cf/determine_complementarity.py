@@ -36,6 +36,7 @@ resources/res_cf/<cc>_average_profiles_2023.parquet
 
 from __future__ import annotations
 
+import logging
 from itertools import product
 from pathlib import Path
 
@@ -43,6 +44,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from common._logging import configure_logging, progress
 from common._paths import REPO_ROOT, RES_CF
 from scripts.res_cf._helpers import haversine_distance_km
 
@@ -55,6 +57,9 @@ from determine_bestsite_p95 import (
     geometry_for_tech,
     mask_cells_inside,
 )
+
+configure_logging(snakemake)
+log = logging.getLogger(__name__)
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 OUTDIR = RES_CF
@@ -151,10 +156,10 @@ def brute_force_screen(
     top_n:          int,
 ) -> list[dict]:
     records = []
+    n_total = len(ys_on) * len(ys_off) * len(ys_sol)
 
-    for i, j, k in product(range(len(ys_on)),
-                             range(len(ys_off)),
-                             range(len(ys_sol))):
+    triplets = product(range(len(ys_on)), range(len(ys_off)), range(len(ys_sol)))
+    for i, j, k in progress(triplets, desc="brute-force triplets", total=n_total, unit="trip"):
 
         dist = max_pairwise_distance_km_coords(
             lons_on[i],  lats_on[i],
@@ -216,7 +221,7 @@ def greedy_screen(
     are the highest-value refactor target in this file. Leave until the broader
     cutout-cache refactor stabilises the API this script depends on.
     """
-    print("  → Using greedy search (candidate space too large for brute force)")
+    log.info("using greedy search (candidate space too large for brute force)")
 
     def _find_best_triplet(anchor: str):
         if anchor == "wind_onshore":
@@ -409,14 +414,13 @@ def greedy_screen(
     # Run greedy from all three anchors
     anchor_results = []
     for anchor in ["wind_onshore", "wind_offshore", "solar"]:
-        print(f"    trying anchor: {anchor}...", end=" ", flush=True)
         result = _find_best_triplet(anchor)
         if result is None:
-            print("no valid triplet found")
+            log.info("anchor=%s: no valid triplet found", anchor)
             continue
         bi, bj, bk, bs = result
         anchor_results.append((bi, bj, bk, bs))
-        print(f"score={bs:.4f}")
+        log.info("anchor=%s: score=%.4f", anchor, bs)
 
     if not anchor_results:
         return []
@@ -480,7 +484,7 @@ def save_average_profiles(cc: str, year: int, avg_out: Path | None = None) -> No
         raise FileNotFoundError(f"National mean CF file not found: {src}")
     df = pd.read_parquet(src)
     df.to_parquet(dst, index=False)
-    print(f"  Saved average profiles → {dst.name}")
+    log.info("saved average profiles → %s", dst.name)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -498,25 +502,22 @@ def main() -> None:
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
     countries = [sm_country] if sm_country is not None else [c.upper() for c in cfg["countries"]]
-    print("Countries:", countries)
+    log.info("countries: %s", countries)
     for country in countries:
         current_country = country.upper()
         cc = country.lower()
 
-        print(f"\n{'='*60}")
-        print(f"Country: {current_country}")
-        print(f"{'='*60}")
+        log.info("country=%s start", current_country)
 
         save_average_profiles(cc, cfg["year"], avg_out=sm_avg_out)
 
-        print("  Building CF grids (this takes a few minutes per tech)...")
+        log.info("building CF grids (this takes a few minutes per tech)")
         cf_grids = {}
         for tech in TECHS:
-            print(f"    {tech}...", end=" ", flush=True)
             cf_grids[tech] = build_cf_year(current_country, tech)
-            print("done")
+            log.info("tech=%s CF grid built", tech)
 
-        print("  Identifying candidate cells...")
+        log.info("identifying candidate cells")
         candidates   = {}
         ts_matrices  = {}
         coord_arrays = {}
@@ -532,11 +533,11 @@ def main() -> None:
 
             ys, xs = np.where(valid)
             n      = len(ys)
-            print(f"    {tech}: {n} candidate cells")
+            log.info("tech=%s: %d candidate cells", tech, n)
 
             n_timesteps = int(cf.sizes["time"])
             ts_matrix   = np.zeros((n_timesteps, n), dtype=np.float32)
-            for idx in range(n):
+            for idx in progress(range(n), desc=f"extract {tech} cells", total=n, unit="cell"):
                 ts = extract_cell_timeseries(cf, int(ys[idx]), int(xs[idx]), tech)
                 ts_matrix[:, idx] = ts.values
 
@@ -555,7 +556,7 @@ def main() -> None:
         lons_sol, lats_sol = coord_arrays["solar"]
 
         n_triplets = len(ys_on) * len(ys_off) * len(ys_sol)
-        print(f"  Total candidate triplets: {n_triplets:,}")
+        log.info("total candidate triplets: %d", n_triplets)
 
         screen_kwargs = dict(
             ys_on=ys_on,   xs_on=xs_on,   lons_on=lons_on,   lats_on=lats_on,
@@ -580,8 +581,11 @@ def main() -> None:
             top_records = greedy_screen(**screen_kwargs)
 
         if not top_records:
-            print(f"  WARNING: No valid triplets found for {current_country}. "
-                  f"Try increasing max_radius_km (currently {cfg['max_radius_km']} km).")
+            log.warning(
+                "no valid triplets found for %s. "
+                "Try increasing max_radius_km (currently %s km).",
+                current_country, cfg['max_radius_km'],
+            )
             continue
 
         df = pd.DataFrame(top_records)
@@ -591,11 +595,14 @@ def main() -> None:
         out_path = sm_top_out if sm_top_out is not None else OUTDIR / f"{cc}_complementarity_top{cfg['top_n']}_{cfg['year']}.parquet"
         df.to_parquet(out_path, index=False)
 
-        print(f"\n  Top {len(df)} complementary triplets → {out_path.name}")
-        print(f"  Best score: {df['score'].iloc[0]:.4f}  "
-              f"coincidence: {df['coincidence'].iloc[0]:.3f}  "
-              f"mean_corr: {df['mean_corr'].iloc[0]:.3f}  "
-              f"dist_km: {df['dist_km'].iloc[0]:.1f}")
+        log.info("top %d complementary triplets → %s", len(df), out_path.name)
+        log.info(
+            "best score=%.4f coincidence=%.3f mean_corr=%.3f dist_km=%.1f",
+            df['score'].iloc[0],
+            df['coincidence'].iloc[0],
+            df['mean_corr'].iloc[0],
+            df['dist_km'].iloc[0],
+        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,20 @@
+# Default Snakemake profile for local interactive runs.
+#
+# Usage:
+#   snakemake --profile profiles/default --cores 4
+#   snakemake --profile profiles/default --cores 4 --verbose          # loud
+#   snakemake --profile profiles/default --cores 4 2>&1 | tee logs/snakemake.log
+#
+# Per-rule log files (logs/{rule}/{wildcards}.log) are produced regardless,
+# via the `log:` directive on each rule.
+
+cores: 4
+keep-going: true
+rerun-incomplete: true
+printshellcmds: false
+
+# Hide rule chatter and the engine progress line — per-rule logs and tqdm
+# bars carry the detail. Drop these keys (or use --verbose) for the loud view.
+quiet:
+  - progress
+  - rules

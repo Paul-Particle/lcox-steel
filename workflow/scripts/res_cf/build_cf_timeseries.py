@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import atlite
@@ -8,6 +9,11 @@ from common._paths import CUTOUTS, RES_CF, SHAPES_RES
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
+
+from common._logging import configure_logging
+
+configure_logging(snakemake)
+log = logging.getLogger(__name__)
 
 # Standalone defaults
 _CF_AREA = "de"
@@ -124,7 +130,7 @@ def main() -> None:
         raise ValueError(f"Unknown tech: {_TECH!r}")
 
     series.to_frame().to_parquet(_OUT, index=True)
-    print(f"Wrote: {_OUT}  ({len(series)} rows, mean={series.mean():.3f})")
+    log.info("wrote %s (%d rows, mean=%.3f)", _OUT, len(series), series.mean())
 
 
 if __name__ == "__main__":

@@ -48,6 +48,7 @@ resources/res_cf/<cc>_cf_2023_bestsite_p95.csv
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -59,12 +60,16 @@ from shapely.geometry import box
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
+from common._logging import configure_logging
 from common._paths import RES_CF, SHAPES_RES
 from scripts.res_cf._helpers import (
     QUARTERS,
     cutout_path,
     load_res_cf_cfg,
 )
+
+configure_logging(snakemake)
+log = logging.getLogger(__name__)
 
 
 RES_CF_CFG = load_res_cf_cfg()
@@ -256,9 +261,10 @@ def main() -> None:
 
             best_mean = float(ts.mean())
 
-            print(f"{country_upper} | {tech}")
-            print(f"  national_mean = {nat_mean:.3f}")
-            print(f"  best_mean     = {best_mean:.3f}")
+            log.info(
+                "%s | %s: national_mean=%.3f best_mean=%.3f",
+                country_upper, tech, nat_mean, best_mean,
+            )
 
             results[tech] = ts
 
@@ -273,7 +279,7 @@ def main() -> None:
         out_p95 = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95.parquet"
         df_p95.to_parquet(out_p95, index=False)
 
-        print(f"{country_upper}: wrote {out_p95.name}")
+        log.info("%s: wrote %s", country_upper, out_p95.name)
 
 
 

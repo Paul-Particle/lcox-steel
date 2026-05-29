@@ -9,17 +9,22 @@ Usage:
 """
 
 import argparse
+import logging
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from common._logging import configure_logging
 from common._paths import RES_CF, RESULTS
 
 CF_DIR   = RES_CF
 PLOT_DIR = RESULTS / "plots"
 
 from determine_bestsite_p95 import build_cf_year, extract_cell_timeseries
+
+configure_logging(None)
+log = logging.getLogger(__name__)
 
 
 def plot_best_triplet(country: str, year: int) -> None:
@@ -34,7 +39,7 @@ def plot_best_triplet(country: str, year: int) -> None:
     df   = pd.read_parquet(comp_path)
     best = df.iloc[0]
 
-    print(f"Loading CF grids for {country} {year}...")
+    log.info("loading CF grids for %s %s", country, year)
     cf_on  = build_cf_year(country, "wind_onshore")
     cf_off = build_cf_year(country, "wind_offshore")
     cf_sol = build_cf_year(country, "solar")
@@ -63,7 +68,7 @@ def plot_best_triplet(country: str, year: int) -> None:
     PLOT_DIR.mkdir(parents=True, exist_ok=True)
     out = PLOT_DIR / f"{cc}_best_triplet_{year}.png"
     plt.savefig(out, dpi=150)
-    print(f"Saved → {out}")
+    log.info("saved → %s", out)
 
 
 if __name__ == "__main__":
