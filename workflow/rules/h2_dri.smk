@@ -19,6 +19,7 @@ rule compile_report:
 
 rule h2_dri_optimize:
     input:
+        assumptions="config/assumptions.yaml",
         tech_inputs=collect(
             "resources/{item.pipeline}/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}.parquet",
             item=lookup(

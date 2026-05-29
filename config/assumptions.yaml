@@ -7,7 +7,7 @@ finance:
   default_wacc: 0.07
 
 plant:
-  dri_mt_per_year: 2.0
+  dri_mt_per_year: 0.526  # 100 MW H2 LHV input × 8760 h / 33.33 kWh/kg / 50 kg/t
   h2_intensity_kg_per_t_dri: 50.0
   # Floor for electrolyser sizing — the optimiser may grow it further when the
   # extra capacity earns its capex via buffer-mediated arbitrage of cheap RES.
