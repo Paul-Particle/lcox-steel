@@ -1,39 +1,17 @@
 wildcard_constraints:
     start_date=r"\d{8}",
     end_date=r"\d{8}",
-    data_type=r"prices|load_forecast|load_actual|res|generation|crossborder",
     nem_table=r"price|generation|load|crossborder",
+    variant=r"dayahead|full",
 
 
-rule download_entsoe:
+rule retrieve_entsoe:
     output:
-        "resources/entsoe/{area}/{data_type}_{start_date}_{end_date}.parquet",
+        temp("resources/entsoe/{area}_grid_{variant}_{start_date}_{end_date}.parquet"),
     resources:
         entsoe_api=2,
     script:
-        "../scripts/grid/download_entsoe.py"
-
-
-rule process_entsoe:
-    input:
-        "resources/entsoe/{area}/prices_{start_date}_{end_date}.parquet",
-    output:
-        prices="resources/entsoe/{area}_grid_dayahead_{start_date}_{end_date}.parquet",
-    script:
-        "../scripts/grid/process_entsoe.py"
-
-
-rule process_entsoe_full:
-    input:
-        expand(
-            "resources/entsoe/{area}/{data_type}_{start_date}_{end_date}.parquet",
-            data_type=config["entsoe"]["data_types"],
-            allow_missing=True,
-        ),
-    output:
-        "resources/entsoe/{area}_grid_full_{start_date}_{end_date}.parquet",
-    script:
-        "../scripts/grid/process_entsoe_full.py"
+        "../scripts/grid/retrieve_entsoe.py"
 
 
 rule download_nem:
