@@ -82,27 +82,33 @@ def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild
     def determine_gen_type(df):
         """Assign a generator type to each row using ordered regex patterns.
 
-        Patterns are tested in definition order; once a row is matched it is
-        skipped by later patterns so narrow patterns (e.g. 'wind - onshore')
-        take precedence over broader ones (e.g. 'wind') that appear later.
-        The Excel often contains typos in fuel/technology strings, so some
-        patterns intentionally cover misspellings (e.g. 'natrual gas').
+        First match wins. Dict order is intentional — see inline comments.
+        The Excel contains typos in fuel/technology strings, so some patterns
+        intentionally cover misspellings (e.g. 'natrual gas').
         """
+        # Dict order is load-bearing: first match wins.
+        # Ordering rules (each intentional for emissions classification):
+        #   - gas and biomass before oil: natural-gas/diesel → gas; bagasse+diesel → biomass
+        #   - oil before coal_gas and waste: coal-seam-methane and landfill-methane classify
+        #     as oil (the 'ethane' substring of 'methane' matches the oil regex on purpose —
+        #     these generators are treated as dirty/leaky for emissions estimation)
+        #   - other_re before pumped_storage: sewerage burning sludge wins over pump storage
+        #   - wind_onshore before energy_storage: co-located wind+battery treated as wind
         type_regex = {
-            'hard_coal' : 'black coal',
-            'brown_coal' : 'brown coal',
-            'coal_gas' : 'coal seam methane|coal mine gas',
-            'waste' : 'methane',
-            'oil' : 'diesel|ethane|kerosene',
-            'biomass' : 'bagasse|biomass|biogas',
-            'gas' : 'natural gas|natrual gas',
-            'solar' : 'solar',
+            'hard_coal'      : 'black coal',
+            'brown_coal'     : 'brown coal',
+            'gas'            : 'natural gas|natrual gas',
+            'biomass'        : 'bagasse|biomass|biogas',
+            'oil'            : 'diesel|ethane|kerosene',
+            'coal_gas'       : 'coal seam methane|coal mine gas',
+            'waste'          : 'methane',
+            'solar'          : 'solar',
+            'other_re'       : 'sewerage',
+            'wind_onshore'   : 'wind - onshore|wind',
             'energy_storage' : 'battery',
             'pumped_storage' : 'pump storage|^- -$',
-            'other_re' : 'sewerage',
-            'wind_onshore' : 'wind - onshore|wind',
-            'hydro_river' : 'run of river',
-            'hydro' : 'hydro',
+            'hydro_river'    : 'run of river',
+            'hydro'          : 'hydro',
         }
         gen_info = df['gen_info']
         gen_type = pd.Series('', index=df.index, dtype=str)
