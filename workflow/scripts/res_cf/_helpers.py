@@ -1,10 +1,11 @@
 """
-Thematic helpers shared across res_cf pipeline scripts.
+Thematic helpers shared across WIP res_cf analysis scripts.
 
-Lives next to its consumers (download_cutout, determine_bestsite_p95, determine_complementarity,
+Lives next to its consumers (determine_bestsite_p95, determine_complementarity,
 determine_resource_spread, diag_plot_bestsite_p95) rather than in a top-level
-common/ module — the helpers are specific to the atlite/quarterly-cutout
-workflow.
+common/ module — these helpers are specific to the quarterly-cutout workflow
+used by those scripts and are not used by the active Snakemake pipeline
+(build_regions, build_offshore_regions, download_cutout, build_cf_timeseries).
 """
 
 from pathlib import Path

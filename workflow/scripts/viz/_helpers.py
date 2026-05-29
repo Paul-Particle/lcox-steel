@@ -1,8 +1,14 @@
+"""Shared plotting helpers for FCA-style Plotly visualisations.
+
+WIP: This file was adapted from a standalone notebook context and not yet
+aligned with the rest of the repo's conventions. Known issues tracked in
+TODO.md under 'viz/_helpers.py cleanup'.
+"""
+
 import numpy as np
 import pandas as pd
 from pathlib import Path
 import datetime
-# import kaleido # required for saveFig
 import plotly.graph_objects as go
 import plotly.io as pio
 import plotly.express as px

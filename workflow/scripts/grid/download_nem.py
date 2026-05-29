@@ -1,8 +1,20 @@
-import _nemosis_patches  # noqa: F401  — applies AEMO compatibility patches on import
+"""NEM download primitives — imported by retrieve_nem.py.
+
+Provides four download functions (price, generation, load, crossborder) that
+pull data from NEMOSIS and return DataFrames in a shape compatible with their
+ENTSO-E counterparts in download_entsoe.py.
+
+The AEMO compatibility patches in _nemosis_patches.py must be applied before
+any NEMOSIS call; they are activated by the `import _nemosis_patches` line
+below, which must remain the first import in this file.
+"""
+
+import _nemosis_patches  # noqa: F401  — applies AEMO compatibility patches on import; must be first
 from pathlib import Path
 
 import pandas as pd
 from nemosis import dynamic_data_compiler
+
 
 def download_price(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads price data or gets it from the cached feather files or csv files if rebuild=True."""
@@ -24,6 +36,7 @@ def download_price(start_time: str, end_time: str, cache_dir: Path, rebuild: boo
     prices.columns = pd.MultiIndex.from_tuples([(col, 'price') for col in prices.columns])
     prices.index.name = None
     return prices
+
 
 def _resolve_generator_excel(cache_dir: Path) -> Path:
     """Return path to the NEM Registration and Exemption List, fetching via NEMOSIS if absent.
@@ -66,9 +79,15 @@ def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild
     )
     generator_info.columns = generator_info.columns.str.strip().str.replace("\n", " ")
 
-    
     def determine_gen_type(df):
-        dfi = df['gen_info']
+        """Assign a generator type to each row using ordered regex patterns.
+
+        Patterns are tested in definition order; once a row is matched it is
+        skipped by later patterns so narrow patterns (e.g. 'wind - onshore')
+        take precedence over broader ones (e.g. 'wind') that appear later.
+        The Excel often contains typos in fuel/technology strings, so some
+        patterns intentionally cover misspellings (e.g. 'natrual gas').
+        """
         type_regex = {
             'hard_coal' : 'black coal',
             'brown_coal' : 'brown coal',
@@ -85,15 +104,14 @@ def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild
             'hydro_river' : 'run of river',
             'hydro' : 'hydro',
         }
-        for t, r in type_regex.items():
-            m = dfi.str.contains(r)
-            df.loc[m, 'gen_type'] = t
-            df.loc[m, 'gen_info_temp'] = df.loc[m, 'gen_info']
-            df.loc[m, 'gen_info'] = ''
-        df = df.drop(columns=['gen_info'])
-        df.columns = ['gen_type', 'gen_info']
-        return df.loc[:,['gen_info', 'gen_type']]
-
+        gen_info = df['gen_info']
+        gen_type = pd.Series('', index=df.index, dtype=str)
+        matched = pd.Series(False, index=df.index)
+        for t, pattern in type_regex.items():
+            m = (~matched) & gen_info.str.contains(pattern, na=False)
+            gen_type[m] = t
+            matched[m] = True
+        return pd.DataFrame({'gen_info': gen_info, 'gen_type': gen_type})
 
     nem_gen_names = dict(
         generator_info.copy()
@@ -128,7 +146,6 @@ def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild
     # This can happen if a new 'Fuel Source - Descriptor' and 'Technology Type - Descriptor' combination
     # is not covered by the regex in `determine_gen_type`.
     assert not any(pd.isna(v) for v in nem_gen_names.values()), "NaN values found in nem_gen_names mapping. Please update the regex in 'determine_gen_type'."
-    
 
     # final mapping of generator ID to generator type
     map_df = (generator_info.copy()
@@ -137,7 +154,6 @@ def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild
         .drop(columns=["Technology Type - Descriptor", "Fuel Source - Descriptor"])
         .assign(gen_type = lambda df: df["gen_info"].map(nem_gen_names))
     )
-
 
     print("Fetching generation...")
     unit_generation = dynamic_data_compiler(
@@ -192,8 +208,32 @@ def download_load(start_time: str, end_time: str, cache_dir: Path, rebuild: bool
     load.index.name = None
     return load
 
+
 def download_crossborder(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
-    """Downloads and processes cross-border flow data."""
+    """Downloads and processes cross-border flow data.
+
+    NEM records one signed METEREDMWFLOW value per interconnector:
+      positive → flow from `from_region` to `to_region`
+      negative → reverse
+
+    ENTSO-E records two unsigned values per border from each area's perspective:
+      to_{neighbour}   (exports)
+      from_{neighbour} (imports)
+    and in rare cases both can be non-zero simultaneously (bilateral trading).
+
+    To produce an output with the same shape as the ENTSO-E crossborder table —
+    so that VIC1 and DE_LU can be compared side-by-side — each NEM interconnector
+    row is expanded into four rows, one per (region, direction) perspective:
+
+      (a) from_region exporting: to_{to_region}      = |flow|  (main direction)
+      (b) to_region importing:   from_{from_region}  = |flow|  (same physical flow)
+      (c) from_region importing: from_{to_region}    = 0       (reverse simultaneous,
+      (d) to_region exporting:   to_{from_region}    = 0        always 0 in NEM)
+
+    The zero-valued rows (c, d) exist so that any aggregation or comparison code
+    that expects both directions per border (as in ENTSO-E) finds the expected
+    columns rather than NaN.
+    """
     print("Fetching cross-border flows...")
     interconnector = dynamic_data_compiler(
         start_time,
@@ -207,7 +247,7 @@ def download_crossborder(start_time: str, end_time: str, cache_dir: Path, rebuil
     )
     interconnector["SETTLEMENTDATE"] = pd.to_datetime(interconnector["SETTLEMENTDATE"])
 
-    # convert fromatting to match ENTSO-E
+    # Normalise INTERCONNECTORID names to match ENTSO-E border naming convention
     ic_names = {
         k: v
         for k, v in zip(
@@ -220,43 +260,51 @@ def download_crossborder(start_time: str, end_time: str, cache_dir: Path, rebuil
     interconnector['from_region'] = regions[0]
     interconnector['to_region'] = regions[1]
 
-    crossborder = (interconnector.copy()
-        .assign(flow_type_for_region    = lambda df: df.METEREDMWFLOW.apply(lambda v: 'to_'   if v >= 0 else 'from_') + df.to_region  )
-        .assign(flow_type_for_other     = lambda df: df.METEREDMWFLOW.apply(lambda v: 'from_' if v >= 0 else 'to_'  ) + df.from_region)
-        .assign(flow_type_r_for_region  = lambda df: df.METEREDMWFLOW.apply(lambda v: 'from_' if v >= 0 else 'to_'  ) + df.to_region  )
-        .assign(flow_type_r_for_other   = lambda df: df.METEREDMWFLOW.apply(lambda v: 'to_'   if v >= 0 else 'from_') + df.from_region)
-        .assign(flow_value_for_region   = lambda df: df.METEREDMWFLOW.apply(lambda v: v       if v >= 0 else -v))
-        .assign(flow_value_for_other    = lambda df: df.METEREDMWFLOW.apply(lambda v: v       if v >= 0 else -v))
-        .assign(flow_value_r_for_region = lambda df: df.METEREDMWFLOW.apply(lambda v: 0.0))
-        .assign(flow_value_r_for_other  = lambda df: df.METEREDMWFLOW.apply(lambda v: 0.0))
-
+    # Build the four flow columns (see docstring for the (a)-(d) mapping)
+    flow = interconnector.METEREDMWFLOW
+    crossborder = interconnector.assign(
+        # (a) from_region perspective: exporting to to_region
+        flow_type_for_region    = flow.apply(lambda v: 'to_'   if v >= 0 else 'from_') + interconnector.to_region,
+        # (b) to_region perspective: importing from from_region
+        flow_type_for_other     = flow.apply(lambda v: 'from_' if v >= 0 else 'to_'  ) + interconnector.from_region,
+        # (c) from_region perspective: reverse simultaneous import = 0
+        flow_type_r_for_region  = flow.apply(lambda v: 'from_' if v >= 0 else 'to_'  ) + interconnector.to_region,
+        # (d) to_region perspective: reverse simultaneous export = 0
+        flow_type_r_for_other   = flow.apply(lambda v: 'to_'   if v >= 0 else 'from_') + interconnector.from_region,
+        flow_value_for_region   = flow.abs(),
+        flow_value_for_other    = flow.abs(),
+        flow_value_r_for_region = 0.0,   # NEM has no concurrent reverse flows
+        flow_value_r_for_other  = 0.0,
     )
+
+    # Rename columns to a common schema so all four perspectives can be stacked
     common_names = {
-        'from_region':'region',
-        'to_region':'region',
-        'flow_type_for_region': 'flow_type',
-        'flow_type_for_other': 'flow_type',
-        'flow_type_r_for_region': 'flow_type',
+        'from_region':           'region',
+        'to_region':             'region',
+        'flow_type_for_region':  'flow_type',
+        'flow_type_for_other':   'flow_type',
+        'flow_type_r_for_region':'flow_type',
         'flow_type_r_for_other': 'flow_type',
         'flow_value_for_region': 'flow_value',
-        'flow_value_for_other': 'flow_value',
-        'flow_value_r_for_region': 'flow_value',
+        'flow_value_for_other':  'flow_value',
+        'flow_value_r_for_region':'flow_value',
         'flow_value_r_for_other': 'flow_value',
     }
 
-    cols_a = ['SETTLEMENTDATE', 'from_region','flow_type_for_region', 'flow_value_for_region', 'INTERCONNECTORID', 'METEREDMWFLOW']
-    df_a = crossborder[cols_a].rename(columns=common_names)
+    base_cols = ['SETTLEMENTDATE', 'INTERCONNECTORID', 'METEREDMWFLOW']
+    perspectives = [
+        ('from_region', 'flow_type_for_region',   'flow_value_for_region'),    # (a)
+        ('to_region',   'flow_type_for_other',    'flow_value_for_other'),     # (b)
+        ('from_region', 'flow_type_r_for_region', 'flow_value_r_for_region'),  # (c) zeros
+        ('to_region',   'flow_type_r_for_other',  'flow_value_r_for_other'),   # (d) zeros
+    ]
+    parts = [
+        crossborder[base_cols + [region_col, flow_type_col, flow_value_col]]
+        .rename(columns=common_names)
+        for region_col, flow_type_col, flow_value_col in perspectives
+    ]
 
-    cols_b = ['SETTLEMENTDATE', 'to_region', 'flow_type_for_other', 'flow_value_for_other',  'INTERCONNECTORID',  'METEREDMWFLOW']
-    df_b = crossborder[cols_b].rename(columns=common_names)
-
-    cols_c = ['SETTLEMENTDATE', 'from_region', 'flow_type_r_for_region', 'flow_value_r_for_region',  'INTERCONNECTORID',  'METEREDMWFLOW']
-    df_c = crossborder[cols_c].rename(columns=common_names)
-
-    cols_d = ['SETTLEMENTDATE', 'to_region', 'flow_type_r_for_other', 'flow_value_r_for_other',  'INTERCONNECTORID',  'METEREDMWFLOW']
-    df_d = crossborder[cols_d].rename(columns=common_names)
-
-    crossborder = pd.concat([df_a, df_b, df_c, df_d], ignore_index=True)
+    crossborder = pd.concat(parts, ignore_index=True)
     crossborder = crossborder.pivot_table(index='SETTLEMENTDATE', values='flow_value', columns=['region', 'flow_type'], aggfunc='sum')
     return crossborder
 
@@ -267,5 +315,3 @@ DOWNLOADERS = {
     "load": download_load,
     "crossborder": download_crossborder,
 }
-
-

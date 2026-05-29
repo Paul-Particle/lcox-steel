@@ -29,6 +29,11 @@ import pandas as pd
 
 from common._paths import RES_CF, SHAPES_RES
 
+# WIP NOTE: This script references quarterly cutouts (e.g. de_2023_q1.nc) and
+# the old regions.parquet / offshore_regions.parquet paths, both of which are
+# from the pre-Snakemake pipeline layout. The current pipeline produces annual
+# cutouts and per-area geo parquets (e.g. de_geo.parquet). Update when the
+# cutout-cache refactor lands.
 CUTOUT_DIR = Path("cutouts")
 REGIONS_PATH = SHAPES_RES / "regions.parquet"
 OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"
@@ -99,6 +104,8 @@ def load_offshore_geometry(iso2: str):
 
 
 def cutout_path(iso2: str, seg: str) -> Path:
+    # WIP NOTE: different signature from _helpers.cutout_path(country, year, quarter)
+    # — this local version folds YEAR in from module-level rather than as a parameter.
     return CUTOUT_DIR / f"{iso2.lower()}_{YEAR}_{seg}.nc"
 
 

@@ -47,6 +47,15 @@ _WIND_ADD_CUTOUT_WS = _WIND_CF.get("add_cutout_windspeed", True)
 
 
 def to_cf_series(x, name: str = "cf") -> pd.Series:
+    """Extract a single CF time series from an atlite result.
+
+    Atlite can return either a Series (single-region indicator matrix) or a
+    DataFrame (multi-column, one per region). The fallback chain handles both:
+      - already a Series → use directly
+      - single column → that column
+      - multiple columns, region present → pick the named region
+      - multiple columns, region absent → first column (shouldn't happen normally)
+    """
     obj = x.to_pandas()
     if not isinstance(obj, pd.DataFrame):
         s = obj

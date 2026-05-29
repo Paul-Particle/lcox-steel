@@ -21,7 +21,7 @@ import pandas as pd
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-from _helpers import area_month_in_cache, iso, to_utc_naive
+from _helpers import area_month_in_cache, iso, iter_months_str, to_utc_naive
 from download_nem import DOWNLOADERS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -87,14 +87,7 @@ def retrieve(snakemake) -> None:
 
     cached = pd.read_parquet(processed_cache_path) if processed_cache_path.exists() else None
 
-    months = [
-        ts.strftime("%Y-%m")
-        for ts in pd.date_range(
-            start=pd.Timestamp(iso(start_date)),
-            end=pd.Timestamp(iso(end_date)),
-            freq="MS",
-        )
-    ]
+    months = iter_months_str(start_date, end_date)
 
     new_frames = []
     for ym in months:

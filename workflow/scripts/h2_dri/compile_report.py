@@ -9,10 +9,10 @@ from pathlib import Path
 import pandas as pd
 import pypsa
 
+from common._constants import H2_LHV_KWH_PER_KG
+
 if "snakemake" not in globals():
     from common._stubs import snakemake
-
-H2_LHV_KWH_PER_KG = 33.33  # physical constant; lower heating value of hydrogen
 
 
 def _h2_produced_kg(n: pypsa.Network) -> float:
@@ -88,18 +88,23 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     return summary
 
 
-project_name = snakemake.wildcards.project
+def main() -> None:
+    project_name = snakemake.wildcards.project
 
-rows = []
-# networks may contain duplicates (collect fans out per tech row); dedupe
-# while preserving order so each scenario appears once.
-for nc_path in dict.fromkeys(snakemake.input.networks):
-    nc_path = Path(nc_path)
-    scenario_name = nc_path.stem
-    n = pypsa.Network()
-    n.import_from_netcdf(nc_path)
-    rows.append(extract_summary(n, project_name, scenario_name))
+    rows = []
+    # networks may contain duplicates (collect fans out per tech row); dedupe
+    # while preserving order so each scenario appears once.
+    for nc_path in dict.fromkeys(snakemake.input.networks):
+        nc_path = Path(nc_path)
+        scenario_name = nc_path.stem
+        n = pypsa.Network()
+        n.import_from_netcdf(nc_path)
+        rows.append(extract_summary(n, project_name, scenario_name))
 
-out_path = Path(snakemake.output[0])
-out_path.parent.mkdir(parents=True, exist_ok=True)
-pd.DataFrame(rows).to_csv(out_path, index=False)
+    out_path = Path(snakemake.output[0])
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).to_csv(out_path, index=False)
+
+
+if __name__ == "__main__":
+    main()

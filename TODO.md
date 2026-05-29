@@ -53,3 +53,19 @@ Key fields:
 
 Wire this into Snakemake logging or a small polling script that prints progress
 as monthly jobs complete, so long cutout runs don't require manual checks.
+
+## viz/_helpers.py cleanup
+
+`workflow/scripts/viz/_helpers.py` was ported from a standalone notebook and has several
+issues to resolve before it's considered production-ready:
+
+- `darkmode()` silently switches plot style based on wall-clock hour (≤18:00 = light,
+  >18:00 = dark). Breaks reproducibility. Either remove or make explicit with a `force=`
+  parameter.
+- Global `save` flag + `toggle_save()` / `set_save()` / `save_is_on()` setters are
+  redundant — `save_fig()` already takes `save_condition`. Pass `save=` directly instead.
+- `OUTPUTPATH = Path('./results/')` and `DATAPATH = Path('./data/')` use cwd-relative
+  paths; should use `common._paths.RESULTS` / `common._paths.DATA` for consistency.
+- The 258-line inline colormap at the bottom (`cm_data`) could move to `viz/_cmap.py`
+  so the rest of the file stays readable.
+- No module docstring (now added as a WIP marker).

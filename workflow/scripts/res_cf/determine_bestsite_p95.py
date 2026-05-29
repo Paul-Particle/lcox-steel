@@ -63,7 +63,6 @@ from common._paths import RES_CF, SHAPES_RES
 from scripts.res_cf._helpers import (
     QUARTERS,
     cutout_path,
-    haversine_distance_km,  # noqa: F401  — re-exported for legacy callers
     load_res_cf_cfg,
 )
 
@@ -118,6 +117,10 @@ def extract_cell_timeseries(
 def build_cf_year(country_upper: str, tech: str) -> xr.DataArray:
     parts = []
 
+    # NOTE (WIP): cutout_path() returns quarterly cutouts (e.g. de_2023_q1.nc) from
+    # the old pipeline layout. The current Snakemake pipeline produces annual cutouts
+    # (e.g. de_20230101_20231231.nc). This script needs updating when the cutout-cache
+    # refactor lands (see TODO.md).
     for seg in QUARTERS:
         co = atlite.Cutout(path=str(cutout_path(country_upper, YEAR, seg)))
 
@@ -210,6 +213,9 @@ def _to_cf_series(x: xr.DataArray, name: str = "cf") -> pd.Series:
     obj = x.to_pandas()
 
     if isinstance(obj, pd.DataFrame):
+        # BUG (WIP): both branches do the same thing. Multi-column case likely
+        # intended to select a specific region column (cf. build_cf_timeseries.py's
+        # to_cf_series which does obj[_REGION]). Fix when this script is revisited.
         if obj.shape[1] == 1:
             s = obj.iloc[:, 0]
         else:

@@ -58,7 +58,14 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     OUT_PATH   = Path(snakemake.output[0])
     RES_CF_CFG = snakemake.config["res_cf"]
 
-COUNTRIES = {info["region"]: QUARTERS for info in RES_CF_CFG["countries"].values() if info.get("enabled")}
+# Explicit list of countries to process in standalone mode. The old `enabled`
+# flag was removed from config.yaml, so we hardcode the target countries here
+# until this script is wired into the Snakemake pipeline.
+COUNTRIES = {
+    info["region"]: QUARTERS
+    for key, info in RES_CF_CFG["countries"].items()
+    if key in ("de", "fr", "es", "aus", "bra")
+}
 
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
 

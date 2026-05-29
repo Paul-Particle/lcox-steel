@@ -64,7 +64,7 @@ def download_res(client: entsoe.EntsoePandasClient, area: str, start: pd.Timesta
 def download_generation(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     data = client.query_generation(area, start=start, end=end)
     if data.columns.nlevels == 2:
-        data.columns = ["_".join(col) for col in data.columns.values]
+        data.columns = ["_".join(col) for col in data.columns]
     else:
         data.columns = ["_".join([col, "Actual Aggregated"]) for col in data.columns]
     cons_cols = data.filter(regex="Consumption$", axis=1).columns
@@ -155,7 +155,7 @@ def download_with_retry(
     start: pd.Timestamp,
     end: pd.Timestamp,
     max_attempts: int = 3,
-) -> pd.DataFrame | None:
+) -> pd.DataFrame:
     for attempt in range(1, max_attempts + 1):
         try:
             return fetcher(client, area, start=start, end=end)

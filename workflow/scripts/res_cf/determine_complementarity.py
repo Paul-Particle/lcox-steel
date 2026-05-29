@@ -36,8 +36,6 @@ resources/res_cf/<cc>_average_profiles_2023.parquet
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from itertools import product
 from pathlib import Path
 
@@ -51,37 +49,18 @@ from scripts.res_cf._helpers import haversine_distance_km
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-# ── Import reusable functions from determine_bestsite_p95 ────────────────────
-_spec = importlib.util.spec_from_file_location(
-    "bestsite",
-    Path(__file__).parent / "determine_bestsite_p95.py"
+from determine_bestsite_p95 import (
+    build_cf_year,
+    extract_cell_timeseries,
+    geometry_for_tech,
+    mask_cells_inside,
 )
-_bestsite = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_bestsite)
-
-build_cf_year           = _bestsite.build_cf_year
-extract_cell_timeseries = _bestsite.extract_cell_timeseries
-geometry_for_tech       = _bestsite.geometry_for_tech
-mask_cells_inside       = _bestsite.mask_cells_inside
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 OUTDIR = RES_CF
 CF_DIR = RES_CF
 
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
-
-# Module-level country variable set in main loop
-_current_country: str = ""
-
-# Snakemake overrides (set before main() runs)
-_SM_COUNTRY = None
-_SM_TOP_OUT = None
-_SM_AVG_OUT = None
-
-if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    _SM_COUNTRY = snakemake.wildcards.country.upper()
-    _SM_TOP_OUT = Path(snakemake.output.top)
-    _SM_AVG_OUT = Path(snakemake.output.avg)
 
 
 
@@ -232,6 +211,10 @@ def greedy_screen(
     """
     Greedy sequential selection tried from all three anchor techs,
     followed by neighbourhood search to return top N diverse results.
+
+    WIP NOTE: The three `if anchor == ...` blocks share ~80% of their body and
+    are the highest-value refactor target in this file. Leave until the broader
+    cutout-cache refactor stabilises the API this script depends on.
     """
     print("  → Using greedy search (candidate space too large for brute force)")
 
@@ -248,6 +231,9 @@ def greedy_screen(
                 )
                 if d > max_radius_km:
                     continue
+                # WIP NOTE: ts_on_all[:, best_i] is passed as the solar placeholder while
+                # solar hasn't been chosen yet. This is an intentional bootstrap (using the
+                # anchor as a stand-in) or a copy-paste bug — needs verification.
                 s, _, _ = score_triplet(
                     ts_on_all[:, best_i], ts_off_all[:, j], ts_on_all[:, best_i],
                     threshold, w_coincidence, w_correlation,
@@ -289,6 +275,7 @@ def greedy_screen(
                 )
                 if d > max_radius_km:
                     continue
+                # WIP NOTE: ts_on_all[:, i] is used as solar placeholder — see comment above.
                 s, _, _ = score_triplet(
                     ts_on_all[:, i], ts_off_all[:, best_j], ts_on_all[:, i],
                     threshold, w_coincidence, w_correlation,
@@ -330,6 +317,7 @@ def greedy_screen(
                 )
                 if d > max_radius_km:
                     continue
+                # WIP NOTE: ts_on_all[:, i] is used as offshore placeholder — see comment above.
                 s, _, _ = score_triplet(
                     ts_on_all[:, i], ts_sol_all[:, best_k], ts_on_all[:, i],
                     threshold, w_coincidence, w_correlation,
@@ -485,9 +473,9 @@ def greedy_screen(
 
 # ── Average profiles ──────────────────────────────────────────────────────────
 
-def save_average_profiles(cc: str, year: int) -> None:
+def save_average_profiles(cc: str, year: int, avg_out: Path | None = None) -> None:
     src = CF_DIR / f"{cc.lower()}_cf_{year}.parquet"
-    dst = _SM_AVG_OUT if _SM_AVG_OUT is not None else CF_DIR / f"{cc.lower()}_average_profiles_{year}.parquet"
+    dst = avg_out if avg_out is not None else CF_DIR / f"{cc.lower()}_average_profiles_{year}.parquet"
     if not src.exists():
         raise FileNotFoundError(f"National mean CF file not found: {src}")
     df = pd.read_parquet(src)
@@ -498,28 +486,34 @@ def save_average_profiles(cc: str, year: int) -> None:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    global _current_country
+    sm_country = None
+    sm_top_out = None
+    sm_avg_out = None
+    if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
+        sm_country = snakemake.wildcards.country.upper()
+        sm_top_out = Path(snakemake.output.top)
+        sm_avg_out = Path(snakemake.output.avg)
 
     cfg = load_cfg()
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
-    countries = [_SM_COUNTRY] if _SM_COUNTRY is not None else [c.upper() for c in cfg["countries"]]
+    countries = [sm_country] if sm_country is not None else [c.upper() for c in cfg["countries"]]
     print("Countries:", countries)
     for country in countries:
-        _current_country = country.upper()
+        current_country = country.upper()
         cc = country.lower()
 
         print(f"\n{'='*60}")
-        print(f"Country: {_current_country}")
+        print(f"Country: {current_country}")
         print(f"{'='*60}")
 
-        save_average_profiles(cc, cfg["year"])
+        save_average_profiles(cc, cfg["year"], avg_out=sm_avg_out)
 
         print("  Building CF grids (this takes a few minutes per tech)...")
         cf_grids = {}
         for tech in TECHS:
             print(f"    {tech}...", end=" ", flush=True)
-            cf_grids[tech] = build_cf_year(_current_country, tech)
+            cf_grids[tech] = build_cf_year(current_country, tech)
             print("done")
 
         print("  Identifying candidate cells...")
@@ -529,7 +523,7 @@ def main() -> None:
 
         for tech in TECHS:
             cf   = cf_grids[tech]
-            geom = geometry_for_tech(_current_country, tech)
+            geom = geometry_for_tech(current_country, tech)
 
             cell_mean = cf.mean("time")
             inside    = mask_cells_inside(cell_mean, geom)
@@ -586,15 +580,15 @@ def main() -> None:
             top_records = greedy_screen(**screen_kwargs)
 
         if not top_records:
-            print(f"  WARNING: No valid triplets found for {_current_country}. "
+            print(f"  WARNING: No valid triplets found for {current_country}. "
                   f"Try increasing max_radius_km (currently {cfg['max_radius_km']} km).")
             continue
 
         df = pd.DataFrame(top_records)
         df.insert(0, "rank",    range(1, len(df) + 1))
-        df.insert(1, "country", _current_country)
+        df.insert(1, "country", current_country)
 
-        out_path = _SM_TOP_OUT if _SM_TOP_OUT is not None else OUTDIR / f"{cc}_complementarity_top{cfg['top_n']}_{cfg['year']}.parquet"
+        out_path = sm_top_out if sm_top_out is not None else OUTDIR / f"{cc}_complementarity_top{cfg['top_n']}_{cfg['year']}.parquet"
         df.to_parquet(out_path, index=False)
 
         print(f"\n  Top {len(df)} complementary triplets → {out_path.name}")

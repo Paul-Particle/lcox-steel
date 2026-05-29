@@ -7,6 +7,16 @@ def iso(yyyymmdd: str) -> str:
     return f"{yyyymmdd[:4]}-{yyyymmdd[4:6]}-{yyyymmdd[6:8]}"
 
 
+def iter_months_str(start_date: str, end_date: str) -> list[str]:
+    """Return a list of 'YYYY-MM' strings for every month in [start_date, end_date].
+
+    start_date / end_date are 'YYYYMMDD' strings (Snakemake wildcard format).
+    """
+    start = pd.Timestamp(iso(start_date))
+    end = pd.Timestamp(iso(end_date))
+    return [ts.strftime("%Y-%m") for ts in pd.date_range(start=start, end=end, freq="MS")]
+
+
 def to_utc_naive(df: pd.DataFrame) -> pd.DataFrame:
     """Convert a tz-aware or fixed-offset-naive (AEST = UTC+10) index to UTC-naive."""
     if df.index.tz is not None:

@@ -9,7 +9,6 @@ Usage:
 """
 
 import argparse
-import importlib.util
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -20,16 +19,7 @@ from common._paths import RES_CF, RESULTS
 CF_DIR   = RES_CF
 PLOT_DIR = RESULTS / "plots"
 
-# ── Import reusable functions from determine_bestsite_p95 ────────────────────
-_spec = importlib.util.spec_from_file_location(
-    "bestsite",
-    Path(__file__).parent / "determine_bestsite_p95.py"
-)
-_bestsite = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_bestsite)
-
-build_cf_year           = _bestsite.build_cf_year
-extract_cell_timeseries = _bestsite.extract_cell_timeseries
+from determine_bestsite_p95 import build_cf_year, extract_cell_timeseries
 
 
 def plot_best_triplet(country: str, year: int) -> None:

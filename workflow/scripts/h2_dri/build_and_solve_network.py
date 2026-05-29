@@ -24,6 +24,8 @@ import pypsa
 sys.path.insert(0, str(Path(__file__).parent))
 from _helpers import annuity_factor, dri_to_el_mw
 
+from common._constants import H2_LHV_KWH_PER_KG
+
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
@@ -43,15 +45,13 @@ def build_network(
     wacc = assumptions["finance"]["default_wacc"]
     el_cfg = assumptions["electrolyser"]
     plant = assumptions["plant"]
-    h2_lhv_kwh_per_kg = 33.33  # kWh/kg H2 (LHV, physical constant)
-
     el_mw = dri_to_el_mw(
         dri_mt_per_year=plant["dri_mt_per_year"],
         h2_intensity_kg_per_t_dri=plant["h2_intensity_kg_per_t_dri"],
         efficiency_kwh_per_kg=el_cfg["efficiency_kwh_per_kg"],
         availability_target=plant["availability_target"],
     )
-    el_efficiency = h2_lhv_kwh_per_kg / el_cfg["efficiency_kwh_per_kg"]
+    el_efficiency = H2_LHV_KWH_PER_KG / el_cfg["efficiency_kwh_per_kg"]
 
     n = pypsa.Network()
     n.set_snapshots(cf_timeseries.index)
