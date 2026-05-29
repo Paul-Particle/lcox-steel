@@ -7,6 +7,21 @@ The `entsoe` Python library already enumerates all bidding zones via its `entsoe
 enum. Replace the CSV with a file generated from that enum, or validate directly against
 it in `retrieve_entsoe.py`, so the list stays up to date automatically without manual edits.
 
+## Cutout cache (like the grid data cache)
+
+Grid data uses a persistent per-variant processed cache (`resources/entsoe/{variant}.parquet`,
+`resources/nem/{variant}.parquet`) that accumulates area/month slices and avoids re-downloading
+covered periods. Cutouts have no equivalent: each `download_cutout` rule invocation is a
+one-shot ERA5 pull for a fixed `(cf_area, start_date, end_date)` triple, protected to avoid
+accidental re-download.
+
+A proper cutout cache would: store ERA5 data by area in a persistent location (analogous to
+`data/entsoe_cache/`), check spatial and temporal coverage before requesting, and support
+partial fills. This would also make the `geo → cutout → timeseries` chain more natural:
+`build_regions`/`build_offshore_regions` would define the area, the cache layer would ensure
+coverage, and `build_cf_timeseries` would slice from the cache. Until then, the pipeline
+is WIP in this area (see README for current limitations).
+
 ## CDS download monitoring
 
 Atlite ERA5 cutout downloads go through the CDS API. With `monthly_requests=True`

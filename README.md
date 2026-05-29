@@ -142,6 +142,9 @@ snakemake resources/res_cf/de_wind_onshore_country-average_20230101_20231231.par
 
 This chains: `build_regions` → `build_offshore_regions` → `download_cutout` (ERA5) → `build_cf_timeseries`. The `{tech}` wildcard accepts `wind_onshore`, `wind_offshore`, or `solar`.
 
+> [!NOTE]
+> **Current limitations (WIP).** The geometry is computed twice: `build_regions` produces the country's onshore geometry as a parquet for `build_cf_timeseries`, and `download_cutout` independently re-derives the same country boundary from the raw ZIP to compute the ERA5 bounding box. The bounding box is padded (`bbox_pad_deg` in config), so in practice it almost always encompasses the feasible offshore wind distance as well — the explicit offshore geometry from `build_offshore_regions` adds little that the cutout doesn't already cover spatially. The inconsistency is more subtle for offshore: the cutout bbox is a rectangle around the country's land area plus padding, while the offshore region is clipped to the EEZ within `offshore_max_distance_km`. For a narrow EEZ (many neighbours), the two align well. For a wide EEZ, the cutout covers only part of it — but `build_cf_timeseries` uses the full clipped offshore geometry as its spatial mask, so ERA5 cells far from the coast that fall outside the cutout are simply absent. Whether that matters depends on the country. A proper fix requires a cutout cache with explicit spatial and temporal coverage checking (see `TODO.md`).
+
 ### PyPSA investment optimization
 
 Snakemake runs this automatically as part of `rule all`. For ad-hoc runs:
