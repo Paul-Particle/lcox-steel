@@ -22,9 +22,17 @@ log = logging.getLogger(__name__)
 
 
 def _h2_produced_kg(n: pypsa.Network) -> float:
-    """Annual H2 production in kg, scaled from the simulation period to 8760 h."""
+    """Annual H2 produced by the electrolyser, in kg, scaled to 8760 h.
+
+    Read from the electrolyser link's H2-side output rather than the dri_load,
+    so the result reflects actual production. The two coincide when the model
+    is feasible and the H2 buffer is cyclic, but only the link side stays
+    correct if the load formulation changes later (e.g. flexible demand).
+    """
     t_hours = len(n.snapshots)
-    h2_mwh_lhv = float(n.loads_t.p["dri_load"].sum()) * (8760.0 / t_hours)
+    # PyPSA Link sign convention: p1 < 0 when the link injects power into bus1,
+    # so -p1 is the (positive) H2 LHV output on the hydrogen bus.
+    h2_mwh_lhv = -float(n.links_t.p1["electrolyser"].sum()) * (8760.0 / t_hours)
     return h2_mwh_lhv / (H2_LHV_KWH_PER_KG / 1000.0)
 
 

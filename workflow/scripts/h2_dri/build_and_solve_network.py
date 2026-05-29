@@ -11,7 +11,6 @@ Electrolyser efficiency is:
 """
 
 import logging
-import sys
 from pathlib import Path
 
 # pandas 3.0 defaults to ArrowStringArray for strings; xarray (used by PyPSA
@@ -22,7 +21,6 @@ pd.options.mode.string_storage = "python"
 
 import pypsa
 
-sys.path.insert(0, str(Path(__file__).parent))
 from _helpers import annuity_factor, dri_to_el_mw
 
 from common._constants import H2_LHV_KWH_PER_KG
@@ -67,7 +65,7 @@ def build_network(
     _add_battery(n, assumptions["battery"], wacc)
     _add_electrolyser(n, el_mw, el_efficiency, el_cfg, wacc)
     _add_h2_buffer(n, assumptions["h2_buffer"], wacc)
-    _add_dri_load(n, el_mw, el_efficiency)
+    _add_dri_load(n, el_mw, el_efficiency, plant["availability_target"])
 
     if price_series is not None:
         _add_grid_import(n, price_series)
@@ -177,8 +175,15 @@ def _add_h2_buffer(n: pypsa.Network, buf_cfg: dict, wacc: float) -> None:
     )
 
 
-def _add_dri_load(n: pypsa.Network, el_mw: float, el_efficiency: float) -> None:
-    h2_demand_mw_lhv = el_mw * el_efficiency  # continuous H2 demand in MW LHV
+def _add_dri_load(
+    n: pypsa.Network, el_mw: float, el_efficiency: float, availability_target: float
+) -> None:
+    # The plant's hydrogen demand is the annual-average value, not the
+    # electrolyser's rated max output. dri_to_el_mw sizes el_mw to deliver the
+    # annual quota at the chosen availability, so el_mw * el_efficiency is the
+    # rated output and el_mw * el_efficiency * availability_target collapses
+    # back to the constant demand implied by dri_mt_per_year * h2_intensity.
+    h2_demand_mw_lhv = el_mw * el_efficiency * availability_target
     n.add("Load", "dri_load", bus="hydrogen", carrier="H2", p_set=h2_demand_mw_lhv)
 
 
