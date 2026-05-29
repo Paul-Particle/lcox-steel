@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 from nemosis import dynamic_data_compiler
 
-def download_price_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
+def download_price(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads price data or gets it from the cached feather files or csv files if rebuild=True."""
     print("Fetching prices...")
     prices = dynamic_data_compiler(
@@ -57,7 +57,7 @@ def _resolve_generator_excel(cache_dir: Path) -> Path:
     return target
 
 
-def download_generation_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
+def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads and processes generation data."""
     generator_file_path = _resolve_generator_excel(cache_dir)
 
@@ -169,7 +169,7 @@ def download_generation_data(start_time: str, end_time: str, cache_dir: Path, re
     return generation
 
 
-def download_load_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
+def download_load(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads and processes load data."""
     print("Fetching load...")
     load = dynamic_data_compiler(
@@ -192,7 +192,7 @@ def download_load_data(start_time: str, end_time: str, cache_dir: Path, rebuild:
     load.index.name = None
     return load
 
-def download_crossborder_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
+def download_crossborder(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads and processes cross-border flow data."""
     print("Fetching cross-border flows...")
     interconnector = dynamic_data_compiler(
@@ -261,11 +261,11 @@ def download_crossborder_data(start_time: str, end_time: str, cache_dir: Path, r
     return crossborder
 
 
-TABLE_FETCHERS = {
-    "price": download_price_data,
-    "generation": download_generation_data,
-    "load": download_load_data,
-    "crossborder": download_crossborder_data,
+DOWNLOADERS = {
+    "price": download_price,
+    "generation": download_generation,
+    "load": download_load,
+    "crossborder": download_crossborder,
 }
 
 

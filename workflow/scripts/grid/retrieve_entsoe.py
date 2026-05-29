@@ -24,7 +24,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from _helpers import area_month_in_cache, iso, to_utc_naive
-from download_entsoe import FETCHERS, fetch_with_retry, get_entsoe_client, iter_months
+from download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client, iter_months
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("retrieve_entsoe")
@@ -50,7 +50,7 @@ def ensure_raw_months(
             month_start = pd.Timestamp(ym + "-01", tz="Europe/Brussels")
             next_month = month_start + pd.offsets.MonthBegin(1)
             log.info(f"{area}/{ym}/{dt}: fetching")
-            df = fetch_with_retry(FETCHERS[dt], client, area, month_start, next_month)
+            df = download_with_retry(DOWNLOADERS[dt], client, area, month_start, next_month)
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             df.to_parquet(cache_path, index=True)
             log.info(f"{area}/{ym}/{dt}: cached")

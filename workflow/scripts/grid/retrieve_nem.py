@@ -22,7 +22,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from _helpers import area_month_in_cache, iso, to_utc_naive
-from download_nem import TABLE_FETCHERS
+from download_nem import DOWNLOADERS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("retrieve_nem")
@@ -44,7 +44,7 @@ def process_dayahead_month(
     area: str, ym: str, cache_dir: Path, eur_per_aud: float
 ) -> pd.DataFrame:
     start_str, end_str = month_range_str(ym)
-    raw = TABLE_FETCHERS["price"](start_str, end_str, cache_dir, rebuild=False)
+    raw = DOWNLOADERS["price"](start_str, end_str, cache_dir, rebuild=False)
     raw = to_utc_naive(raw)
     price = (raw[(area, "price")].resample("1h").mean() * eur_per_aud).rename("price")
     return price.to_frame()
@@ -55,7 +55,7 @@ def process_full_month(
 ) -> pd.DataFrame:
     start_str, end_str = month_range_str(ym)
     tables = {
-        t: to_utc_naive(TABLE_FETCHERS[t](start_str, end_str, cache_dir, rebuild=False))
+        t: to_utc_naive(DOWNLOADERS[t](start_str, end_str, cache_dir, rebuild=False))
         for t in FULL_TABLES
     }
     df = pd.concat(list(tables.values()), axis=1, sort=False)
