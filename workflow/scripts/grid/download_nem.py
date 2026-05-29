@@ -1,52 +1,10 @@
-import http.client
-import io
-import ssl
-import zipfile
-from datetime import datetime
+import _nemosis_patches  # noqa: F401  — applies AEMO compatibility patches on import
 from pathlib import Path
 
-import nemosis.downloader as _dl
 import pandas as pd
 from nemosis import dynamic_data_compiler
 
-# Patch 1: AEMO now blocks NEMOSIS's stale Chrome 80 User-Agent with HTTP 403.
-_dl.USR_AGENT_HEADER.clear()
-_dl.USR_AGENT_HEADER["User-Agent"] = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-)
-
-# Patch 2: MMSDM filenames from Aug-2024 contain literal '#' characters.
-# requests percent-encodes '#' → '%23', which AEMO's Azure endpoint rejects (HTTP 400).
-# Sending a literal '#' also fails (proxies strip it as a fragment). The only working
-# encoding is double-encoding '%2523'; Azure decodes one layer to '%23' as expected.
-# requests would re-normalise '%2523' → '%23', so we bypass it entirely with http.client.
-def download_unzip_csv_patched(url: str, down_load_to: str) -> None:
-    from urllib.parse import urlsplit
-    url_fixed = url.replace("#", "%2523").replace("%23", "%2523")
-    u = urlsplit(url_fixed)
-    path = u.path + (f"?{u.query}" if u.query else "")
-    conn = http.client.HTTPSConnection(
-        u.hostname, u.port or 443, context=ssl.create_default_context(), timeout=120 # pyright:ignore
-    )
-    try:
-        conn.request("GET", path,
-                     headers={**_dl.USR_AGENT_HEADER, "Host": u.hostname, "Accept": "*/*"}) # pyright: ignore
-        resp = conn.getresponse()
-        if resp.status != 200:
-            raise IOError(f"GET {url} -> {resp.status} {resp.reason}")
-        body = resp.read()
-    finally:
-        conn.close()
-    zipfile.ZipFile(io.BytesIO(body)).extractall(down_load_to)
-
-_dl.download_unzip_csv = download_unzip_csv_patched
-
-if "snakemake" not in globals():
-    from common._stubs import snakemake
-
-
-def download_price_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
+def download_price(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads price data or gets it from the cached feather files or csv files if rebuild=True."""
     print("Fetching prices...")
     prices = dynamic_data_compiler(
@@ -99,7 +57,7 @@ def _resolve_generator_excel(cache_dir: Path) -> Path:
     return target
 
 
-def download_generation_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
+def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads and processes generation data."""
     generator_file_path = _resolve_generator_excel(cache_dir)
 
@@ -211,7 +169,7 @@ def download_generation_data(start_time: str, end_time: str, cache_dir: Path, re
     return generation
 
 
-def download_load_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
+def download_load(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads and processes load data."""
     print("Fetching load...")
     load = dynamic_data_compiler(
@@ -234,7 +192,7 @@ def download_load_data(start_time: str, end_time: str, cache_dir: Path, rebuild:
     load.index.name = None
     return load
 
-def download_crossborder_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
+def download_crossborder(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads and processes cross-border flow data."""
     print("Fetching cross-border flows...")
     interconnector = dynamic_data_compiler(
@@ -303,46 +261,11 @@ def download_crossborder_data(start_time: str, end_time: str, cache_dir: Path, r
     return crossborder
 
 
-TABLE_FETCHERS = {
-    "price": download_price_data,
-    "generation": download_generation_data,
-    "load": download_load_data,
-    "crossborder": download_crossborder_data,
+DOWNLOADERS = {
+    "price": download_price,
+    "generation": download_generation,
+    "load": download_load,
+    "crossborder": download_crossborder,
 }
 
 
-def download_table(snakemake) -> None:
-    """Fetch one NEM table (national, all regions) for a date range and write it
-    to resources/nem/raw/{nem_table}_{start}_{end}.parquet.
-
-    NEMOSIS caches the underlying MMSDM files under data/nem_cache; refresh by
-    deleting those. process_nem / process_nem_full consume these raw tables, so
-    a price-only build never triggers the heavy generation (SCADA) fetch.
-    """
-    cache_dir = Path("data/nem_cache")
-    nem_table = snakemake.wildcards.nem_table
-    start_time = (
-        datetime.strptime(snakemake.wildcards.start_date, "%Y%m%d").strftime("%Y/%m/%d")
-        + " 00:00:00"
-    )
-    end_time = (
-        datetime.strptime(snakemake.wildcards.end_date, "%Y%m%d").strftime("%Y/%m/%d")
-        + " 23:59:59"
-    )
-
-    df = TABLE_FETCHERS[nem_table](start_time, end_time, cache_dir, rebuild=False)
-    # AEMO writes SETTLEMENTDATE in NEM time (AEST = fixed UTC+10, no DST).
-    # Shift to UTC so NEM outputs align with ERA5 CF series and ENTSO-E prices.
-    if df.index.tz is not None:
-        df.index = df.index.tz_convert("UTC").tz_localize(None)
-    else:
-        df.index = df.index.tz_localize("Australia/Brisbane").tz_convert("UTC").tz_localize(None)
-
-    out = Path(snakemake.output[0])
-    out.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(out, index=True)
-    print(f"Wrote {out} ({df.shape[0]} rows × {df.shape[1]} cols)")
-
-
-if __name__ == "__main__":
-    download_table(snakemake)
