@@ -28,6 +28,8 @@ data/entsoe_cache/*
 resources/*.parquet
 resources/entsoe/
 resources/res_cf/
+resources/nem/
+resources/shapes/
 
 # Log files
 logs/
@@ -46,7 +48,6 @@ results/*.json
 # IDE specific files
 .vscode/
 *.swp
-output_for_gemini
 .antigravitycli
 .claude
 
@@ -62,8 +63,6 @@ data/shapes/offshore_zones/
 data/shapes/ne_110m_admin_0_countries/
 data/shapes/*.zip
 
-# Debug artefacts
-data/debug/
 # Local virtualenv (Atlite)
 .venv-atlite/
 
@@ -76,4 +75,3 @@ results.zip
 
 # other
 HANDOFF.md
-snakemake_advice.md

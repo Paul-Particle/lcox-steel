@@ -19,7 +19,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 # Standalone defaults
-_NE_SHP = DATA / "shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp"
+_NE_ZIP = DATA / "shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"
 _CF_AREA = "de"
 _ISO3 = "DEU"
 _REGION = "DE"
@@ -27,7 +27,7 @@ _MAINLAND_BBOX = None
 _OUT = SHAPES_RES / "de_geo.parquet"
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    _NE_SHP = Path(snakemake.input[0])
+    _NE_ZIP = Path(snakemake.input[0])
     _CF_AREA = snakemake.wildcards.cf_area
     _ISO3 = snakemake.params.iso3
     _REGION = snakemake.params.region
@@ -58,12 +58,12 @@ def restrict_to_bbox(geom: BaseGeometry, bbox: list[float]) -> BaseGeometry:
 
 
 def main() -> None:
-    if not _NE_SHP.exists():
-        raise FileNotFoundError(f"Natural Earth shapefile not found: {_NE_SHP}")
+    if not _NE_ZIP.exists():
+        raise FileNotFoundError(f"Natural Earth shapefile ZIP not found: {_NE_ZIP}")
 
     _OUT.parent.mkdir(parents=True, exist_ok=True)
 
-    world = gpd.read_file(_NE_SHP).to_crs(4326)
+    world = gpd.read_file(str(_NE_ZIP)).to_crs(4326)
     geom = country_geometry(world, _ISO3)
     if _MAINLAND_BBOX is not None:
         geom = restrict_to_bbox(geom, _MAINLAND_BBOX)

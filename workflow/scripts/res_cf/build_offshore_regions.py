@@ -18,7 +18,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 # Standalone defaults
-_OFFSHORE_ZONE_SHP = DATA / "shapes/offshore_zones/eez_v12.shp"
+_OFFSHORE_ZONE_ZIP = DATA / "shapes/offshore_zones/eez_v12.zip"
 _LAND_REGIONS = SHAPES_RES / "de_geo.parquet"
 _OUT = SHAPES_RES / "de_offshore_geo.parquet"
 _ISO3 = "DEU"
@@ -26,7 +26,7 @@ _REGION = "DE"
 _OFFSHORE_MAX_KM = 200.0
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    _OFFSHORE_ZONE_SHP = Path(snakemake.input.offshore_zone)
+    _OFFSHORE_ZONE_ZIP = Path(snakemake.input.offshore_zone)
     _LAND_REGIONS = Path(snakemake.input.regions)
     _OUT = Path(snakemake.output[0])
     _ISO3 = snakemake.params.iso3
@@ -35,15 +35,15 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
 
 
 def main() -> None:
-    if not _OFFSHORE_ZONE_SHP.exists():
-        raise FileNotFoundError(f"Offshore zone shapefile not found: {_OFFSHORE_ZONE_SHP}")
+    if not _OFFSHORE_ZONE_ZIP.exists():
+        raise FileNotFoundError(f"Offshore zone ZIP not found: {_OFFSHORE_ZONE_ZIP}")
     if not _LAND_REGIONS.exists():
         raise FileNotFoundError(f"Land regions file not found: {_LAND_REGIONS}")
 
     _OUT.parent.mkdir(parents=True, exist_ok=True)
     print(f"Building offshore region for {_REGION} (ISO3={_ISO3}, max {_OFFSHORE_MAX_KM} km)")
 
-    offshore_zone = gpd.read_file(_OFFSHORE_ZONE_SHP).to_crs(4326)
+    offshore_zone = gpd.read_file(str(_OFFSHORE_ZONE_ZIP)).to_crs(4326)
     gdf = offshore_zone.loc[
         (offshore_zone["ISO_TER1"] == _ISO3) & (offshore_zone["POL_TYPE"] == "200NM"),
         ["ISO_TER1", "geometry"],

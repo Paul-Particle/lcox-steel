@@ -10,12 +10,11 @@ lcox-steel/
 │   ├── Snakefile           # configfiles + sys.path + includes + rule all
 │   ├── rules/
 │   │   ├── grid.smk        # ENTSO-E + NEM download/process rules
-│   │   ├── res_cf.smk      # extract shapefiles + atlite CF pipeline
+│   │   ├── res_cf.smk      # atlite CF pipeline (shapes → cutout → CF timeseries)
 │   │   └── h2_dri.smk      # PyPSA optimisation rule
 │   ├── scripts/
 │   │   ├── grid/           # Grid data pipeline (ENTSO-E + NEM)
 │   │   ├── res_cf/         # Atlite capacity factor pipeline
-│   │   │   ├── extract_shapefile.py # Generic zip→shp extractor
 │   │   │   ├── build_regions.py
 │   │   │   ├── build_offshore_regions.py
 │   │   │   ├── download_cutout.py
@@ -73,7 +72,7 @@ git config core.hooksPath .githooks
 
 ### 2. External data files
 
-Two large geographic datasets must be downloaded manually. Snakemake has two `extract_*_shapefile` rules that handle unzipping — just put the ZIPs at the canonical paths below (create the directories first) and the pipeline will extract them when it needs them.
+Two large geographic datasets must be downloaded manually and placed as ZIPs — the pipeline reads from them directly via geopandas, no extraction step needed.
 
 **World EEZ v12** — https://www.marineregions.org/downloads.php (free registration). Choose "World EEZ v12 (2023)" → Shapefile. Save (or rename) the download as `data/shapes/offshore_zones/eez_v12.zip`. Any v11 or v12 works; needs `ISO_TER1` and `POL_TYPE` columns.
 
@@ -83,8 +82,6 @@ Two large geographic datasets must be downloaded manually. Snakemake has two `ex
 mkdir -p data/shapes/offshore_zones data/shapes/ne_110m_admin_0_countries
 # then drop the two ZIPs into those directories with the names above
 ```
-
-(A shapefile is a `.shp` + `.shx` + `.dbf` + `.prj` suite that has to travel together — the extract rule handles flattening if the ZIP nests the components under a subfolder.)
 
 Both cache directories follow the same gitignore strategy: everything is ignored except one committed reference file per pipeline.
 
@@ -144,6 +141,9 @@ snakemake resources/res_cf/de_wind_onshore_country-average_20230101_20231231.par
 ```
 
 This chains: `build_regions` → `build_offshore_regions` → `download_cutout` (ERA5) → `build_cf_timeseries`. The `{tech}` wildcard accepts `wind_onshore`, `wind_offshore`, or `solar`.
+
+> [!NOTE]
+> **Current limitations (WIP).** The geometry is computed twice: `build_regions` produces the country's onshore geometry as a parquet for `build_cf_timeseries`, and `download_cutout` independently re-derives the same country boundary from the raw ZIP to compute the ERA5 bounding box. The bounding box is padded (`bbox_pad_deg` in config), so in practice it almost always encompasses the feasible offshore wind distance as well — the explicit offshore geometry from `build_offshore_regions` adds little that the cutout doesn't already cover spatially. The inconsistency is more subtle for offshore: the cutout bbox is a rectangle around the country's land area plus padding, while the offshore region is clipped to the EEZ within `offshore_max_distance_km`. For a narrow EEZ (many neighbours), the two align well. For a wide EEZ, the cutout covers only part of it — but `build_cf_timeseries` uses the full clipped offshore geometry as its spatial mask, so ERA5 cells far from the coast that fall outside the cutout are simply absent. Whether that matters depends on the country. A proper fix requires a cutout cache with explicit spatial and temporal coverage checking (see `TODO.md`).
 
 ### PyPSA investment optimization
 

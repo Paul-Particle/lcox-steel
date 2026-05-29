@@ -9,14 +9,16 @@ from pathlib import Path
 import atlite
 import geopandas as gpd
 
-from common._paths import ATLITE_CACHE, CUTOUTS, SHAPES_RES
+from common._paths import ATLITE_CACHE, CUTOUTS, SHAPES_RAW
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
 # Standalone defaults
-_REGIONS_PATH = SHAPES_RES / "de_geo.parquet"
+_NE_ZIP = SHAPES_RAW / "ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"
 _CF_AREA = "de"
+_ISO3 = "DEU"
+_MAINLAND_BBOX = None
 _START_DATE = "20230101"
 _END_DATE = "20231231"
 _OUTPUT_PATH = CUTOUTS / "de_20230101_20231231.nc"
@@ -27,8 +29,10 @@ _MONTHLY_REQUESTS = False
 _ATLITE_CACHE = ATLITE_CACHE
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    _REGIONS_PATH = Path(snakemake.input.regions)
+    _NE_ZIP = Path(snakemake.input.ne_zip)
     _CF_AREA = snakemake.wildcards.cf_area
+    _ISO3 = snakemake.params.iso3
+    _MAINLAND_BBOX = snakemake.params.mainland_bbox
     _START_DATE = snakemake.wildcards.start_date
     _END_DATE = snakemake.wildcards.end_date
     _OUTPUT_PATH = Path(snakemake.output[0])
@@ -43,8 +47,22 @@ def _iso(yyyymmdd: str) -> str:
 
 
 def get_bounds(pad: float) -> tuple[slice, slice]:
-    regions = gpd.read_parquet(_REGIONS_PATH).to_crs(4326)
-    geom = regions.loc[regions["region"] == _REGION, "geometry"].union_all()
+    world = gpd.read_file(str(_NE_ZIP)).to_crs(4326)
+    for col in ["ADM0_A3", "SOV_A3", "ISO_A3"]:
+        if col in world.columns:
+            sel = world.loc[world[col] == _ISO3, "geometry"]
+            if not sel.empty:
+                geom = sel.union_all()
+                break
+    else:
+        raise ValueError(f"ISO3 code '{_ISO3}' not found in Natural Earth shapefile.")
+    if _MAINLAND_BBOX is not None:
+        lon_min, lon_max, lat_min, lat_max = _MAINLAND_BBOX
+        parts = list(geom.geoms) if geom.geom_type == "MultiPolygon" else [geom]
+        kept = [p for p in parts if lon_min <= p.centroid.x <= lon_max and lat_min <= p.centroid.y <= lat_max]
+        if not kept:
+            raise ValueError(f"No polygon parts inside mainland_bbox {_MAINLAND_BBOX}.")
+        geom = gpd.GeoSeries(kept, crs=4326).union_all()
     minx, miny, maxx, maxy = geom.bounds
     return slice(minx - pad, maxx + pad), slice(miny - pad, maxy + pad)
 
