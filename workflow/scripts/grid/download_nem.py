@@ -42,10 +42,6 @@ def download_unzip_csv_patched(url: str, down_load_to: str) -> None:
 
 _dl.download_unzip_csv = download_unzip_csv_patched
 
-if "snakemake" not in globals():
-    from common._stubs import snakemake
-
-
 def download_price_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads price data or gets it from the cached feather files or csv files if rebuild=True."""
     print("Fetching prices...")
@@ -311,38 +307,3 @@ TABLE_FETCHERS = {
 }
 
 
-def download_table(snakemake) -> None:
-    """Fetch one NEM table (national, all regions) for a date range and write it
-    to resources/nem/raw/{nem_table}_{start}_{end}.parquet.
-
-    NEMOSIS caches the underlying MMSDM files under data/nem_cache; refresh by
-    deleting those. process_nem / process_nem_full consume these raw tables, so
-    a price-only build never triggers the heavy generation (SCADA) fetch.
-    """
-    cache_dir = Path("data/nem_cache")
-    nem_table = snakemake.wildcards.nem_table
-    start_time = (
-        datetime.strptime(snakemake.wildcards.start_date, "%Y%m%d").strftime("%Y/%m/%d")
-        + " 00:00:00"
-    )
-    end_time = (
-        datetime.strptime(snakemake.wildcards.end_date, "%Y%m%d").strftime("%Y/%m/%d")
-        + " 23:59:59"
-    )
-
-    df = TABLE_FETCHERS[nem_table](start_time, end_time, cache_dir, rebuild=False)
-    # AEMO writes SETTLEMENTDATE in NEM time (AEST = fixed UTC+10, no DST).
-    # Shift to UTC so NEM outputs align with ERA5 CF series and ENTSO-E prices.
-    if df.index.tz is not None:
-        df.index = df.index.tz_convert("UTC").tz_localize(None)
-    else:
-        df.index = df.index.tz_localize("Australia/Brisbane").tz_convert("UTC").tz_localize(None)
-
-    out = Path(snakemake.output[0])
-    out.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(out, index=True)
-    print(f"Wrote {out} ({df.shape[0]} rows × {df.shape[1]} cols)")
-
-
-if __name__ == "__main__":
-    download_table(snakemake)

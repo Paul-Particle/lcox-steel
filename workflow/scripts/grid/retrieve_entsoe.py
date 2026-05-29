@@ -1,11 +1,13 @@
 """Retrieve ENTSO-E grid data for a (area, variant, date-range) slice.
 
 Maintains a persistent second-level processed cache at
-  resources/entsoe/{area}_{variant}.parquet
+  resources/entsoe/{variant}.parquet
 
-On a warm-cache run the rule just slices and writes the temp output; on a miss
-it downloads any absent months to the per-month raw cache (via download_entsoe
-primitives), processes them, and extends the processed cache before slicing.
+Cache columns are a MultiIndex (area, metric) so all areas share one file per
+variant. Accessing one area's data: df["DE_LU"]. On a warm-cache run the rule
+just slices and writes the temp output; on a miss it downloads any absent months
+to the per-month raw cache (via download_entsoe primitives), processes them, and
+extends the cache before slicing.
 
 Variants
 --------
@@ -43,10 +45,11 @@ def iso(yyyymmdd: str) -> str:
     return f"{yyyymmdd[:4]}-{yyyymmdd[4:6]}-{yyyymmdd[6:8]}"
 
 
-def month_in_cache(cached: pd.DataFrame | None, ym: str) -> bool:
-    if cached is None or cached.empty:
+def area_month_in_cache(cached: pd.DataFrame | None, area: str, ym: str) -> bool:
+    if cached is None or area not in cached.columns.get_level_values(0):
         return False
-    return (cached.index.to_period("M") == pd.Period(ym, freq="M")).any()
+    area_data = cached[area].dropna(how="all")
+    return (area_data.index.to_period("M") == pd.Period(ym, freq="M")).any()
 
 
 # ── Raw-cache management ──────────────────────────────────────────────────────
@@ -120,7 +123,7 @@ def retrieve(snakemake) -> None:
 
     raw_cache_dir        = Path("data/entsoe_cache")
     processed_cache_dir  = Path("resources/entsoe")
-    processed_cache_path = processed_cache_dir / f"{area}_{variant}.parquet"
+    processed_cache_path = processed_cache_dir / f"{variant}.parquet"
 
     data_types    = ["prices"] if variant == "dayahead" else FULL_DATA_TYPES
     process_month = process_dayahead_month if variant == "dayahead" else process_full_month
@@ -131,11 +134,14 @@ def retrieve(snakemake) -> None:
 
     ensure_raw_months(area, months, data_types, raw_cache_dir)
 
-    new_frames = [
-        process_month(area, ym, raw_cache_dir)
-        for ym in months
-        if not month_in_cache(cached, ym)
-    ]
+    new_frames = []
+    for ym in months:
+        if area_month_in_cache(cached, area, ym):
+            continue
+        frame = process_month(area, ym, raw_cache_dir)
+        frame.columns = pd.MultiIndex.from_tuples([(area, c) for c in frame.columns])
+        new_frames.append(frame)
+
     if new_frames:
         all_frames = ([cached] if cached is not None else []) + new_frames
         cached = pd.concat(all_frames)
@@ -145,7 +151,7 @@ def retrieve(snakemake) -> None:
         log.info(f"Updated processed cache: {processed_cache_path} ({len(cached)} rows)")
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:00")
-    out_df = cached.loc[window]
+    out_df = cached[area].loc[window]
     if variant == "dayahead":
         out_df = out_df.ffill(limit=3).bfill(limit=3)
     else:
