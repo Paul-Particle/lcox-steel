@@ -13,13 +13,16 @@ venv/
 *.env
 .env
 
-# Data files
+# Data files (broad patterns cover resources/ and other locations)
 *.parquet
 *.feather
-*.CSV
 !config/projects.csv
-# data/nem_cache/ and data/entsoe_cache/ cache files are caught by the extension rules above;
-# only the committed reference files (NEM Registration xlsx, entsoe_bidding_zones.csv) escape them.
+
+# Cache directories: ignore everything except the committed reference file in each
+data/nem_cache/*
+!data/nem_cache/NEM Registration and Exemption List.xlsx
+data/entsoe_cache/*
+!data/entsoe_cache/entsoe_bidding_zones.csv
 
 # Derived workflow outputs (rebuilt by snakemake)
 resources/*.parquet

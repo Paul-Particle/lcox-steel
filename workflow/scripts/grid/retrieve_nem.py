@@ -30,7 +30,7 @@ log = logging.getLogger("retrieve_nem")
 FULL_TABLES = ["price", "load", "generation", "crossborder"]
 
 
-def month_range_str(ym: str) -> tuple[str, str]:
+def _month_range_str(ym: str) -> tuple[str, str]:
     """Return NEMOSIS-format (start, end) strings for a full calendar month."""
     ts = pd.Timestamp(ym + "-01")
     start = ts.strftime("%Y/%m/%d") + " 00:00:00"
@@ -40,20 +40,20 @@ def month_range_str(ym: str) -> tuple[str, str]:
 
 # ── Per-variant month processing ──────────────────────────────────────────────
 
-def process_dayahead_month(
+def _process_dayahead_month(
     area: str, ym: str, cache_dir: Path, eur_per_aud: float
 ) -> pd.DataFrame:
-    start_str, end_str = month_range_str(ym)
+    start_str, end_str = _month_range_str(ym)
     raw = DOWNLOADERS["price"](start_str, end_str, cache_dir, rebuild=False)
     raw = to_utc_naive(raw)
     price = (raw[(area, "price")].resample("1h").mean() * eur_per_aud).rename("price")
     return price.to_frame()
 
 
-def process_full_month(
+def _process_full_month(
     area: str, ym: str, cache_dir: Path, eur_per_aud: float
 ) -> pd.DataFrame:
-    start_str, end_str = month_range_str(ym)
+    start_str, end_str = _month_range_str(ym)
     tables = {
         t: to_utc_naive(DOWNLOADERS[t](start_str, end_str, cache_dir, rebuild=False))
         for t in FULL_TABLES
@@ -99,9 +99,9 @@ def retrieve(snakemake) -> None:
             continue
         log.info(f"{area}/{ym}/{variant}: processing")
         if variant == "dayahead":
-            frame = process_dayahead_month(area, ym, cache_dir, eur_per_aud)
+            frame = _process_dayahead_month(area, ym, cache_dir, eur_per_aud)
         else:
-            frame = process_full_month(area, ym, cache_dir, eur_per_aud)
+            frame = _process_full_month(area, ym, cache_dir, eur_per_aud)
         frame.columns = pd.MultiIndex.from_tuples([(area, c) for c in frame.columns])
         new_frames.append(frame)
 

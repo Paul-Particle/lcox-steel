@@ -1,5 +1,12 @@
 # TODO / Notes
 
+## ENTSO-E bidding zone list
+
+`data/entsoe_cache/entsoe_bidding_zones.csv` is currently hand-crafted (60 zones).
+The `entsoe` Python library already enumerates all bidding zones via its `entsoe.Area`
+enum. Replace the CSV with a file generated from that enum, or validate directly against
+it in `retrieve_entsoe.py`, so the list stays up to date automatically without manual edits.
+
 ## CDS download monitoring
 
 Atlite ERA5 cutout downloads go through the CDS API. With `monthly_requests=True`

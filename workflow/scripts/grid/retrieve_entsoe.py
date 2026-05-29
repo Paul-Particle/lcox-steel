@@ -32,9 +32,15 @@ log = logging.getLogger("retrieve_entsoe")
 FULL_DATA_TYPES = ["prices", "load_forecast", "load_actual", "res", "generation", "crossborder"]
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _load_bidding_zones(raw_cache_dir: Path) -> set[str]:
+    return set(pd.read_csv(raw_cache_dir / "entsoe_bidding_zones.csv")["area"])
+
+
 # ── Raw-cache management ──────────────────────────────────────────────────────
 
-def ensure_raw_months(
+def _ensure_raw_months(
     area: str, months: list[str], data_types: list[str], raw_cache_dir: Path
 ) -> None:
     """Download any (month, data_type) pairs absent from the raw monthly cache."""
@@ -58,14 +64,14 @@ def ensure_raw_months(
 
 # ── Per-variant month processing ──────────────────────────────────────────────
 
-def process_dayahead_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame:
+def _process_dayahead_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame:
     raw = pd.read_parquet(raw_cache_dir / area / ym / "prices.parquet")
     price = to_utc_naive(raw).iloc[:, 0]
     price = price.ffill(limit=3).bfill(limit=3).resample("1h").mean().rename("price")
     return price.to_frame()
 
 
-def process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame:
+def _process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame:
     d = raw_cache_dir / area / ym
     prices_raw  = pd.read_parquet(d / "prices.parquet")
     load_fc_raw = pd.read_parquet(d / "load_forecast.parquet")
@@ -106,14 +112,21 @@ def retrieve(snakemake) -> None:
     processed_cache_dir  = Path("resources/entsoe")
     processed_cache_path = processed_cache_dir / f"{variant}.parquet"
 
+    valid_zones = _load_bidding_zones(raw_cache_dir)
+    if area not in valid_zones:
+        raise ValueError(
+            f"{area!r} is not a recognised ENTSO-E bidding zone. "
+            f"See data/entsoe_cache/entsoe_bidding_zones.csv for the full list."
+        )
+
     data_types    = ["prices"] if variant == "dayahead" else FULL_DATA_TYPES
-    process_month = process_dayahead_month if variant == "dayahead" else process_full_month
+    process_month = _process_dayahead_month if variant == "dayahead" else _process_full_month
 
     cached = pd.read_parquet(processed_cache_path) if processed_cache_path.exists() else None
 
     months = [ym for ym, _, _ in iter_months(start_date, end_date)]
 
-    ensure_raw_months(area, months, data_types, raw_cache_dir)
+    _ensure_raw_months(area, months, data_types, raw_cache_dir)
 
     new_frames = []
     for ym in months:

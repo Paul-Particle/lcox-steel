@@ -38,8 +38,8 @@ lcox-steel/
 │   └── projects.csv        # Project + scenario definitions — one row per (project, scenario, tech)
 ├── environment.yaml        # Conda environment (lcox-steel)
 ├── data/                   # Raw / external / expensive (not produced by this repo)
-│   ├── entsoe_cache/       # Internal ENTSO-E monthly cache (area/year-month/data_type) — gitignored
-│   ├── nem_cache/          # AEMO NEMOSIS cache — CSV/parquet gitignored; one committed XLSX (see §External data files)
+│   ├── entsoe_cache/       # ENTSO-E monthly raw cache (area/year-month/data_type); all ignored except entsoe_bidding_zones.csv
+│   ├── nem_cache/          # AEMO NEMOSIS cache; all ignored except NEM Registration and Exemption List.xlsx
 │   └── shapes/             # Raw shapefiles: ne_110m_admin_0_countries/, eez/ (gitignored — see below)
 ├── resources/              # Derived / Snakemake-tracked outputs (reproducible)
 │   ├── entsoe/{area}/{data_type}_{start}_{end}.parquet  # Raw per-type ENTSO-E downloads
@@ -86,7 +86,11 @@ mkdir -p data/shapes/offshore_zones data/shapes/ne_110m_admin_0_countries
 
 (A shapefile is a `.shp` + `.shx` + `.dbf` + `.prj` suite that has to travel together — the extract rule handles flattening if the ZIP nests the components under a subfolder.)
 
-**NEM Registration and Exemption List** — AEMO-maintained generator metadata, refreshed by AEMO every so often. A snapshot is **committed** to the repo at `data/nem_cache/NEM Registration and Exemption List.xlsx`. It's small (~1 MB) and AEMO's hosting is flaky enough — they 403 NEMOSIS's default User-Agent, hence the monkey-patch in `download_nem.py` — that a checked-in copy makes bootstrapping much more reliable than relying on the live download. If the file is missing, `download_nem.py` falls back to `nemosis.static_table("Generators and Scheduled Loads", ...)` (which inherits the same UA patch). If that also fails, fetch manually from https://www.aemo.com.au/-/media/Files/Electricity/NEM/Participant_Information/NEM-Registration-and-Exemption-List.xls (served as XLSX despite the extension) and drop it into `data/nem_cache/` as either `.xls` or `.xlsx`. Caveat: when AEMO blocks NEMOSIS this way, the rest of the NEM downloader (MMSDM dispatch tables) is probably also broken via the same gating — better than nothing, but expect to debug.
+Both cache directories follow the same gitignore strategy: everything is ignored except one committed reference file per pipeline.
+
+**ENTSO-E bidding zone registry** — `data/entsoe_cache/entsoe_bidding_zones.csv` is a hand-crafted list of recognised bidding zone codes (e.g. `DE_LU`, `FR`, `NO_1`). `retrieve_entsoe.py` validates the `area` wildcard against this file before making any API calls — an unrecognised code raises a `ValueError` immediately. The file is small and rarely changes; update it manually when ENTSO-E adds or retires a zone. (See `TODO.md` for a planned migration to derive the list automatically from the `entsoe` library's `Area` enum.)
+
+**NEM Registration and Exemption List** — AEMO-maintained generator metadata, refreshed by AEMO every so often. A snapshot is **committed** to the repo at `data/nem_cache/NEM Registration and Exemption List.xlsx`. It's small (~1 MB) and AEMO's hosting is flaky enough — they 403 NEMOSIS's default User-Agent, hence the monkey-patch in `_nemosis_patches.py` — that a checked-in copy makes bootstrapping much more reliable than relying on the live download. If the file is missing, `download_nem.py` falls back to a NEMOSIS static download (which inherits the same UA patch). If that also fails, fetch manually from https://www.aemo.com.au/-/media/Files/Electricity/NEM/Participant_Information/NEM-Registration-and-Exemption-List.xls (served as XLSX despite the extension) and drop it into `data/nem_cache/` as either `.xls` or `.xlsx`.
 
 ### 3. API keys
 
@@ -121,7 +125,7 @@ snakemake resources/entsoe/DE_LU_grid_dayahead_20230101_20231231.parquet --cores
 snakemake resources/nem/VIC1_grid_dayahead_20250101_20251231.parquet --cores 4
 ```
 
-The `download_entsoe` rule manages a per-month cache in `data/entsoe_cache/`; once a month is cached it is never re-fetched. `--resources entsoe_api=N` caps concurrent ENTSO-E API calls (their rate limit is ~400/min per key).
+The `retrieve_entsoe` rule maintains a per-month raw cache in `data/entsoe_cache/`; once a month is cached it is never re-fetched. `--resources entsoe_api=N` caps concurrent ENTSO-E API calls (their rate limit is ~400/min per key).
 
 To force a refresh, delete the relevant cache files then re-run:
 
