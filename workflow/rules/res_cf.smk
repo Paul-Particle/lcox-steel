@@ -3,33 +3,9 @@ wildcard_constraints:
     tech=r"wind_onshore|wind_offshore|solar",
 
 
-rule extract_offshore_zone_shapefile:
-    input:
-        "data/shapes/offshore_zones/eez_v12.zip",
-    output:
-        shp="data/shapes/offshore_zones/eez_v12.shp",
-        shx="data/shapes/offshore_zones/eez_v12.shx",
-        dbf="data/shapes/offshore_zones/eez_v12.dbf",
-        prj="data/shapes/offshore_zones/eez_v12.prj",
-    script:
-        "../scripts/res_cf/extract_shapefile.py"
-
-
-rule extract_ne_countries_shapefile:
-    input:
-        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
-    output:
-        shp="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp",
-        shx="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shx",
-        dbf="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.dbf",
-        prj="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.prj",
-    script:
-        "../scripts/res_cf/extract_shapefile.py"
-
-
 rule build_regions:
     input:
-        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp",
+        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
     output:
         "resources/shapes/{cf_area}_geo.parquet",
     params:
@@ -47,7 +23,7 @@ rule build_regions:
 rule build_offshore_regions:
     input:
         regions="resources/shapes/{cf_area}_geo.parquet",
-        offshore_zone="data/shapes/offshore_zones/eez_v12.shp",
+        offshore_zone="data/shapes/offshore_zones/eez_v12.zip",
     output:
         "resources/shapes/{cf_area}_offshore_geo.parquet",
     params:
@@ -62,7 +38,7 @@ rule build_offshore_regions:
 
 rule download_cutout:
     input:
-        ne_zip="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
+        ne_zip=ancient("data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"),
     output:
         protected("cutouts/{cf_area}_{start_date}_{end_date}.nc"),
     params:
