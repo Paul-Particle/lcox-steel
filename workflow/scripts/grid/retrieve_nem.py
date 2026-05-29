@@ -23,6 +23,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _helpers import area_month_in_cache, iso, to_utc_naive  # noqa: E402
 from download_nem import TABLE_FETCHERS  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -31,34 +32,12 @@ log = logging.getLogger("retrieve_nem")
 FULL_TABLES = ["price", "load", "generation", "crossborder"]
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def to_utc_naive(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert AEST (fixed UTC+10, no DST) index to UTC-naive."""
-    if df.index.tz is not None:
-        df.index = df.index.tz_convert("UTC").tz_localize(None)
-    else:
-        df.index = df.index.tz_localize("Australia/Brisbane").tz_convert("UTC").tz_localize(None)
-    return df.sort_index()
-
-
-def iso(yyyymmdd: str) -> str:
-    return f"{yyyymmdd[:4]}-{yyyymmdd[4:6]}-{yyyymmdd[6:8]}"
-
-
 def month_range_str(ym: str) -> tuple[str, str]:
     """Return NEMOSIS-format (start, end) strings for a full calendar month."""
     ts = pd.Timestamp(ym + "-01")
     start = ts.strftime("%Y/%m/%d") + " 00:00:00"
     end   = (ts + pd.offsets.MonthEnd(0)).strftime("%Y/%m/%d") + " 23:59:59"
     return start, end
-
-
-def area_month_in_cache(cached: pd.DataFrame | None, area: str, ym: str) -> bool:
-    if cached is None or area not in cached.columns.get_level_values(0):
-        return False
-    area_data = cached[area].dropna(how="all")
-    return (area_data.index.to_period("M") == pd.Period(ym, freq="M")).any()
 
 
 # ── Per-variant month processing ──────────────────────────────────────────────

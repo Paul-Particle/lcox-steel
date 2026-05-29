@@ -25,31 +25,13 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _helpers import area_month_in_cache, iso, to_utc_naive  # noqa: E402
 from download_entsoe import FETCHERS, fetch_with_retry, get_entsoe_client, iter_months  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("retrieve_entsoe")
 
 FULL_DATA_TYPES = ["prices", "load_forecast", "load_actual", "res", "generation", "crossborder"]
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def to_utc_naive(obj):
-    if obj.index.tz is not None:
-        obj.index = obj.index.tz_convert("UTC").tz_localize(None)
-    return obj.sort_index()
-
-
-def iso(yyyymmdd: str) -> str:
-    return f"{yyyymmdd[:4]}-{yyyymmdd[4:6]}-{yyyymmdd[6:8]}"
-
-
-def area_month_in_cache(cached: pd.DataFrame | None, area: str, ym: str) -> bool:
-    if cached is None or area not in cached.columns.get_level_values(0):
-        return False
-    area_data = cached[area].dropna(how="all")
-    return (area_data.index.to_period("M") == pd.Period(ym, freq="M")).any()
 
 
 # ── Raw-cache management ──────────────────────────────────────────────────────
