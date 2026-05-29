@@ -16,13 +16,11 @@ full      all six data_types → wide frame with derived residual-load columns
 """
 
 import logging
-import sys
 from pathlib import Path
 
 import pandas as pd
 
 if "snakemake" not in globals():
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from common._stubs import snakemake
 
 from _helpers import area_month_in_cache, iso, to_utc_naive

@@ -14,13 +14,11 @@ full      all four tables → wide per-area frame with derived wind/residual col
 """
 
 import logging
-import sys
 from pathlib import Path
 
 import pandas as pd
 
 if "snakemake" not in globals():
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from common._stubs import snakemake
 
 from _helpers import area_month_in_cache, iso, to_utc_naive
