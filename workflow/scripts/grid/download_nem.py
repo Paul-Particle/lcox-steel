@@ -1,46 +1,8 @@
-import http.client
-import io
-import ssl
-import zipfile
-from datetime import datetime
+import _nemosis_patches  # noqa: F401  — applies AEMO compatibility patches on import
 from pathlib import Path
 
-import nemosis.downloader as _dl
 import pandas as pd
 from nemosis import dynamic_data_compiler
-
-# Patch 1: AEMO now blocks NEMOSIS's stale Chrome 80 User-Agent with HTTP 403.
-_dl.USR_AGENT_HEADER.clear()
-_dl.USR_AGENT_HEADER["User-Agent"] = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-)
-
-# Patch 2: MMSDM filenames from Aug-2024 contain literal '#' characters.
-# requests percent-encodes '#' → '%23', which AEMO's Azure endpoint rejects (HTTP 400).
-# Sending a literal '#' also fails (proxies strip it as a fragment). The only working
-# encoding is double-encoding '%2523'; Azure decodes one layer to '%23' as expected.
-# requests would re-normalise '%2523' → '%23', so we bypass it entirely with http.client.
-def download_unzip_csv_patched(url: str, down_load_to: str) -> None:
-    from urllib.parse import urlsplit
-    url_fixed = url.replace("#", "%2523").replace("%23", "%2523")
-    u = urlsplit(url_fixed)
-    path = u.path + (f"?{u.query}" if u.query else "")
-    conn = http.client.HTTPSConnection(
-        u.hostname, u.port or 443, context=ssl.create_default_context(), timeout=120 # pyright:ignore
-    )
-    try:
-        conn.request("GET", path,
-                     headers={**_dl.USR_AGENT_HEADER, "Host": u.hostname, "Accept": "*/*"}) # pyright: ignore
-        resp = conn.getresponse()
-        if resp.status != 200:
-            raise IOError(f"GET {url} -> {resp.status} {resp.reason}")
-        body = resp.read()
-    finally:
-        conn.close()
-    zipfile.ZipFile(io.BytesIO(body)).extractall(down_load_to)
-
-_dl.download_unzip_csv = download_unzip_csv_patched
 
 def download_price_data(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads price data or gets it from the cached feather files or csv files if rebuild=True."""
