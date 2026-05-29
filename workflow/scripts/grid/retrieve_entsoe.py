@@ -23,11 +23,12 @@ import pandas as pd
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
+from common._logging import configure_logging
 from _helpers import area_month_in_cache, iso, to_utc_naive
 from download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client, iter_months
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger("retrieve_entsoe")
+configure_logging(snakemake)
+log = logging.getLogger(__name__)
 
 FULL_DATA_TYPES = ["prices", "load_forecast", "load_actual", "res", "generation", "crossborder"]
 
@@ -55,11 +56,11 @@ def _ensure_raw_months(
                 client = get_entsoe_client()
             month_start = pd.Timestamp(ym + "-01", tz="Europe/Brussels")
             next_month = month_start + pd.offsets.MonthBegin(1)
-            log.info(f"{area}/{ym}/{dt}: fetching")
+            log.info("%s/%s/%s: fetching", area, ym, dt)
             df = download_with_retry(DOWNLOADERS[dt], client, area, month_start, next_month)
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             df.to_parquet(cache_path, index=True)
-            log.info(f"{area}/{ym}/{dt}: cached")
+            log.info("%s/%s/%s: cached", area, ym, dt)
 
 
 # ── Per-variant month processing ──────────────────────────────────────────────
@@ -145,7 +146,7 @@ def retrieve(snakemake) -> None:
         cached = cached[~cached.index.duplicated(keep="last")].sort_index()
         processed_cache_dir.mkdir(parents=True, exist_ok=True)
         cached.to_parquet(processed_cache_path, index=True)
-        log.info(f"Updated processed cache: {processed_cache_path} ({len(cached)} rows)")
+        log.info("updated processed cache: %s (%d rows)", processed_cache_path, len(cached))
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:00")
     out_df = cached[area].loc[window]
@@ -159,7 +160,7 @@ def retrieve(snakemake) -> None:
     out_path = Path(snakemake.output[0])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_parquet(out_path, index=True)
-    log.info(f"Wrote {out_path} ({len(out_df)} rows × {out_df.shape[1]} cols)")
+    log.info("wrote %s (%d rows × %d cols)", out_path, len(out_df), out_df.shape[1])
 
 
 if __name__ == "__main__":

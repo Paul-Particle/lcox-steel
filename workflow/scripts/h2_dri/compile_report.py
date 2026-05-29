@@ -4,6 +4,7 @@ Compile per-scenario summaries into a single project-level report CSV.
 Invoked by Snakemake's `script:` directive (compile_report rule).
 """
 
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -13,6 +14,11 @@ from common._constants import H2_LHV_KWH_PER_KG
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
+
+from common._logging import configure_logging
+
+configure_logging(snakemake)
+log = logging.getLogger(__name__)
 
 
 def _h2_produced_kg(n: pypsa.Network) -> float:
@@ -94,7 +100,9 @@ def main() -> None:
     rows = []
     # networks may contain duplicates (collect fans out per tech row); dedupe
     # while preserving order so each scenario appears once.
-    for nc_path in dict.fromkeys(snakemake.input.networks):
+    network_paths = list(dict.fromkeys(snakemake.input.networks))
+    log.info("compiling report for project=%s (%d scenarios)", project_name, len(network_paths))
+    for nc_path in network_paths:
         nc_path = Path(nc_path)
         scenario_name = nc_path.stem
         n = pypsa.Network()
@@ -104,6 +112,7 @@ def main() -> None:
     out_path = Path(snakemake.output[0])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(out_path, index=False)
+    log.info("wrote %s (%d rows)", out_path, len(rows))
 
 
 if __name__ == "__main__":

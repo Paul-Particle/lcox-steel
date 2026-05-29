@@ -8,6 +8,7 @@ offshore wind makes economic sense.
 Output: resources/shapes/{cf_area}_offshore_geo.parquet — one row, (region, geometry).
 """
 
+import logging
 from pathlib import Path
 
 import geopandas as gpd
@@ -16,6 +17,11 @@ from common._paths import DATA, SHAPES_RES
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
+
+from common._logging import configure_logging
+
+configure_logging(snakemake)
+log = logging.getLogger(__name__)
 
 # Standalone defaults
 _OFFSHORE_ZONE_ZIP = DATA / "shapes/offshore_zones/eez_v12.zip"
@@ -41,7 +47,7 @@ def main() -> None:
         raise FileNotFoundError(f"Land regions file not found: {_LAND_REGIONS}")
 
     _OUT.parent.mkdir(parents=True, exist_ok=True)
-    print(f"Building offshore region for {_REGION} (ISO3={_ISO3}, max {_OFFSHORE_MAX_KM} km)")
+    log.info("building offshore region for %s (ISO3=%s, max %.0f km)", _REGION, _ISO3, _OFFSHORE_MAX_KM)
 
     offshore_zone = gpd.read_file(str(_OFFSHORE_ZONE_ZIP)).to_crs(4326)
     gdf = offshore_zone.loc[
@@ -66,11 +72,11 @@ def main() -> None:
     result = gpd.GeoDataFrame({"region": [_REGION], "geometry": [offshore_geom]}, crs=4326)
     result["geometry"] = result["geometry"].buffer(0)
     if not result.is_valid.all():
-        print("Warning: offshore geometry is invalid after cleanup")
+        log.warning("offshore geometry is invalid after cleanup")
 
     result.to_parquet(_OUT)
     area_km2 = result.to_crs(6933)["geometry"].area.iloc[0] / 1e6
-    print(f"Wrote: {_OUT}  ({_REGION}: {area_km2:.0f} km²)")
+    log.info("wrote %s (%s: %.0f km²)", _OUT, _REGION, area_km2)
 
 
 if __name__ == "__main__":

@@ -108,9 +108,14 @@ All pipelines are managed by Snakemake. `config/projects.csv` drives the full DA
 ### Full workflow (dry-run first)
 
 ```bash
-snakemake -n          # preview what would run
-snakemake --cores 4   # execute
+snakemake -n                                            # preview what would run
+snakemake --profile profiles/default --cores 4          # execute (concise output)
+snakemake --profile profiles/default --cores 4 --verbose   # loud
 ```
+
+The `profiles/default/` profile sets sensible defaults (`keep-going`, `rerun-incomplete`,
+quiet rule chatter so per-rule log files carry the detail). Drop `--profile profiles/default`
+to fall back to the bare Snakemake invocation.
 
 ### Grid data for one area
 
@@ -167,3 +172,61 @@ Edit `config/projects.csv` to add projects and scenarios. Edit `config/assumptio
 **Best-site profiles** (`resources/res_cf/<cc>_cf_<year>_bestsite_p95.parquet`): same format; P95 grid cell extracted directly from the Atlite CF grid with 3×3 spatial averaging for wind.
 
 **Complementarity results** (`resources/res_cf/<cc>_complementarity_top<N>_<year>.parquet`): ranked triplets of (onshore, offshore, solar) grid cells with score, coincidence, correlation, distance, and coordinates.
+
+## Logging & live output
+
+Every rule writes a per-(rule, wildcards) log file under `logs/` via the Snakemake `log:`
+directive. Scripts use Python's `logging` module wired through a shared helper
+(`workflow/common/_logging.py`); there are no stray `print()` calls. Long-running loops
+(triplet screening, per-cell extraction) show a `tqdm` progress bar with ETA when stderr
+is a terminal, and degrade to a single start/finish log line otherwise.
+
+### Layout
+
+```
+logs/
+├── snakemake.log                                       # combined engine output (if you pipe through tee)
+├── retrieve_entsoe/{area}_{variant}_{start}_{end}.log
+├── retrieve_nem/{area}_{variant}_{start}_{end}.log
+├── build_regions/{cf_area}.log
+├── build_offshore_regions/{cf_area}.log
+├── download_cutout/{cf_area}_{start}_{end}.log
+├── build_cf_timeseries/{cf_area}_{tech}_{start}_{end}.log
+├── h2_dri_optimize/{project}_{scenario}.log
+└── compile_report/{project}.log
+```
+
+### Verbosity
+
+Default is `INFO`. Crank up via either:
+
+```bash
+snakemake --profile profiles/default --cores 4 --config 'logging={level: DEBUG}'
+# or just
+snakemake --profile profiles/default --cores 4 --verbose
+```
+
+The third-party libraries that flood at INFO (atlite, cdsapi, urllib3, entsoe, pypsa,
+linopy, fiona, matplotlib) are pinned to WARNING by default; bump
+`config.logging.third_party_level` to lower their threshold.
+
+### Watching a run live
+
+The most agent-friendly recipe runs Snakemake in the background and tails everything:
+
+```bash
+mkdir -p logs
+snakemake --profile profiles/default --cores 4 > logs/snakemake.log 2>&1 &
+tail -F logs/snakemake.log logs/*/*.log
+```
+
+For a single rule, `tail -F logs/download_cutout/de_20230101_20231231.log` shows just
+that one. CDS downloads via `download_cutout` log the start of each request and the
+completion line; periodic status polling is on the roadmap (see `TODO.md`).
+
+### HPC / cluster
+
+`profiles/slurm/config.yaml.template` is a placeholder for a SLURM executor profile.
+Copy it to `profiles/slurm/config.yaml`, fill in the `cluster:` line for your scheduler,
+and run with `snakemake --profile profiles/slurm --jobs 200`. The script-side logging is
+unchanged — per-rule files still land under `logs/{rule}/...`.

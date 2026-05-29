@@ -5,6 +5,7 @@ aligned with the rest of the repo's conventions. Known issues tracked in
 TODO.md under 'viz/_helpers.py cleanup'.
 """
 
+import logging
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -12,6 +13,8 @@ import datetime
 import plotly.graph_objects as go
 import plotly.io as pio
 import plotly.express as px
+
+log = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------
@@ -63,12 +66,12 @@ save = False
 def toggle_save() -> bool:
     global save
     save = not save
-    print(f'Saving figures is now {"ON" if save else "OFF"}')
+    log.info("saving figures is now %s", "ON" if save else "OFF")
     return save
 def set_save(setting: bool) -> bool:
     global save
     save = setting
-    print(f'Saving figures is now {"ON" if save else "OFF"}')
+    log.info("saving figures is now %s", "ON" if save else "OFF")
     return save
 def save_is_on():
     global save

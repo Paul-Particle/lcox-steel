@@ -11,6 +11,8 @@ rule compile_report:
         ),
     output:
         "results/report_{project}.csv",
+    log:
+        "logs/compile_report/{project}.log",
     script:
         "../scripts/h2_dri/compile_report.py"
 
@@ -34,5 +36,7 @@ rule h2_dri_optimize:
         ),
     output:
         network="results/{project}/{scenario}.nc",
+    log:
+        "logs/h2_dri_optimize/{project}_{scenario}.log",
     script:
         "../scripts/h2_dri/build_and_solve_network.py"

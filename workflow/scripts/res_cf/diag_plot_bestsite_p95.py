@@ -16,6 +16,7 @@ Outputs
 results/plots/bestsite_locations/<country>_<tech>.png
 """
 
+import logging
 from pathlib import Path
 import numpy as np
 import xarray as xr
@@ -27,7 +28,11 @@ import atlite
 import regionmask
 import pandas as pd
 
+from common._logging import configure_logging
 from common._paths import RES_CF, SHAPES_RES
+
+configure_logging(None)
+log = logging.getLogger(__name__)
 
 # WIP NOTE: This script references quarterly cutouts (e.g. de_2023_q1.nc) and
 # the old regions.parquet / offshore_regions.parquet paths, both of which are
@@ -306,7 +311,7 @@ def plot_bestsite_map(iso2: str, tech: str) -> None:
     fig.savefig(out, dpi=200)
     plt.close(fig)
 
-    print(f"Wrote {out}")
+    log.info("wrote %s", out)
 
 def main():
     for iso2 in COUNTRIES:

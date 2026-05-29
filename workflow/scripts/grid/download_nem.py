@@ -10,15 +10,19 @@ below, which must remain the first import in this file.
 """
 
 import _nemosis_patches  # noqa: F401  — applies AEMO compatibility patches on import; must be first
+import logging
 from pathlib import Path
 
 import pandas as pd
 from nemosis import dynamic_data_compiler
 
+# Module-level logger only — the rule script (retrieve_nem.py) installs handlers.
+log = logging.getLogger(__name__)
+
 
 def download_price(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads price data or gets it from the cached feather files or csv files if rebuild=True."""
-    print("Fetching prices...")
+    log.info("fetching prices")
     prices = dynamic_data_compiler(
         start_time,
         end_time,
@@ -57,7 +61,7 @@ def _resolve_generator_excel(cache_dir: Path) -> Path:
     table_name = "Generators and Scheduled Loads"
     target = cache_dir / _nemosis_defaults.names[table_name]
     url = _nemosis_defaults.static_table_url[table_name]
-    print(f"Generator excel not found; downloading via NEMOSIS to {target}...")
+    log.info("generator excel not found; downloading via NEMOSIS to %s", target)
     cache_dir.mkdir(parents=True, exist_ok=True)
     try:
         static_downloader_map[table_name](url, str(target))
@@ -161,7 +165,7 @@ def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild
         .assign(gen_type = lambda df: df["gen_info"].map(nem_gen_names))
     )
 
-    print("Fetching generation...")
+    log.info("fetching generation")
     unit_generation = dynamic_data_compiler(
         start_time,
         end_time,
@@ -193,7 +197,7 @@ def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild
 
 def download_load(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Downloads and processes load data."""
-    print("Fetching load...")
+    log.info("fetching load")
     load = dynamic_data_compiler(
         start_time,
         end_time,
@@ -240,7 +244,7 @@ def download_crossborder(start_time: str, end_time: str, cache_dir: Path, rebuil
     that expects both directions per border (as in ENTSO-E) finds the expected
     columns rather than NaN.
     """
-    print("Fetching cross-border flows...")
+    log.info("fetching cross-border flows")
     interconnector = dynamic_data_compiler(
         start_time,
         end_time,

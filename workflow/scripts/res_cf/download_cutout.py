@@ -4,6 +4,7 @@ Create one Atlite ERA5 cutout for a given area and date range.
 Output: cutouts/{cf_area}_{start_date}_{end_date}.nc
 """
 
+import logging
 from pathlib import Path
 
 import atlite
@@ -13,6 +14,11 @@ from common._paths import ATLITE_CACHE, CUTOUTS, SHAPES_RAW
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
+
+from common._logging import configure_logging
+
+configure_logging(snakemake)
+log = logging.getLogger(__name__)
 
 # Standalone defaults
 _NE_ZIP = SHAPES_RAW / "ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"
@@ -80,8 +86,14 @@ def main() -> None:
         kwargs.update(dx=0.5, dy=0.5)
 
     cutout = atlite.Cutout(**kwargs)
+    log.info(
+        "starting CDS request: x=%s y=%s time=%s monthly=%s coarse=%s → %s",
+        kwargs["x"], kwargs["y"], time_range, _MONTHLY_REQUESTS, _COARSE, _OUTPUT_PATH,
+    )
+    # TODO: when CDS polling lands, spawn a background thread that calls
+    # cdsapi `get_jobs()` every N seconds and `log.info`s status — see TODO.md.
     cutout.prepare(tmpdir=str(_ATLITE_CACHE), monthly_requests=_MONTHLY_REQUESTS)
-    print(f"Prepared: {_OUTPUT_PATH}")
+    log.info("CDS request complete: %s", _OUTPUT_PATH)
 
 
 if __name__ == "__main__":

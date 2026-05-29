@@ -8,6 +8,8 @@ rule build_regions:
         "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
     output:
         "resources/shapes/{cf_area}_geo.parquet",
+    log:
+        "logs/build_regions/{cf_area}.log",
     params:
         iso3=lookup(dpath="res_cf/countries/{cf_area}/iso3", within=config),
         region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
@@ -26,6 +28,8 @@ rule build_offshore_regions:
         offshore_zone="data/shapes/offshore_zones/eez_v12.zip",
     output:
         "resources/shapes/{cf_area}_offshore_geo.parquet",
+    log:
+        "logs/build_offshore_regions/{cf_area}.log",
     params:
         iso3=lookup(dpath="res_cf/countries/{cf_area}/iso3", within=config),
         region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
@@ -41,6 +45,8 @@ rule download_cutout:
         ne_zip=ancient("data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"),
     output:
         protected("cutouts/{cf_area}_{start_date}_{end_date}.nc"),
+    log:
+        "logs/download_cutout/{cf_area}_{start_date}_{end_date}.log",
     params:
         iso3=lookup(dpath="res_cf/countries/{cf_area}/iso3", within=config),
         mainland_bbox=lookup(
@@ -65,6 +71,8 @@ rule build_cf_timeseries:
         offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
     output:
         "resources/res_cf/{cf_area}_{tech}_country-average_{start_date}_{end_date}.parquet",
+    log:
+        "logs/build_cf_timeseries/{cf_area}_{tech}_{start_date}_{end_date}.log",
     params:
         region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),

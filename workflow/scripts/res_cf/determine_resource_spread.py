@@ -31,6 +31,7 @@ resources/res_cf/resource_spread_2023.parquet
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -41,8 +42,12 @@ import geopandas as gpd
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
+from common._logging import configure_logging
 from common._paths import RES_CF, SHAPES_RES
 from scripts.res_cf._helpers import QUARTERS, cutout_path, load_res_cf_cfg
+
+configure_logging(snakemake)
+log = logging.getLogger(__name__)
 
 
 REGIONS_PATH          = SHAPES_RES / "regions.parquet"
@@ -256,13 +261,15 @@ def main():
                 "uplift_p90_vs_national": uplift_p90,
             })
 
-            # Optional: sanity print
-            print(f"{iso2} {tech}: national_mean={nat_mean:.4f}, spatial_mean={spatial_mean:.4f}, p95={p95:.4f}")
+            log.info(
+                "%s %s: national_mean=%.4f spatial_mean=%.4f p95=%.4f",
+                iso2, tech, nat_mean, spatial_mean, p95,
+            )
 
     out = pd.DataFrame(rows)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     out.to_parquet(OUT_PATH, index=False)
-    print(f"Wrote {OUT_PATH}")
+    log.info("wrote %s", OUT_PATH)
 
 if __name__ == "__main__":
     main()

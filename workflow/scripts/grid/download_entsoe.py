@@ -16,8 +16,8 @@ import entsoe
 import pandas as pd
 from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger("download_entsoe")
+# Module-level logger only — the rule script (retrieve_entsoe.py) installs handlers.
+log = logging.getLogger(__name__)
 
 
 def get_entsoe_client() -> entsoe.EntsoePandasClient:
@@ -164,7 +164,8 @@ def download_with_retry(
                 raise
             backoff = 2 ** attempt
             log.warning(
-                f"  attempt {attempt}/{max_attempts} failed ({e!r}); retry in {backoff}s"
+                "attempt %d/%d failed (%r); retry in %ds",
+                attempt, max_attempts, e, backoff,
             )
             time.sleep(backoff)
 
