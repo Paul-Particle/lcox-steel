@@ -10,12 +10,11 @@ lcox-steel/
 │   ├── Snakefile           # configfiles + sys.path + includes + rule all
 │   ├── rules/
 │   │   ├── grid.smk        # ENTSO-E + NEM download/process rules
-│   │   ├── res_cf.smk      # extract shapefiles + atlite CF pipeline
+│   │   ├── res_cf.smk      # atlite CF pipeline (shapes → cutout → CF timeseries)
 │   │   └── h2_dri.smk      # PyPSA optimisation rule
 │   ├── scripts/
 │   │   ├── grid/           # Grid data pipeline (ENTSO-E + NEM)
 │   │   ├── res_cf/         # Atlite capacity factor pipeline
-│   │   │   ├── extract_shapefile.py # Generic zip→shp extractor
 │   │   │   ├── build_regions.py
 │   │   │   ├── build_offshore_regions.py
 │   │   │   ├── download_cutout.py
@@ -73,7 +72,7 @@ git config core.hooksPath .githooks
 
 ### 2. External data files
 
-Two large geographic datasets must be downloaded manually. Snakemake has two `extract_*_shapefile` rules that handle unzipping — just put the ZIPs at the canonical paths below (create the directories first) and the pipeline will extract them when it needs them.
+Two large geographic datasets must be downloaded manually and placed as ZIPs — the pipeline reads from them directly via geopandas, no extraction step needed.
 
 **World EEZ v12** — https://www.marineregions.org/downloads.php (free registration). Choose "World EEZ v12 (2023)" → Shapefile. Save (or rename) the download as `data/shapes/offshore_zones/eez_v12.zip`. Any v11 or v12 works; needs `ISO_TER1` and `POL_TYPE` columns.
 
@@ -83,8 +82,6 @@ Two large geographic datasets must be downloaded manually. Snakemake has two `ex
 mkdir -p data/shapes/offshore_zones data/shapes/ne_110m_admin_0_countries
 # then drop the two ZIPs into those directories with the names above
 ```
-
-(A shapefile is a `.shp` + `.shx` + `.dbf` + `.prj` suite that has to travel together — the extract rule handles flattening if the ZIP nests the components under a subfolder.)
 
 Both cache directories follow the same gitignore strategy: everything is ignored except one committed reference file per pipeline.
 
