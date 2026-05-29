@@ -56,6 +56,7 @@ def build_network(
     n = pypsa.Network()
     n.set_snapshots(cf_timeseries.index)
 
+    _add_carriers(n, res_techs=list(cf_timeseries.columns))
     _add_buses(n)
     _add_generators(n, cf_timeseries, assumptions["res"], wacc)
     _add_battery(n, assumptions["battery"], wacc)
@@ -67,6 +68,15 @@ def build_network(
         _add_grid_import(n, price_series)
 
     return n
+
+
+def _add_carriers(n: pypsa.Network, res_techs: list[str]) -> None:
+    # Register every carrier string referenced by a component before that
+    # component is added — otherwise PyPSA's consistency check warns
+    # ("carriers which are not defined") and n.carriers stays empty,
+    # which blocks carrier-aware features (CO2 constraints, grouped stats).
+    carriers = list(dict.fromkeys(["AC", "H2", "battery", "electrolyser", *res_techs]))
+    n.add("Carrier", carriers)
 
 
 def _add_buses(n: pypsa.Network) -> None:
@@ -138,6 +148,7 @@ def _add_electrolyser(
         "electrolyser",
         bus0="electricity",
         bus1="hydrogen",
+        carrier="electrolyser",
         p_nom=el_mw,
         p_nom_extendable=False,
         efficiency=el_efficiency,
