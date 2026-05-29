@@ -20,11 +20,11 @@ from pathlib import Path
 import pandas as pd
 
 if "snakemake" not in globals():
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from common._stubs import snakemake
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _helpers import area_month_in_cache, iso, to_utc_naive  # noqa: E402
-from download_nem import TABLE_FETCHERS  # noqa: E402
+from _helpers import area_month_in_cache, iso, to_utc_naive
+from download_nem import TABLE_FETCHERS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("retrieve_nem")
