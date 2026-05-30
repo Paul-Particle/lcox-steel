@@ -3,20 +3,6 @@ wildcard_constraints:
     scenario=r"[^/]+",
 
 
-rule compile_report:
-    input:
-        networks=collect(
-            "results/{item.project}/{item.scenario}.nc",
-            item=lookup(query="project == '{project}'", within=projects_df),
-        ),
-    output:
-        "results/report_{project}.csv",
-    log:
-        "logs/compile_report/{project}.log",
-    script:
-        "../scripts/h2_dri/compile_report.py"
-
-
 rule h2_dri_optimize:
     input:
         assumptions="config/assumptions.yaml",

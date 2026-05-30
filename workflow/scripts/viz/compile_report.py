@@ -1,7 +1,7 @@
 """
 Compile per-scenario summaries into a single project-level report CSV.
 
-Invoked by Snakemake's `script:` directive (compile_report rule).
+Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
 """
 
 import logging
@@ -99,7 +99,17 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         summary["h2_buffer_mwh_lhv_opt"] = n.stores.at["h2_buffer", "e_nom_opt"]
 
     if "electrolyser" in n.links.index:
-        summary["electrolyser_gw"] = n.links.at["electrolyser", "p_nom_opt"] / 1e3
+        el_cap = n.links.at["electrolyser", "p_nom_opt"]
+        summary["electrolyser_gw"] = el_cap / 1e3
+        if el_cap > 0 and "electrolyser" in n.links_t.p0.columns:
+            summary["electrolyser_utilization"] = float(
+                n.links_t.p0["electrolyser"].mean() / el_cap
+            )
+        else:
+            summary["electrolyser_utilization"] = float("nan")
+
+    if "dri_load" in n.loads.index:
+        summary["dri_h2_mw_lhv"] = float(n.loads.at["dri_load", "p_set"])
 
     return summary
 

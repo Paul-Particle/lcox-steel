@@ -1,5 +1,6 @@
 configfile: "config/config.yaml"
 configfile: "config/assumptions.yaml"
+configfile: "config/assumptions_high_allcost.yaml"
 
 
 import sys
@@ -17,6 +18,7 @@ projects_df = pd.read_csv(
 include: "rules/grid.smk"
 include: "rules/res_cf.smk"
 include: "rules/h2_dri.smk"
+include: "rules/viz.smk"
 
 
 rule all:
