@@ -3,7 +3,7 @@ Plot mean annual CF as a spatial heatmap for a given cutout area and tech,
 with the region boundary as a white outline and the P95 bestsite marked.
 
 Snakemake rule: plot_cf_map  (in viz.smk)
-Standalone:     python workflow/scripts/viz/plot_cf_map.py [--area aus] [--tech solar]
+Standalone:     python workflow/scripts/viz/plot_cf_map.py [--area de] [--tech solar]
 """
 
 import argparse
@@ -13,8 +13,9 @@ from pathlib import Path
 
 import atlite
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
+from shapely.geometry import MultiPolygon, Polygon
 
 if "snakemake" not in globals():
     # standalone: add workflow/ to path and load stub
@@ -23,21 +24,28 @@ if "snakemake" not in globals():
 
 from common._logging import configure_logging
 from common._paths import CUTOUTS, SHAPES_RES
+from scripts.viz._helpers import (
+    PLOTLY_CONFIG,
+    blue_black,
+    fca_colormap,
+    fca_template,
+)
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
-# Standalone defaults
-_CF_AREA = "aus"
+# Standalone defaults — German cutout (Australian cutout has missing snakemake
+# metadata because it was stitched together from old downloads).
+_CF_AREA = "de"
 _TECH = "solar"
-_START_DATE = "20250101"
-_END_DATE = "20251231"
-_CUTOUT_PATH = CUTOUTS / "aus_20250101_20251231.nc"
-_REGIONS_PATH = SHAPES_RES / "aus_geo.parquet"
-_REGION = "AUS"
+_START_DATE = "20230101"
+_END_DATE = "20231231"
+_CUTOUT_PATH = CUTOUTS / "de_20230101_20231231.nc"
+_REGIONS_PATH = SHAPES_RES / "de_geo.parquet"
+_REGION = "DE"
 _PV_PANEL = "CSi"
 _WIND_TURBINE = "Vestas_V112_3MW"
-_OUT = Path("results/plots/cf_map/aus_solar_20250101_20251231_cf_map.png")
+_OUT = Path("results/plots/cf_map/de_solar_20230101_20231231_cf_map.png")
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _CF_AREA = snakemake.wildcards.cf_area
@@ -71,6 +79,29 @@ def _find_p95_cell(cf_grid, geom):
     idx_flat = np.nanargmin(dist)
     y_idx, x_idx = np.unravel_index(idx_flat, vals.shape)
     return int(y_idx), int(x_idx)
+
+
+def _boundary_segments(geom) -> tuple[list[float], list[float]]:
+    """Flatten one or more polygon exteriors+holes into x/y arrays with NaN
+    separators so a single Scatter trace can render all rings."""
+    xs: list[float] = []
+    ys: list[float] = []
+
+    def _push(ring):
+        rx, ry = zip(*ring.coords)
+        xs.extend(rx)
+        ys.extend(ry)
+        xs.append(np.nan)
+        ys.append(np.nan)
+
+    polys = geom.geoms if isinstance(geom, MultiPolygon) else [geom]
+    for poly in polys:
+        if not isinstance(poly, Polygon):
+            continue
+        _push(poly.exterior)
+        for interior in poly.interiors:
+            _push(interior)
+    return xs, ys
 
 
 def main() -> None:
@@ -110,30 +141,58 @@ def main() -> None:
     lons = cutout.data.coords["x"].values
     lats = cutout.data.coords["y"].values
 
-    fig, ax = plt.subplots(figsize=(10, 8))
-    pcm = ax.pcolormesh(lons, lats, cell_mean.values, cmap="YlOrRd",
-                        shading="nearest", vmin=0)
-    cbar = fig.colorbar(pcm, ax=ax, fraction=0.03, pad=0.02)
-    cbar.set_label("Mean annual CF (latitude-optimal)", fontsize=10)
+    bx, by = _boundary_segments(geom)
 
-    gdf.boundary.plot(ax=ax, color="white", linewidth=1.5, zorder=3)
-    ax.scatter(p95_lon, p95_lat, marker="*", s=250, color="white",
-               edgecolors="black", linewidths=0.8, zorder=5,
-               label=f"P95 site (CF={p95_cf:.3f})")
-    ax.legend(loc="lower right", fontsize=9, framealpha=0.8)
+    fig = go.Figure()
+    fig.add_trace(go.Heatmap(
+        x=lons,
+        y=lats,
+        z=cell_mean.values,
+        colorscale=fca_colormap,
+        zmin=0,
+        colorbar=dict(
+            title=dict(text="Mean annual CF<br>(latitude-optimal)", side="right"),
+            thickness=14,
+            len=0.8,
+        ),
+        hovertemplate="lon %{x:.2f}, lat %{y:.2f}<br>CF %{z:.3f}<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=bx, y=by,
+        mode="lines",
+        line=dict(color="white", width=1.6),
+        hoverinfo="skip",
+        showlegend=False,
+        name="region",
+    ))
+    fig.add_trace(go.Scatter(
+        x=[p95_lon], y=[p95_lat],
+        mode="markers",
+        marker=dict(symbol="star", size=18, color="white",
+                    line=dict(color=blue_black, width=1.2)),
+        name=f"P95 site (CF={p95_cf:.3f})",
+        hovertemplate=f"P95 site<br>lon %{{x:.2f}}, lat %{{y:.2f}}<br>CF {p95_cf:.3f}<extra></extra>",
+    ))
 
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-    ax.set_title(
-        f"{_CF_AREA.upper()} — {_TECH} mean annual CF ({_START_DATE[:4]})\n"
-        f"latitude-optimal orientation · P95 bestsite marked",
-        fontsize=11,
+    fig.update_layout(
+        template=fca_template,
+        title=(f"{_REGION} — {_TECH} mean annual CF ({_START_DATE[:4]})<br>"
+               "<sup>latitude-optimal orientation · P95 bestsite marked</sup>"),
+        xaxis_title="Longitude",
+        yaxis_title="Latitude",
+        width=900,
+        height=720,
+        legend=dict(x=0.99, y=0.01, xanchor="right", yanchor="bottom",
+                    bgcolor="rgba(255,255,255,0.7)"),
+        margin=dict(l=70, r=120, t=90, b=70),
     )
-    ax.set_aspect("equal")
+    # Equal-aspect lat/lon. scaleratio≈1 is fine away from poles; at mid-
+    # latitudes longitude visually stretches but matches the matplotlib version.
+    fig.update_yaxes(scaleanchor="x", scaleratio=1)
 
-    fig.savefig(_OUT, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    log.info("saved %s", _OUT)
+    fig.write_image(_OUT, scale=2)
+    fig.write_html(_OUT.with_suffix(".html"), config=PLOTLY_CONFIG, include_plotlyjs="cdn")
+    log.info("saved %s (+ .html)", _OUT)
 
 
 if __name__ == "__main__":
@@ -142,9 +201,12 @@ if __name__ == "__main__":
     parser.add_argument("--tech",       default=_TECH)
     parser.add_argument("--start-date", default=_START_DATE)
     parser.add_argument("--end-date",   default=_END_DATE)
+    parser.add_argument("--region",     default=_REGION,
+                        help="region tag stored in the regions parquet (e.g. DE, AUS)")
     args = parser.parse_args()
     _CF_AREA = args.area; _TECH = args.tech
     _START_DATE = args.start_date; _END_DATE = args.end_date
+    _REGION = args.region
     _CUTOUT_PATH = CUTOUTS / f"{_CF_AREA}_{_START_DATE}_{_END_DATE}.nc"
     _REGIONS_PATH = SHAPES_RES / f"{_CF_AREA}_geo.parquet"
     _OUT = Path(f"results/plots/cf_map/{_CF_AREA}_{_TECH}_{_START_DATE}_{_END_DATE}_cf_map.png")

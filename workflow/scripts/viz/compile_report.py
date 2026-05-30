@@ -96,7 +96,13 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         summary["battery_mwh_opt"] = p_opt * n.storage_units.at["battery", "max_hours"]
 
     if "h2_buffer" in n.stores.index:
-        summary["h2_buffer_mwh_lhv_opt"] = n.stores.at["h2_buffer", "e_nom_opt"]
+        # Reported as hours of DRI H₂ demand (buffer MWh LHV / load MW LHV).
+        buffer_mwh = n.stores.at["h2_buffer", "e_nom_opt"]
+        if "dri_load" in n.loads.index:
+            dri_mw = float(n.loads.at["dri_load", "p_set"])
+            summary["h2_buffer_hours_dri"] = buffer_mwh / dri_mw if dri_mw else float("nan")
+        else:
+            summary["h2_buffer_hours_dri"] = float("nan")
 
     if "electrolyser" in n.links.index:
         el_cap = n.links.at["electrolyser", "p_nom_opt"]

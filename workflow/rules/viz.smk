@@ -20,7 +20,8 @@ rule plot_cf_map:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
         regions="resources/shapes/{cf_area}_geo.parquet",
     output:
-        "results/plots/cf_map/{cf_area}_{tech}_{start_date}_{end_date}_cf_map.png",
+        png="results/plots/cf_map/{cf_area}_{tech}_{start_date}_{end_date}_cf_map.png",
+        html="results/plots/cf_map/{cf_area}_{tech}_{start_date}_{end_date}_cf_map.html",
     wildcard_constraints:
         tech=r"solar|wind_onshore|wind_offshore",
     log:
@@ -37,7 +38,8 @@ rule plot_capacity_bars:
     input:
         reports=expand("results/report_{project}.csv", project=_viz_bar_projects),
     output:
-        "results/plots/capacity_bars.png",
+        png="results/plots/capacity_bars.png",
+        html="results/plots/capacity_bars.html",
     log:
         "logs/plot_capacity_bars.log",
     script:
