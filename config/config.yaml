@@ -2,6 +2,13 @@
 
 scheduler: greedy
 
+viz:
+  capacity_bar_projects:
+    - VIC_2025_solar_ew
+    - VIC_2025_solar_ew_hielcost
+    - VIC_2025_solar_ew_hiallcost
+    - VIC_2025_solar_ew_noopt
+
 logging:
   # Root level for the project's own loggers. Set to DEBUG for verbose runs.
   # Override on the CLI: snakemake --config 'logging={level: DEBUG}'.

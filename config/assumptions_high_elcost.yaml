@@ -1,0 +1,5 @@
+electrolyser:
+  capex_per_mw_eur: 3_500_000
+  opex_per_mw_per_year_eur: 20_000
+  lifetime_years: 20
+  efficiency_kwh_per_kg: 55

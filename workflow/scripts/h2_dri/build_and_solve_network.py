@@ -11,6 +11,7 @@ Electrolyser efficiency is:
 """
 
 import logging
+import re
 from pathlib import Path
 
 # pandas 3.0 defaults to ArrowStringArray for strings; xarray (used by PyPSA
@@ -94,9 +95,13 @@ def _add_generators(
     wacc: float,
 ) -> None:
     for tech in cf_timeseries.columns:
-        if tech not in res_cfg:
+        cfg = res_cfg.get(tech)
+        if cfg is None:
+            base = re.sub(r"_(east|west)_\d+$|_az\d+$", "", tech)
+            cfg = res_cfg.get(base)
+        if cfg is None:
             raise KeyError(f"No assumptions found for tech '{tech}' — add it to assumptions.yaml")
-        cfg = res_cfg[tech]
+
         cap_cost = (
             annuity_factor(wacc, cfg["lifetime_years"]) * cfg["capex_per_mw_eur"]
             + cfg["opex_per_mw_per_year_eur"]
@@ -216,7 +221,17 @@ def main() -> None:
     price_series = pd.read_parquet(grid_path).iloc[:, 0] if grid_path is not None else None
 
     if cf_files:
-        cf_timeseries = pd.DataFrame({t: pd.read_parquet(p).iloc[:, 0] for t, p in cf_files.items()})
+        cf_parts: dict[str, pd.Series] = {}
+        for t, p in cf_files.items():
+            df = pd.read_parquet(p)
+            if df.shape[1] == 1:
+                cf_parts[t] = df.iloc[:, 0]
+            else:
+                # multi-column parquet (e.g. orientation sweep): expand into
+                # one generator per column; column names become the tech keys.
+                for col in df.columns:
+                    cf_parts[col] = df[col]
+        cf_timeseries = pd.DataFrame(cf_parts)
     elif price_series is not None:
         cf_timeseries = pd.DataFrame(index=price_series.index)
     else:
