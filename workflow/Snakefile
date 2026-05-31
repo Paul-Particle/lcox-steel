@@ -1,5 +1,11 @@
 configfile: "config/config.yaml"
-configfile: "config/assumptions.yaml"
+
+# Cost/finance assumptions are NOT loaded as a global configfile. The base file
+# (config/assumptions.yaml) is an input to h2_dri_optimize; per-scenario overlays
+# are picked up by file presence via the optional() polyfill in
+# workflow/rules/_polyfills.smk (sibling file
+# config/assumptions_{project}_{scenario}.yaml). Edits to a variant only rerun
+# the scenarios that depend on it.
 
 
 import sys
@@ -14,9 +20,11 @@ projects_df = pd.read_csv(
 )
 
 
+include: "rules/_polyfills.smk"
 include: "rules/grid.smk"
 include: "rules/res_cf.smk"
 include: "rules/h2_dri.smk"
+include: "rules/viz.smk"
 
 
 rule all:
@@ -26,6 +34,12 @@ rule all:
         expand(
             "results/report_{project}.csv",
             project=projects_df["project"].unique().tolist(),
+        ),
+        # Per-project scenario bar charts for the projects listed under
+        # viz.capacity_bar_projects in config.yaml.
+        expand(
+            "results/plots/capacity_bars/{project}.png",
+            project=config.get("viz", {}).get("capacity_bar_projects", []),
         ),
         # Full ENTSO-E dataset (grid variant=full) for the German archive — a
         # top-level target for now until something downstream consumes it.

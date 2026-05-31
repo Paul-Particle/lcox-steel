@@ -31,6 +31,7 @@ dependencies:
   - matplotlib
   - seaborn
   - plotly
+  - python-kaleido       # static image export for plotly (write_image)
 
   # Config & workflow
   - pyyaml

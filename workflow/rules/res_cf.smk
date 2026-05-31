@@ -1,6 +1,6 @@
 wildcard_constraints:
     cf_area=r"[a-z]{2,3}",
-    tech=r"wind_onshore|wind_offshore|solar",
+    tech=r"wind-onshore|wind-offshore|solar",
 
 
 rule build_regions:
@@ -44,7 +44,9 @@ rule download_cutout:
     input:
         ne_zip=ancient("data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"),
     output:
-        protected("cutouts/{cf_area}_{start_date}_{end_date}.nc"),
+        # Not protected(): the download_cutout.py script preserves expensive
+        # downloads via the `_backup.nc` sibling-file convention.
+        "cutouts/{cf_area}_{start_date}_{end_date}.nc",
     log:
         "logs/download_cutout/{cf_area}_{start_date}_{end_date}.log",
     params:
@@ -62,6 +64,23 @@ rule download_cutout:
         monthly_requests=lookup(dpath="res_cf/cutout/monthly_requests", within=config),
     script:
         "../scripts/res_cf/download_cutout.py"
+
+
+rule build_solar_orientation_bestsite_p95:
+    input:
+        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/{cf_area}_geo.parquet",
+    output:
+        "resources/res_cf/{cf_area}_solar_bestsite-p95-n{n_steps}_{start_date}_{end_date}.parquet",
+    wildcard_constraints:
+        n_steps=r"\d+",
+    log:
+        "logs/build_solar_orientation_bestsite_p95/{cf_area}_n{n_steps}_{start_date}_{end_date}.log",
+    params:
+        pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
+        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
+    script:
+        "../scripts/res_cf/build_solar_orientation_bestsite_p95.py"
 
 
 rule build_cf_timeseries:

@@ -1,20 +1,15 @@
-# FX rates for converting non-EUR price feeds.
-# Keys: eur_per_<iso3>. Bump if you need real accuracy.
-fx:
-  eur_per_aud: 0.61
-
 finance:
   default_wacc: 0.07
 
 plant:
-  dri_mt_per_year: 2.0
+  dri_mt_per_year: 0.526  # 100 MW H2 LHV input × 8760 h / 33.33 kWh/kg / 50 kg/t
   h2_intensity_kg_per_t_dri: 50.0
   # Floor for electrolyser sizing — the optimiser may grow it further when the
   # extra capacity earns its capex via buffer-mediated arbitrage of cheap RES.
   availability_target: 0.95
 
 res:
-  wind_onshore:
+  wind-onshore:
     capex_per_mw_eur: 1_000_000
     opex_per_mw_per_year_eur: 30_000
     lifetime_years: 25
@@ -22,7 +17,7 @@ res:
     capex_per_mw_eur: 600_000
     opex_per_mw_per_year_eur: 12_000
     lifetime_years: 25
-  wind_offshore:
+  wind-offshore:
     capex_per_mw_eur: 2_500_000
     opex_per_mw_per_year_eur: 75_000
     lifetime_years: 25

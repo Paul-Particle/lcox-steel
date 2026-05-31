@@ -17,13 +17,13 @@ log = logging.getLogger(__name__)
 
 # Standalone defaults
 _CF_AREA = "de"
-_TECH = "wind_onshore"
+_TECH = "wind-onshore"
 _START_DATE = "20230101"
 _END_DATE = "20231231"
 _CUTOUT_PATH = CUTOUTS / "de_20230101_20231231.nc"
 _REGIONS_PATH = SHAPES_RES / "de_geo.parquet"
 _OFFSHORE_REGIONS_PATH = SHAPES_RES / "de_offshore_geo.parquet"
-_OUT = RES_CF / "de_wind_onshore_country-average_20230101_20231231.parquet"
+_OUT = RES_CF / "de_wind-onshore_country-average_20230101_20231231.parquet"
 _REGION = "DE"
 _WIND_ONSHORE_TURBINE = "Vestas_V112_3MW"
 _WIND_OFFSHORE_TURBINE = "NREL_ReferenceTurbine_5MW_offshore"
@@ -100,7 +100,7 @@ def main() -> None:
         )
         series = to_cf_series(cf)
 
-    elif _TECH == "wind_onshore":
+    elif _TECH == "wind-onshore":
         gdf = get_region_gdf(_REGIONS_PATH)
         matrix = cutout.indicatormatrix(gdf)
         cf = cutout.wind(
@@ -113,7 +113,7 @@ def main() -> None:
         )
         series = to_cf_series(cf)
 
-    elif _TECH == "wind_offshore":
+    elif _TECH == "wind-offshore":
         gdf = get_region_gdf(_OFFSHORE_REGIONS_PATH)
         matrix = cutout.indicatormatrix(gdf)
         cf = cutout.wind(
@@ -129,7 +129,9 @@ def main() -> None:
     else:
         raise ValueError(f"Unknown tech: {_TECH!r}")
 
-    series.to_frame().to_parquet(_OUT, index=True)
+    # Column name = tech wildcard, so downstream scripts (build_and_solve_network)
+    # can read the tech key straight off the parquet without a separate param.
+    series.rename(_TECH).to_frame().to_parquet(_OUT, index=True)
     log.info("wrote %s (%d rows, mean=%.3f)", _OUT, len(series), series.mean())
 
 

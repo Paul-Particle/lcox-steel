@@ -11,6 +11,7 @@ Electrolyser efficiency is:
 """
 
 import logging
+import re
 from pathlib import Path
 
 # pandas 3.0 defaults to ArrowStringArray for strings; xarray (used by PyPSA
@@ -20,6 +21,7 @@ import pandas as pd
 pd.options.mode.string_storage = "python"
 
 import pypsa
+import yaml
 
 from _helpers import annuity_factor, dri_to_el_mw
 
@@ -31,6 +33,30 @@ if "snakemake" not in globals():
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
+
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively merge `overlay` into `base`. Overlay leaves replace base
+    leaves; dict branches are merged key-by-key. Neither input is mutated."""
+    out = dict(base)
+    for k, v in overlay.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def load_assumptions(base_path: Path, overlay_path: Path | None) -> dict:
+    """Load base assumptions and optionally merge a per-scenario overlay on top.
+
+    `overlay_path == base_path` (or None) means no overlay — caller passes the
+    base path twice in the snakemake input when no variant applies."""
+    base = yaml.safe_load(Path(base_path).read_text()) or {}
+    if overlay_path is None or Path(overlay_path) == Path(base_path):
+        return base
+    overlay = yaml.safe_load(Path(overlay_path).read_text()) or {}
+    return _deep_merge(base, overlay)
 
 
 def build_network(
@@ -94,9 +120,13 @@ def _add_generators(
     wacc: float,
 ) -> None:
     for tech in cf_timeseries.columns:
-        if tech not in res_cfg:
+        cfg = res_cfg.get(tech)
+        if cfg is None:
+            base = re.sub(r"_(east|west)_\d+$|_az\d+$", "", tech)
+            cfg = res_cfg.get(base)
+        if cfg is None:
             raise KeyError(f"No assumptions found for tech '{tech}' — add it to assumptions.yaml")
-        cfg = res_cfg[tech]
+
         cap_cost = (
             annuity_factor(wacc, cfg["lifetime_years"]) * cfg["capex_per_mw_eur"]
             + cfg["opex_per_mw_per_year_eur"]
@@ -206,17 +236,36 @@ def _add_grid_import(n: pypsa.Network, price_series: pd.Series) -> None:
 def main() -> None:
     project  = snakemake.wildcards.project
     scenario = snakemake.wildcards.scenario
-    techs    = list(snakemake.params.techs)
     out_path = Path(snakemake.output.network)
 
-    tech_files = dict(zip(techs, [Path(p) for p in snakemake.input.tech_inputs]))
-    cf_files   = {t: p for t, p in tech_files.items() if t != "grid"}
-    grid_path  = tech_files.get("grid")
+    # Each tech input is one parquet, classified by its pipeline directory:
+    # resources/res_cf/... → capacity-factor series (column names are tech keys);
+    # resources/entsoe/... or resources/nem/... → grid price series.
+    cf_paths:   list[Path] = []
+    grid_paths: list[Path] = []
+    for raw in snakemake.input.tech_inputs:
+        p = Path(raw)
+        (cf_paths if p.parent.name == "res_cf" else grid_paths).append(p)
 
+    if len(grid_paths) > 1:
+        raise ValueError(f"{project}/{scenario}: multiple grid inputs: {grid_paths}")
+    grid_path = grid_paths[0] if grid_paths else None
     price_series = pd.read_parquet(grid_path).iloc[:, 0] if grid_path is not None else None
 
-    if cf_files:
-        cf_timeseries = pd.DataFrame({t: pd.read_parquet(p).iloc[:, 0] for t, p in cf_files.items()})
+    if cf_paths:
+        cf_parts: dict[str, pd.Series] = {}
+        for p in cf_paths:
+            df = pd.read_parquet(p)
+            # Single- and multi-column parquets are uniform: columns are tech keys.
+            # build_cf_timeseries.py names single-column outputs by the tech wildcard.
+            for col in df.columns:
+                if col in cf_parts:
+                    raise ValueError(
+                        f"{project}/{scenario}: duplicate tech key '{col}' "
+                        f"across CF inputs"
+                    )
+                cf_parts[col] = df[col]
+        cf_timeseries = pd.DataFrame(cf_parts)
     elif price_series is not None:
         cf_timeseries = pd.DataFrame(index=price_series.index)
     else:
@@ -230,11 +279,19 @@ def main() -> None:
                 "aligning to CF index. Check that the grid file covers the same period."
             )
 
+    # optional() yields a Namedlist of 0 or 1 paths: present iff a
+    # config/assumptions_{project}_{scenario}.yaml file exists on disk.
+    overlays = list(snakemake.input.assumptions_overlay)
+    overlay_path = Path(overlays[0]) if overlays else None
+    base_path = Path(snakemake.input.assumptions_base)
+
+    assumptions = load_assumptions(base_path, overlay_path)
     log.info(
-        "building network for project=%s scenario=%s techs=%s",
-        project, scenario, techs,
+        "building network for project=%s scenario=%s techs=%s (overlay=%s)",
+        project, scenario, list(cf_timeseries.columns),
+        overlay_path.name if overlay_path else "none",
     )
-    n = build_network(snakemake.config, cf_timeseries, price_series)
+    n = build_network(assumptions, cf_timeseries, price_series)
     log.info("optimising with HiGHS (snapshots=%d)", len(n.snapshots))
     n.optimize(solver_name="highs")
 

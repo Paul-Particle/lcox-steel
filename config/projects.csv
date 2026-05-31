@@ -1,9 +1,13 @@
 project,scenario,tech,variant,pipeline,area,start_date,end_date
-DE_2023_baseline,dedicated_res,wind_onshore,country-average,res_cf,de,20230101,20231231
+DE_2023_baseline,dedicated_res,wind-onshore,country-average,res_cf,de,20230101,20231231
 DE_2023_baseline,dedicated_res,solar,country-average,res_cf,de,20230101,20231231
-DE_2023_baseline,wind_only,wind_onshore,country-average,res_cf,de,20230101,20231231
+DE_2023_baseline,wind_only,wind-onshore,country-average,res_cf,de,20230101,20231231
 DE_2023_baseline,solar_only,solar,country-average,res_cf,de,20230101,20231231
-DE_2023_baseline,grid_connected,wind_onshore,country-average,res_cf,de,20230101,20231231
+DE_2023_baseline,grid_connected,wind-onshore,country-average,res_cf,de,20230101,20231231
 DE_2023_baseline,grid_connected,solar,country-average,res_cf,de,20230101,20231231
 DE_2023_baseline,grid_connected,grid,dayahead,entsoe,DE_LU,20230101,20231231
 VIC_2025_test,grid_only,grid,dayahead,nem,VIC1,20250101,20251231
+VIC_2025_solar_ew,baseline,solar,bestsite-p95-n7,res_cf,aus,20250101,20251231
+VIC_2025_solar_ew,high_el_cost,solar,bestsite-p95-n7,res_cf,aus,20250101,20251231
+VIC_2025_solar_ew,high_all_cost,solar,bestsite-p95-n7,res_cf,aus,20250101,20251231
+VIC_2025_solar_ew,noopt,solar,bestsite-p95-n7-noopt,res_cf,aus,20250101,20251231

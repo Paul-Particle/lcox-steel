@@ -11,6 +11,11 @@
 cores: 4
 keep-going: true
 rerun-incomplete: true
+rerun-triggers:
+  - mtime
+  - params
+  - code
+  - input
 printshellcmds: false
 
 # Hide rule chatter and the engine progress line — per-rule logs and tqdm

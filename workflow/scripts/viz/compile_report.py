@@ -1,7 +1,7 @@
 """
 Compile per-scenario summaries into a single project-level report CSV.
 
-Invoked by Snakemake's `script:` directive (compile_report rule).
+Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
 """
 
 import logging
@@ -77,27 +77,45 @@ def _compute_lcoh(n: pypsa.Network) -> float:
 
 def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> dict:
     """Key sizing and cost metrics as a flat dict (suitable for a one-row CSV)."""
+    lcoh_eur_per_kg = _compute_lcoh(n)
     summary = {
         "project": project_name,
         "scenario": scenario_name,
-        "lcoh_eur_per_kg": _compute_lcoh(n),
-        "total_annual_cost_eur": _annual_cost(n),
-        "_h2_produced_kg": _h2_produced_kg(n),
+        "lcoh_eur_per_kg": lcoh_eur_per_kg,
+        "lcoh_eur_per_mwh_lhv": lcoh_eur_per_kg * 1000.0 / H2_LHV_KWH_PER_KG,
+        "total_annual_cost_meur": _annual_cost(n) / 1e6,
+        "h2_produced_kt": _h2_produced_kg(n) / 1e6,
     }
 
     for gen in n.generators.index[n.generators.p_nom_extendable]:
-        summary[f"{gen}_mw_opt"] = n.generators.at[gen, "p_nom_opt"]
+        summary[f"{gen}_gw_opt"] = n.generators.at[gen, "p_nom_opt"] / 1e3
 
     if "battery" in n.storage_units.index:
         p_opt = n.storage_units.at["battery", "p_nom_opt"]
-        summary["battery_mw_opt"] = p_opt
+        summary["battery_gw_opt"] = p_opt / 1e3
         summary["battery_mwh_opt"] = p_opt * n.storage_units.at["battery", "max_hours"]
 
     if "h2_buffer" in n.stores.index:
-        summary["h2_buffer_mwh_lhv_opt"] = n.stores.at["h2_buffer", "e_nom_opt"]
+        # Reported as hours of DRI H₂ demand (buffer MWh LHV / load MW LHV).
+        buffer_mwh = n.stores.at["h2_buffer", "e_nom_opt"]
+        if "dri_load" in n.loads.index:
+            dri_mw = float(n.loads.at["dri_load", "p_set"])
+            summary["h2_buffer_hours_dri"] = buffer_mwh / dri_mw if dri_mw else float("nan")
+        else:
+            summary["h2_buffer_hours_dri"] = float("nan")
 
     if "electrolyser" in n.links.index:
-        summary["electrolyser_mw"] = n.links.at["electrolyser", "p_nom_opt"]
+        el_cap = n.links.at["electrolyser", "p_nom_opt"]
+        summary["electrolyser_gw"] = el_cap / 1e3
+        if el_cap > 0 and "electrolyser" in n.links_t.p0.columns:
+            summary["electrolyser_utilization"] = float(
+                n.links_t.p0["electrolyser"].mean() / el_cap
+            )
+        else:
+            summary["electrolyser_utilization"] = float("nan")
+
+    if "dri_load" in n.loads.index:
+        summary["dri_h2_mw_lhv"] = float(n.loads.at["dri_load", "p_set"])
 
     return summary
 
@@ -119,7 +137,9 @@ def main() -> None:
 
     out_path = Path(snakemake.output[0])
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(rows).to_csv(out_path, index=False)
+    df = pd.DataFrame(rows)
+    df[df.select_dtypes("number").columns] = df.select_dtypes("number").round(2)
+    df.to_csv(out_path, index=False)
     log.info("wrote %s (%d rows)", out_path, len(rows))
 
 

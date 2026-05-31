@@ -1,0 +1,15 @@
+electrolyser:
+  capex_per_mw_eur: 3_500_000   # 5× base (700k)
+  opex_per_mw_per_year_eur: 20_000
+  lifetime_years: 20
+  efficiency_kwh_per_kg: 55
+
+battery:
+  capex_per_mw_eur: 1_000_000   # 5× base (200k)
+  capex_per_mwh_eur: 750_000    # 5× base (150k)
+  lifetime_years: 15
+  efficiency_roundtrip: 0.90
+
+h2_buffer:
+  capex_per_mwh_eur: 50_000     # 5× base (10k)
+  lifetime_years: 25
