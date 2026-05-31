@@ -83,7 +83,7 @@ rule build_solar_orientation_bestsite_p95:
         "../scripts/res_cf/build_solar_orientation_bestsite_p95.py"
 
 
-rule build_cf_timeseries:
+rule build_res_cf_profile:
     input:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
         regions="resources/shapes/{cf_area}_geo.parquet",
@@ -91,7 +91,7 @@ rule build_cf_timeseries:
     output:
         "resources/res_cf/{cf_area}_{tech}_country-average_{start_date}_{end_date}.parquet",
     log:
-        "logs/build_cf_timeseries/{cf_area}_{tech}_{start_date}_{end_date}.log",
+        "logs/build_res_cf_profile/{cf_area}_{tech}_{start_date}_{end_date}.log",
     params:
         region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
@@ -102,4 +102,4 @@ rule build_cf_timeseries:
         pv_orientation=lookup(dpath="res_cf/pv_orientation", within=config),
         wind_cf=lookup(dpath="res_cf/wind_cf", within=config),
     script:
-        "../scripts/res_cf/build_cf_timeseries.py"
+        "../scripts/res_cf/build_res_cf_profile.py"

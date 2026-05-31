@@ -61,7 +61,7 @@ res_cf:
   offshore_max_distance_km: 200
 
   # Wind CF computation flags — passed to atlite.Cutout.wind() in
-  # build_cf_timeseries, determine_bestsite_p95, determine_resource_spread.
+  # build_res_cf_profile, determine_bestsite_p95, determine_resource_spread.
   # smooth=True             smooths the turbine power curve
   # add_cutout_windspeed    preserves atlite's built-in 25 m/s cutoff during smoothing
   # spatial_avg_window      odd-N square window of cells averaged for wind site CFs

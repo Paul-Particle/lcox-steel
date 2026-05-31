@@ -20,7 +20,7 @@ lcox-steel/
 │   │   │   ├── build_regions.py
 │   │   │   ├── build_offshore_regions.py
 │   │   │   ├── download_cutout.py             # honours `_backup.nc` cache; see below
-│   │   │   ├── build_cf_timeseries.py
+│   │   │   ├── build_res_cf_profile.py
 │   │   │   ├── build_solar_orientation_bestsite_p95.py
 │   │   │   ├── determine_resource_spread.py
 │   │   │   ├── determine_bestsite_p95.py
@@ -154,10 +154,10 @@ Months that fail (transient ENTSO-E errors, network blips) are retried 3× with 
 snakemake resources/res_cf/de_wind-onshore_country-average_20230101_20231231.parquet --cores 4
 ```
 
-This chains: `build_regions` → `build_offshore_regions` → `download_cutout` (ERA5) → `build_cf_timeseries`. The `{tech}` wildcard accepts `wind-onshore`, `wind-offshore`, or `solar`. Tech and variant identifiers use `-` as their internal separator (e.g. `wind-onshore`, `country-average`, `bestsite-p95-n7`) so that the underscore-delimited filename pattern `{area}_{tech}_{variant}_{start}_{end}.parquet` stays unambiguous to parse — area can contain `_` (e.g. `DE_LU`), dates are always the last two 8-digit tokens.
+This chains: `build_regions` → `build_offshore_regions` → `download_cutout` (ERA5) → `build_res_cf_profile`. The `{tech}` wildcard accepts `wind-onshore`, `wind-offshore`, or `solar`. Tech and variant identifiers use `-` as their internal separator (e.g. `wind-onshore`, `country-average`, `bestsite-p95-n7`) so that the underscore-delimited filename pattern `{area}_{tech}_{variant}_{start}_{end}.parquet` stays unambiguous to parse — area can contain `_` (e.g. `DE_LU`), dates are always the last two 8-digit tokens.
 
 > [!NOTE]
-> **Current limitations (WIP).** The geometry is computed twice: `build_regions` produces the country's onshore geometry as a parquet for `build_cf_timeseries`, and `download_cutout` independently re-derives the same country boundary from the raw ZIP to compute the ERA5 bounding box. The bounding box is padded (`bbox_pad_deg` in config), so in practice it almost always encompasses the feasible offshore wind distance as well — the explicit offshore geometry from `build_offshore_regions` adds little that the cutout doesn't already cover spatially. The inconsistency is more subtle for offshore: the cutout bbox is a rectangle around the country's land area plus padding, while the offshore region is clipped to the EEZ within `offshore_max_distance_km`. For a narrow EEZ (many neighbours), the two align well. For a wide EEZ, the cutout covers only part of it — but `build_cf_timeseries` uses the full clipped offshore geometry as its spatial mask, so ERA5 cells far from the coast that fall outside the cutout are simply absent. Whether that matters depends on the country. A proper fix requires a cutout cache with explicit spatial and temporal coverage checking (see `TODO.md`).
+> **Current limitations (WIP).** The geometry is computed twice: `build_regions` produces the country's onshore geometry as a parquet for `build_res_cf_profile`, and `download_cutout` independently re-derives the same country boundary from the raw ZIP to compute the ERA5 bounding box. The bounding box is padded (`bbox_pad_deg` in config), so in practice it almost always encompasses the feasible offshore wind distance as well — the explicit offshore geometry from `build_offshore_regions` adds little that the cutout doesn't already cover spatially. The inconsistency is more subtle for offshore: the cutout bbox is a rectangle around the country's land area plus padding, while the offshore region is clipped to the EEZ within `offshore_max_distance_km`. For a narrow EEZ (many neighbours), the two align well. For a wide EEZ, the cutout covers only part of it — but `build_res_cf_profile` uses the full clipped offshore geometry as its spatial mask, so ERA5 cells far from the coast that fall outside the cutout are simply absent. Whether that matters depends on the country. A proper fix requires a cutout cache with explicit spatial and temporal coverage checking (see `TODO.md`).
 
 ### PyPSA investment optimization
 
@@ -205,7 +205,7 @@ logs/
 ├── build_regions/{cf_area}.log
 ├── build_offshore_regions/{cf_area}.log
 ├── download_cutout/{cf_area}_{start}_{end}.log
-├── build_cf_timeseries/{cf_area}_{tech}_{start}_{end}.log
+├── build_res_cf_profile/{cf_area}_{tech}_{start}_{end}.log
 ├── h2_dri_optimize/{project}_{scenario}.log
 └── compile_report/{project}.log
 ```
