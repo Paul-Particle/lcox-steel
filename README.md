@@ -110,6 +110,9 @@ The `.env` file is gitignored — never commit it.
 
 Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` following the [atlite CDS setup instructions](https://atlite.readthedocs.io/en/latest/installation.html).
 
+> [!TIP]
+> After a successful cutout download, copy `cutouts/{name}.nc` to `cutouts/{name}_backup.nc` to pin it across code-trigger reruns. `download_cutout.py` copies from the backup when present and skips CDS — handy until the proper cache lands (see `TODO.md`).
+
 ## Running the pipelines
 
 All pipelines are managed by Snakemake. `config/projects.csv` drives the full DAG — each row is one `(project, scenario, tech)` input, and adding a project means adding rows, not editing the Snakefile.

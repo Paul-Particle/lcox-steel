@@ -8,6 +8,11 @@ it instead of hitting CDS. This lets us preserve hand-curated or
 expensively-downloaded cutouts across code-trigger reruns without giving up
 the rule's reproducibility story. Drop this once res_cf inputs get the
 same content-addressed caching treatment that the grid pipelines already have.
+
+Caveat: the backup is copied without verification — partial or stale files
+will silently propagate into downstream CFs. Operator's responsibility to
+ensure the backup is a valid, complete cutout (e.g. the result of a
+previous successful CDS run).
 """
 
 import logging
