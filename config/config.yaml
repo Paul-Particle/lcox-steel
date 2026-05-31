@@ -1,10 +1,3 @@
-scheduler: greedy
-
-# FX rates for converting non-EUR price feeds (used by grid.smk → retrieve_nem).
-# Infra-level constants; per-scenario cost assumptions live in config/assumptions*.yaml.
-fx:
-  eur_per_aud: 0.61
-
 logging:
   # Root level for the project's own loggers. Set to DEBUG for verbose runs.
   # Override on the CLI: snakemake --config 'logging={level: DEBUG}'.
@@ -18,6 +11,12 @@ entsoe:
   # Per-(area, data_type) downloads are pulled on demand by config/projects.csv;
   # the bidding-zone catalog lives in data/entsoe_cache/entsoe_bidding_zones.csv.
   data_types: [prices, load_forecast, load_actual, res, generation, crossborder]
+
+nem:
+  # FX rate for converting AUD-denominated NEM prices to EUR (used by
+  # grid.smk → retrieve_nem). Infra-level constant; per-scenario cost
+  # assumptions live in config/assumptions*.yaml.
+  eur_per_aud: 0.61
 
 res_cf:
   # Per-country metadata for the atlite + capacity factor pipeline.
@@ -41,13 +40,22 @@ res_cf:
     aus: { iso3: AUS, region: AUS, coarse: true,  vic_bbox: [140.96, 149.97, -39.16, -34.00] }
     bra: { iso3: BRA, region: BRA, coarse: true  }
 
+  offshore_max_distance_km: 200
+
+  # Atlite cutout build settings.
+  # bbox_pad_deg            degrees of padding added around country/region bounds.
+  # monthly_requests        split CDS download into one request per month; reduces
+  #                         individual request size but multiplies queue wait times
+  #                         (6000+ jobs in the global queue is common — use sparingly).
+  cutout:
+    bbox_pad_deg: 1.0
+    monthly_requests: false
+
   # atlite technology settings (passed to cutout.wind / cutout.pv).
   wind_onshore_turbine:  Vestas_V112_3MW
   wind_offshore_turbine: NREL_ReferenceTurbine_5MW_offshore
   pv_panel:              CSi
   pv_orientation:        latitude_optimal
-
-  offshore_max_distance_km: 200
 
   # Wind CF computation flags — passed to atlite.Cutout.wind() in
   # build_res_cf_profile, determine_bestsite_p95, determine_resource_spread.
@@ -60,11 +68,3 @@ res_cf:
     add_cutout_windspeed: true
     spatial_avg_window: 1
 
-  # Atlite cutout build settings.
-  # bbox_pad_deg            degrees of padding added around country/region bounds.
-  # monthly_requests        split CDS download into one request per month; reduces
-  #                         individual request size but multiplies queue wait times
-  #                         (6000+ jobs in the global queue is common — use sparingly).
-  cutout:
-    bbox_pad_deg: 1.0
-    monthly_requests: false

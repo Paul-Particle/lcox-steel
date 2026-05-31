@@ -21,6 +21,6 @@ rule retrieve_nem:
     log:
         "logs/retrieve_nem/{area}_{variant}_{start_date}_{end_date}.log",
     params:
-        eur_per_aud=config["fx"]["eur_per_aud"],
+        eur_per_aud=config["nem"]["eur_per_aud"],
     script:
         "../scripts/grid/retrieve_nem.py"
