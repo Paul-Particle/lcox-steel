@@ -4,7 +4,6 @@ logging:
   level: INFO
   # Level for noisy upstream libraries (atlite, cdsapi, pypsa, ...).
   third_party_level: WARNING
-  # Stick to %-style; no f-strings in log calls.
   format: "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 
 entsoe:
