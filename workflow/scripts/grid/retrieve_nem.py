@@ -18,9 +18,6 @@ from pathlib import Path
 
 import pandas as pd
 
-if "snakemake" not in globals():
-    from common._stubs import snakemake
-
 from common._logging import configure_logging
 from _helpers import area_month_in_cache, iso, iter_months_str, to_utc_naive
 from download_nem import DOWNLOADERS

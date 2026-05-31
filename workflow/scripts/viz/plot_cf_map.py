@@ -3,12 +3,9 @@ Plot mean annual CF as a spatial heatmap for a given cutout area and tech,
 with the region boundary as a white outline and the P95 bestsite marked.
 
 Snakemake rule: plot_cf_map  (in viz.smk)
-Standalone:     python workflow/scripts/viz/plot_cf_map.py [--area de] [--tech solar]
 """
 
-import argparse
 import logging
-import sys
 from pathlib import Path
 
 import atlite
@@ -17,13 +14,7 @@ import numpy as np
 import plotly.graph_objects as go
 from shapely.geometry import MultiPolygon, Polygon
 
-if "snakemake" not in globals():
-    # standalone: add workflow/ to path and load stub
-    sys.path.insert(0, str(Path(__file__).parents[2]))
-    from common._stubs import snakemake
-
 from common._logging import configure_logging
-from common._paths import CUTOUTS, SHAPES_RES
 from scripts.viz._helpers import (
     PLOTLY_CONFIG,
     blue_black,
@@ -34,30 +25,16 @@ from scripts.viz._helpers import (
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
-# Standalone defaults — German cutout (Australian cutout has missing snakemake
-# metadata because it was stitched together from old downloads).
-_CF_AREA = "de"
-_TECH = "solar"
-_START_DATE = "20230101"
-_END_DATE = "20231231"
-_CUTOUT_PATH = CUTOUTS / "de_20230101_20231231.nc"
-_REGIONS_PATH = SHAPES_RES / "de_geo.parquet"
-_REGION = "DE"
-_PV_PANEL = "CSi"
-_WIND_TURBINE = "Vestas_V112_3MW"
-_OUT = Path("results/plots/cf_map/de_solar_20230101_20231231_cf_map.png")
-
-if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    _CF_AREA = snakemake.wildcards.cf_area
-    _TECH = snakemake.wildcards.tech
-    _START_DATE = snakemake.wildcards.start_date
-    _END_DATE = snakemake.wildcards.end_date
-    _CUTOUT_PATH = Path(snakemake.input.cutout)
-    _REGIONS_PATH = Path(snakemake.input.regions)
-    _REGION = snakemake.params.region
-    _PV_PANEL = snakemake.params.pv_panel
-    _WIND_TURBINE = snakemake.params.wind_onshore_turbine
-    _OUT = Path(snakemake.output[0])
+_CF_AREA = snakemake.wildcards.cf_area
+_TECH = snakemake.wildcards.tech
+_START_DATE = snakemake.wildcards.start_date
+_END_DATE = snakemake.wildcards.end_date
+_CUTOUT_PATH = Path(snakemake.input.cutout)
+_REGIONS_PATH = Path(snakemake.input.regions)
+_REGION = snakemake.params.region
+_PV_PANEL = snakemake.params.pv_panel
+_WIND_TURBINE = snakemake.params.wind_onshore_turbine
+_OUT = Path(snakemake.output[0])
 
 
 def _mask_cells_inside(cell_mean, geom) -> np.ndarray:
@@ -196,18 +173,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--area",       default=_CF_AREA)
-    parser.add_argument("--tech",       default=_TECH)
-    parser.add_argument("--start-date", default=_START_DATE)
-    parser.add_argument("--end-date",   default=_END_DATE)
-    parser.add_argument("--region",     default=_REGION,
-                        help="region tag stored in the regions parquet (e.g. DE, AUS)")
-    args = parser.parse_args()
-    _CF_AREA = args.area; _TECH = args.tech
-    _START_DATE = args.start_date; _END_DATE = args.end_date
-    _REGION = args.region
-    _CUTOUT_PATH = CUTOUTS / f"{_CF_AREA}_{_START_DATE}_{_END_DATE}.nc"
-    _REGIONS_PATH = SHAPES_RES / f"{_CF_AREA}_geo.parquet"
-    _OUT = Path(f"results/plots/cf_map/{_CF_AREA}_{_TECH}_{_START_DATE}_{_END_DATE}_cf_map.png")
     main()
