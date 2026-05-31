@@ -72,20 +72,22 @@ TECHS = ["wind_onshore", "wind_offshore", "solar"]
 # ── Config ────────────────────────────────────────────────────────────────────
 
 def load_cfg() -> dict:
+    """Tuning constants for the WIP complementarity screen. Hardcoded here
+    (rather than read from config.yaml) since this script is off the active
+    Snakemake pipeline — see _helpers.py for the legacy-pipeline context."""
     with open(REPO_ROOT / "config/config.yaml") as f:
         c = yaml.safe_load(f)
     rc = c["res_cf"]
-    comp = rc.get("complementarity", {})
     return {
         "countries":             [x.upper() for x in rc["countries"]],
-        "year":                  rc["year"],
-        "top_n":                 rc["top_n"],
-        "coincidence_threshold": comp.get("coincidence_threshold", 0.20),
-        "w_coincidence":         comp.get("w_coincidence", 0.6),
-        "w_correlation":         comp.get("w_correlation", 0.4),
-        "max_radius_km":         float(comp.get("max_radius_km", 300.0)),
-        "quality_floor":         float(comp.get("quality_floor", 0.90)),
-        "max_triplets_brute_force": int(comp.get("max_triplets_brute_force", 500_000)),
+        "year":                  2023,
+        "top_n":                 10,
+        "coincidence_threshold": 0.20,
+        "w_coincidence":         0.6,
+        "w_correlation":         0.4,
+        "max_radius_km":         300.0,
+        "quality_floor":         0.90,
+        "max_triplets_brute_force": 500_000,
     }
 
 

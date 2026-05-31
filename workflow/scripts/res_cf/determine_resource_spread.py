@@ -59,7 +59,6 @@ OUT_PATH    = RES_CF / f"resource_spread_{YEAR}.parquet"
 RES_CF_CFG  = load_res_cf_cfg()
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    YEAR       = int(snakemake.config["res_cf"]["year"])
     OUT_PATH   = Path(snakemake.output[0])
     RES_CF_CFG = snakemake.config["res_cf"]
 

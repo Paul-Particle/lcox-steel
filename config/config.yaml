@@ -1,5 +1,3 @@
-# Configuration for the cfp_data_analysis project
-
 scheduler: greedy
 
 # FX rates for converting non-EUR price feeds (used by grid.smk → retrieve_nem).
@@ -49,8 +47,6 @@ res_cf:
   pv_panel:              CSi
   pv_orientation:        latitude_optimal
 
-  year: 2025
-  top_n: 10
   offshore_max_distance_km: 200
 
   # Wind CF computation flags — passed to atlite.Cutout.wind() in
@@ -72,13 +68,3 @@ res_cf:
   cutout:
     bbox_pad_deg: 1.0
     monthly_requests: false
-
-  complementarity:
-    coincidence_threshold: 0.20
-    w_coincidence: 0.6
-    w_correlation: 0.4
-    max_radius_km: 300.0
-    quality_floor: 0.90
-    # Triplet count threshold above which determine_complementarity.py switches from
-    # exhaustive brute-force screening to greedy + neighbourhood search.
-    max_triplets_brute_force: 500000

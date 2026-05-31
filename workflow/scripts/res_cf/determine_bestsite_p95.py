@@ -73,13 +73,12 @@ log = logging.getLogger(__name__)
 
 
 RES_CF_CFG = load_res_cf_cfg()
-YEAR       = int(RES_CF_CFG["year"])  # standalone default from config
+YEAR       = 2023
 OUTDIR     = RES_CF
 COUNTRIES  = ["de"]  # lowercase to match filenames; standalone default
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     COUNTRIES  = [snakemake.wildcards.country.lower()]
-    YEAR       = int(snakemake.config["res_cf"]["year"])
     RES_CF_CFG = snakemake.config["res_cf"]
 
 REGIONS_PATH          = SHAPES_RES / "regions.parquet"
