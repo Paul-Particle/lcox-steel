@@ -66,21 +66,21 @@ rule download_cutout:
         "../scripts/res_cf/download_cutout.py"
 
 
-rule build_solar_orientation_bestsite_p95:
+rule build_solar_tilt_mix_p95:
     input:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
         regions="resources/shapes/{cf_area}_geo.parquet",
     output:
-        "resources/res_cf/{cf_area}_solar_bestsite-p95-n{n_steps}_{start_date}_{end_date}.parquet",
+        "resources/res_cf/{cf_area}_solar_tilt-mix-n{n_steps}_{start_date}_{end_date}.parquet",
     wildcard_constraints:
         n_steps=r"\d+",
     log:
-        "logs/build_solar_orientation_bestsite_p95/{cf_area}_n{n_steps}_{start_date}_{end_date}.log",
+        "logs/build_solar_tilt_mix_p95/{cf_area}_n{n_steps}_{start_date}_{end_date}.log",
     params:
         pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
         region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
     script:
-        "../scripts/res_cf/build_solar_orientation_bestsite_p95.py"
+        "../scripts/res_cf/build_solar_tilt_mix_p95.py"
 
 
 rule build_res_cf_profile:

@@ -5,8 +5,9 @@ For a southern-hemisphere site, panels can be oriented anywhere from due west
 (azimuth 270°) through north (0°, maximum annual yield) to due east (90°,
 maximum morning shift). This script:
 
-  1. Identifies the bestsite-p95 grid cell (ranked by latitude_optimal annual CF)
-     so all orientations compare at the same high-quality location.
+  1. Identifies the bestsite cell — P95 of annual-mean latitude_optimal CF —
+     so all orientations compare at the same high-quality location. The
+     site-selection helpers are copied from `determine_bestsite_p95.py`.
   2. Sweeps N equally spaced azimuths from 270° (west) → 0° (north) → 90° (east).
   3. For each azimuth, finds the slope that maximises annual plane-of-array (POA)
      irradiance using the Hay-Davies model and the cell's pre-computed ERA5 solar
@@ -51,7 +52,7 @@ _CUTOUT_PATH = CUTOUTS / "aus_20250101_20251231.nc"
 _REGIONS_PATH = SHAPES_RES / "aus_geo.parquet"
 _REGION = "AUS"
 _PV_PANEL = "CSi"
-_OUT = RES_CF / "aus_solar_bestsite-p95-n7_20250101_20251231.parquet"
+_OUT = RES_CF / "aus_solar_tilt-mix-n7_20250101_20251231.parquet"
 
 # Slope search resolution for the optimization loop (degrees).
 # 1° is pure numpy so it runs in milliseconds regardless of resolution.
