@@ -2,9 +2,16 @@
 Create one Atlite ERA5 cutout for a given area and date range.
 
 Output: cutouts/{cf_area}_{start_date}_{end_date}.nc
+
+Caching hack: if a sibling file named `<cutout>_backup.nc` exists, copy from
+it instead of hitting CDS. This lets us preserve hand-curated or
+expensively-downloaded cutouts across code-trigger reruns without giving up
+the rule's reproducibility story. Drop this once res_cf inputs get the
+same content-addressed caching treatment that the grid pipelines already have.
 """
 
 import logging
+import shutil
 from pathlib import Path
 
 import atlite
@@ -76,6 +83,12 @@ def get_bounds(pad: float) -> tuple[slice, slice]:
 def main() -> None:
     _OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     _ATLITE_CACHE.mkdir(parents=True, exist_ok=True)
+
+    backup = _OUTPUT_PATH.with_name(_OUTPUT_PATH.stem + "_backup" + _OUTPUT_PATH.suffix)
+    if backup.exists():
+        log.info("backup cutout found at %s — copying to %s (skipping CDS)", backup, _OUTPUT_PATH)
+        shutil.copy2(backup, _OUTPUT_PATH)
+        return
 
     x, y = get_bounds(_BBOX_PAD_DEG)
     # End at 23:00 so the full final day of hourly data is included.

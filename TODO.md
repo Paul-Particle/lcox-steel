@@ -12,15 +12,19 @@ it in `retrieve_entsoe.py`, so the list stays up to date automatically without m
 Grid data uses a persistent per-variant processed cache (`resources/entsoe/{variant}.parquet`,
 `resources/nem/{variant}.parquet`) that accumulates area/month slices and avoids re-downloading
 covered periods. Cutouts have no equivalent: each `download_cutout` rule invocation is a
-one-shot ERA5 pull for a fixed `(cf_area, start_date, end_date)` triple, protected to avoid
-accidental re-download.
+one-shot ERA5 pull for a fixed `(cf_area, start_date, end_date)` triple.
+
+**Current stopgap**: `download_cutout.py` checks for a sibling `cutouts/{name}_backup.nc`
+file at the start of its run and copies from it instead of hitting CDS. Renaming an
+existing cutout to `*_backup.nc` thus pins it across code-trigger reruns. `protected()` is
+no longer used on the rule output — the backup IS the safety net.
 
 A proper cutout cache would: store ERA5 data by area in a persistent location (analogous to
 `data/entsoe_cache/`), check spatial and temporal coverage before requesting, and support
 partial fills. This would also make the `geo → cutout → timeseries` chain more natural:
 `build_regions`/`build_offshore_regions` would define the area, the cache layer would ensure
-coverage, and `build_cf_timeseries` would slice from the cache. Until then, the pipeline
-is WIP in this area (see README for current limitations).
+coverage, and `build_cf_timeseries` would slice from the cache. When this lands, the backup
+hack and its README/HANDOFF callouts can come out.
 
 ## CDS download monitoring
 

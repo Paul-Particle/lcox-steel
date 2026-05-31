@@ -44,7 +44,9 @@ rule download_cutout:
     input:
         ne_zip=ancient("data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"),
     output:
-        protected("cutouts/{cf_area}_{start_date}_{end_date}.nc"),
+        # Not protected(): the download_cutout.py script preserves expensive
+        # downloads via the `_backup.nc` sibling-file convention.
+        "cutouts/{cf_area}_{start_date}_{end_date}.nc",
     log:
         "logs/download_cutout/{cf_area}_{start_date}_{end_date}.log",
     params:

@@ -7,33 +7,40 @@ This project calculates the levelized cost of hydrogen (LCOH) for green-steel DR
 ```
 lcox-steel/
 ├── workflow/               # Snakemake workflow (standard layout)
-│   ├── Snakefile           # configfiles + sys.path + includes + rule all
+│   ├── Snakefile           # one configfile + sys.path + includes + rule all
 │   ├── rules/
+│   │   ├── _polyfills.smk  # local stand-ins for snakemake helpers not shipped yet (optional())
 │   │   ├── grid.smk        # ENTSO-E + NEM download/process rules
 │   │   ├── res_cf.smk      # atlite CF pipeline (shapes → cutout → CF timeseries)
-│   │   └── h2_dri.smk      # PyPSA optimisation rule
+│   │   ├── h2_dri.smk      # PyPSA optimisation rule
+│   │   └── viz.smk         # compile_report + plot rules
 │   ├── scripts/
 │   │   ├── grid/           # Grid data pipeline (ENTSO-E + NEM)
 │   │   ├── res_cf/         # Atlite capacity factor pipeline
 │   │   │   ├── build_regions.py
 │   │   │   ├── build_offshore_regions.py
-│   │   │   ├── download_cutout.py
+│   │   │   ├── download_cutout.py             # honours `_backup.nc` cache; see below
 │   │   │   ├── build_cf_timeseries.py
+│   │   │   ├── build_solar_orientation_bestsite_p95.py
 │   │   │   ├── determine_resource_spread.py
 │   │   │   ├── determine_bestsite_p95.py
-│   │   │   ├── determine_complementarity.py
-│   │   │   └── diag_*.py               # Diagnostic and QC scripts
+│   │   │   ├── determine_complementarity.py   # WIP, not in active DAG
+│   │   │   └── diag_*.py                      # Diagnostic and QC scripts
 │   │   ├── h2_dri/         # PyPSA investment model
-│   │   │   ├── build_and_solve_network.py  # PyPSA network builder + solver
-│   │   │   ├── compile_report.py           # Post-solve LCOH accounting → CSV
-│   │   │   └── _helpers.py                 # annuity factor + electrolyser sizing
-│   │   ├── viz/_helpers.py # Shared plotting helpers
+│   │   │   ├── build_and_solve_network.py     # PyPSA network builder + solver
+│   │   │   └── _helpers.py                    # annuity factor + electrolyser sizing
+│   │   ├── viz/            # Reporting + Plotly figures
+│   │   │   ├── compile_report.py              # Post-solve LCOH accounting → CSV
+│   │   │   ├── plot_capacity_bars.py          # Per-project scenario bar chart
+│   │   │   ├── plot_cf_map.py                 # Spatial CF heatmap
+│   │   │   └── _helpers.py                    # FCA Plotly template + colormap
 │   │   └── tests/          # End-to-end smoke tests
 │   ├── notebooks/          # API exploration notebooks (entsoe, nem)
 │   └── common/             # Shared helpers (_paths.py, _stubs.py)
 ├── config/
-│   ├── config.yaml         # Pipeline knobs (countries, turbine specs, CF parameters)
-│   ├── assumptions.yaml    # Techno-economic defaults (CAPEX, OPEX, WACC, lifetimes)
+│   ├── config.yaml         # Pipeline knobs (countries, turbine specs, CF parameters, FX rates)
+│   ├── assumptions.yaml    # Base techno-economic assumptions (CAPEX, OPEX, WACC, lifetimes)
+│   ├── assumptions_{project}_{scenario}.yaml  # Optional per-scenario overlay (file presence = on)
 │   └── projects.csv        # Project + scenario definitions — one row per (project, scenario, tech)
 ├── environment.yaml        # Conda environment (lcox-steel)
 ├── data/                   # Raw / external / expensive (not produced by this repo)
@@ -49,8 +56,11 @@ lcox-steel/
 │   ├── nem/{area}_grid_full_{start}_{end}.parquet         # All tables + derived columns, 5-min
 │   ├── shapes/{cf_area}_geo.parquet                       # Onshore country geometry (GeoParquet)
 │   ├── shapes/{cf_area}_offshore_geo.parquet              # EEZ-clipped offshore geometry
-│   └── res_cf/{cf_area}_{tech}_country-average_{start}_{end}.parquet  # Hourly CF time series
-├── cutouts/                # Atlite ERA5 cutout files (gitignored)
+│   ├── res_cf/{cf_area}_{tech}_country-average_{start}_{end}.parquet     # Hourly CF time series
+│   └── res_cf/{cf_area}_solar_bestsite-p95-n{N}_{start}_{end}.parquet    # Orientation-resolved CF sweep
+├── cutouts/                # Atlite ERA5 cutout files (gitignored). Existing downloads can be
+│                           # preserved across reruns by renaming to `<name>_backup.nc`;
+│                           # download_cutout.py copies from the backup when present (caching hack).
 ├── .atlite-cache/          # Atlite scratch working dir (gitignored)
 └── results/                # PyPSA optimization outputs (.nc + summary CSVs)
 ```
@@ -142,34 +152,39 @@ Months that fail (transient ENTSO-E errors, network blips) are retried 3× with 
 
 ```bash
 # wind onshore CF for Germany, 2023:
-snakemake resources/res_cf/de_wind_onshore_country-average_20230101_20231231.parquet --cores 4
+snakemake resources/res_cf/de_wind-onshore_country-average_20230101_20231231.parquet --cores 4
 ```
 
-This chains: `build_regions` → `build_offshore_regions` → `download_cutout` (ERA5) → `build_cf_timeseries`. The `{tech}` wildcard accepts `wind_onshore`, `wind_offshore`, or `solar`.
+This chains: `build_regions` → `build_offshore_regions` → `download_cutout` (ERA5) → `build_cf_timeseries`. The `{tech}` wildcard accepts `wind-onshore`, `wind-offshore`, or `solar`. Tech and variant identifiers use `-` as their internal separator (e.g. `wind-onshore`, `country-average`, `bestsite-p95-n7`) so that the underscore-delimited filename pattern `{area}_{tech}_{variant}_{start}_{end}.parquet` stays unambiguous to parse — area can contain `_` (e.g. `DE_LU`), dates are always the last two 8-digit tokens.
 
 > [!NOTE]
 > **Current limitations (WIP).** The geometry is computed twice: `build_regions` produces the country's onshore geometry as a parquet for `build_cf_timeseries`, and `download_cutout` independently re-derives the same country boundary from the raw ZIP to compute the ERA5 bounding box. The bounding box is padded (`bbox_pad_deg` in config), so in practice it almost always encompasses the feasible offshore wind distance as well — the explicit offshore geometry from `build_offshore_regions` adds little that the cutout doesn't already cover spatially. The inconsistency is more subtle for offshore: the cutout bbox is a rectangle around the country's land area plus padding, while the offshore region is clipped to the EEZ within `offshore_max_distance_km`. For a narrow EEZ (many neighbours), the two align well. For a wide EEZ, the cutout covers only part of it — but `build_cf_timeseries` uses the full clipped offshore geometry as its spatial mask, so ERA5 cells far from the coast that fall outside the cutout are simply absent. Whether that matters depends on the country. A proper fix requires a cutout cache with explicit spatial and temporal coverage checking (see `TODO.md`).
 
 ### PyPSA investment optimization
 
-Snakemake runs this automatically as part of `rule all`. For ad-hoc runs:
+Snakemake runs this automatically as part of `rule all`. For ad-hoc runs target a single network:
 
 ```bash
-python workflow/scripts/h2_dri/run.py --project DE_2023_baseline --scenario dedicated_res
-python workflow/scripts/h2_dri/run.py --project DE_2023_baseline   # all scenarios
+snakemake results/DE_2023_baseline/dedicated_res.nc --cores 4
 ```
 
-Results are written to `results/<project>/` as `.nc` (full PyPSA network) and `_summary.csv` (LCOH + optimal capacities).
+Results are written to `results/<project>/<scenario>.nc` (full PyPSA network); the per-project
+report CSV (`results/report_<project>.csv`, produced by `compile_report`) carries LCOH and
+optimal capacities for every scenario in that project.
 
-Edit `config/projects.csv` to add projects and scenarios. Edit `config/assumptions.yaml` to change techno-economic defaults.
+Edit `config/projects.csv` to add projects and scenarios. Edit `config/assumptions.yaml`
+to change techno-economic defaults. To override a single scenario's assumptions, create
+`config/assumptions_<project>_<scenario>.yaml` with just the keys you want to bump — the
+script deep-merges it on top of the base. The overlay is picked up by file presence (no
+column to edit in `projects.csv`).
 
 ## Data formats
 
 **Grid data** (`resources/entsoe/{area}_grid_dayahead_{start}_{end}.parquet`): pandas DataFrame with a UTC hourly DatetimeIndex and a single `price` column (EUR/MWh). The `_full` variant has MultiIndex columns `(area_code, metric)` covering all six ENTSO-E data types at native resolution. NEM equivalents live under `resources/nem/` with the same naming.
 
-**Capacity factors** (`resources/res_cf/{cf_area}_{tech}_country-average_{start}_{end}.parquet`): hourly parquet, DatetimeIndex named `time`, single column `cf` in [0, 1]. One file per `(area, tech, date range)`; `{tech}` is `wind_onshore`, `wind_offshore`, or `solar`.
+**Capacity factors** (`resources/res_cf/{cf_area}_{tech}_country-average_{start}_{end}.parquet`): hourly parquet, DatetimeIndex named `time`, a single column whose name *is* the tech key (e.g. `solar` or `wind-onshore`) with values in [0, 1]. One file per `(area, tech, date range)`; `{tech}` is `wind-onshore`, `wind-offshore`, or `solar`.
 
-**Best-site profiles** (`resources/res_cf/<cc>_cf_<year>_bestsite_p95.parquet`): same format; P95 grid cell extracted directly from the Atlite CF grid with 3×3 spatial averaging for wind.
+**Best-site profiles** (`resources/res_cf/{cf_area}_solar_bestsite-p95-n{N}_{start}_{end}.parquet`): same time index, **multiple columns** — one per orientation in the sweep (e.g. `solar_az0`, `solar_az30`, … `solar_az330`). build_and_solve concatenates columns from all CF inputs into a single multi-tech `cf_timeseries`.
 
 **Complementarity results** (`resources/res_cf/<cc>_complementarity_top<N>_<year>.parquet`): ranked triplets of (onshore, offshore, solar) grid cells with score, coincidence, correlation, distance, and coordinates.
 

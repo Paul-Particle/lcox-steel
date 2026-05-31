@@ -1,6 +1,3 @@
-_viz_bar_projects = config.get("viz", {}).get("capacity_bar_projects", [])
-
-
 rule compile_report:
     input:
         networks=collect(
@@ -35,7 +32,8 @@ rule plot_cf_map:
 
 
 rule plot_capacity_bars:
-    """One PNG/HTML per project — scenarios go on the x-axis within each plot."""
+    """One PNG/HTML per project — scenarios go on the x-axis within each plot.
+    rule all expands viz.capacity_bar_projects into per-project targets."""
     input:
         reports=["results/report_{project}.csv"],
     output:
@@ -45,10 +43,3 @@ rule plot_capacity_bars:
         "logs/plot_capacity_bars/{project}.log",
     script:
         "../scripts/viz/plot_capacity_bars.py"
-
-
-rule plot_capacity_bars_all:
-    """Aggregator target: render the bar chart for every project listed under
-    viz.capacity_bar_projects in config.yaml."""
-    input:
-        expand("results/plots/capacity_bars/{project}.png", project=_viz_bar_projects),
