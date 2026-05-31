@@ -35,7 +35,6 @@ lcox-steel/
 │   │   │   ├── plot_cf_map.py                 # Spatial CF heatmap
 │   │   │   └── _helpers.py                    # FCA Plotly template + colormap
 │   │   └── tests/          # End-to-end smoke tests
-│   ├── notebooks/          # API exploration notebooks (entsoe, nem)
 │   └── common/             # Shared helpers (_paths.py, _stubs.py)
 ├── config/
 │   ├── config.yaml         # Pipeline knobs (countries, turbine specs, CF parameters, FX rates)
