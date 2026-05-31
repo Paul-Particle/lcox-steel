@@ -51,7 +51,7 @@ _CUTOUT_PATH = CUTOUTS / "aus_20250101_20251231.nc"
 _REGIONS_PATH = SHAPES_RES / "aus_geo.parquet"
 _REGION = "AUS"
 _PV_PANEL = "CSi"
-_OUT = RES_CF / "aus_solar_ew_bestsite_p95_n7_20250101_20251231.parquet"
+_OUT = RES_CF / "aus_solar_bestsite-p95-n7_20250101_20251231.parquet"
 
 # Slope search resolution for the optimization loop (degrees).
 # 1° is pure numpy so it runs in milliseconds regardless of resolution.

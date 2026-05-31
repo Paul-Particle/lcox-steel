@@ -117,7 +117,7 @@ def main() -> None:
             orientation="latitude_optimal",
             capacity_factor_timeseries=True,
         )
-    elif _TECH == "wind_onshore":
+    elif _TECH == "wind-onshore":
         cf_grid = cutout.wind(
             turbine=_WIND_TURBINE,
             capacity_factor_timeseries=True,

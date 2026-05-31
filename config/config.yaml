@@ -2,12 +2,17 @@
 
 scheduler: greedy
 
+# FX rates for converting non-EUR price feeds (used by grid.smk → retrieve_nem).
+# Infra-level constants; per-scenario cost assumptions live in config/assumptions*.yaml.
+fx:
+  eur_per_aud: 0.61
+
 viz:
+  # Projects to render side-by-side as scenario-comparison bar charts.
+  # One PNG/HTML per project; scenarios go on the x-axis within each plot.
   capacity_bar_projects:
+    - DE_2023_baseline
     - VIC_2025_solar_ew
-    - VIC_2025_solar_ew_hielcost
-    - VIC_2025_solar_ew_hiallcost
-    - VIC_2025_solar_ew_noopt
 
 logging:
   # Root level for the project's own loggers. Set to DEBUG for verbose runs.

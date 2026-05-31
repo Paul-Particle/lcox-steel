@@ -23,7 +23,7 @@ rule plot_cf_map:
         png="results/plots/cf_map/{cf_area}_{tech}_{start_date}_{end_date}_cf_map.png",
         html="results/plots/cf_map/{cf_area}_{tech}_{start_date}_{end_date}_cf_map.html",
     wildcard_constraints:
-        tech=r"solar|wind_onshore|wind_offshore",
+        tech=r"solar|wind-onshore|wind-offshore",
     log:
         "logs/plot_cf_map/{cf_area}_{tech}_{start_date}_{end_date}.log",
     params:
@@ -35,12 +35,20 @@ rule plot_cf_map:
 
 
 rule plot_capacity_bars:
+    """One PNG/HTML per project — scenarios go on the x-axis within each plot."""
     input:
-        reports=expand("results/report_{project}.csv", project=_viz_bar_projects),
+        reports=["results/report_{project}.csv"],
     output:
-        png="results/plots/capacity_bars.png",
-        html="results/plots/capacity_bars.html",
+        png="results/plots/capacity_bars/{project}.png",
+        html="results/plots/capacity_bars/{project}.html",
     log:
-        "logs/plot_capacity_bars.log",
+        "logs/plot_capacity_bars/{project}.log",
     script:
         "../scripts/viz/plot_capacity_bars.py"
+
+
+rule plot_capacity_bars_all:
+    """Aggregator target: render the bar chart for every project listed under
+    viz.capacity_bar_projects in config.yaml."""
+    input:
+        expand("results/plots/capacity_bars/{project}.png", project=_viz_bar_projects),

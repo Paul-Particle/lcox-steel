@@ -38,7 +38,7 @@ configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
 _REPORT_PATHS: list[Path] = []
-_OUT = Path("results/plots/capacity_bars.png")
+_OUT: Path | None = None  # standalone: derived from first report path's stem
 
 if "snakemake" in globals() and hasattr(snakemake, "input"):
     _REPORT_PATHS = [Path(p) for p in snakemake.input.reports]
@@ -69,7 +69,7 @@ def _solar_cols(df):
 
 def _wind_cols(df):
     return [c for c in df.columns if
-            (c.startswith("wind_onshore") or c.startswith("wind_offshore"))
+            (c.startswith("wind-onshore") or c.startswith("wind-offshore"))
             and c.endswith("_gw_opt")]
 
 
@@ -112,8 +112,8 @@ def _pretty(col: str) -> str:
     """Humanize a plot_df column name for the legend, e.g.
     'solar_mw' → 'Solar (MW nominal)',
     'solar_az180_mw' → 'Solar az180 (MW nominal)',
-    'wind_onshore_mw' → 'Wind onshore (MW nominal)'."""
-    base = col.removesuffix("_mw").replace("_", " ")
+    'wind-onshore_mw' → 'Wind onshore (MW nominal)'."""
+    base = col.removesuffix("_mw").replace("-", " ").replace("_", " ")
     return f"{base.capitalize()} (MW nominal)"
 
 
@@ -237,7 +237,8 @@ def main() -> None:
         raise SystemExit("usage: plot_capacity_bars.py report1.csv [report2.csv ...]")
     df = load_reports(paths)
     project_label = ", ".join(dict.fromkeys(df["project"].astype(str)))
-    plot(build_plot_data(df), _OUT, project_label)
+    out = _OUT or Path(f"results/plots/capacity_bars/{paths[0].stem.removeprefix('report_')}.png")
+    plot(build_plot_data(df), out, project_label)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,9 @@
 configfile: "config/config.yaml"
-configfile: "config/assumptions.yaml"
-configfile: "config/assumptions_high_allcost.yaml"
+
+# Cost/finance assumptions are NOT loaded as a global configfile — they are a
+# per-scenario input declared in config/projects.csv (assumptions_overlay column)
+# and consumed by the h2_dri_optimize rule, so edits to a variant only rerun the
+# scenarios that point at it.
 
 
 import sys
@@ -15,6 +18,7 @@ projects_df = pd.read_csv(
 )
 
 
+include: "rules/_polyfills.smk"
 include: "rules/grid.smk"
 include: "rules/res_cf.smk"
 include: "rules/h2_dri.smk"
