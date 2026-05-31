@@ -4,6 +4,8 @@ logging:
   level: INFO
   # Level for noisy upstream libraries (atlite, cdsapi, pypsa, ...).
   third_party_level: WARNING
+  # %()s is logging.Formatter's own template syntax — unrelated to the
+  # "f-strings ok in log calls" convention (that's about call sites).
   format: "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 
 entsoe:
