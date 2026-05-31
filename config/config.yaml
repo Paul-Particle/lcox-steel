@@ -7,13 +7,6 @@ scheduler: greedy
 fx:
   eur_per_aud: 0.61
 
-viz:
-  # Projects to render side-by-side as scenario-comparison bar charts.
-  # One PNG/HTML per project; scenarios go on the x-axis within each plot.
-  capacity_bar_projects:
-    - DE_2023_baseline
-    - VIC_2025_solar_ew
-
 logging:
   # Root level for the project's own loggers. Set to DEBUG for verbose runs.
   # Override on the CLI: snakemake --config 'logging={level: DEBUG}'.
@@ -69,7 +62,7 @@ res_cf:
   wind_cf:
     smooth: true
     add_cutout_windspeed: true
-    spatial_avg_window: 3
+    spatial_avg_window: 1
 
   # Atlite cutout build settings.
   # bbox_pad_deg            degrees of padding added around country/region bounds.
