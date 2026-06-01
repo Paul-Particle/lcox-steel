@@ -73,13 +73,12 @@ log = logging.getLogger(__name__)
 
 
 RES_CF_CFG = load_res_cf_cfg()
-YEAR       = int(RES_CF_CFG["year"])  # standalone default from config
+YEAR       = 2023
 OUTDIR     = RES_CF
 COUNTRIES  = ["de"]  # lowercase to match filenames; standalone default
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     COUNTRIES  = [snakemake.wildcards.country.lower()]
-    YEAR       = int(snakemake.config["res_cf"]["year"])
     RES_CF_CFG = snakemake.config["res_cf"]
 
 REGIONS_PATH          = SHAPES_RES / "regions.parquet"
@@ -219,7 +218,7 @@ def _to_cf_series(x: xr.DataArray, name: str = "cf") -> pd.Series:
 
     if isinstance(obj, pd.DataFrame):
         # BUG (WIP): both branches do the same thing. Multi-column case likely
-        # intended to select a specific region column (cf. build_cf_timeseries.py's
+        # intended to select a specific region column (cf. build_res_cf_profile.py's
         # to_cf_series which does obj[_REGION]). Fix when this script is revisited.
         if obj.shape[1] == 1:
             s = obj.iloc[:, 0]

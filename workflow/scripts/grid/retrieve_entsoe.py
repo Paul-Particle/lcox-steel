@@ -20,9 +20,6 @@ from pathlib import Path
 
 import pandas as pd
 
-if "snakemake" not in globals():
-    from common._stubs import snakemake
-
 from common._logging import configure_logging
 from _helpers import area_month_in_cache, iso, to_utc_naive
 from download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client, iter_months

@@ -32,8 +32,7 @@ rule plot_cf_map:
 
 
 rule plot_capacity_bars:
-    """One PNG/HTML per project — scenarios go on the x-axis within each plot.
-    rule all expands viz.capacity_bar_projects into per-project targets."""
+    """One PNG/HTML per project — scenarios go on the x-axis within each plot."""
     input:
         reports=["results/report_{project}.csv"],
     output:

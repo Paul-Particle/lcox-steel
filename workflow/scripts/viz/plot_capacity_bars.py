@@ -2,7 +2,6 @@
 Bar chart comparing scenario capacities across projects.
 
 Snakemake rule: plot_capacity_bars  (in viz.smk)
-Standalone:     python workflow/scripts/viz/plot_capacity_bars.py results/report_*.csv
 
 Shows per scenario:
   DRI H2 demand (MW LHV) · Electrolyser (MW) · H2 buffer (MW·days LHV)
@@ -11,15 +10,10 @@ Shows per scenario:
 """
 
 import logging
-import sys
 from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
-
-if "snakemake" not in globals():
-    sys.path.insert(0, str(Path(__file__).parents[2]))
-    from common._stubs import snakemake
 
 from common._logging import configure_logging
 from scripts.viz._helpers import (
@@ -37,12 +31,8 @@ from scripts.viz._helpers import (
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
-_REPORT_PATHS: list[Path] = []
-_OUT: Path | None = None  # standalone: derived from first report path's stem
-
-if "snakemake" in globals() and hasattr(snakemake, "input"):
-    _REPORT_PATHS = [Path(p) for p in snakemake.input.reports]
-    _OUT = Path(snakemake.output[0])
+_REPORT_PATHS = [Path(p) for p in snakemake.input.reports]
+_OUT = Path(snakemake.output[0])
 
 # Stacked sub-bar palettes, sampled from the FCA colormap.
 # Solar: high end of the colormap (golden/sand tones — close to sand_yellow).
@@ -232,13 +222,9 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
 
 
 def main() -> None:
-    paths = _REPORT_PATHS or [Path(p) for p in sys.argv[1:]]
-    if not paths:
-        raise SystemExit("usage: plot_capacity_bars.py report1.csv [report2.csv ...]")
-    df = load_reports(paths)
+    df = load_reports(_REPORT_PATHS)
     project_label = ", ".join(dict.fromkeys(df["project"].astype(str)))
-    out = _OUT or Path(f"results/plots/capacity_bars/{paths[0].stem.removeprefix('report_')}.png")
-    plot(build_plot_data(df), out, project_label)
+    plot(build_plot_data(df), _OUT, project_label)
 
 
 if __name__ == "__main__":

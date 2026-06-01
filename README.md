@@ -20,8 +20,8 @@ lcox-steel/
 │   │   │   ├── build_regions.py
 │   │   │   ├── build_offshore_regions.py
 │   │   │   ├── download_cutout.py             # honours `_backup.nc` cache; see below
-│   │   │   ├── build_cf_timeseries.py
-│   │   │   ├── build_solar_orientation_bestsite_p95.py
+│   │   │   ├── build_res_cf_profile.py
+│   │   │   ├── build_solar_tilt_mix_p95.py
 │   │   │   ├── determine_resource_spread.py
 │   │   │   ├── determine_bestsite_p95.py
 │   │   │   ├── determine_complementarity.py   # WIP, not in active DAG
@@ -35,7 +35,6 @@ lcox-steel/
 │   │   │   ├── plot_cf_map.py                 # Spatial CF heatmap
 │   │   │   └── _helpers.py                    # FCA Plotly template + colormap
 │   │   └── tests/          # End-to-end smoke tests
-│   ├── notebooks/          # API exploration notebooks (entsoe, nem)
 │   └── common/             # Shared helpers (_paths.py, _stubs.py)
 ├── config/
 │   ├── config.yaml         # Pipeline knobs (countries, turbine specs, CF parameters, FX rates)
@@ -57,7 +56,7 @@ lcox-steel/
 │   ├── shapes/{cf_area}_geo.parquet                       # Onshore country geometry (GeoParquet)
 │   ├── shapes/{cf_area}_offshore_geo.parquet              # EEZ-clipped offshore geometry
 │   ├── res_cf/{cf_area}_{tech}_country-average_{start}_{end}.parquet     # Hourly CF time series
-│   └── res_cf/{cf_area}_solar_bestsite-p95-n{N}_{start}_{end}.parquet    # Orientation-resolved CF sweep
+│   └── res_cf/{cf_area}_solar_tilt-mix-n{N}_{start}_{end}.parquet    # Orientation-resolved CF sweep
 ├── cutouts/                # Atlite ERA5 cutout files (gitignored). Existing downloads can be
 │                           # preserved across reruns by renaming to `<name>_backup.nc`;
 │                           # download_cutout.py copies from the backup when present (caching hack).
@@ -111,6 +110,9 @@ The `.env` file is gitignored — never commit it.
 
 Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` following the [atlite CDS setup instructions](https://atlite.readthedocs.io/en/latest/installation.html).
 
+> [!TIP]
+> After a successful cutout download, copy `cutouts/{name}.nc` to `cutouts/{name}_backup.nc` to pin it across code-trigger reruns. `download_cutout.py` copies from the backup when present and skips CDS — handy until the proper cache lands (see `TODO.md`).
+
 ## Running the pipelines
 
 All pipelines are managed by Snakemake. `config/projects.csv` drives the full DAG — each row is one `(project, scenario, tech)` input, and adding a project means adding rows, not editing the Snakefile.
@@ -155,10 +157,10 @@ Months that fail (transient ENTSO-E errors, network blips) are retried 3× with 
 snakemake resources/res_cf/de_wind-onshore_country-average_20230101_20231231.parquet --cores 4
 ```
 
-This chains: `build_regions` → `build_offshore_regions` → `download_cutout` (ERA5) → `build_cf_timeseries`. The `{tech}` wildcard accepts `wind-onshore`, `wind-offshore`, or `solar`. Tech and variant identifiers use `-` as their internal separator (e.g. `wind-onshore`, `country-average`, `bestsite-p95-n7`) so that the underscore-delimited filename pattern `{area}_{tech}_{variant}_{start}_{end}.parquet` stays unambiguous to parse — area can contain `_` (e.g. `DE_LU`), dates are always the last two 8-digit tokens.
+This chains: `build_regions` → `build_offshore_regions` → `download_cutout` (ERA5) → `build_res_cf_profile`. The `{tech}` wildcard accepts `wind-onshore`, `wind-offshore`, or `solar`. Tech and variant identifiers use `-` as their internal separator (e.g. `wind-onshore`, `country-average`, `tilt-mix-n7`) so that the underscore-delimited filename pattern `{area}_{tech}_{variant}_{start}_{end}.parquet` stays unambiguous to parse — area can contain `_` (e.g. `DE_LU`), dates are always the last two 8-digit tokens.
 
 > [!NOTE]
-> **Current limitations (WIP).** The geometry is computed twice: `build_regions` produces the country's onshore geometry as a parquet for `build_cf_timeseries`, and `download_cutout` independently re-derives the same country boundary from the raw ZIP to compute the ERA5 bounding box. The bounding box is padded (`bbox_pad_deg` in config), so in practice it almost always encompasses the feasible offshore wind distance as well — the explicit offshore geometry from `build_offshore_regions` adds little that the cutout doesn't already cover spatially. The inconsistency is more subtle for offshore: the cutout bbox is a rectangle around the country's land area plus padding, while the offshore region is clipped to the EEZ within `offshore_max_distance_km`. For a narrow EEZ (many neighbours), the two align well. For a wide EEZ, the cutout covers only part of it — but `build_cf_timeseries` uses the full clipped offshore geometry as its spatial mask, so ERA5 cells far from the coast that fall outside the cutout are simply absent. Whether that matters depends on the country. A proper fix requires a cutout cache with explicit spatial and temporal coverage checking (see `TODO.md`).
+> **Current limitations (WIP).** The geometry is computed twice: `build_regions` produces the country's onshore geometry as a parquet for `build_res_cf_profile`, and `download_cutout` independently re-derives the same country boundary from the raw ZIP to compute the ERA5 bounding box. The bounding box is padded (`bbox_pad_deg` in config), so in practice it almost always encompasses the feasible offshore wind distance as well — the explicit offshore geometry from `build_offshore_regions` adds little that the cutout doesn't already cover spatially. The inconsistency is more subtle for offshore: the cutout bbox is a rectangle around the country's land area plus padding, while the offshore region is clipped to the EEZ within `offshore_max_distance_km`. For a narrow EEZ (many neighbours), the two align well. For a wide EEZ, the cutout covers only part of it — but `build_res_cf_profile` uses the full clipped offshore geometry as its spatial mask, so ERA5 cells far from the coast that fall outside the cutout are simply absent. Whether that matters depends on the country. A proper fix requires a cutout cache with explicit spatial and temporal coverage checking (see `TODO.md`).
 
 ### PyPSA investment optimization
 
@@ -184,7 +186,7 @@ column to edit in `projects.csv`).
 
 **Capacity factors** (`resources/res_cf/{cf_area}_{tech}_country-average_{start}_{end}.parquet`): hourly parquet, DatetimeIndex named `time`, a single column whose name *is* the tech key (e.g. `solar` or `wind-onshore`) with values in [0, 1]. One file per `(area, tech, date range)`; `{tech}` is `wind-onshore`, `wind-offshore`, or `solar`.
 
-**Best-site profiles** (`resources/res_cf/{cf_area}_solar_bestsite-p95-n{N}_{start}_{end}.parquet`): same time index, **multiple columns** — one per orientation in the sweep (e.g. `solar_az0`, `solar_az30`, … `solar_az330`). build_and_solve concatenates columns from all CF inputs into a single multi-tech `cf_timeseries`.
+**Best-site profiles** (`resources/res_cf/{cf_area}_solar_tilt-mix-n{N}_{start}_{end}.parquet`): same time index, **multiple columns** — one per orientation in the sweep (e.g. `solar_az0`, `solar_az30`, … `solar_az330`). build_and_solve concatenates columns from all CF inputs into a single multi-tech `cf_timeseries`.
 
 **Complementarity results** (`resources/res_cf/<cc>_complementarity_top<N>_<year>.parquet`): ranked triplets of (onshore, offshore, solar) grid cells with score, coincidence, correlation, distance, and coordinates.
 
@@ -206,7 +208,7 @@ logs/
 ├── build_regions/{cf_area}.log
 ├── build_offshore_regions/{cf_area}.log
 ├── download_cutout/{cf_area}_{start}_{end}.log
-├── build_cf_timeseries/{cf_area}_{tech}_{start}_{end}.log
+├── build_res_cf_profile/{cf_area}_{tech}_{start}_{end}.log
 ├── h2_dri_optimize/{project}_{scenario}.log
 └── compile_report/{project}.log
 ```

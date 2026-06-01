@@ -28,9 +28,6 @@ from _helpers import annuity_factor, dri_to_el_mw
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
 
-if "snakemake" not in globals():
-    from common._stubs import snakemake
-
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
@@ -257,7 +254,7 @@ def main() -> None:
         for p in cf_paths:
             df = pd.read_parquet(p)
             # Single- and multi-column parquets are uniform: columns are tech keys.
-            # build_cf_timeseries.py names single-column outputs by the tech wildcard.
+            # build_res_cf_profile.py names single-column outputs by the tech wildcard.
             for col in df.columns:
                 if col in cf_parts:
                     raise ValueError(

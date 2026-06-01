@@ -11,10 +11,6 @@ import pandas as pd
 import pypsa
 
 from common._constants import H2_LHV_KWH_PER_KG
-
-if "snakemake" not in globals():
-    from common._stubs import snakemake
-
 from common._logging import configure_logging
 
 configure_logging(snakemake)

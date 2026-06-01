@@ -23,7 +23,7 @@ A proper cutout cache would: store ERA5 data by area in a persistent location (a
 `data/entsoe_cache/`), check spatial and temporal coverage before requesting, and support
 partial fills. This would also make the `geo → cutout → timeseries` chain more natural:
 `build_regions`/`build_offshore_regions` would define the area, the cache layer would ensure
-coverage, and `build_cf_timeseries` would slice from the cache. When this lands, the backup
+coverage, and `build_res_cf_profile` would slice from the cache. When this lands, the backup
 hack and its README/HANDOFF callouts can come out.
 
 ## CDS download monitoring
