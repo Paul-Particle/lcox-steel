@@ -9,7 +9,6 @@ To force a full re-fetch, delete the relevant month directories and re-run.
 import logging
 import os
 import time
-from pathlib import Path
 from typing import Callable
 
 import entsoe
@@ -164,8 +163,7 @@ def download_with_retry(
                 raise
             backoff = 2 ** attempt
             log.warning(
-                "attempt %d/%d failed (%r); retry in %ds",
-                attempt, max_attempts, e, backoff,
+                f"attempt {attempt}/{max_attempts} failed ({e!r}); retry in {backoff}s"
             )
             time.sleep(backoff)
 

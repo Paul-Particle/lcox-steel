@@ -194,10 +194,10 @@ def main() -> None:
     y_idx, x_idx = _find_p95_cell(cf_ref, geom)
     cell_lat = float(cutout.data.coords["y"].isel(y=y_idx))
     cell_lon = float(cutout.data.coords["x"].isel(x=x_idx))
+    annual_mean_ref = float(cf_ref.isel(y=y_idx, x=x_idx).mean())
     log.info(
-        "P95 cell: y=%d x=%d  lat=%.2f lon=%.2f  annual_mean_ref=%.3f",
-        y_idx, x_idx, cell_lat, cell_lon,
-        float(cf_ref.isel(y=y_idx, x=x_idx).mean()),
+        f"P95 cell: y={y_idx} x={x_idx}  lat={cell_lat:.2f} lon={cell_lon:.2f}  "
+        f"annual_mean_ref={annual_mean_ref:.3f}"
     )
 
     # Step 2: extract pre-computed irradiance and solar position at P95 cell
@@ -220,12 +220,12 @@ def main() -> None:
     for az in azimuths:
         slope = _optimal_slope(direct, diffuse, influx_toa, albedo, sun_alt, sun_az, float(az))
         opt_slopes[az] = slope
-        log.info("azimuth=%3d°  optimal_slope=%2d°", az, slope)
+        log.info(f"azimuth={az:3d}°  optimal_slope={slope:2d}°")
 
     # Step 5: compute final CF at optimal (slope, azimuth) via atlite.pv()
     results: dict[str, pd.Series] = {}
     for az, slope in opt_slopes.items():
-        log.info("computing CF: azimuth=%3d° slope=%2d°", az, slope)
+        log.info(f"computing CF: azimuth={az:3d}° slope={slope:2d}°")
         cf_grid = cutout.pv(
             panel=_PV_PANEL,
             orientation={"slope": float(slope), "azimuth": float(az)},
@@ -236,12 +236,12 @@ def main() -> None:
         ts = ts.clip(0.0, 1.0)
         col = f"solar_az{az}"
         results[col] = ts
-        log.info("  annual_mean_cf=%.3f", float(ts.mean()))
+        log.info(f"  annual_mean_cf={float(ts.mean()):.3f}")
 
     df = pd.DataFrame(results)
     df.index.name = "time"
     df.to_parquet(_OUT, index=True)
-    log.info("wrote %s (%d rows, %d orientations)", _OUT, len(df), len(results))
+    log.info(f"wrote {_OUT} ({len(df)} rows, {len(results)} orientations)")
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ lcox-steel/
 ├── workflow/               # Snakemake workflow (standard layout)
 │   ├── Snakefile           # one configfile + sys.path + includes + rule all
 │   ├── rules/
-│   │   ├── _polyfills.smk  # local stand-ins for snakemake helpers not shipped yet (optional())
+│   │   ├── _optional_shim.smk  # local stand-in for snakemake's optional() helper (not shipped yet)
 │   │   ├── grid.smk        # ENTSO-E + NEM download/process rules
 │   │   ├── res_cf.smk      # atlite CF pipeline (shapes → cutout → CF timeseries)
 │   │   ├── h2_dri.smk      # PyPSA optimisation rule
@@ -27,7 +27,8 @@ lcox-steel/
 │   │   │   ├── determine_complementarity.py   # WIP, not in active DAG
 │   │   │   └── diag_*.py                      # Diagnostic and QC scripts
 │   │   ├── h2_dri/         # PyPSA investment model
-│   │   │   ├── build_and_solve_network.py     # PyPSA network builder + solver
+│   │   │   ├── build_network.py               # PyPSA network construction (pure)
+│   │   │   ├── solve_network.py               # snakemake entrypoint: load → build → solve → write
 │   │   │   └── _helpers.py                    # annuity factor + electrolyser sizing
 │   │   ├── viz/            # Reporting + Plotly figures
 │   │   │   ├── compile_report.py              # Post-solve LCOH accounting → CSV
@@ -186,7 +187,7 @@ column to edit in `projects.csv`).
 
 **Capacity factors** (`resources/res_cf/{cf_area}_{tech}_country-average_{start}_{end}.parquet`): hourly parquet, DatetimeIndex named `time`, a single column whose name *is* the tech key (e.g. `solar` or `wind-onshore`) with values in [0, 1]. One file per `(area, tech, date range)`; `{tech}` is `wind-onshore`, `wind-offshore`, or `solar`.
 
-**Best-site profiles** (`resources/res_cf/{cf_area}_solar_tilt-mix-n{N}_{start}_{end}.parquet`): same time index, **multiple columns** — one per orientation in the sweep (e.g. `solar_az0`, `solar_az30`, … `solar_az330`). build_and_solve concatenates columns from all CF inputs into a single multi-tech `cf_timeseries`.
+**Best-site profiles** (`resources/res_cf/{cf_area}_solar_tilt-mix-n{N}_{start}_{end}.parquet`): same time index, **multiple columns** — one per orientation in the sweep (e.g. `solar_az0`, `solar_az30`, … `solar_az330`). solve_network concatenates columns from all CF inputs into a single multi-tech `cf_timeseries`.
 
 **Complementarity results** (`resources/res_cf/<cc>_complementarity_top<N>_<year>.parquet`): ranked triplets of (onshore, offshore, solar) grid cells with score, coincidence, correlation, distance, and coordinates.
 

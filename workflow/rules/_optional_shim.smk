@@ -1,8 +1,8 @@
-# Local stand-ins for snakemake helpers that don't ship yet.
+# Local stand-in for snakemake's `optional()` helper, which hasn't shipped yet.
 #
 # Delete this file (and its `include:` line in the Snakefile) once the upstream
-# equivalents land. Track snakemake/snakemake for the proper `optional()`
-# helper — when it merges, the call sites here should work unchanged.
+# `optional()` lands in snakemake/snakemake — the call sites here should work
+# unchanged.
 
 from pathlib import Path
 

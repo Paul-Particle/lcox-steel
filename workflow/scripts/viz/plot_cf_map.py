@@ -14,6 +14,9 @@ import numpy as np
 import plotly.graph_objects as go
 from shapely.geometry import MultiPolygon, Polygon
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 from common._logging import configure_logging
 from scripts.viz._helpers import (
     PLOTLY_CONFIG,
@@ -84,10 +87,10 @@ def _boundary_segments(geom) -> tuple[list[float], list[float]]:
 def main() -> None:
     _OUT.parent.mkdir(parents=True, exist_ok=True)
 
-    log.info("loading cutout %s", _CUTOUT_PATH)
+    log.info(f"loading cutout {_CUTOUT_PATH}")
     cutout = atlite.Cutout(str(_CUTOUT_PATH))
 
-    log.info("computing %s CF grid", _TECH)
+    log.info(f"computing {_TECH} CF grid")
     if _TECH == "solar":
         cf_grid = cutout.pv(
             panel=_PV_PANEL,
@@ -113,7 +116,7 @@ def main() -> None:
     p95_lat = float(cutout.data.coords["y"].isel(y=y_idx))
     p95_lon = float(cutout.data.coords["x"].isel(x=x_idx))
     p95_cf  = float(cell_mean.isel(y=y_idx, x=x_idx))
-    log.info("P95 cell: lat=%.2f lon=%.2f cf=%.3f", p95_lat, p95_lon, p95_cf)
+    log.info(f"P95 cell: lat={p95_lat:.2f} lon={p95_lon:.2f} cf={p95_cf:.3f}")
 
     lons = cutout.data.coords["x"].values
     lats = cutout.data.coords["y"].values
@@ -169,7 +172,7 @@ def main() -> None:
 
     fig.write_image(_OUT, scale=2)
     fig.write_html(_OUT.with_suffix(".html"), config=PLOTLY_CONFIG, include_plotlyjs="cdn")
-    log.info("saved %s (+ .html)", _OUT)
+    log.info(f"saved {_OUT} (+ .html)")
 
 
 if __name__ == "__main__":

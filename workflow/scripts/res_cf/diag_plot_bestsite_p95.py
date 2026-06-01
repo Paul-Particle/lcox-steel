@@ -311,7 +311,7 @@ def plot_bestsite_map(iso2: str, tech: str) -> None:
     fig.savefig(out, dpi=200)
     plt.close(fig)
 
-    log.info("wrote %s", out)
+    log.info(f"wrote {out}")
 
 def main():
     for iso2 in COUNTRIES:

@@ -21,4 +21,4 @@ rule h2_dri_optimize:
     log:
         "logs/h2_dri_optimize/{project}_{scenario}.log",
     script:
-        "../scripts/h2_dri/build_and_solve_network.py"
+        "../scripts/h2_dri/solve_network.py"

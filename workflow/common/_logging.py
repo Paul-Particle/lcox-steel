@@ -14,7 +14,7 @@ Usage in a script
     configure_logging(snakemake)
     log = logging.getLogger(__name__)
 
-    log.info("starting %s", area)
+    log.info(f"starting {area}")
     for item in progress(items, desc="cells"):
         ...
 
@@ -213,9 +213,9 @@ def progress(
     is_tty = sys.stderr.isatty()
     if not is_tty:
         if total_n is not None:
-            log.info("%s — starting (n=%d)", desc, total_n)
+            log.info(f"{desc} — starting (n={total_n})")
         else:
-            log.info("%s — starting", desc)
+            log.info(f"{desc} — starting")
 
     bar = tqdm(
         iterable,
@@ -235,4 +235,4 @@ def progress(
     finally:
         bar.close()
         if not is_tty:
-            log.info("%s — done", desc)
+            log.info(f"{desc} — done")

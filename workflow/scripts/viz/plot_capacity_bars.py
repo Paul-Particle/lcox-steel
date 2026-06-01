@@ -15,6 +15,9 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 from common._logging import configure_logging
 from scripts.viz._helpers import (
     PLOTLY_CONFIG,
@@ -31,7 +34,7 @@ from scripts.viz._helpers import (
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
-_REPORT_PATHS = [Path(p) for p in snakemake.input.reports]
+_REPORT_PATH = Path(snakemake.input.report)
 _OUT = Path(snakemake.output[0])
 
 # Stacked sub-bar palettes, sampled from the FCA colormap.
@@ -49,8 +52,8 @@ _SLOTS = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]
 _BAR_WIDTH = 0.13
 
 
-def load_reports(paths: list[Path]) -> pd.DataFrame:
-    return pd.concat([pd.read_csv(p) for p in paths], ignore_index=True)
+def load_report(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path)
 
 
 def _solar_cols(df):
@@ -218,11 +221,11 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.write_image(out, scale=2)
     fig.write_html(out.with_suffix(".html"), config=PLOTLY_CONFIG, include_plotlyjs="cdn")
-    log.info("saved %s (+ .html)", out)
+    log.info(f"saved {out} (+ .html)")
 
 
 def main() -> None:
-    df = load_reports(_REPORT_PATHS)
+    df = load_report(_REPORT_PATH)
     project_label = ", ".join(dict.fromkeys(df["project"].astype(str)))
     plot(build_plot_data(df), _OUT, project_label)
 

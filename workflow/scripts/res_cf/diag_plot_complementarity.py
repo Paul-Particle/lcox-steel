@@ -39,7 +39,7 @@ def plot_best_triplet(country: str, year: int) -> None:
     df   = pd.read_parquet(comp_path)
     best = df.iloc[0]
 
-    log.info("loading CF grids for %s %s", country, year)
+    log.info(f"loading CF grids for {country} {year}")
     cf_on  = build_cf_year(country, "wind_onshore")
     cf_off = build_cf_year(country, "wind_offshore")
     cf_sol = build_cf_year(country, "solar")
@@ -68,7 +68,7 @@ def plot_best_triplet(country: str, year: int) -> None:
     PLOT_DIR.mkdir(parents=True, exist_ok=True)
     out = PLOT_DIR / f"{cc}_best_triplet_{year}.png"
     plt.savefig(out, dpi=150)
-    log.info("saved → %s", out)
+    log.info(f"saved → {out}")
 
 
 if __name__ == "__main__":

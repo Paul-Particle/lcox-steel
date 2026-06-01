@@ -34,7 +34,7 @@ rule plot_cf_map:
 rule plot_capacity_bars:
     """One PNG/HTML per project — scenarios go on the x-axis within each plot."""
     input:
-        reports=["results/report_{project}.csv"],
+        report="results/report_{project}.csv",
     output:
         png="results/plots/capacity_bars/{project}.png",
         html="results/plots/capacity_bars/{project}.html",

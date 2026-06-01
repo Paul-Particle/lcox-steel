@@ -66,12 +66,12 @@ save = False
 def toggle_save() -> bool:
     global save
     save = not save
-    log.info("saving figures is now %s", "ON" if save else "OFF")
+    log.info(f"saving figures is now {'ON' if save else 'OFF'}")
     return save
 def set_save(setting: bool) -> bool:
     global save
     save = setting
-    log.info("saving figures is now %s", "ON" if save else "OFF")
+    log.info(f"saving figures is now {'ON' if save else 'OFF'}")
     return save
 def save_is_on():
     global save

@@ -61,7 +61,7 @@ def _resolve_generator_excel(cache_dir: Path) -> Path:
     table_name = "Generators and Scheduled Loads"
     target = cache_dir / _nemosis_defaults.names[table_name]
     url = _nemosis_defaults.static_table_url[table_name]
-    log.info("generator excel not found; downloading via NEMOSIS to %s", target)
+    log.info(f"generator excel not found; downloading via NEMOSIS to {target}")
     cache_dir.mkdir(parents=True, exist_ok=True)
     try:
         static_downloader_map[table_name](url, str(target))
