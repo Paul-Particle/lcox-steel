@@ -4,7 +4,9 @@
 - f-strings are fine in log calls (`log.info(f"...")`). The old PyPSA-Eur-style
   "%-style only" rule was dropped — lazy-eval/exception-safety wins don't
   bite at this codebase's scale.
-- Don't rewrite existing %-style calls just to switch styles.
+- The `format:` template in `config/config.yaml` stays %-style — that's
+  `logging.Formatter`'s own substitution syntax (`%(asctime)s`, `%(message)s`),
+  not the same thing as call-site formatting.
 
 ## Snakefile / `.smk` style
 Keep raw Python in `Snakefile` and `workflow/rules/*.smk` to a minimum.
