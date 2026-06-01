@@ -15,6 +15,9 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 from common._logging import configure_logging
 from scripts.viz._helpers import (
     PLOTLY_CONFIG,

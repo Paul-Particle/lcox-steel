@@ -14,6 +14,9 @@ import numpy as np
 import plotly.graph_objects as go
 from shapely.geometry import MultiPolygon, Polygon
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 from common._logging import configure_logging
 from scripts.viz._helpers import (
     PLOTLY_CONFIG,

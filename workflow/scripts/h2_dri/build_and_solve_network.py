@@ -28,6 +28,9 @@ from _helpers import annuity_factor, dri_to_el_mw
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
 
+if "snakemake" not in globals():
+    from common._stubs import snakemake
+
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
