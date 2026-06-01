@@ -540,7 +540,7 @@ def main() -> None:
             n_timesteps = int(cf.sizes["time"])
             ts_matrix   = np.zeros((n_timesteps, n), dtype=np.float32)
             for idx in progress(range(n), desc=f"extract {tech} cells", total=n, unit="cell"):
-                ts = extract_cell_timeseries(cf, int(ys[idx]), int(xs[idx]), tech)
+                ts = extract_cell_timeseries(cf, int(ys[idx]), int(xs[idx]))
                 ts_matrix[:, idx] = ts.values
 
             lons, lats = get_candidate_coords(cf, ys, xs)

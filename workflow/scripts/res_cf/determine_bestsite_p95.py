@@ -18,8 +18,6 @@ Method
 - Computes annual mean CF per grid cell
 - Identifies the representative P95 grid cell (mean-based ranking)
 - Extracts that cell's hourly CF time series
-- Applies 3×3 spatial averaging for wind technologies to approximate
-  wind farm-scale variability and avoid artificial saturation at CF ≈ 1
 - Writes the resulting hourly series as the best-site P95 scenario
 
 Key updates vs previous implementation
@@ -28,7 +26,6 @@ Key updates vs previous implementation
 - ❌ Removed dependence on resource_spread outputs for time series generation
 - ✅ Direct extraction from full CF grid (cf_year)
 - ✅ Introduced wind power-curve smoothing (smooth=True)
-- ✅ Added 3×3 spatial averaging for wind to approximate site-level behaviour
 - ✅ Uses mean-based P95 selection (median-based selection tested and rejected)
 
 Notes
@@ -92,30 +89,16 @@ PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
 WIND_CF_CFG           = RES_CF_CFG.get("wind_cf", {})
 WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
 WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
-SPATIAL_AVG_WINDOW    = int(WIND_CF_CFG.get("spatial_avg_window", 3))
 
 
 def extract_cell_timeseries(
     cf_year: xr.DataArray,
     y_idx: int,
     x_idx: int,
-    tech: str,
-    window: int = SPATIAL_AVG_WINDOW,
 ) -> pd.Series:
-
-    if tech.startswith("wind"):
-        half = window // 2
-        ts = cf_year.isel(
-            y=slice(max(0, y_idx - half), y_idx + half + 1),
-            x=slice(max(0, x_idx - half), x_idx + half + 1),
-        ).mean(dim=("y", "x"))
-    else:
-        ts = cf_year.isel(y=y_idx, x=x_idx)
-
-    s = ts.to_pandas()
+    s = cf_year.isel(y=y_idx, x=x_idx).to_pandas()
     s.index = pd.to_datetime(s.index)
     s.name = "cf"
-
     return s.clip(0, 1)
 
 def build_cf_year(country_upper: str, tech: str) -> xr.DataArray:
@@ -256,7 +239,7 @@ def main() -> None:
 
             y_idx, x_idx = _find_p95_cell(cf_year, geom)
 
-            ts = extract_cell_timeseries(cf_year, y_idx, x_idx, tech)
+            ts = extract_cell_timeseries(cf_year, y_idx, x_idx)
 
             best_mean = float(ts.mean())
 

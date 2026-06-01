@@ -238,32 +238,6 @@ def plot_bestsite_map(iso2: str, tech: str) -> None:
             zorder=9,
         )
 
-        # 3x3 footprint (wind only)
-    if tech.startswith("wind") and len(xx) > 0:
-        y0, x0 = yy[0], xx[0]
-
-        y_min = max(0, y0 - 1)
-        y_max = min(len(ys) - 1, y0 + 1)
-        x_min = max(0, x0 - 1)
-        x_max = min(len(xs) - 1, x0 + 1)
-
-        xs_foot = xs[x_min:x_max+1]
-        ys_foot = ys[y_min:y_max+1]
-
-        xx_f, yy_f = np.meshgrid(xs_foot, ys_foot)
-
-        ax.scatter(
-            xx_f.flatten(),
-            yy_f.flatten(),
-            marker="s",
-            s=40,
-            facecolors="none",
-            edgecolors="yellow",
-            linewidths=1,
-            label="3x3 footprint",
-            zorder=8,
-        )
-
     # best cell
     yyb, xxb = np.where(best_mask)
     ax.scatter(
