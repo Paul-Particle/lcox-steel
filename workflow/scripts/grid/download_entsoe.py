@@ -9,7 +9,6 @@ To force a full re-fetch, delete the relevant month directories and re-run.
 import logging
 import os
 import time
-from pathlib import Path
 from typing import Callable
 
 import entsoe
