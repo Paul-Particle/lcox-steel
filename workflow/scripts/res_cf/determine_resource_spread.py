@@ -261,14 +261,13 @@ def main():
             })
 
             log.info(
-                "%s %s: national_mean=%.4f spatial_mean=%.4f p95=%.4f",
-                iso2, tech, nat_mean, spatial_mean, p95,
+                f"{iso2} {tech}: national_mean={nat_mean:.4f} spatial_mean={spatial_mean:.4f} p95={p95:.4f}"
             )
 
     out = pd.DataFrame(rows)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     out.to_parquet(OUT_PATH, index=False)
-    log.info("wrote %s", OUT_PATH)
+    log.info(f"wrote {OUT_PATH}")
 
 if __name__ == "__main__":
     main()

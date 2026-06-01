@@ -91,7 +91,7 @@ def main() -> None:
 
     backup = _OUTPUT_PATH.with_name(_OUTPUT_PATH.stem + "_backup" + _OUTPUT_PATH.suffix)
     if backup.exists():
-        log.info("backup cutout found at %s — copying to %s (skipping CDS)", backup, _OUTPUT_PATH)
+        log.info(f"backup cutout found at {backup} — copying to {_OUTPUT_PATH} (skipping CDS)")
         shutil.copy2(backup, _OUTPUT_PATH)
         return
 
@@ -105,13 +105,13 @@ def main() -> None:
 
     cutout = atlite.Cutout(**kwargs)
     log.info(
-        "starting CDS request: x=%s y=%s time=%s monthly=%s coarse=%s → %s",
-        kwargs["x"], kwargs["y"], time_range, _MONTHLY_REQUESTS, _COARSE, _OUTPUT_PATH,
+        f"starting CDS request: x={kwargs['x']} y={kwargs['y']} time={time_range} "
+        f"monthly={_MONTHLY_REQUESTS} coarse={_COARSE} → {_OUTPUT_PATH}"
     )
     # TODO: when CDS polling lands, spawn a background thread that calls
     # cdsapi `get_jobs()` every N seconds and `log.info`s status — see TODO.md.
     cutout.prepare(tmpdir=str(_ATLITE_CACHE), monthly_requests=_MONTHLY_REQUESTS)
-    log.info("CDS request complete: %s", _OUTPUT_PATH)
+    log.info(f"CDS request complete: {_OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

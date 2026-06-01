@@ -418,11 +418,11 @@ def greedy_screen(
     for anchor in ["wind_onshore", "wind_offshore", "solar"]:
         result = _find_best_triplet(anchor)
         if result is None:
-            log.info("anchor=%s: no valid triplet found", anchor)
+            log.info(f"anchor={anchor}: no valid triplet found")
             continue
         bi, bj, bk, bs = result
         anchor_results.append((bi, bj, bk, bs))
-        log.info("anchor=%s: score=%.4f", anchor, bs)
+        log.info(f"anchor={anchor}: score={bs:.4f}")
 
     if not anchor_results:
         return []
@@ -486,7 +486,7 @@ def save_average_profiles(cc: str, year: int, avg_out: Path | None = None) -> No
         raise FileNotFoundError(f"National mean CF file not found: {src}")
     df = pd.read_parquet(src)
     df.to_parquet(dst, index=False)
-    log.info("saved average profiles → %s", dst.name)
+    log.info(f"saved average profiles → {dst.name}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -504,12 +504,12 @@ def main() -> None:
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
     countries = [sm_country] if sm_country is not None else [c.upper() for c in cfg["countries"]]
-    log.info("countries: %s", countries)
+    log.info(f"countries: {countries}")
     for country in countries:
         current_country = country.upper()
         cc = country.lower()
 
-        log.info("country=%s start", current_country)
+        log.info(f"country={current_country} start")
 
         save_average_profiles(cc, cfg["year"], avg_out=sm_avg_out)
 
@@ -517,7 +517,7 @@ def main() -> None:
         cf_grids = {}
         for tech in TECHS:
             cf_grids[tech] = build_cf_year(current_country, tech)
-            log.info("tech=%s CF grid built", tech)
+            log.info(f"tech={tech} CF grid built")
 
         log.info("identifying candidate cells")
         candidates   = {}
@@ -535,7 +535,7 @@ def main() -> None:
 
             ys, xs = np.where(valid)
             n      = len(ys)
-            log.info("tech=%s: %d candidate cells", tech, n)
+            log.info(f"tech={tech}: {n} candidate cells")
 
             n_timesteps = int(cf.sizes["time"])
             ts_matrix   = np.zeros((n_timesteps, n), dtype=np.float32)
@@ -558,7 +558,7 @@ def main() -> None:
         lons_sol, lats_sol = coord_arrays["solar"]
 
         n_triplets = len(ys_on) * len(ys_off) * len(ys_sol)
-        log.info("total candidate triplets: %d", n_triplets)
+        log.info(f"total candidate triplets: {n_triplets}")
 
         screen_kwargs = dict(
             ys_on=ys_on,   xs_on=xs_on,   lons_on=lons_on,   lats_on=lats_on,
@@ -584,9 +584,8 @@ def main() -> None:
 
         if not top_records:
             log.warning(
-                "no valid triplets found for %s. "
-                "Try increasing max_radius_km (currently %s km).",
-                current_country, cfg['max_radius_km'],
+                f"no valid triplets found for {current_country}. "
+                f"Try increasing max_radius_km (currently {cfg['max_radius_km']} km)."
             )
             continue
 
@@ -597,13 +596,11 @@ def main() -> None:
         out_path = sm_top_out if sm_top_out is not None else OUTDIR / f"{cc}_complementarity_top{cfg['top_n']}_{cfg['year']}.parquet"
         df.to_parquet(out_path, index=False)
 
-        log.info("top %d complementary triplets → %s", len(df), out_path.name)
+        log.info(f"top {len(df)} complementary triplets → {out_path.name}")
+        best = df.iloc[0]
         log.info(
-            "best score=%.4f coincidence=%.3f mean_corr=%.3f dist_km=%.1f",
-            df['score'].iloc[0],
-            df['coincidence'].iloc[0],
-            df['mean_corr'].iloc[0],
-            df['dist_km'].iloc[0],
+            f"best score={best['score']:.4f} coincidence={best['coincidence']:.3f} "
+            f"mean_corr={best['mean_corr']:.3f} dist_km={best['dist_km']:.1f}"
         )
 
 

@@ -94,7 +94,7 @@ def retrieve(snakemake) -> None:
     for ym in months:
         if area_month_in_cache(cached, area, ym):
             continue
-        log.info("%s/%s/%s: processing", area, ym, variant)
+        log.info(f"{area}/{ym}/{variant}: processing")
         if variant == "dayahead":
             frame = _process_dayahead_month(area, ym, cache_dir, eur_per_aud)
         else:
@@ -108,7 +108,7 @@ def retrieve(snakemake) -> None:
         cached = cached[~cached.index.duplicated(keep="last")].sort_index()
         processed_cache_dir.mkdir(parents=True, exist_ok=True)
         cached.to_parquet(processed_cache_path, index=True)
-        log.info("updated processed cache: %s (%d rows)", processed_cache_path, len(cached))
+        log.info(f"updated processed cache: {processed_cache_path} ({len(cached)} rows)")
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:59")
     out_df = cached[area].loc[window]
@@ -117,7 +117,7 @@ def retrieve(snakemake) -> None:
     out_path = Path(snakemake.output[0])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_parquet(out_path, index=True)
-    log.info("wrote %s (%d rows × %d cols)", out_path, len(out_df), out_df.shape[1])
+    log.info(f"wrote {out_path} ({len(out_df)} rows × {out_df.shape[1]} cols)")
 
 
 if __name__ == "__main__":

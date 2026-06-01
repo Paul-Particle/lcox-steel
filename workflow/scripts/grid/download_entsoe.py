@@ -163,8 +163,7 @@ def download_with_retry(
                 raise
             backoff = 2 ** attempt
             log.warning(
-                "attempt %d/%d failed (%r); retry in %ds",
-                attempt, max_attempts, e, backoff,
+                f"attempt {attempt}/{max_attempts} failed ({e!r}); retry in {backoff}s"
             )
             time.sleep(backoff)
 

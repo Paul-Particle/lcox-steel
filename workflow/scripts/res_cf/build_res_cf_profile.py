@@ -132,7 +132,7 @@ def main() -> None:
     # Column name = tech wildcard, so downstream scripts (solve_network)
     # can read the tech key straight off the parquet without a separate param.
     series.rename(_TECH).to_frame().to_parquet(_OUT, index=True)
-    log.info("wrote %s (%d rows, mean=%.3f)", _OUT, len(series), series.mean())
+    log.info(f"wrote {_OUT} ({len(series)} rows, mean={series.mean():.3f})")
 
 
 if __name__ == "__main__":

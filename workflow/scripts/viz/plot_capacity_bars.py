@@ -221,7 +221,7 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.write_image(out, scale=2)
     fig.write_html(out.with_suffix(".html"), config=PLOTLY_CONFIG, include_plotlyjs="cdn")
-    log.info("saved %s (+ .html)", out)
+    log.info(f"saved {out} (+ .html)")
 
 
 def main() -> None:

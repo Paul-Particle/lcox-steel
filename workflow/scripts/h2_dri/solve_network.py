@@ -80,18 +80,18 @@ def main() -> None:
     base_path = Path(snakemake.input.assumptions_base)
 
     assumptions = load_assumptions(base_path, overlay_path)
+    overlay_name = overlay_path.name if overlay_path else "none"
     log.info(
-        "building network for project=%s scenario=%s techs=%s (overlay=%s)",
-        project, scenario, list(cf_timeseries.columns),
-        overlay_path.name if overlay_path else "none",
+        f"building network for project={project} scenario={scenario} "
+        f"techs={list(cf_timeseries.columns)} (overlay={overlay_name})"
     )
     n = build_network(assumptions, cf_timeseries, price_series)
-    log.info("optimising with HiGHS (snapshots=%d)", len(n.snapshots))
+    log.info(f"optimising with HiGHS (snapshots={len(n.snapshots)})")
     n.optimize(solver_name="highs")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     n.export_to_netcdf(out_path)
-    log.info("network saved to %s", out_path)
+    log.info(f"network saved to {out_path}")
 
 
 if __name__ == "__main__":

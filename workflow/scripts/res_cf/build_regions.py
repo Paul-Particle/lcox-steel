@@ -77,7 +77,7 @@ def main() -> None:
     out = gpd.GeoDataFrame({"region": [_REGION], "geometry": [geom]}, crs=4326)
     out["geometry"] = out["geometry"].buffer(0)
     out.to_parquet(_OUT)
-    log.info("wrote %s (%s → %s)", _OUT, _CF_AREA, _REGION)
+    log.info(f"wrote {_OUT} ({_CF_AREA} → {_REGION})")
 
 
 if __name__ == "__main__":

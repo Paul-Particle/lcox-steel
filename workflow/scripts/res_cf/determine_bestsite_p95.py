@@ -261,8 +261,7 @@ def main() -> None:
             best_mean = float(ts.mean())
 
             log.info(
-                "%s | %s: national_mean=%.3f best_mean=%.3f",
-                country_upper, tech, nat_mean, best_mean,
+                f"{country_upper} | {tech}: national_mean={nat_mean:.3f} best_mean={best_mean:.3f}"
             )
 
             results[tech] = ts
@@ -278,7 +277,7 @@ def main() -> None:
         out_p95 = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95.parquet"
         df_p95.to_parquet(out_p95, index=False)
 
-        log.info("%s: wrote %s", country_upper, out_p95.name)
+        log.info(f"{country_upper}: wrote {out_p95.name}")
 
 
 

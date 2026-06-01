@@ -126,7 +126,7 @@ def main() -> None:
     # networks may contain duplicates (collect fans out per tech row); dedupe
     # while preserving order so each scenario appears once.
     network_paths = list(dict.fromkeys(snakemake.input.networks))
-    log.info("compiling report for project=%s (%d scenarios)", project_name, len(network_paths))
+    log.info(f"compiling report for project={project_name} ({len(network_paths)} scenarios)")
     for nc_path in network_paths:
         nc_path = Path(nc_path)
         scenario_name = nc_path.stem
@@ -139,7 +139,7 @@ def main() -> None:
     df = pd.DataFrame(rows)
     df[df.select_dtypes("number").columns] = df.select_dtypes("number").round(2)
     df.to_csv(out_path, index=False)
-    log.info("wrote %s (%d rows)", out_path, len(rows))
+    log.info(f"wrote {out_path} ({len(rows)} rows)")
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@ def main() -> None:
         raise FileNotFoundError(f"Land regions file not found: {_LAND_REGIONS}")
 
     _OUT.parent.mkdir(parents=True, exist_ok=True)
-    log.info("building offshore region for %s (ISO3=%s, max %.0f km)", _REGION, _ISO3, _OFFSHORE_MAX_KM)
+    log.info(f"building offshore region for {_REGION} (ISO3={_ISO3}, max {_OFFSHORE_MAX_KM:.0f} km)")
 
     offshore_zone = gpd.read_file(str(_OFFSHORE_ZONE_ZIP)).to_crs(4326)
     gdf = offshore_zone.loc[
@@ -76,7 +76,7 @@ def main() -> None:
 
     result.to_parquet(_OUT)
     area_km2 = result.to_crs(6933)["geometry"].area.iloc[0] / 1e6
-    log.info("wrote %s (%s: %.0f km²)", _OUT, _REGION, area_km2)
+    log.info(f"wrote {_OUT} ({_REGION}: {area_km2:.0f} km²)")
 
 
 if __name__ == "__main__":
