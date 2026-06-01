@@ -13,7 +13,7 @@ projects_df = pd.read_csv(
 )
 
 
-include: "rules/_polyfills.smk"
+include: "rules/_optional_shim.smk"
 include: "rules/grid.smk"
 include: "rules/res_cf.smk"
 include: "rules/h2_dri.smk"

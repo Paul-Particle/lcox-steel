@@ -9,7 +9,7 @@ lcox-steel/
 ├── workflow/               # Snakemake workflow (standard layout)
 │   ├── Snakefile           # one configfile + sys.path + includes + rule all
 │   ├── rules/
-│   │   ├── _polyfills.smk  # local stand-ins for snakemake helpers not shipped yet (optional())
+│   │   ├── _optional_shim.smk  # local stand-in for snakemake's optional() helper (not shipped yet)
 │   │   ├── grid.smk        # ENTSO-E + NEM download/process rules
 │   │   ├── res_cf.smk      # atlite CF pipeline (shapes → cutout → CF timeseries)
 │   │   ├── h2_dri.smk      # PyPSA optimisation rule
