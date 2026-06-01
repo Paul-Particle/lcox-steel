@@ -12,6 +12,16 @@ projects_df = pd.read_csv(
     "config/projects.csv", dtype={"start_date": str, "end_date": str}
 )
 
+# (project, scenario, tech) is the natural row key in projects.csv; two rows
+# with the same triple would silently merge in the DAG and confuse downstream
+# lookup() calls, so reject the file at load time.
+_key = ["project", "scenario", "tech"]
+if projects_df.duplicated(subset=_key).any():
+    dups = projects_df[projects_df.duplicated(subset=_key, keep=False)][_key]
+    raise ValueError(f"projects.csv has duplicate (project, scenario, tech) rows:\n{dups}")
+
+PROJECTS = projects_df["project"].unique()
+
 
 include: "rules/_optional_shim.smk"
 include: "rules/grid.smk"
@@ -24,15 +34,9 @@ rule all:
     default_target: True
     input:
         # One report per project.
-        expand(
-            "results/report_{project}.csv",
-            project=projects_df["project"].unique().tolist(),
-        ),
+        expand("results/report_{project}.csv", project=PROJECTS),
         # One scenario-comparison bar chart per project.
-        expand(
-            "results/plots/capacity_bars/{project}.png",
-            project=projects_df["project"].unique().tolist(),
-        ),
+        expand("results/plots/capacity_bars/{project}.png", project=PROJECTS),
         # Full ENTSO-E dataset (grid variant=full) for the German archive — a
         # top-level target for now until something downstream consumes it.
         "resources/entsoe/DE_LU_grid_full_20230101_20231231.parquet",
