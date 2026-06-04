@@ -168,7 +168,7 @@ This chains: `build_regions` → `build_offshore_regions` → `download_cutout` 
 Snakemake runs this automatically as part of `rule all`. For ad-hoc runs target a single network:
 
 ```bash
-snakemake results/DE_2023_baseline/dedicated_res.nc --cores 4
+snakemake results/DE-2023-baseline/dedicated-res.nc --cores 4
 ```
 
 Results are written to `results/<project>/<scenario>.nc` (full PyPSA network); the per-project
@@ -180,6 +180,13 @@ to change techno-economic defaults. To override a single scenario's assumptions,
 `config/assumptions_<project>_<scenario>.yaml` with just the keys you want to bump — the
 script deep-merges it on top of the base. The overlay is picked up by file presence (no
 column to edit in `projects.csv`).
+
+Name projects and scenarios with dashes between words (`VIC-2025-solar-ew`,
+`high-el-cost`), not underscores. Underscore is the field separator in the
+filenames these names compose into (e.g. `assumptions_<project>_<scenario>.yaml`),
+so reserving it for that keeps the boundaries legible at a glance. The `area`
+column is the exception — it keeps underscores, since official bidding-zone codes
+use them (`DE_LU`).
 
 ## Data formats
 
