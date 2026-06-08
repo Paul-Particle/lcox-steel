@@ -1,5 +1,4 @@
-"""
-Build offshore region geometry from EEZ shapefile for one area.
+"""Build offshore region geometry from EEZ shapefile for one area.
 
 Takes the country's EEZ polygon, subtracts the onshore land, and clips to
 a buffer of offshore_max_distance_km km around the coast — the area where
@@ -41,6 +40,7 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
 
 
 def main() -> None:
+    """Clip the area's EEZ to a near-shore band minus land, and write the offshore parquet."""
     if not _OFFSHORE_ZONE_ZIP.exists():
         raise FileNotFoundError(f"Offshore zone ZIP not found: {_OFFSHORE_ZONE_ZIP}")
     if not _LAND_REGIONS.exists():

@@ -64,6 +64,7 @@ PV_PANEL = "CSi"
 PV_ORIENTATION = "latitude_optimal"
 
 def get_national_mean_from_csv(iso2: str, tech: str) -> float:
+    """Return the national-mean CF for (iso2, tech) from the per-country parquet."""
     path = RES_CF / f"{iso2.lower()}_cf_2023.parquet"
     df = pd.read_parquet(path)
 
@@ -76,9 +77,9 @@ def get_national_mean_from_csv(iso2: str, tech: str) -> float:
     return float(df[col_map[tech.strip()]].mean())
 
 def land_mask(cell_mean):
-    """
-    Returns boolean mask of land cells with the same dims/coords as cell_mean.
-    """
+    """Return a boolean land mask matching `cell_mean`'s dims/coords (Natural Earth 110m land)."""
+    # --- Previous docstring (kept for reference) below ---
+    # Returns boolean mask of land cells with the same dims/coords as cell_mean.
     land = regionmask.defined_regions.natural_earth_v5_0_0.land_110
 
     xs = cell_mean.coords["x"].values
@@ -109,12 +110,14 @@ def load_offshore_geometry(iso2: str):
 
 
 def cutout_path(iso2: str, seg: str) -> Path:
+    """Return the quarterly cutout path for (iso2, segment); YEAR is folded in from module scope."""
     # WIP NOTE: different signature from _helpers.cutout_path(country, year, quarter)
     # — this local version folds YEAR in from module-level rather than as a parameter.
     return CUTOUT_DIR / f"{iso2.lower()}_{YEAR}_{seg}.nc"
 
 
 def compute_cf_grid(cutout: atlite.Cutout, tech: str) -> xr.DataArray:
+    """Return the per-cell CF grid (time, y, x) for `tech` from the cutout."""
     if tech == "wind_onshore":
         cf = cutout.wind(
             turbine=WIND_TURBINE,
@@ -145,6 +148,7 @@ def compute_cf_grid(cutout: atlite.Cutout, tech: str) -> xr.DataArray:
     return cf
 
 def build_annual_mean_grid(iso2: str, tech: str) -> xr.DataArray:
+    """Return the annual-mean per-cell CF grid (y, x) by concatenating the quarterly cutouts."""
     parts = []
     for seg in COUNTRIES[iso2]:
         p = cutout_path(iso2, seg)
@@ -163,6 +167,7 @@ def geometry_for_tech(iso2: str, tech: str):
 
 
 def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
+    """Return a boolean grid marking cells whose centre lies within `geom`."""
     xs = cell_mean.coords["x"].values
     ys = cell_mean.coords["y"].values
     xx, yy = np.meshgrid(xs, ys)
@@ -172,6 +177,7 @@ def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
 
 
 def best_and_p95_masks(cell_mean: xr.DataArray, geom):
+    """Return (p95_mask, best_mask, p95_threshold) for the in-geometry cells of `cell_mean`."""
     inside = mask_cells_inside(cell_mean, geom)
     vals = cell_mean.values.copy()
 
@@ -196,6 +202,7 @@ def best_and_p95_masks(cell_mean: xr.DataArray, geom):
     return p95_mask, best_mask, p95_threshold
 
 def plot_bestsite_map(iso2: str, tech: str) -> None:
+    """Plot the annual-mean CF map for (iso2, tech), marking the best and P95 cells; save PNG."""
     geom = geometry_for_tech(iso2, tech)
     cell_mean = build_annual_mean_grid(iso2, tech)
 
@@ -288,6 +295,7 @@ def plot_bestsite_map(iso2: str, tech: str) -> None:
     log.info(f"wrote {out}")
 
 def main():
+    """Plot best-site maps for every country × tech."""
     for iso2 in COUNTRIES:
         for tech in TECHS:
             plot_bestsite_map(iso2, tech)

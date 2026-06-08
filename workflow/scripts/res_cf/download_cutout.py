@@ -1,5 +1,4 @@
-"""
-Create one Atlite ERA5 cutout for a given area and date range.
+"""Create one Atlite ERA5 cutout for a given area and date range.
 
 Output: cutouts/{cf_area}_{start_date}_{end_date}.nc
 
@@ -65,6 +64,11 @@ def _iso(yyyymmdd: str) -> str:
 
 
 def get_bounds(pad: float) -> tuple[slice, slice]:
+    """Return padded (x, y) coordinate slices bounding the area's geometry.
+
+    Loads the country geometry from Natural Earth (optionally restricted to
+    `_MAINLAND_BBOX`) and pads its bounds by `pad` degrees for the ERA5 request.
+    """
     world = gpd.read_file(str(_NE_ZIP)).to_crs(4326)
     for col in ["ADM0_A3", "SOV_A3", "ISO_A3"]:
         if col in world.columns:
@@ -86,6 +90,7 @@ def get_bounds(pad: float) -> tuple[slice, slice]:
 
 
 def main() -> None:
+    """Download (or restore from a sibling `_backup.nc`) the ERA5 cutout for the area+dates."""
     _OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     _ATLITE_CACHE.mkdir(parents=True, exist_ok=True)
 

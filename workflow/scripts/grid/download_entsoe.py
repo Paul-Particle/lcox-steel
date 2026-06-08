@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 
 
 def get_entsoe_client() -> entsoe.EntsoePandasClient:
+    """Build an authenticated ENTSO-E client from ENTSOE_API_KEY (loaded via .env)."""
     load_dotenv()
     api_key = os.environ.get("ENTSOE_API_KEY")
     if not api_key:
@@ -32,24 +33,28 @@ def get_entsoe_client() -> entsoe.EntsoePandasClient:
 # ── Per-data_type fetchers (return DataFrame or raise) ────────────────────────
 
 def download_prices(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    """Fetch day-ahead prices for one area as a single-column (€/MWh) frame."""
     data = client.query_day_ahead_prices(area, start=start, end=end)
     data.name = area
     return data.to_frame()
 
 
 def download_load_forecast(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    """Fetch the day-ahead load forecast for one area (single column, MW)."""
     data = client.query_load_forecast(area, start=start, end=end)
     data.columns = [area]
     return data
 
 
 def download_load_actual(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    """Fetch actual (realised) load for one area (single column, MW)."""
     data = client.query_load(area, start=start, end=end)
     data.columns = [area]
     return data
 
 
 def download_res(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    """Fetch the wind/solar forecast, renamed to solar/wind_onshore/wind_offshore_forecast."""
     data = client.query_wind_and_solar_forecast(area, start=start, end=end)
     res_names = {
         "Solar": "solar_forecast",
@@ -61,6 +66,12 @@ def download_res(client: entsoe.EntsoePandasClient, area: str, start: pd.Timesta
 
 
 def download_generation(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    """Fetch per-carrier generation, renamed to short keys with consumption sign-flipped.
+
+    ENTSO-E's verbose carrier labels are mapped to short keys (e.g. 'Fossil Gas'
+    → 'gas'); 'Actual Consumption' columns are negated and suffixed `_cons` so
+    storage/pumped-hydro consumption reads as negative generation.
+    """
     data = client.query_generation(area, start=start, end=end)
     if data.columns.nlevels == 2:
         data.columns = ["_".join(col) for col in data.columns]
@@ -100,6 +111,7 @@ def download_generation(client: entsoe.EntsoePandasClient, area: str, start: pd.
 
 
 def download_crossborder(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    """Fetch physical cross-border flows as signed columns (imports +, exports −)."""
     parts = []
     data_in = client.query_physical_crossborder_allborders(
         area, start=start, end=end, export=False, per_hour=False
@@ -129,13 +141,11 @@ DOWNLOADERS = {
 # ── Month iteration & retry helpers ──────────────────────────────────────────
 
 def iter_months(start_date_str: str, end_date_str: str):
-    """Yield (YYYY-MM, month_start_ts, next_month_start_ts) for each month that
-    overlaps [start, end].
+    """Yield (YYYY-MM, month_start, next_month_start) for every month overlapping [start, end].
 
-    The query end is the *next* month's start: ENTSO-E treats the end as
-    exclusive, so this fetches the full final day of each month (using MonthEnd
-    landed on the last day at 00:00, dropping the last day). Starting the range
-    at the first of start's month keeps a mid-month start_date from skipping it.
+    ENTSO-E treats the query end as exclusive, so each month is bounded by the
+    *next* month's start to capture its full final day. The range starts at the
+    first of start_date's month so a mid-month start_date isn't skipped.
     """
     start = pd.to_datetime(start_date_str, format="%Y%m%d")
     end = pd.to_datetime(end_date_str, format="%Y%m%d")
@@ -155,6 +165,7 @@ def download_with_retry(
     end: pd.Timestamp,
     max_attempts: int = 3,
 ) -> pd.DataFrame:
+    """Call `fetcher`, retrying up to max_attempts with exponential backoff."""
     for attempt in range(1, max_attempts + 1):
         try:
             return fetcher(client, area, start=start, end=end)

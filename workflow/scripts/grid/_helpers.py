@@ -27,6 +27,7 @@ def to_utc_naive(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def area_month_in_cache(cached: pd.DataFrame | None, area: str, ym: str) -> bool:
+    """Return True if `cached` already holds any data for (area, month `ym`)."""
     if cached is None or area not in cached.columns.get_level_values(0):
         return False
     area_data = cached[area].dropna(how="all")

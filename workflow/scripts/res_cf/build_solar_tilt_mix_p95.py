@@ -1,5 +1,4 @@
-"""
-Build N solar CF time series spanning the east–west orientation trade-off.
+"""Build N solar CF time series spanning the east–west orientation trade-off.
 
 For a southern-hemisphere site, panels can be oriented anywhere from due west
 (azimuth 270°) through north (0°, maximum annual yield) to due east (90°,
@@ -75,6 +74,7 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
 # ---------------------------------------------------------------------------
 
 def _get_region_geometry(path: Path, region: str):
+    """Return the geometry of `region` from the GeoParquet at `path` (raises if missing)."""
     gdf = gpd.read_parquet(path).to_crs(4326)
     row = gdf.loc[gdf["region"] == region]
     if row.empty:
@@ -83,6 +83,7 @@ def _get_region_geometry(path: Path, region: str):
 
 
 def _mask_cells_inside(cell_mean, geom) -> np.ndarray:
+    """Return a boolean grid marking cutout cells whose centre lies within `geom`."""
     xs = cell_mean.coords["x"].values
     ys = cell_mean.coords["y"].values
     xx, yy = np.meshgrid(xs, ys)
@@ -92,7 +93,9 @@ def _mask_cells_inside(cell_mean, geom) -> np.ndarray:
 
 
 def _find_p95_cell(cf_grid, geom) -> tuple[int, int]:
-    """Return (y_idx, x_idx) of the cell closest to the P95 annual-mean CF."""
+    """Return the (y, x) index of the in-region cell closest to the P95 annual-mean CF."""
+    # --- Previous docstring (kept for reference) below ---
+    # Return (y_idx, x_idx) of the cell closest to the P95 annual-mean CF.
     cell_mean = cf_grid.mean("time")
     inside = _mask_cells_inside(cell_mean, geom)
     vals = np.where(inside, cell_mean.values, np.nan)
@@ -117,16 +120,22 @@ def _annual_poa(
     slope_deg: float,
     azimuth_deg: float,
 ) -> float:
-    """
-    Annual sum of plane-of-array irradiance using the Hay-Davies model.
+    """Annual sum of plane-of-array irradiance via the Hay-Davies model.
 
     Replicates atlite's TiltedDirectIrrad + TiltedDiffuseIrrad + TiltedGroundIrrad
-    (see atlite.pv.irradiation) on pre-extracted single-cell numpy arrays.
-
-    All solar position angles are in radians (as stored in the ERA5 cutout).
-    Slope and azimuth are in degrees (converted here, matching atlite's
-    make_constant convention).
+    (atlite.pv.irradiation) on pre-extracted single-cell numpy arrays. Solar
+    position angles are in radians (as stored in the ERA5 cutout); slope and
+    azimuth are in degrees, converted here.
     """
+    # --- Previous docstring (kept for reference) below ---
+    # Annual sum of plane-of-array irradiance using the Hay-Davies model.
+    #
+    # Replicates atlite's TiltedDirectIrrad + TiltedDiffuseIrrad + TiltedGroundIrrad
+    # (see atlite.pv.irradiation) on pre-extracted single-cell numpy arrays.
+    #
+    # All solar position angles are in radians (as stored in the ERA5 cutout).
+    # Slope and azimuth are in degrees (converted here, matching atlite's
+    # make_constant convention).
     slope = np.radians(slope_deg)
     azim  = np.radians(azimuth_deg)
 
@@ -164,7 +173,9 @@ def _annual_poa(
 def _optimal_slope(
     direct, diffuse, influx_toa, albedo, sun_alt_rad, sun_az_rad, azimuth_deg
 ) -> int:
-    """Integer slope (0–90°) maximising annual POA at the given azimuth."""
+    """Return the integer slope (0–90°) maximising annual POA at the given azimuth."""
+    # --- Previous docstring (kept for reference) below ---
+    # Integer slope (0–90°) maximising annual POA at the given azimuth.
     slopes = np.arange(0, 91, _SLOPE_STEP)
     poa = np.array([
         _annual_poa(direct, diffuse, influx_toa, albedo,
@@ -179,6 +190,12 @@ def _optimal_slope(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    """Sweep east–west solar orientations at the P95 cell and write per-azimuth CF columns.
+
+    Finds the P95 latitude-optimal cell, then for N azimuths (west→north→east)
+    picks the POA-maximising slope and computes the hourly CF, writing one
+    `solar_az{az}` column per orientation.
+    """
     _OUT.parent.mkdir(parents=True, exist_ok=True)
 
     cutout = atlite.Cutout(str(_CUTOUT_PATH))

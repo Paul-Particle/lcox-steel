@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 
 
 def plot_best_triplet(country: str, year: int) -> None:
+    """Plot a 2-week sample of the best complementarity triplet's CF series for `country`."""
     cc = country.lower()
     comp_path = CF_DIR / f"{cc}_complementarity_top10_{year}.parquet"
     if not comp_path.exists():

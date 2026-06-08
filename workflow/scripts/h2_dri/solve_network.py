@@ -1,9 +1,7 @@
-"""
-Snakemake entrypoint: assemble inputs, build a PyPSA network, solve it,
-write the result to netcdf.
+"""Snakemake entrypoint: assemble inputs, build a PyPSA network, solve it, write netCDF.
 
-The network construction itself lives in `build_network.py` (importable
-in isolation). This file is the IO + orchestration shell driven by the
+The network construction itself lives in `build_network.py` (importable in
+isolation). This file is the IO + orchestration shell driven by the
 `h2_dri_optimize` rule in `workflow/rules/h2_dri.smk`.
 """
 
@@ -28,6 +26,13 @@ log = logging.getLogger(__name__)
 
 
 def main() -> None:
+    """Assemble rule inputs, build and solve the network, export it to netCDF.
+
+    Classifies each tech-input parquet as a CF series (res_cf) or a grid price
+    (entsoe/nem) by its pipeline directory, concatenates CF columns into one
+    multi-tech frame, aligns the optional price series, merges base+overlay
+    assumptions, then builds, optimises (HiGHS), and writes the network.
+    """
     project  = snakemake.wildcards.project
     scenario = snakemake.wildcards.scenario
     out_path = Path(snakemake.output.network)

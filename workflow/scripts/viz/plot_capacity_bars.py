@@ -1,7 +1,6 @@
-"""
-Bar chart comparing scenario capacities across projects.
+"""Bar chart comparing scenario capacities across projects.
 
-Snakemake rule: plot_capacity_bars  (in viz.smk)
+Snakemake rule: plot_capacity_bars (in viz.smk).
 
 Shows per scenario:
   DRI H2 demand (MW LHV) · Electrolyser (MW) · H2 buffer (MW·days LHV)
@@ -67,6 +66,12 @@ def _wind_cols(df):
 
 
 def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Reshape a report DataFrame into per-scenario rows of plottable MW capacities.
+
+    Converts GW columns to MW, expands orientation-resolved solar columns (falling
+    back to a single `solar_mw` when none are present), and keeps the H2 buffer in
+    hours of DRI demand. Indexed by scenario label.
+    """
     solar_cols = _solar_cols(df)
     wind_cols  = _wind_cols(df)
     rows = []
@@ -155,6 +160,7 @@ def _single_bar(
     name: str,
     unit: str = "MW",
 ) -> go.Bar:
+    """Return a single Bar trace positioned at the given grouped-bar slot."""
     offset = _SLOTS[slot] * _BAR_WIDTH - _BAR_WIDTH / 2
     return go.Bar(
         x=plot_df.index,
@@ -168,6 +174,11 @@ def _single_bar(
 
 
 def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
+    """Assemble the grouped capacity bar chart and write it to PNG + HTML.
+
+    Lays out six slots left→right: solar (stacked by orientation), wind (stacked
+    by tech), battery, electrolyser, H2 buffer, and DRI H2 demand.
+    """
     solar_mw_cols = [c for c in plot_df.columns if c.startswith("solar_")]
     wind_mw_cols  = [c for c in plot_df.columns if c.startswith("wind_")]
 
@@ -225,6 +236,7 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
 
 
 def main() -> None:
+    """Load the project report and render its capacity bar chart."""
     df = load_report(_REPORT_PATH)
     project_label = ", ".join(dict.fromkeys(df["project"].astype(str)))
     plot(build_plot_data(df), _OUT, project_label)

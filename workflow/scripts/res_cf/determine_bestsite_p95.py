@@ -96,12 +96,14 @@ def extract_cell_timeseries(
     y_idx: int,
     x_idx: int,
 ) -> pd.Series:
+    """Extract one grid cell's hourly CF series (clipped to [0, 1], 'time'-indexed)."""
     s = cf_year.isel(y=y_idx, x=x_idx).to_pandas()
     s.index = pd.to_datetime(s.index)
     s.name = "cf"
     return s.clip(0, 1)
 
 def build_cf_year(country_upper: str, tech: str) -> xr.DataArray:
+    """Build the full-year per-cell CF grid for `tech` by concatenating the quarterly cutouts."""
     parts = []
 
     # NOTE (WIP): cutout_path() returns quarterly cutouts (e.g. de_2023_q1.nc) from
@@ -161,6 +163,7 @@ def geometry_for_tech(iso2: str, tech: str):  # returns shapely geometry
 
 
 def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
+    """Return a boolean grid marking cells whose centre lies within `geom`."""
     xs = cell_mean.coords["x"].values
     ys = cell_mean.coords["y"].values
     xx, yy = np.meshgrid(xs, ys)
@@ -170,14 +173,14 @@ def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
 
 
 def _find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
-    """
-    Identify the representative P95 grid cell based on annual mean CF.
-
-    Returns
-    -------
-    (y_idx, x_idx)
-        Index of the selected P95 grid cell.
-    """
+    """Return the (y, x) index of the in-region cell closest to the P95 annual-mean CF."""
+    # --- Previous docstring (kept for reference) below ---
+    # Identify the representative P95 grid cell based on annual mean CF.
+    #
+    # Returns
+    # -------
+    # (y_idx, x_idx)
+    #     Index of the selected P95 grid cell.
     cell_mean = cf_year.mean("time")
 
     inside = mask_cells_inside(cell_mean, geom)
@@ -197,6 +200,7 @@ def _find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
     return int(y_idx), int(x_idx)
 
 def _to_cf_series(x: xr.DataArray, name: str = "cf") -> pd.Series:
+    """Collapse an atlite result to one [0, 1] CF series on a 'time' index."""
     obj = x.to_pandas()
 
     if isinstance(obj, pd.DataFrame):
@@ -217,7 +221,7 @@ def _to_cf_series(x: xr.DataArray, name: str = "cf") -> pd.Series:
 
 
 def main() -> None:
-
+    """Extract best-site P95 hourly CF per tech for each country and write the parquet."""
 
     for cc in COUNTRIES:
         country_upper = cc.upper()
