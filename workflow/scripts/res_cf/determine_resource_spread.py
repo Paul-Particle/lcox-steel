@@ -82,10 +82,10 @@ WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
 WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
 
 def weighted_percentile(values: np.ndarray, weights: np.ndarray, q: float) -> float:
-    """
-    Area-weighted percentile of 'values' with nonnegative 'weights'.
-    q in [0, 1].
-    """
+    """Area-weighted percentile of `values` (nonnegative `weights`), q in [0, 1]."""
+    # --- Previous docstring (kept for reference) below ---
+    # Area-weighted percentile of 'values' with nonnegative 'weights'.
+    # q in [0, 1].
     if not (0.0 <= q <= 1.0):
         raise ValueError("q must be in [0, 1].")
 
@@ -122,10 +122,10 @@ def load_offshore_geometry(iso2: str):
     return row.geometry.iloc[0]
 
 def compute_cf_grid(cutout: atlite.Cutout, tech: str) -> xr.DataArray:
-    """
-    Returns CF grid with dims (time, y, x).
-    Keeps Atlite tech assumptions identical to national pipeline.
-    """
+    """Return the per-cell CF grid (time, y, x) for `tech`, matching the national pipeline's atlite assumptions."""
+    # --- Previous docstring (kept for reference) below ---
+    # Returns CF grid with dims (time, y, x).
+    # Keeps Atlite tech assumptions identical to national pipeline.
     if tech == "wind_onshore":
         cf = cutout.wind(turbine=WIND_ONSHORE_TURBINE, capacity_factor=True,
                          smooth=WIND_SMOOTH, add_cutout_windspeed=WIND_ADD_CUTOUT_WS)
@@ -150,10 +150,10 @@ def compute_cf_grid(cutout: atlite.Cutout, tech: str) -> xr.DataArray:
     return cf
 
 def build_weights(cutout: atlite.Cutout, country_geom) -> xr.DataArray:
-    """
-    Build per-cell weights = cell_area * in-country fraction.
-    Returns DataArray with dims (y, x).
-    """
+    """Build per-cell area weights (cell_area × in-country fraction) as a (y, x) DataArray."""
+    # --- Previous docstring (kept for reference) below ---
+    # Build per-cell weights = cell_area * in-country fraction.
+    # Returns DataArray with dims (y, x).
     # indicator matrix: fraction of each grid cell inside the country polygon
     # In some Atlite versions this returns a scipy sparse matrix (shape: (n_shapes, n_cells))
     indicator = cutout.indicatormatrix([country_geom]).tocsr()
@@ -188,6 +188,7 @@ def build_weights(cutout: atlite.Cutout, country_geom) -> xr.DataArray:
 
 
 def national_mean_from_csv(iso2: str, tech: str) -> float:
+    """Return the national-mean CF for (iso2, tech) from the per-country parquet, or NaN if absent."""
     p = NATIONAL_CF_DIR / f"{iso2.lower()}_cf_{YEAR}.parquet"
     if not p.exists():
         return np.nan
@@ -201,6 +202,7 @@ def national_mean_from_csv(iso2: str, tech: str) -> float:
     return float(df[col].mean())
 
 def main():
+    """Compute area-weighted spatial CF stats (P90/P95/max + uplift) per country/tech and write parquet."""
     rows = []
     regions_geom_cache = {}
 

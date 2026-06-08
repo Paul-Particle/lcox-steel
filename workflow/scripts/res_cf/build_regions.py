@@ -1,5 +1,4 @@
-"""
-Build a single country/region geometry for RES capacity factor extraction.
+"""Build a single country/region geometry for RES capacity factor extraction.
 
 Source: Natural Earth Admin 0 countries (1:110m).
 
@@ -42,6 +41,7 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
 
 
 def country_geometry(world: gpd.GeoDataFrame, iso_a3: str) -> BaseGeometry:
+    """Return the dissolved geometry for `iso_a3`, trying ADM0_A3/SOV_A3/ISO_A3 in turn."""
     for col in ["ADM0_A3", "SOV_A3", "ISO_A3"]:
         if col in world.columns:
             sel = world.loc[world[col] == iso_a3, "geometry"]
@@ -51,7 +51,12 @@ def country_geometry(world: gpd.GeoDataFrame, iso_a3: str) -> BaseGeometry:
 
 
 def restrict_to_bbox(geom: BaseGeometry, bbox: list[float]) -> BaseGeometry:
-    """Keep only polygon parts whose centroid falls in [lon_min, lon_max, lat_min, lat_max]."""
+    """Return only the polygon parts whose centroid falls inside `bbox`.
+
+    `bbox` is [lon_min, lon_max, lat_min, lat_max]; raises if nothing remains.
+    """
+    # --- Previous docstring (kept for reference) below ---
+    # Keep only polygon parts whose centroid falls in [lon_min, lon_max, lat_min, lat_max].
     lon_min, lon_max, lat_min, lat_max = bbox
     parts = list(geom.geoms) if geom.geom_type == "MultiPolygon" else [geom]
     kept = [
@@ -64,6 +69,7 @@ def restrict_to_bbox(geom: BaseGeometry, bbox: list[float]) -> BaseGeometry:
 
 
 def main() -> None:
+    """Load Natural Earth, extract the area geometry (optionally bbox-clipped), write parquet."""
     if not _NE_ZIP.exists():
         raise FileNotFoundError(f"Natural Earth shapefile ZIP not found: {_NE_ZIP}")
 

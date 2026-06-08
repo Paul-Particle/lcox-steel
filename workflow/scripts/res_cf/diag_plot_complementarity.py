@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 
 
 def plot_best_triplet(country: str, year: int) -> None:
+    """Plot a 2-week sample of the best complementarity triplet's CF series for `country`."""
     cc = country.lower()
     comp_path = CF_DIR / f"{cc}_complementarity_top10_{year}.parquet"
     if not comp_path.exists():
@@ -44,9 +45,9 @@ def plot_best_triplet(country: str, year: int) -> None:
     cf_off = build_cf_year(country, "wind_offshore")
     cf_sol = build_cf_year(country, "solar")
 
-    ts_on  = extract_cell_timeseries(cf_on,  int(best["onshore_y_idx"]),  int(best["onshore_x_idx"]),  "wind_onshore")
-    ts_off = extract_cell_timeseries(cf_off, int(best["offshore_y_idx"]), int(best["offshore_x_idx"]), "wind_offshore")
-    ts_sol = extract_cell_timeseries(cf_sol, int(best["solar_y_idx"]),    int(best["solar_x_idx"]),    "solar")
+    ts_on  = extract_cell_timeseries(cf_on,  int(best["onshore_y_idx"]),  int(best["onshore_x_idx"]))
+    ts_off = extract_cell_timeseries(cf_off, int(best["offshore_y_idx"]), int(best["offshore_x_idx"]))
+    ts_sol = extract_cell_timeseries(cf_sol, int(best["solar_y_idx"]),    int(best["solar_x_idx"]))
 
     hours = slice(0, 24 * 14)  # 2 weeks
     t = range(24 * 14)

@@ -53,15 +53,21 @@ _WIND_ADD_CUTOUT_WS = _WIND_CF.get("add_cutout_windspeed", True)
 
 
 def to_cf_series(x, name: str = "cf") -> pd.Series:
-    """Extract a single CF time series from an atlite result.
+    """Collapse an atlite result to one per-unit [0, 1] CF series on a 'time' index.
 
-    Atlite can return either a Series (single-region indicator matrix) or a
-    DataFrame (multi-column, one per region). The fallback chain handles both:
-      - already a Series → use directly
-      - single column → that column
-      - multiple columns, region present → pick the named region
-      - multiple columns, region absent → first column (shouldn't happen normally)
+    atlite returns a Series (single-region indicator matrix) or a DataFrame (one
+    column per region); the fallback picks the named region, else the sole/first
+    column.
     """
+    # --- Previous docstring (kept for reference) below ---
+    # Extract a single CF time series from an atlite result.
+    #
+    # Atlite can return either a Series (single-region indicator matrix) or a
+    # DataFrame (multi-column, one per region). The fallback chain handles both:
+    #   - already a Series → use directly
+    #   - single column → that column
+    #   - multiple columns, region present → pick the named region
+    #   - multiple columns, region absent → first column (shouldn't happen normally)
     obj = x.to_pandas()
     if not isinstance(obj, pd.DataFrame):
         s = obj
@@ -77,6 +83,7 @@ def to_cf_series(x, name: str = "cf") -> pd.Series:
 
 
 def get_region_gdf(path: Path) -> gpd.GeoDataFrame:
+    """Read a region GeoParquet and return just the `_REGION` row (raises if missing)."""
     gdf = gpd.read_parquet(path).to_crs(4326)
     gdf = gdf.loc[gdf["region"] == _REGION, ["region", "geometry"]].copy()
     if gdf.empty:
@@ -85,6 +92,12 @@ def get_region_gdf(path: Path) -> gpd.GeoDataFrame:
 
 
 def main() -> None:
+    """Compute the hourly CF series for the area+tech from the cutout and write parquet.
+
+    Dispatches on `_TECH` (solar / wind-onshore / wind-offshore), aggregates over
+    the region via atlite's indicator matrix, and names the output column by the
+    tech wildcard so downstream scripts read the key straight off the parquet.
+    """
     _OUT.parent.mkdir(parents=True, exist_ok=True)
     cutout = atlite.Cutout(str(_CUTOUT_PATH))
 

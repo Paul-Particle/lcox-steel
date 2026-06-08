@@ -1,8 +1,7 @@
-"""
-Plot mean annual CF as a spatial heatmap for a given cutout area and tech,
-with the region boundary as a white outline and the P95 bestsite marked.
+"""Plot mean annual CF as a spatial heatmap for one cutout area and tech.
 
-Snakemake rule: plot_cf_map  (in viz.smk)
+Draws the region boundary as a white outline and marks the P95 best-site cell.
+Snakemake rule: plot_cf_map (in viz.smk).
 """
 
 import logging
@@ -41,6 +40,7 @@ _OUT = Path(snakemake.output[0])
 
 
 def _mask_cells_inside(cell_mean, geom) -> np.ndarray:
+    """Return a boolean grid marking cutout cells whose centre lies within `geom`."""
     xs = cell_mean.coords["x"].values
     ys = cell_mean.coords["y"].values
     xx, yy = np.meshgrid(xs, ys)
@@ -50,6 +50,7 @@ def _mask_cells_inside(cell_mean, geom) -> np.ndarray:
 
 
 def _find_p95_cell(cf_grid, geom):
+    """Return the (y, x) index of the in-region cell closest to the P95 mean CF."""
     cell_mean = cf_grid.mean("time")
     inside = _mask_cells_inside(cell_mean, geom)
     vals = np.where(inside, cell_mean.values, np.nan)
@@ -85,6 +86,7 @@ def _boundary_segments(geom) -> tuple[list[float], list[float]]:
 
 
 def main() -> None:
+    """Build the CF grid, locate the P95 cell, and render the heatmap to PNG + HTML."""
     _OUT.parent.mkdir(parents=True, exist_ok=True)
 
     log.info(f"loading cutout {_CUTOUT_PATH}")

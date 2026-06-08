@@ -44,6 +44,7 @@ def _month_range_str(ym: str) -> tuple[str, str]:
 def _process_dayahead_month(
     area: str, ym: str, cache_dir: Path, eur_per_aud: float
 ) -> pd.DataFrame:
+    """Return one month of prices as a single hourly, UTC-naive `price` column (AUD→EUR)."""
     start_str, end_str = _month_range_str(ym)
     raw = DOWNLOADERS["price"](start_str, end_str, cache_dir, rebuild=False)
     raw = to_utc_naive(raw)
@@ -54,6 +55,11 @@ def _process_dayahead_month(
 def _process_full_month(
     area: str, ym: str, cache_dir: Path, eur_per_aud: float
 ) -> pd.DataFrame:
+    """Assemble one month's four tables into a wide per-area frame with derived columns.
+
+    Concatenates the price, load, generation, and cross-border tables, then adds
+    a `wind` aggregate and residual load (load − wind − solar) for the area.
+    """
     start_str, end_str = _month_range_str(ym)
     tables = {
         t: to_utc_naive(DOWNLOADERS[t](start_str, end_str, cache_dir, rebuild=False))
@@ -73,6 +79,12 @@ def _process_full_month(
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def retrieve(snakemake) -> None:
+    """Slice the requested (area, variant, date range) out of the processed cache.
+
+    Processes any months missing from the shared per-variant cache (NEMOSIS
+    manages its own raw download cache under data/nem_cache/), appends them, then
+    writes the requested window to the rule output.
+    """
     area        = snakemake.wildcards.area
     variant     = snakemake.wildcards.variant
     start_date  = snakemake.wildcards.start_date

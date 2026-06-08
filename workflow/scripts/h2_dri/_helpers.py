@@ -1,6 +1,4 @@
-"""
-Financial and sizing utilities for the DRI-hydrogen model.
-"""
+"""Financial and sizing utilities for the DRI-hydrogen model."""
 
 
 def annuity_factor(wacc: float, lifetime_years: float) -> float:
@@ -20,14 +18,11 @@ def dri_to_el_mw(
     efficiency_kwh_per_kg: float,
     availability_target: float,
 ) -> float:
-    """
-    Size the electrolyser (MW) required to supply a DRI plant continuously.
+    """Size the electrolyser (MW electricity input) to supply a DRI plant continuously.
 
-    efficiency_kwh_per_kg already encodes the electrolyser's MWh-electricity
-    per kg-H2 conversion, so the H2 LHV does not appear here.
-
-    availability_target = fraction of 8760 h the plant is assumed to run (e.g. 1.0).
-    Returns nameplate MW of electricity input capacity needed.
+    `efficiency_kwh_per_kg` already encodes MWh-electricity per kg-H2, so the H2
+    LHV doesn't appear here. `availability_target` is the fraction of 8760 h the
+    plant runs (e.g. 1.0). Returns the nameplate MW of electricity input needed.
     """
     if dri_mt_per_year <= 0:
         raise ValueError("dri_mt_per_year must be > 0")

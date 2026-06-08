@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 
 def download_price(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
-    """Downloads price data or gets it from the cached feather files or csv files if rebuild=True."""
+    """Fetch dispatch prices (AUD) as (region, 'price') columns; rebuild=True forces a re-pull."""
     log.info("fetching prices")
     prices = dynamic_data_compiler(
         start_time,
@@ -75,7 +75,11 @@ def _resolve_generator_excel(cache_dir: Path) -> Path:
 
 
 def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
-    """Downloads and processes generation data."""
+    """Aggregate per-unit SCADA generation (MW) into (region, carrier) columns.
+
+    Resolves each DUID to a carrier type via the AEMO registration list (see
+    `determine_gen_type`), then sums dispatch onto a (region, gen_type) MultiIndex.
+    """
     generator_file_path = _resolve_generator_excel(cache_dir)
 
     generator_info = pd.read_excel(
@@ -196,7 +200,7 @@ def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild
 
 
 def download_load(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
-    """Downloads and processes load data."""
+    """Fetch regional demand (TOTALDEMAND, MW) as (region, 'load') columns."""
     log.info("fetching load")
     load = dynamic_data_compiler(
         start_time,
@@ -220,7 +224,7 @@ def download_load(start_time: str, end_time: str, cache_dir: Path, rebuild: bool
 
 
 def download_crossborder(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
-    """Downloads and processes cross-border flow data.
+    """Fetch cross-border flows and reshape them to the ENTSO-E two-direction schema.
 
     NEM records one signed METEREDMWFLOW value per interconnector:
       positive → flow from `from_region` to `to_region`

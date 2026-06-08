@@ -1,5 +1,4 @@
-"""
-Compile per-scenario summaries into a single project-level report CSV.
+"""Compile per-scenario summaries into a single project-level report CSV.
 
 Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
 """
@@ -36,12 +35,11 @@ def _h2_produced_kg(n: pypsa.Network) -> float:
 
 
 def _annual_cost(n: pypsa.Network) -> float:
-    """
-    Annualized capital costs + variable grid import costs (scaled to annual).
+    """Annualised capital costs + variable grid-import costs (scaled to 8760 h).
 
-    Capital costs are always per-year (annualized CAPEX × p_nom_opt).
-    Variable costs from grid import are scaled from simulation period to 8760 h
-    so that LCOH is meaningful even when running with partial-year data.
+    Capital costs are already per-year (annualised CAPEX × p_nom_opt). Grid-import
+    variable costs are scaled from the simulation period up to 8760 h so LCOH stays
+    meaningful on partial-year runs.
     """
     t_hours = len(n.snapshots)
     annual_scale = 8760.0 / t_hours
@@ -120,6 +118,12 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
 
 
 def main() -> None:
+    """Load each scenario network for the project and write the combined report CSV.
+
+    Dedupes the netCDF inputs (collect fans out per tech row), extracts one summary
+    row per scenario via `extract_summary`, rounds numerics, and writes
+    results/report_<project>.csv.
+    """
     project_name = snakemake.wildcards.project
 
     rows = []

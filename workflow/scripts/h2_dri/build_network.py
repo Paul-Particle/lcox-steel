@@ -1,5 +1,4 @@
-"""
-PyPSA network construction for a DRI-hydrogen project scenario.
+"""PyPSA network construction for a DRI-hydrogen project scenario.
 
 Pure construction — no IO except YAML loading for assumptions, no snakemake,
 no solver call. Importable from a notebook for inspection; the snakemake
@@ -27,8 +26,10 @@ from common._constants import H2_LHV_KWH_PER_KG
 
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
-    """Recursively merge `overlay` into `base`. Overlay leaves replace base
-    leaves; dict branches are merged key-by-key. Neither input is mutated."""
+    """Recursively merge `overlay` into `base` (neither input mutated).
+
+    Overlay leaves replace base leaves; dict branches are merged key-by-key.
+    """
     out = dict(base)
     for k, v in overlay.items():
         if isinstance(v, dict) and isinstance(out.get(k), dict):
@@ -55,12 +56,12 @@ def build_network(
     cf_timeseries: pd.DataFrame,
     price_series: pd.Series | None = None,
 ) -> pypsa.Network:
-    """
-    Build (but do not solve) a PyPSA network.
+    """Build (but do not solve) the PyPSA network for one scenario.
 
-    assumptions: full assumptions dict (from snakemake.config)
-    cf_timeseries: DataFrame indexed by DatetimeIndex, columns = tech names in assumptions.res
-    price_series: optional hourly price Series (€/MWh), same index as cf_timeseries
+    `assumptions` is the merged base+overlay dict; `cf_timeseries` is indexed by
+    snapshot with one column per RES tech (names matching keys in `assumptions.res`);
+    `price_series` is an optional hourly €/MWh grid price on the same index, which
+    adds a grid-import generator when present.
     """
     wacc = assumptions["finance"]["default_wacc"]
     el_cfg = assumptions["electrolyser"]
@@ -91,15 +92,18 @@ def build_network(
 
 
 def _add_carriers(n: pypsa.Network, res_techs: list[str]) -> None:
-    # Register every carrier string referenced by a component before that
-    # component is added — otherwise PyPSA's consistency check warns
-    # ("carriers which are not defined") and n.carriers stays empty,
-    # which blocks carrier-aware features (CO2 constraints, grouped stats).
+    """Register every carrier referenced by a component, before those components are added.
+
+    Otherwise PyPSA's consistency check warns ("carriers which are not defined")
+    and leaves n.carriers empty, which blocks carrier-aware features (CO2
+    constraints, grouped stats).
+    """
     carriers = list(dict.fromkeys(["AC", "H2", "battery", "electrolyser", *res_techs]))
     n.add("Carrier", carriers)
 
 
 def _add_buses(n: pypsa.Network) -> None:
+    """Add the electricity (AC) and hydrogen (H2 LHV) buses."""
     n.add("Bus", "electricity", carrier="AC")
     n.add("Bus", "hydrogen", carrier="H2")
 
@@ -110,6 +114,12 @@ def _add_generators(
     res_cfg: dict,
     wacc: float,
 ) -> None:
+    """Add one extendable RES generator per CF column, costed from assumptions.
+
+    Each column's tech key is looked up in `res_cfg`; orientation-suffixed keys
+    (e.g. `solar_az180`, `..._east_30`) fall back to their base tech. Capital
+    cost is annuitised CAPEX + fixed OPEX; the CF profile enters as p_max_pu.
+    """
     for tech in cf_timeseries.columns:
         cfg = res_cfg.get(tech)
         if cfg is None:
@@ -135,6 +145,7 @@ def _add_generators(
 
 
 def _add_battery(n: pypsa.Network, bat_cfg: dict, wacc: float) -> None:
+    """Add an extendable battery; energy CAPEX is folded into the per-MW cost at fixed duration."""
     eta = bat_cfg["efficiency_roundtrip"] ** 0.5
     max_hours = bat_cfg["max_hours"]
     # Fold energy capex into per-MW capital cost (assumes fixed duration = max_hours)
@@ -163,6 +174,7 @@ def _add_electrolyser(
     el_cfg: dict,
     wacc: float,
 ) -> None:
+    """Add the extendable electrolyser link (electricity → hydrogen), floored at `el_mw`."""
     cap_cost = (
         annuity_factor(wacc, el_cfg["lifetime_years"]) * el_cfg["capex_per_mw_eur"]
         + el_cfg["opex_per_mw_per_year_eur"]
@@ -185,6 +197,7 @@ def _add_electrolyser(
 
 
 def _add_h2_buffer(n: pypsa.Network, buf_cfg: dict, wacc: float) -> None:
+    """Add the extendable, cyclic H2 storage buffer (a Store on the hydrogen bus)."""
     # Store capital_cost is per MWh of e_nom (H2 LHV energy capacity)
     cap_cost = annuity_factor(wacc, buf_cfg["lifetime_years"]) * buf_cfg["capex_per_mwh_eur"]
     n.add(
@@ -202,6 +215,7 @@ def _add_h2_buffer(n: pypsa.Network, buf_cfg: dict, wacc: float) -> None:
 def _add_dri_load(
     n: pypsa.Network, el_mw: float, el_efficiency: float, availability_target: float
 ) -> None:
+    """Add the constant DRI hydrogen demand (annual-average MW H2 LHV) on the hydrogen bus."""
     # The plant's hydrogen demand is the annual-average value, not the
     # electrolyser's rated max output. dri_to_el_mw sizes el_mw to deliver the
     # annual quota at the chosen availability, so el_mw * el_efficiency is the
@@ -212,6 +226,7 @@ def _add_dri_load(
 
 
 def _add_grid_import(n: pypsa.Network, price_series: pd.Series) -> None:
+    """Add an unconstrained grid-import generator priced at the hourly `price_series`."""
     n.add(
         "Generator",
         "grid_import",

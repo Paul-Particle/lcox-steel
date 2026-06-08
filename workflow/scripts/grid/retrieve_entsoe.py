@@ -36,6 +36,7 @@ FULL_DATA_TYPES = ["prices", "load_forecast", "load_actual", "res", "generation"
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _load_bidding_zones(raw_cache_dir: Path) -> set[str]:
+    """Return the set of recognised bidding-zone codes from the registry CSV."""
     return set(pd.read_csv(raw_cache_dir / "entsoe_bidding_zones.csv")["area"])
 
 
@@ -66,6 +67,7 @@ def _ensure_raw_months(
 # ── Per-variant month processing ──────────────────────────────────────────────
 
 def _process_dayahead_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame:
+    """Return one month of prices as a single hourly, UTC-naive `price` column."""
     raw = pd.read_parquet(raw_cache_dir / area / ym / "prices.parquet")
     price = to_utc_naive(raw).iloc[:, 0]
     price = price.ffill(limit=3).bfill(limit=3).resample("1h").mean().rename("price")
@@ -73,6 +75,12 @@ def _process_dayahead_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataF
 
 
 def _process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame:
+    """Assemble one month's six data types into a wide frame with residual-load columns.
+
+    Joins prices, load (forecast + actual), RES forecast, generation, and
+    cross-border flows on a common UTC-naive index, then derives the wind/RES
+    aggregates and residual load (load − RES) for both forecast and actual.
+    """
     d = raw_cache_dir / area / ym
     prices_raw  = pd.read_parquet(d / "prices.parquet")
     load_fc_raw = pd.read_parquet(d / "load_forecast.parquet")
@@ -104,6 +112,13 @@ def _process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def retrieve(snakemake) -> None:
+    """Slice the requested (area, variant, date range) out of the processed cache.
+
+    Validates the bidding zone, downloads any missing months into the raw cache,
+    processes and appends them to the shared per-variant processed cache, then
+    writes the requested window to the rule output. Warm-cache runs make no API
+    calls.
+    """
     area       = snakemake.wildcards.area
     variant    = snakemake.wildcards.variant
     start_date = snakemake.wildcards.start_date

@@ -1,5 +1,4 @@
-"""
-Thematic helpers shared across WIP res_cf analysis scripts.
+"""Thematic helpers shared across WIP res_cf analysis scripts.
 
 Lives next to its consumers (determine_bestsite_p95, determine_complementarity,
 determine_resource_spread, diag_plot_bestsite_p95) rather than in a top-level
@@ -19,14 +18,21 @@ QUARTERS = ["q1", "q2", "q3", "q4"]
 
 
 def load_res_cf_cfg() -> dict:
-    """Read the `res_cf` block from config/config.yaml. Standalone-mode default;
-    Snakemake-driven runs go through snakemake.config instead."""
+    """Read the `res_cf` config block from config/config.yaml (standalone-mode default).
+
+    Snakemake-driven runs receive this via snakemake.config instead.
+    """
+    # --- Previous docstring (kept for reference) below ---
+    # Read the `res_cf` block from config/config.yaml. Standalone-mode default;
+    # Snakemake-driven runs go through snakemake.config instead.
     with open(REPO_ROOT / "config/config.yaml") as f:
         return yaml.safe_load(f)["res_cf"]
 
 
 def cutout_path(country: str, year: int, quarter: str) -> Path:
-    """Canonical path to an atlite cutout."""
+    """Return the canonical path to an atlite cutout for (country, year, quarter)."""
+    # --- Previous docstring (kept for reference) below ---
+    # Canonical path to an atlite cutout.
     return CUTOUTS / f"{country.lower()}_{year}_{quarter}.nc"
 
 
@@ -36,12 +42,16 @@ def haversine_distance_km(
     lon2: np.ndarray,
     lat2: np.ndarray,
 ) -> np.ndarray:
-    """
-    Great-circle distance (km) between one target point and arrays of points.
+    """Great-circle distance (km) from one target point to arrays of points.
 
-    lon1, lat1: target point in degrees.
-    lon2, lat2: arrays of candidate point coordinates in degrees.
+    `lon1`/`lat1` are the target point and `lon2`/`lat2` the candidate-point
+    arrays, all in degrees.
     """
+    # --- Previous docstring (kept for reference) below ---
+    # Great-circle distance (km) between one target point and arrays of points.
+    #
+    # lon1, lat1: target point in degrees.
+    # lon2, lat2: arrays of candidate point coordinates in degrees.
     earth_radius_km = 6371.0
 
     lon1_rad = np.deg2rad(lon1)

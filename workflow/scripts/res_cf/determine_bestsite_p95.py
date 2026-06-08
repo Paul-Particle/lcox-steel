@@ -18,8 +18,6 @@ Method
 - Computes annual mean CF per grid cell
 - Identifies the representative P95 grid cell (mean-based ranking)
 - Extracts that cell's hourly CF time series
-- Applies 3×3 spatial averaging for wind technologies to approximate
-  wind farm-scale variability and avoid artificial saturation at CF ≈ 1
 - Writes the resulting hourly series as the best-site P95 scenario
 
 Key updates vs previous implementation
@@ -28,7 +26,6 @@ Key updates vs previous implementation
 - ❌ Removed dependence on resource_spread outputs for time series generation
 - ✅ Direct extraction from full CF grid (cf_year)
 - ✅ Introduced wind power-curve smoothing (smooth=True)
-- ✅ Added 3×3 spatial averaging for wind to approximate site-level behaviour
 - ✅ Uses mean-based P95 selection (median-based selection tested and rejected)
 
 Notes
@@ -92,33 +89,21 @@ PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
 WIND_CF_CFG           = RES_CF_CFG.get("wind_cf", {})
 WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
 WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
-SPATIAL_AVG_WINDOW    = int(WIND_CF_CFG.get("spatial_avg_window", 3))
 
 
 def extract_cell_timeseries(
     cf_year: xr.DataArray,
     y_idx: int,
     x_idx: int,
-    tech: str,
-    window: int = SPATIAL_AVG_WINDOW,
 ) -> pd.Series:
-
-    if tech.startswith("wind"):
-        half = window // 2
-        ts = cf_year.isel(
-            y=slice(max(0, y_idx - half), y_idx + half + 1),
-            x=slice(max(0, x_idx - half), x_idx + half + 1),
-        ).mean(dim=("y", "x"))
-    else:
-        ts = cf_year.isel(y=y_idx, x=x_idx)
-
-    s = ts.to_pandas()
+    """Extract one grid cell's hourly CF series (clipped to [0, 1], 'time'-indexed)."""
+    s = cf_year.isel(y=y_idx, x=x_idx).to_pandas()
     s.index = pd.to_datetime(s.index)
     s.name = "cf"
-
     return s.clip(0, 1)
 
 def build_cf_year(country_upper: str, tech: str) -> xr.DataArray:
+    """Build the full-year per-cell CF grid for `tech` by concatenating the quarterly cutouts."""
     parts = []
 
     # NOTE (WIP): cutout_path() returns quarterly cutouts (e.g. de_2023_q1.nc) from
@@ -178,6 +163,7 @@ def geometry_for_tech(iso2: str, tech: str):  # returns shapely geometry
 
 
 def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
+    """Return a boolean grid marking cells whose centre lies within `geom`."""
     xs = cell_mean.coords["x"].values
     ys = cell_mean.coords["y"].values
     xx, yy = np.meshgrid(xs, ys)
@@ -187,14 +173,14 @@ def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
 
 
 def _find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
-    """
-    Identify the representative P95 grid cell based on annual mean CF.
-
-    Returns
-    -------
-    (y_idx, x_idx)
-        Index of the selected P95 grid cell.
-    """
+    """Return the (y, x) index of the in-region cell closest to the P95 annual-mean CF."""
+    # --- Previous docstring (kept for reference) below ---
+    # Identify the representative P95 grid cell based on annual mean CF.
+    #
+    # Returns
+    # -------
+    # (y_idx, x_idx)
+    #     Index of the selected P95 grid cell.
     cell_mean = cf_year.mean("time")
 
     inside = mask_cells_inside(cell_mean, geom)
@@ -214,6 +200,7 @@ def _find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
     return int(y_idx), int(x_idx)
 
 def _to_cf_series(x: xr.DataArray, name: str = "cf") -> pd.Series:
+    """Collapse an atlite result to one [0, 1] CF series on a 'time' index."""
     obj = x.to_pandas()
 
     if isinstance(obj, pd.DataFrame):
@@ -234,7 +221,7 @@ def _to_cf_series(x: xr.DataArray, name: str = "cf") -> pd.Series:
 
 
 def main() -> None:
-
+    """Extract best-site P95 hourly CF per tech for each country and write the parquet."""
 
     for cc in COUNTRIES:
         country_upper = cc.upper()
@@ -256,7 +243,7 @@ def main() -> None:
 
             y_idx, x_idx = _find_p95_cell(cf_year, geom)
 
-            ts = extract_cell_timeseries(cf_year, y_idx, x_idx, tech)
+            ts = extract_cell_timeseries(cf_year, y_idx, x_idx)
 
             best_mean = float(ts.mean())
 

@@ -25,6 +25,7 @@ OUTPUTPATH = Path('./results/')
 DATAPATH = Path('./data/')
 
 def get_timestamp(date=True,time=True):
+    """Return the current local date and/or time as a filename-safe string."""
     dt = datetime.datetime.now()
     if date and time:
         return dt.strftime('%Y-%m-%d_%H-%M-%S')
@@ -34,6 +35,7 @@ def get_timestamp(date=True,time=True):
         return dt.strftime('%H-%M-%S')
 
 def save_fig(fig, filename='untitled', path=OUTPUTPATH, add_time=True, html=True, png=True, svg=False, json=False, scale=2, save_condition=True):
+    """Write a figure to disk in the requested formats (no-op unless save_condition)."""
     if not save_condition:
         return
     if add_time:
@@ -54,26 +56,32 @@ def save_fig(fig, filename='untitled', path=OUTPUTPATH, add_time=True, html=True
 pd.options.plotting.backend = "plotly"
 
 def darkmode() -> bool:
+    """Pick dark vs light by wall-clock hour. WIP — non-reproducible; slated for removal (TODO.md)."""
     return False if int(get_timestamp(date=False).split('-')[0]) <= 18 else True
 def dark_or_light() -> str:
+    """Return the Plotly template name implied by darkmode() (WIP — see TODO.md)."""
     return 'plotly_dark' if darkmode() else 'plotly'
 def black_or_white() -> str:
+    """Return 'white' or 'black' per darkmode() (WIP — see TODO.md)."""
     return 'white' if darkmode() else 'black'
 
 # Global variable to control saving of figures
 global save
 save = False
 def toggle_save() -> bool:
+    """Flip the global save flag. WIP — redundant with save_fig(save_condition=); see TODO.md."""
     global save
     save = not save
     log.info(f"saving figures is now {'ON' if save else 'OFF'}")
     return save
 def set_save(setting: bool) -> bool:
+    """Set the global save flag. WIP — redundant with save_fig(save_condition=); see TODO.md."""
     global save
     save = setting
     log.info(f"saving figures is now {'ON' if save else 'OFF'}")
     return save
 def save_is_on():
+    """Return the global save flag (WIP — see TODO.md)."""
     global save
     return save
 

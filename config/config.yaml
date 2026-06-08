@@ -62,10 +62,7 @@ res_cf:
   # build_res_cf_profile, determine_bestsite_p95, determine_resource_spread.
   # smooth=True             smooths the turbine power curve
   # add_cutout_windspeed    preserves atlite's built-in 25 m/s cutoff during smoothing
-  # spatial_avg_window      odd-N square window of cells averaged for wind site CFs
-  #                         (used in determine_bestsite_p95 to approximate wind farm scale)
   wind_cf:
     smooth: true
     add_cutout_windspeed: true
-    spatial_avg_window: 1
 

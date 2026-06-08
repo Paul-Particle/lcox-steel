@@ -27,6 +27,7 @@ _dl.USR_AGENT_HEADER["User-Agent"] = (
 
 
 def _download_unzip_csv_patched(url: str, down_load_to: str) -> None:
+    """Download and extract a NEMOSIS MMSDM zip, double-encoding '#' to dodge Azure (Patch 2)."""
     from urllib.parse import urlsplit
     url_fixed = url.replace("#", "%2523").replace("%23", "%2523")
     u = urlsplit(url_fixed)

@@ -125,10 +125,10 @@ def score_triplet(
     w_coincidence: float,
     w_correlation: float,
 ) -> tuple[float, float, float]:
-    """
-    Returns (score, coincidence, mean_pairwise_corr).
-    Higher score = better complementarity.
-    """
+    """Return (score, coincidence, mean_pairwise_corr); higher score = better complementarity."""
+    # --- Previous docstring (kept for reference) below ---
+    # Returns (score, coincidence, mean_pairwise_corr).
+    # Higher score = better complementarity.
     combined    = (ts_on + ts_off + ts_sol) / 3.0
     coincidence = float(np.mean(combined > threshold))
 
@@ -157,6 +157,7 @@ def brute_force_screen(
     w_correlation:  float,
     top_n:          int,
 ) -> list[dict]:
+    """Score every within-radius (onshore, offshore, solar) triplet and return the top N by score."""
     records = []
     n_total = len(ys_on) * len(ys_off) * len(ys_sol)
 
@@ -215,14 +216,19 @@ def greedy_screen(
     w_correlation:  float,
     top_n:          int,
 ) -> list[dict]:
-    """
-    Greedy sequential selection tried from all three anchor techs,
-    followed by neighbourhood search to return top N diverse results.
+    """Greedy per-anchor selection + neighbourhood search, returning the top N diverse triplets.
 
-    WIP NOTE: The three `if anchor == ...` blocks share ~80% of their body and
-    are the highest-value refactor target in this file. Leave until the broader
-    cutout-cache refactor stabilises the API this script depends on.
+    WIP NOTE: the three `if anchor == ...` blocks share ~80% of their body and are
+    the highest-value refactor target here. Leave until the broader cutout-cache
+    refactor stabilises the API this script depends on.
     """
+    # --- Previous docstring (kept for reference) below ---
+    # Greedy sequential selection tried from all three anchor techs,
+    # followed by neighbourhood search to return top N diverse results.
+    #
+    # WIP NOTE: The three `if anchor == ...` blocks share ~80% of their body and
+    # are the highest-value refactor target in this file. Leave until the broader
+    # cutout-cache refactor stabilises the API this script depends on.
     log.info("using greedy search (candidate space too large for brute force)")
 
     def _find_best_triplet(anchor: str):
@@ -480,6 +486,7 @@ def greedy_screen(
 # ── Average profiles ──────────────────────────────────────────────────────────
 
 def save_average_profiles(cc: str, year: int, avg_out: Path | None = None) -> None:
+    """Copy the national-mean CF parquet to the average-profiles output for `cc`."""
     src = CF_DIR / f"{cc.lower()}_cf_{year}.parquet"
     dst = avg_out if avg_out is not None else CF_DIR / f"{cc.lower()}_average_profiles_{year}.parquet"
     if not src.exists():
@@ -492,6 +499,7 @@ def save_average_profiles(cc: str, year: int, avg_out: Path | None = None) -> No
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    """Screen complementary RES-cell triplets per country and write top-N + average-profile parquets."""
     sm_country = None
     sm_top_out = None
     sm_avg_out = None
@@ -540,7 +548,7 @@ def main() -> None:
             n_timesteps = int(cf.sizes["time"])
             ts_matrix   = np.zeros((n_timesteps, n), dtype=np.float32)
             for idx in progress(range(n), desc=f"extract {tech} cells", total=n, unit="cell"):
-                ts = extract_cell_timeseries(cf, int(ys[idx]), int(xs[idx]), tech)
+                ts = extract_cell_timeseries(cf, int(ys[idx]), int(xs[idx]))
                 ts_matrix[:, idx] = ts.values
 
             lons, lats = get_candidate_coords(cf, ys, xs)
