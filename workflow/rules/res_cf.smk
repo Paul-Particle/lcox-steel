@@ -103,3 +103,27 @@ rule build_res_cf_profile:
         wind_cf=lookup(dpath="res_cf/wind_cf", within=config),
     script:
         "../scripts/res_cf/build_res_cf_profile.py"
+
+
+rule build_res_cf_candidates:
+    input:
+        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/{cf_area}_geo.parquet",
+        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
+    output:
+        "resources/res_cf/{cf_area}_{tech}_grid-n{n_cells}_{start_date}_{end_date}.parquet",
+    wildcard_constraints:
+        n_cells=r"\d+",
+    log:
+        "logs/build_res_cf_candidates/{cf_area}_{tech}_grid-n{n_cells}_{start_date}_{end_date}.log",
+    params:
+        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
+        wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
+        wind_offshore_turbine=lookup(
+            dpath="res_cf/wind_offshore_turbine", within=config
+        ),
+        pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
+        pv_orientation=lookup(dpath="res_cf/pv_orientation", within=config),
+        wind_cf=lookup(dpath="res_cf/wind_cf", within=config),
+    script:
+        "../scripts/res_cf/build_res_cf_candidates.py"

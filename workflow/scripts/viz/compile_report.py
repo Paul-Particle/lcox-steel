@@ -52,7 +52,10 @@ def _annual_cost(n: pypsa.Network) -> float:
     mask = n.storage_units.p_nom_extendable
     cost += (n.storage_units.loc[mask, "capital_cost"] * n.storage_units.loc[mask, "p_nom_opt"]).sum()
 
-    cost += n.links.at["electrolyser", "capital_cost"] * n.links.at["electrolyser", "p_nom_opt"]
+    # All extendable links: the electrolyser (always) and, in multi-site runs, the
+    # HVDC transmission links. Summing the mask captures both without double count.
+    mask = n.links.p_nom_extendable
+    cost += (n.links.loc[mask, "capital_cost"] * n.links.loc[mask, "p_nom_opt"]).sum()
 
     mask = n.stores.e_nom_extendable
     cost += (n.stores.loc[mask, "capital_cost"] * n.stores.loc[mask, "e_nom_opt"]).sum()
@@ -113,6 +116,24 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
 
     if "dri_load" in n.loads.index:
         summary["dri_h2_mw_lhv"] = float(n.loads.at["dri_load", "p_set"])
+
+    # Multi-site only (guarded so single-site reports are unchanged): one column
+    # per HVDC link capacity, the total annualised transmission cost, and per-tech
+    # built-capacity totals summed across candidate sites.
+    hvdc = n.links.index[n.links.carrier == "HVDC"]
+    if len(hvdc):
+        trans_cost = 0.0
+        for link in hvdc:
+            cap = n.links.at[link, "p_nom_opt"]
+            summary[f"{link}_gw_opt"] = cap / 1e3
+            trans_cost += n.links.at[link, "capital_cost"] * cap
+        summary["transmission_total_annual_cost_meur"] = trans_cost / 1e6
+
+    ac_buses = n.buses.index[n.buses.carrier == "AC"]
+    if len(ac_buses) > 1:
+        ext = n.generators[n.generators.p_nom_extendable]
+        for carrier, grp in ext.groupby("carrier"):
+            summary[f"{carrier}_total_gw_opt"] = grp["p_nom_opt"].sum() / 1e3
 
     return summary
 
