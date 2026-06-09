@@ -23,7 +23,7 @@ config/projects.csv ─┬─► res_cf  ──►  resources/res_cf/*.parquet  
                                                                                   ▼
                                                         h2_dri (PyPSA optimise) ──► results/{project}/{scenario}.nc
                                                                                   │
-                                                          viz ◄────────────────────┘
+                                                          viz ◄───────────────────┘
                                               results/report_{project}.csv + plots/*.png|html
 ```
 
