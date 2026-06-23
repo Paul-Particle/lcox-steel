@@ -6,7 +6,7 @@ maximum morning shift). This script:
 
   1. Identifies the bestsite cell — P95 of annual-mean latitude_optimal CF —
      so all orientations compare at the same high-quality location. The
-     site-selection helpers are copied from `determine_bestsite_p95.py`.
+     site-selection helpers are copied from `07_make_bestsite_cf_timeseries.py`.
   2. Sweeps N equally spaced azimuths from 270° (west) → 0° (north) → 90° (east).
   3. For each azimuth, finds the slope that maximises annual plane-of-array (POA)
      irradiance using the Hay-Davies model and the cell's pre-computed ERA5 solar

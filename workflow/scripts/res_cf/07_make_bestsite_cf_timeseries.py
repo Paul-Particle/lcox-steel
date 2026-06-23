@@ -1,5 +1,5 @@
 """
-determine_bestsite_p95.py
+07_make_bestsite_cf_timeseries.py
 
 Purpose
 -------
@@ -205,7 +205,7 @@ def _to_cf_series(x: xr.DataArray, name: str = "cf") -> pd.Series:
 
     if isinstance(obj, pd.DataFrame):
         # BUG (WIP): both branches do the same thing. Multi-column case likely
-        # intended to select a specific region column (cf. build_res_cf_profile.py's
+        # intended to select a specific region column (cf. 03_build_cf_timeseries.py's
         # to_cf_series which does obj[_REGION]). Fix when this script is revisited.
         if obj.shape[1] == 1:
             s = obj.iloc[:, 0]

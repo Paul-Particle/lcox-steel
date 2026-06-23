@@ -12,6 +12,14 @@ Caveat: the backup is copied without verification — partial or stale files
 will silently propagate into downstream CFs. Operator's responsibility to
 ensure the backup is a valid, complete cutout (e.g. the result of a
 previous successful CDS run).
+
+--- Previous module docstring (kept for reference) below ---
+
+Create Atlite ERA5 cutouts for RES capacity factors.
+
+Start small + stable (DE, Jan–Feb 2023) to avoid CDS/GRIB flakiness on Windows.
+Output:
+- data/cutouts/de_2023_q1.nc
 """
 
 import logging

@@ -1,5 +1,5 @@
 """
-determine_complementarity.py
+08_complementarity_screen.py
 
 Purpose
 -------
@@ -11,7 +11,7 @@ This script produces two outputs per country:
   (a) Top N complementary cell triplets for the best-site RES mix scenario
   (b) National mean profiles for the country-average scenario
 
-Both outputs feed directly into the PyPSA optimisation (scripts/h2_dri/run.py).
+Both outputs feed directly into the PyPSA optimisation (scripts/h2_dri/solve_network.py).
 
 Method
 ------
@@ -36,6 +36,7 @@ resources/res_cf/<cc>_average_profiles_2023.parquet
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 from itertools import product
 from pathlib import Path
@@ -51,12 +52,18 @@ from scripts.res_cf._helpers import haversine_distance_km
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
-from determine_bestsite_p95 import (
-    build_cf_year,
-    extract_cell_timeseries,
-    geometry_for_tech,
-    mask_cells_inside,
+# Reusable cell-grid helpers live in 07_make_bestsite_cf_timeseries.py; its
+# numbered filename isn't a valid module name, so load it via importlib.
+_spec = importlib.util.spec_from_file_location(
+    "bestsite", Path(__file__).parent / "07_make_bestsite_cf_timeseries.py"
 )
+_bestsite = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_bestsite)
+
+build_cf_year = _bestsite.build_cf_year
+extract_cell_timeseries = _bestsite.extract_cell_timeseries
+geometry_for_tech = _bestsite.geometry_for_tech
+mask_cells_inside = _bestsite.mask_cells_inside
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)

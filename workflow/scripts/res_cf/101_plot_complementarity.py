@@ -1,14 +1,15 @@
 """
-diag_plot_complementarity.py
+101_plot_complementarity.py
 
 Plots a 2-week sample of the best complementarity triplet's time series for a
-given country, as a visual sanity check on the determine_complementarity.py output.
+given country, as a visual sanity check on the 08_complementarity_screen.py output.
 
 Usage:
-    python scripts/res_cf/diag_plot_complementarity.py --country DE --year 2023
+    python scripts/res_cf/101_plot_complementarity.py --country DE --year 2023
 """
 
 import argparse
+import importlib.util
 import logging
 from pathlib import Path
 
@@ -21,7 +22,15 @@ from common._paths import RES_CF, RESULTS
 CF_DIR   = RES_CF
 PLOT_DIR = RESULTS / "plots"
 
-from determine_bestsite_p95 import build_cf_year, extract_cell_timeseries
+# 07_make_bestsite_cf_timeseries.py has a numbered (non-importable) filename, so
+# load its reusable helpers via importlib.
+_spec = importlib.util.spec_from_file_location(
+    "bestsite", Path(__file__).parent / "07_make_bestsite_cf_timeseries.py"
+)
+_bestsite = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_bestsite)
+build_cf_year = _bestsite.build_cf_year
+extract_cell_timeseries = _bestsite.extract_cell_timeseries
 
 configure_logging(None)
 log = logging.getLogger(__name__)
@@ -34,7 +43,7 @@ def plot_best_triplet(country: str, year: int) -> None:
     if not comp_path.exists():
         raise FileNotFoundError(
             f"Complementarity results not found: {comp_path}\n"
-            "Run determine_complementarity.py first."
+            "Run 08_complementarity_screen.py first."
         )
 
     df   = pd.read_parquet(comp_path)

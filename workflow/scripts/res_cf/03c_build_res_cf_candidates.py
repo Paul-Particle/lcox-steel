@@ -1,6 +1,6 @@
 """Build per-cell candidate CF profiles for multi-site plant-location optimization.
 
-Where `build_res_cf_profile.py` collapses a country to one CF series via the
+Where `03_build_cf_timeseries.py` collapses a country to one CF series via the
 indicator matrix, this script keeps the cell dimension: it sub-samples cutout
 cells inside the region on a coarse regular lattice (targeting ~`n_cells`), and
 writes one CF column per surviving cell. The downstream h2_dri network builder
@@ -14,7 +14,7 @@ Output is a single multi-column parquet:
     under `site_coords` (JSON), so the file is self-describing and the network
     builder needs no separate coordinates input.
 
-Cell extraction reuses the per-cell-grid pattern from build_solar_tilt_mix_p95.py
+Cell extraction reuses the per-cell-grid pattern from 03b_build_solar_tilt_mix_p95.py
 and plot_cf_map.py (`capacity_factor_timeseries=True`), not the indicatormatrix
 aggregation.
 """

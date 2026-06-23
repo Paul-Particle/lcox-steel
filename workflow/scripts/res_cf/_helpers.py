@@ -1,10 +1,10 @@
 """Thematic helpers shared across WIP res_cf analysis scripts.
 
-Lives next to its consumers (determine_bestsite_p95, determine_complementarity,
-determine_resource_spread, diag_plot_bestsite_p95) rather than in a top-level
+Lives next to its consumers (07_make_bestsite_cf_timeseries, 08_complementarity_screen,
+06_resource_spread, 100_plot_bestsite_locations) rather than in a top-level
 common/ module — these helpers are specific to the quarterly-cutout workflow
 used by those scripts and are not used by the active Snakemake pipeline
-(build_regions, build_offshore_regions, download_cutout, build_res_cf_profile).
+(01_build_regions, 01b_build_offshore_regions, 02_make_cutouts, 03_build_cf_timeseries).
 """
 
 from pathlib import Path
