@@ -42,3 +42,29 @@ rule plot_capacity_bars:
         "logs/plot_capacity_bars/{project}.log",
     script:
         "../scripts/viz/plot_capacity_bars.py"
+
+
+rule plot_siting_map:
+    """Multi-site only: geographic map of chosen sites + HVDC links for one scenario."""
+    input:
+        network="results/{project}/{scenario}.nc",
+    output:
+        png="results/plots/siting_map/{project}_{scenario}.png",
+        html="results/plots/siting_map/{project}_{scenario}.html",
+    log:
+        "logs/plot_siting_map/{project}_{scenario}.log",
+    script:
+        "../scripts/viz/plot_siting_map.py"
+
+
+rule plot_site_capacity_bars:
+    """Multi-site only: per-site built capacity + HVDC link MW for one scenario."""
+    input:
+        network="results/{project}/{scenario}.nc",
+    output:
+        png="results/plots/site_capacity/{project}_{scenario}.png",
+        html="results/plots/site_capacity/{project}_{scenario}.html",
+    log:
+        "logs/plot_site_capacity_bars/{project}_{scenario}.log",
+    script:
+        "../scripts/viz/plot_site_capacity_bars.py"

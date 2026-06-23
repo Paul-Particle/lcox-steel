@@ -1,0 +1,3 @@
+project,scenario,tech,variant,pipeline,area,start_date,end_date
+DE-2023-multisite,sweep,solar,grid-n10,res_cf,de,20230101,20231231
+DE-2023-multisite,sweep,wind-onshore,grid-n10,res_cf,de,20230101,20231231

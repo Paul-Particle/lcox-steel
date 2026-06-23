@@ -39,3 +39,12 @@ h2_buffer:
   capex_per_mwh_eur: 10_000   # compressed H2 tank, ~€10/kWh
   lifetime_years: 25
   # e_nom_extendable always True — PyPSA finds optimal buffer size
+
+transmission:
+  # HVDC link connecting a candidate RES site to the electrolyser/demand site.
+  # Only used by multi-site scenarios (those with a config/sites_{project}_{scenario}.yaml
+  # overlay); single-site scenarios never add a transmission link.
+  cost_per_mw_per_km_eur: 400   # HVDC overhead, order-of-magnitude (PyPSA-Eur-ish)
+  lifetime_years: 40
+  losses_pct_per_1000km: 3.0    # ~3% / 1000 km, applied as link efficiency
+  indirect_route_factor: 1.25   # great-circle distance → routed cable length

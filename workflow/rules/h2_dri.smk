@@ -9,6 +9,9 @@ rule h2_dri_optimize:
         assumptions_overlay=optional(
             "config/assumptions_{project}_{scenario}.yaml"
         ),
+        sites_overlay=optional(
+            "config/sites_{project}_{scenario}.yaml"
+        ),
         tech_inputs=collect(
             "resources/{item.pipeline}/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}.parquet",
             item=lookup(

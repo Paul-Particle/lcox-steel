@@ -1,5 +1,7 @@
 """Financial and sizing utilities for the DRI-hydrogen model."""
 
+import numpy as np
+
 
 def annuity_factor(wacc: float, lifetime_years: float) -> float:
     """Capital recovery factor: annualises a lump-sum capex over a project life."""
@@ -36,3 +38,22 @@ def dri_to_el_mw(
     h2_kg_per_year = dri_mt_per_year * 1_000_000.0 * h2_intensity_kg_per_t_dri
     elec_mwh_per_year = h2_kg_per_year * efficiency_kwh_per_kg / 1000.0
     return elec_mwh_per_year / (8760.0 * availability_target)
+
+
+def haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+    """Great-circle distance (km) between two points given in degrees.
+
+    A scalar copy of res_cf/_helpers.haversine_distance_km (which is array-oriented
+    and lives in the res_cf package); duplicated here to keep h2_dri free of a
+    res_cf import for the one place it needs an inter-site distance.
+    """
+    earth_radius_km = 6371.0
+    lon1_rad, lat1_rad = np.deg2rad(lon1), np.deg2rad(lat1)
+    lon2_rad, lat2_rad = np.deg2rad(lon2), np.deg2rad(lat2)
+    dlon = lon2_rad - lon1_rad
+    dlat = lat2_rad - lat1_rad
+    a = (
+        np.sin(dlat / 2.0) ** 2
+        + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon / 2.0) ** 2
+    )
+    return float(earth_radius_km * 2.0 * np.arcsin(np.sqrt(a)))

@@ -58,18 +58,27 @@ Key fields:
 Wire this into Snakemake logging or a small polling script that prints progress
 as monthly jobs complete, so long cutout runs don't require manual checks.
 
-## viz/_helpers.py cleanup
+## Plotly PNG export needs Chrome (kaleido v1)
 
-`workflow/scripts/viz/_helpers.py` was ported from a standalone notebook and has several
-issues to resolve before it's considered production-ready:
+Every viz script writes a static PNG via `fig.write_image(...)`. With the current
+pin (`python-kaleido` v1), kaleido no longer bundles a renderer and requires a
+**Chrome/Chromium binary** to be present, or `write_image` raises
+`ChromeNotFoundError`. The `.html` outputs (`fig.write_html`) need nothing and
+always work.
 
-- `darkmode()` silently switches plot style based on wall-clock hour (≤18:00 = light,
-  >18:00 = dark). Breaks reproducibility. Either remove or make explicit with a `force=`
-  parameter.
-- Global `save` flag + `toggle_save()` / `set_save()` / `save_is_on()` setters are
-  redundant — `save_fig()` already takes `save_condition`. Pass `save=` directly instead.
-- `OUTPUTPATH = Path('./results/')` and `DATAPATH = Path('./data/')` use cwd-relative
-  paths; should use `common._paths.RESULTS` / `common._paths.DATA` for consistency.
-- The 258-line inline colormap at the bottom (`cm_data`) could move to `viz/_cmap.py`
-  so the rest of the file stays readable.
-- No module docstring (now added as a WIP marker).
+One-time fix per environment:
+
+```bash
+# inside the env
+plotly_get_chrome            # or, from Python:
+python -c "import kaleido; kaleido.get_chrome_sync()"
+```
+
+This drops a Chrome-for-Testing build into a local cache (e.g.
+`~/Library/Application Support/choreographer/`); it is per-machine and not shared,
+so each dev box / HPC node / CI runner needs it (or must run HTML-only).
+
+Options to make this less of a footgun: pin `python-kaleido<1` (the old bundled
+renderer) in `environment.yaml`; or add a Snakemake `onstart`/setup check that
+fetches Chrome if missing; or make PNG export optional (HTML always, PNG only when
+a renderer is available) in the viz scripts.
