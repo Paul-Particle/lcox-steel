@@ -23,8 +23,8 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from scripts.viz._helpers import (
-    PLOTLY_CONFIG,
+from scripts.viz.style import (
+    apply_header,
     blue_black,
     dark_gray,
     fca_blue,
@@ -32,6 +32,7 @@ from scripts.viz._helpers import (
     light_gray,
     magenta_red,
     sand_yellow,
+    save_figure,
 )
 
 configure_logging(snakemake)
@@ -154,25 +155,27 @@ def plot(n: pypsa.Network, sites: pd.DataFrame, out: Path, project: str, scenari
     built = sites[sites["gen_mw"] >= _BUILT_MW]
     fig.update_layout(
         template=fca_template,
-        title=(f"{project} / {scenario} — chosen siting<br>"
-               f"<sup>{len(built)} of {len(sites)} candidate sites built · "
-               "marker size ∝ capacity · line width ∝ HVDC capacity</sup>"),
         geo=dict(scope="europe", resolution=50, fitbounds="locations",
                  showcountries=True, countrycolor=dark_gray,
                  showland=True, landcolor="rgb(243,243,243)",
                  showocean=True, oceancolor="rgb(228,241,247)",
                  lataxis=dict(showgrid=True, gridcolor=light_gray),
                  lonaxis=dict(showgrid=True, gridcolor=light_gray)),
-        width=900, height=760,
-        legend=dict(x=0.99, y=0.01, xanchor="right", yanchor="bottom",
+        # Legend bottom-left so it clears the bottom-right brand logo.
+        legend=dict(x=0.01, y=0.01, xanchor="left", yanchor="bottom",
                     bgcolor="rgba(255,255,255,0.75)"),
-        margin=dict(l=20, r=20, t=90, b=20),
     )
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.write_image(out, scale=2)
-    fig.write_html(out.with_suffix(".html"), config=PLOTLY_CONFIG, include_plotlyjs="cdn")
-    log.info(f"saved {out} (+ .html)")
+    apply_header(
+        fig,
+        title=f"{project} / {scenario} — chosen siting",
+        subtitle=(f"{len(built)} of {len(sites)} candidate sites built · "
+                  "marker size ∝ capacity · line width ∝ HVDC capacity"),
+        fig_width=900, fig_height=760,
+        margin_l=20, margin_r=20, margin_t=90, margin_b=50,
+    )
+    saved = save_figure(fig, out.parent, out.stem)
+    log.info(f"saved {' + '.join(saved)}")
 
 
 def main() -> None:

@@ -20,12 +20,13 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from scripts.viz._helpers import (
-    PLOTLY_CONFIG,
+from scripts.viz.style import (
+    apply_header,
     dark_gray,
     fca_blue,
     fca_template,
     sand_yellow,
+    save_figure,
 )
 
 configure_logging(snakemake)
@@ -76,21 +77,24 @@ def plot(sites: pd.DataFrame, out: Path, project: str, scenario: str) -> None:
 
     fig.update_layout(
         template=fca_template,
-        title=(f"{project} / {scenario} — built capacity by site<br>"
-               f"<sup>{len(built)} sites built · generation (by tech) and HVDC link capacity</sup>"),
         barmode="group", bargap=0.25, bargroupgap=0.08,
-        width=max(720, 90 * len(x) + 320), height=560,
-        yaxis_title="MW", xaxis_title=None,
-        legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"),
-        margin=dict(l=80, r=40, t=100, b=120),
+        # No rotated y-axis title — the unit (MW) lives in the subtitle.
+        yaxis_title=None, xaxis_title=None,
+        legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top",
+                    bgcolor="rgba(255,255,255,0.65)"),
     )
     fig.update_xaxes(type="category", tickangle=-45)
     fig.update_yaxes(rangemode="tozero")
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.write_image(out, scale=2)
-    fig.write_html(out.with_suffix(".html"), config=PLOTLY_CONFIG, include_plotlyjs="cdn")
-    log.info(f"saved {out} (+ .html)")
+    apply_header(
+        fig,
+        title=f"{project} / {scenario} — built capacity by site",
+        subtitle=f"MW · {len(built)} sites built · generation (by tech) and HVDC link capacity",
+        fig_width=max(720, 90 * len(x) + 320), fig_height=560,
+        margin_l=80, margin_r=40, margin_t=100, margin_b=120,
+    )
+    saved = save_figure(fig, out.parent, out.stem)
+    log.info(f"saved {' + '.join(saved)}")
 
 
 def main() -> None:

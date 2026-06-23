@@ -17,11 +17,12 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from scripts.viz._helpers import (
-    PLOTLY_CONFIG,
+from scripts.viz.style import (
+    apply_header,
     blue_black,
     fca_colormap,
     fca_template,
+    save_figure,
 )
 
 configure_logging(snakemake)
@@ -158,23 +159,28 @@ def main() -> None:
 
     fig.update_layout(
         template=fca_template,
-        title=(f"{_REGION} — {_TECH} mean annual CF ({_START_DATE[:4]})<br>"
-               "<sup>latitude-optimal orientation · P95 bestsite marked</sup>"),
-        xaxis_title="Longitude",
-        yaxis_title="Latitude",
-        width=900,
-        height=720,
-        legend=dict(x=0.99, y=0.01, xanchor="right", yanchor="bottom",
+        # Degrees are self-evident from the ticks, so no axis titles (and no
+        # sideways "Latitude" title — see the no-rotated-y-title house rule).
+        xaxis_title=None,
+        yaxis_title=None,
+        # Legend bottom-left so it clears the bottom-right brand logo.
+        legend=dict(x=0.01, y=0.01, xanchor="left", yanchor="bottom",
                     bgcolor="rgba(255,255,255,0.7)"),
-        margin=dict(l=70, r=120, t=90, b=70),
     )
     # Equal-aspect lat/lon. scaleratio≈1 is fine away from poles; at mid-
     # latitudes longitude visually stretches but matches the matplotlib version.
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
 
-    fig.write_image(_OUT, scale=2)
-    fig.write_html(_OUT.with_suffix(".html"), config=PLOTLY_CONFIG, include_plotlyjs="cdn")
-    log.info(f"saved {_OUT} (+ .html)")
+    apply_header(
+        fig,
+        title=f"{_REGION} — {_TECH} mean annual CF ({_START_DATE[:4]})",
+        subtitle="latitude-optimal orientation · P95 best site marked",
+        fig_width=900, fig_height=720,
+        margin_l=70, margin_r=120, margin_t=90, margin_b=70,
+        show_logo=False,   # the colorbar already occupies the bottom-right corner
+    )
+    saved = save_figure(fig, _OUT.parent, _OUT.stem)
+    log.info(f"saved {' + '.join(saved)}")
 
 
 if __name__ == "__main__":

@@ -18,8 +18,8 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from scripts.viz._helpers import (
-    PLOTLY_CONFIG,
+from scripts.viz.style import (
+    apply_header,
     blue_black,
     dark_gray,
     fca_blue,
@@ -28,6 +28,7 @@ from scripts.viz._helpers import (
     green,
     magenta_red,
     sand_yellow,
+    save_figure,
 )
 
 configure_logging(snakemake)
@@ -100,7 +101,7 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
 
 def _sample_colormap(cmap, frac: float) -> str:
     """Sample the FCA colormap at a fraction in [0,1]. cmap is the
-    [[frac, 'rgb(...)']] structure defined in _helpers."""
+    [[frac, 'rgb(...)']] structure defined in style.py."""
     frac = max(0.0, min(1.0, frac))
     nearest = min(cmap, key=lambda fc: abs(fc[0] - frac))
     return nearest[1]
@@ -206,33 +207,25 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
     n_sc = len(plot_df)
     fig.update_layout(
         template=fca_template,
-        title=dict(
-            text=f"{project_label} capacity breakdown",
-            subtitle=dict(
-                text="MW; H₂ buffer in hours of DRI demand",
-                font=dict(family="Titillium Web", size=18, color=blue_black),
-            ),
-            font=dict(family="Titillium Web", size=26, color=blue_black),
-            x=0, xref="paper", xanchor="left",
-            y=1.0, yref="container", yanchor="top",
-            pad=dict(t=14, l=0),
-        ),
         barmode="overlay",
         bargap=0.1,
-        width=max(720, 220 * n_sc + 280),
-        height=600,
+        # No rotated y-axis title — the unit lives in the subtitle.
         yaxis_title=None,
         xaxis_title=None,
         legend=dict(x=1.02, y=1.0, xanchor="left", yanchor="top"),
-        margin=dict(l=80, r=260, t=110, b=80),
     )
     fig.update_xaxes(type="category")
     fig.update_yaxes(rangemode="tozero")
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.write_image(out, scale=2)
-    fig.write_html(out.with_suffix(".html"), config=PLOTLY_CONFIG, include_plotlyjs="cdn")
-    log.info(f"saved {out} (+ .html)")
+    apply_header(
+        fig,
+        title=f"{project_label} capacity breakdown",
+        subtitle="MW; H₂ buffer in hours of DRI demand",
+        fig_width=max(720, 220 * n_sc + 280), fig_height=600,
+        margin_l=80, margin_r=260, margin_t=110, margin_b=80,
+    )
+    saved = save_figure(fig, out.parent, out.stem)
+    log.info(f"saved {' + '.join(saved)}")
 
 
 def main() -> None:
