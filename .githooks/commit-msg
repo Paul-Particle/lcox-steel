@@ -3,10 +3,23 @@
 # $1 is the path to the temporary file containing the commit message
 COMMIT_MSG_FILE=$1
 
-# Extended Regular Expression for a basic email address
+# Extended Regular Expressions for emails
 EMAIL_REGEX="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+PETER_REGEX="[pP][eE][tT][eE][rR][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+HANNAH_REGEX="[hH][aA][nN][nN][aA][hH][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
 
-# Use grep -v (invert match) to keep only the lines that DO NOT match the email regex.
-# We save the output to a temporary file, then overwrite the original commit message.
-grep -v -E "$EMAIL_REGEX" "$COMMIT_MSG_FILE" > "${COMMIT_MSG_FILE}.tmp"
+> "${COMMIT_MSG_FILE}.tmp"
+
+# Read the commit message line by line
+while IFS= read -r line || [[ -n "$line" ]]; do
+    # Remove any peter or hannah emails from the line temporarily
+    CLEANED_LINE=$(echo "$line" | sed -E -e "s/$PETER_REGEX//g" -e "s/$HANNAH_REGEX//g")
+    
+    # Check if there are any *other* emails left on the line
+    if ! echo "$CLEANED_LINE" | grep -q -E "$EMAIL_REGEX"; then
+        # If no other emails are found, keep the original line
+        echo "$line" >> "${COMMIT_MSG_FILE}.tmp"
+    fi
+done < "$COMMIT_MSG_FILE"
+
 mv "${COMMIT_MSG_FILE}.tmp" "$COMMIT_MSG_FILE"
