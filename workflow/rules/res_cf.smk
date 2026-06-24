@@ -19,7 +19,7 @@ rule build_regions:
             default=None,
         ),
     script:
-        "../scripts/res_cf/build_regions.py"
+        "../scripts/res_cf/01_build_regions.py"
 
 
 rule build_offshore_regions:
@@ -37,14 +37,14 @@ rule build_offshore_regions:
             dpath="res_cf/offshore_max_distance_km", within=config
         ),
     script:
-        "../scripts/res_cf/build_offshore_regions.py"
+        "../scripts/res_cf/01b_build_offshore_regions.py"
 
 
 rule download_cutout:
     input:
         ne_zip=ancient("data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"),
     output:
-        # Not protected(): the download_cutout.py script preserves expensive
+        # Not protected(): the 02_make_cutouts.py script preserves expensive
         # downloads via the `_backup.nc` sibling-file convention.
         "cutouts/{cf_area}_{start_date}_{end_date}.nc",
     log:
@@ -63,7 +63,7 @@ rule download_cutout:
         bbox_pad_deg=lookup(dpath="res_cf/cutout/bbox_pad_deg", within=config),
         monthly_requests=lookup(dpath="res_cf/cutout/monthly_requests", within=config),
     script:
-        "../scripts/res_cf/download_cutout.py"
+        "../scripts/res_cf/02_make_cutouts.py"
 
 
 rule build_solar_tilt_mix_p95:
@@ -80,7 +80,7 @@ rule build_solar_tilt_mix_p95:
         pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
         region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
     script:
-        "../scripts/res_cf/build_solar_tilt_mix_p95.py"
+        "../scripts/res_cf/03b_build_solar_tilt_mix_p95.py"
 
 
 rule build_res_cf_profile:
@@ -102,7 +102,7 @@ rule build_res_cf_profile:
         pv_orientation=lookup(dpath="res_cf/pv_orientation", within=config),
         wind_cf=lookup(dpath="res_cf/wind_cf", within=config),
     script:
-        "../scripts/res_cf/build_res_cf_profile.py"
+        "../scripts/res_cf/03_build_cf_timeseries.py"
 
 
 rule build_res_cf_candidates:
@@ -126,4 +126,4 @@ rule build_res_cf_candidates:
         pv_orientation=lookup(dpath="res_cf/pv_orientation", within=config),
         wind_cf=lookup(dpath="res_cf/wind_cf", within=config),
     script:
-        "../scripts/res_cf/build_res_cf_candidates.py"
+        "../scripts/res_cf/03c_build_res_cf_candidates.py"

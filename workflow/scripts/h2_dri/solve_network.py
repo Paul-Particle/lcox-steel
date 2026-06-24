@@ -126,7 +126,7 @@ def main() -> None:
         for p in cf_paths:
             df = pd.read_parquet(p)
             # Single- and multi-column parquets are uniform: columns are tech keys.
-            # build_res_cf_profile.py names single-column outputs by the tech wildcard.
+            # 03_build_cf_timeseries.py names single-column outputs by the tech wildcard.
             for col in df.columns:
                 if col in cf_parts:
                     raise ValueError(

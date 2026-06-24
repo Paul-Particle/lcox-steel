@@ -5,6 +5,23 @@ Source: Natural Earth Admin 0 countries (1:110m).
 Output: resources/shapes/{cf_area}_geo.parquet — one row, columns (region, geometry).
 If mainland_bbox is given, only polygon parts whose centroid falls inside
 [lon_min, lon_max, lat_min, lat_max] are kept (drops overseas territories).
+
+--- Previous module docstring (kept for reference) below ---
+
+Build country/region geometries for RES capacity factor extraction with Atlite.
+
+Source:
+- Natural Earth Admin 0 countries (1:110m)
+
+Output:
+- data/shapes/regions.geojson
+
+Regions:
+- DE
+- FR
+- ES
+- AUS
+- BRA
 """
 
 import logging

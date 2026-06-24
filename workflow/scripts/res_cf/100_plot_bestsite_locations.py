@@ -1,5 +1,5 @@
 """
-08_plot_bestsite_locations.py
+100_plot_bestsite_locations.py
 
 Purpose
 -------
@@ -11,9 +11,13 @@ highlight:
 
 for each country and technology.
 
+Also plots the co-located cells chosen by 07's anchor methodology, read from the
+location metadata stored in each per-anchor CF parquet.
+
 Outputs
 -------
 results/plots/bestsite_locations/<country>_<tech>.png
+results/plots/bestsite_locations/<country>_cf_<year>_bestsite_p95_anchor-...__map.png
 """
 
 import logging
@@ -75,6 +79,29 @@ def get_national_mean_from_csv(iso2: str, tech: str) -> float:
     }
 
     return float(df[col_map[tech.strip()]].mean())
+
+def read_location_metadata(path: Path) -> dict:
+    """Read per-tech selected-cell coordinates from the first row of a CF parquet (written by 07)."""
+    row = pd.read_parquet(path).iloc[0]
+    return {
+        tech: {
+            "x": float(row[f"{tech}_x"]),
+            "y": float(row[f"{tech}_y"]),
+            "x_idx": int(row[f"{tech}_x_idx"]),
+            "y_idx": int(row[f"{tech}_y_idx"]),
+        }
+        for tech in TECHS
+    }
+
+def read_anchor_metadata(path: Path) -> tuple[str, str]:
+    """Read (anchor_tech, mix_label) from the first row of an anchor CF parquet."""
+    row = pd.read_parquet(path).iloc[0]
+    mix_label = row["mix_label"]
+    return str(row["anchor_tech"]), ("" if pd.isna(mix_label) else str(mix_label))
+
+def find_res_mix_metadata_files(iso2: str) -> list[Path]:
+    """Find the anchor-co-located CF parquets written by 07 (generic anchors + scenario mixes)."""
+    return sorted(RES_CF.glob(f"{iso2.lower()}_cf_{YEAR}_bestsite_p95_anchor-*.parquet"))
 
 def land_mask(cell_mean):
     """Return a boolean land mask matching `cell_mean`'s dims/coords (Natural Earth 110m land)."""
@@ -294,11 +321,51 @@ def plot_bestsite_map(iso2: str, tech: str) -> None:
 
     log.info(f"wrote {out}")
 
+def plot_res_mix_locations(iso2: str, path: Path) -> None:
+    """Plot the co-located cells (anchor + counterparts) recorded in a 07 anchor file."""
+    meta = read_location_metadata(path)
+    anchor_tech, mix_label = read_anchor_metadata(path)
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+    gpd.GeoSeries([load_land_geometry(iso2)], crs=4326).boundary.plot(
+        ax=ax, color="black", linewidth=1.5
+    )
+    try:
+        gpd.GeoSeries([load_offshore_geometry(iso2)], crs=4326).boundary.plot(
+            ax=ax, color="black", linewidth=1, linestyle="--"
+        )
+    except ValueError:
+        pass  # country has no offshore geometry
+
+    for tech in TECHS:
+        x, y = meta[tech]["x"], meta[tech]["y"]
+        if tech == anchor_tech:
+            ax.scatter(x, y, s=120, marker="o", label=f"{tech} (anchor)")
+        else:
+            ax.scatter(x, y, s=80, marker="x", label=tech)
+
+    title = f"{iso2} RES-mix (anchor={anchor_tech}"
+    if mix_label:
+        title += f", {mix_label}"
+    title += ")"
+    ax.set_title(title)
+    ax.legend()
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    out = OUTDIR / f"{path.stem}_map.png"
+    fig.tight_layout()
+    fig.savefig(out, dpi=200)
+    plt.close(fig)
+    log.info(f"wrote {out}")
+
 def main():
-    """Plot best-site maps for every country × tech."""
+    """Plot best-site maps per country × tech, plus co-located anchor maps from 07's metadata."""
     for iso2 in COUNTRIES:
         for tech in TECHS:
             plot_bestsite_map(iso2, tech)
+        for path in find_res_mix_metadata_files(iso2):
+            plot_res_mix_locations(iso2, path)
 
 
 if __name__ == "__main__":

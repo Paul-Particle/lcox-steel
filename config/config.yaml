@@ -59,10 +59,25 @@ res_cf:
   pv_orientation:        latitude_optimal
 
   # Wind CF computation flags — passed to atlite.Cutout.wind() in
-  # build_res_cf_profile, determine_bestsite_p95, determine_resource_spread.
+  # 03_build_cf_timeseries, 07_make_bestsite_cf_timeseries, 06_resource_spread.
   # smooth=True             smooths the turbine power curve
   # add_cutout_windspeed    preserves atlite's built-in 25 m/s cutoff during smoothing
   wind_cf:
     smooth: true
     add_cutout_windspeed: true
+
+  # Anchor co-location for best-site RES-mix profiles (07_make_bestsite_cf_timeseries).
+  # max_radius_km           search radius (km) for counterpart cells across techs
+  # quality_floor_fraction  keep candidates with CF >= this fraction of the best nearby cell
+  spatial_matching_res_mix:
+    max_radius_km: 100
+    quality_floor_fraction: 0.90
+
+  # RES-mix scenarios needing scenario-specific co-located best-site files.
+  # Each entry: {country, mix_anchor_tech, res_mix: {tech: weight, ...}} (weights sum to 1).
+  # Land anchors (wind_onshore/solar) are skipped — identical to the generic anchor files;
+  # offshore anchors pick a shared land counterpart weighted by res_mix. Empty = generic
+  # per-tech + land-anchor files only.
+  bestsite_res_mix_scenarios: []
+  #   - { country: aus, mix_anchor_tech: wind_offshore, res_mix: { wind_offshore: 0.7, solar: 0.3 } }
 
