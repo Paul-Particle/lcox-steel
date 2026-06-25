@@ -30,13 +30,6 @@ Method
 - For anchor co-location, matches counterpart cells within `max_radius_km`
   subject to a `quality_floor_fraction` of the best nearby CF
 
-Single-cell vs spatial averaging
---------------------------------
-The earlier iteration of this script applied a 3x3 spatial average to wind cells
-to mimic farm-scale variability. The active pipeline dropped that ("single-cell
-sampling is sufficient"), so this version samples single cells. If farm-scale
-smoothing is wanted back, reintroduce it in `extract_cell_timeseries`.
-
 Notes
 -----
 - Purely climate-resource based (no land-use, grid, or permitting constraints)
