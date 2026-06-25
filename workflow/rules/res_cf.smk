@@ -105,26 +105,41 @@ rule build_res_cf_profile:
         "../scripts/res_cf/03_build_cf_timeseries.py"
 
 
-rule build_bestsite_cf:
+rule build_bestsite_p95:
     input:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
         regions="resources/shapes/{cf_area}_geo.parquet",
         offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
     output:
-        p95_wind_onshore="resources/res_cf/{cf_area}_wind-onshore_bestsite-p95_{start_date}_{end_date}.parquet",
-        p95_wind_offshore="resources/res_cf/{cf_area}_wind-offshore_bestsite-p95_{start_date}_{end_date}.parquet",
-        p95_solar="resources/res_cf/{cf_area}_solar_bestsite-p95_{start_date}_{end_date}.parquet",
-        anchored_on_onshore_wind_onshore="resources/res_cf/{cf_area}_wind-onshore_anchored-on-onshore_{start_date}_{end_date}.parquet",
-        anchored_on_onshore_wind_offshore="resources/res_cf/{cf_area}_wind-offshore_anchored-on-onshore_{start_date}_{end_date}.parquet",
-        anchored_on_onshore_solar="resources/res_cf/{cf_area}_solar_anchored-on-onshore_{start_date}_{end_date}.parquet",
-        anchored_on_solar_wind_onshore="resources/res_cf/{cf_area}_wind-onshore_anchored-on-solar_{start_date}_{end_date}.parquet",
-        anchored_on_solar_wind_offshore="resources/res_cf/{cf_area}_wind-offshore_anchored-on-solar_{start_date}_{end_date}.parquet",
-        anchored_on_solar_solar="resources/res_cf/{cf_area}_solar_anchored-on-solar_{start_date}_{end_date}.parquet",
-        anchored_on_offshore_wind_onshore="resources/res_cf/{cf_area}_wind-onshore_anchored-on-offshore_{start_date}_{end_date}.parquet",
-        anchored_on_offshore_wind_offshore="resources/res_cf/{cf_area}_wind-offshore_anchored-on-offshore_{start_date}_{end_date}.parquet",
-        anchored_on_offshore_solar="resources/res_cf/{cf_area}_solar_anchored-on-offshore_{start_date}_{end_date}.parquet",
+        "resources/res_cf/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.parquet",
+    wildcard_constraints:
+        variant=r"bestsite-p95",
     log:
-        "logs/build_bestsite_cf/{cf_area}_{start_date}_{end_date}.log",
+        "logs/build_bestsite_p95/{cf_area}_{tech}_{start_date}_{end_date}.log",
+    params:
+        wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
+        wind_offshore_turbine=lookup(dpath="res_cf/wind_offshore_turbine", within=config),
+        pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
+        pv_orientation=lookup(dpath="res_cf/pv_orientation", within=config),
+        wind_cf=lookup(dpath="res_cf/wind_cf", within=config),
+        spatial_matching_res_mix=lookup(
+            dpath="res_cf/spatial_matching_res_mix", within=config
+        ),
+    script:
+        "../scripts/res_cf/07_make_bestsite_cf_timeseries.py"
+
+
+rule build_anchored_cf:
+    input:
+        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/{cf_area}_geo.parquet",
+        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
+    output:
+        "resources/res_cf/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.parquet",
+    wildcard_constraints:
+        variant=r"anchored-w\d+-s\d+",
+    log:
+        "logs/build_anchored_cf/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.log",
     params:
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
         wind_offshore_turbine=lookup(dpath="res_cf/wind_offshore_turbine", within=config),

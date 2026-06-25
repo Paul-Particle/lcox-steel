@@ -47,6 +47,7 @@ resources/res_cf/<cc>_cf_2023_bestsite_p95_anchor-<anchor>_mix-<label>.parquet
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -77,6 +78,9 @@ COUNTRIES  = ["de"]  # lowercase to match filenames; standalone default
 REGIONS_PATH:          Path = SHAPES_RES / "regions.parquet"
 OFFSHORE_REGIONS_PATH: Path = SHAPES_RES / "offshore_regions.parquet"
 CUTOUT_PATH:           Path | None = None
+SM_VARIANT:            str | None = None   # "bestsite-p95" or "anchored-w{W}-s{S}"
+SM_ANCHOR:             str | None = None   # anchor tech in snake_case (from tech wildcard)
+SM_RES_MIX:            dict[str, float] | None = None  # parsed from variant; offshore anchor only
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     COUNTRIES             = [snakemake.wildcards.cf_area.lower()]
@@ -84,6 +88,14 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     REGIONS_PATH          = Path(snakemake.input.regions)
     OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
     CUTOUT_PATH           = Path(snakemake.input.cutout)
+    SM_VARIANT            = snakemake.wildcards.variant
+    SM_ANCHOR             = snakemake.wildcards.tech.replace("-", "_")
+    if SM_VARIANT.startswith("anchored-"):
+        _m = re.match(r"anchored-w(\d+)-s(\d+)$", SM_VARIANT)
+        assert _m, f"Cannot parse variant '{SM_VARIANT}'"
+        _w = int(_m.group(1)) / 10
+        _s = int(_m.group(2)) / 10
+        SM_RES_MIX = {"wind_onshore": _s, "solar": max(0.0, round(1.0 - _w - _s, 10))}
 
 TECHS                 = ["wind_onshore", "wind_offshore", "solar"]
 WIND_ONSHORE_TURBINE  = RES_CF_CFG["wind_onshore_turbine"]
@@ -429,28 +441,22 @@ def add_location_metadata(
     return df
 
 
-_ANCHOR_SM_PREFIX: dict[str | None, str] = {
-    None:            "p95",
-    "wind_onshore":  "anchored_on_onshore",
-    "wind_offshore": "anchored_on_offshore",
-    "solar":         "anchored_on_solar",
-}
-
-
-def _write_per_tech_parquets(profiles: dict[str, pd.Series], variant_prefix: str) -> None:
-    """Write one single-column per-tech parquet per TECH to snakemake.output in Snakemake mode.
-
-    Output key format: {variant_prefix}_{tech}  e.g. 'p95_wind_onshore'.
-    Column name is kebab-case to match assumptions.yaml ('wind-onshore', etc.).
-    """
-    if "snakemake" not in globals() or not hasattr(snakemake, "output"):
+def _write_sm_p95_output(results: dict[str, pd.Series]) -> None:
+    if "snakemake" not in globals() or SM_VARIANT != "bestsite-p95":
         return
-    for tech in TECHS:
-        out_path = getattr(snakemake.output, f"{variant_prefix}_{tech}", None)
-        if out_path is None:
-            continue
-        kebab = tech.replace("_", "-")
-        profiles[tech].rename(kebab).to_frame().to_parquet(out_path, index=True)
+    results[SM_ANCHOR].rename(SM_ANCHOR.replace("_", "-")).to_frame().to_parquet(
+        snakemake.output[0], index=True
+    )
+
+
+def _write_sm_anchored_output(profiles: dict[str, pd.Series], anchor_tech: str) -> None:
+    if "snakemake" not in globals() or anchor_tech != SM_ANCHOR:
+        return
+    if not (SM_VARIANT and SM_VARIANT.startswith("anchored-")):
+        return
+    pd.DataFrame(
+        {tech.replace("_", "-"): profiles[tech] for tech in TECHS},
+    ).to_parquet(snakemake.output[0], index=True)
 
 
 def main() -> None:
@@ -482,15 +488,16 @@ def main() -> None:
         out_p95 = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95.parquet"
         df_p95.to_parquet(out_p95, index=False)
         log.info(f"{country_upper}: wrote {out_p95.name}")
-        _write_per_tech_parquets(results, _ANCHOR_SM_PREFIX[None])
+        _write_sm_p95_output(results)
 
         # 2) Anchor-co-located files (one per anchor tech: onshore, solar, offshore).
         for anchor_tech in ["wind_onshore", "solar", "wind_offshore"]:
-            anchor_res_mix = (
-                {"wind_onshore": 0.5, "solar": 0.5}
-                if anchor_tech == "wind_offshore"
-                else {anchor_tech: 1.0}
-            )
+            if SM_ANCHOR == anchor_tech and SM_RES_MIX is not None:
+                anchor_res_mix = SM_RES_MIX
+            elif anchor_tech == "wind_offshore":
+                anchor_res_mix = {"wind_onshore": 0.5, "solar": 0.5}
+            else:
+                anchor_res_mix = {anchor_tech: 1.0}
             profiles, cells = build_anchor_colocated_profiles(
                 cutout, country_upper, anchor_tech, res_mix=anchor_res_mix
             )
@@ -498,7 +505,7 @@ def main() -> None:
             out_anchor = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95_anchor-{anchor_tech}.parquet"
             df_anchor.to_parquet(out_anchor, index=False)
             log.info(f"{country_upper}: wrote {out_anchor.name}")
-            _write_per_tech_parquets(profiles, _ANCHOR_SM_PREFIX[anchor_tech])
+            _write_sm_anchored_output(profiles, anchor_tech)
 
         # 3) Scenario-specific RES-mix files (config-driven; offshore anchors etc.).
         for scenario in RES_MIX_SCENARIOS:
