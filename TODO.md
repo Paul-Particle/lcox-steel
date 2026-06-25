@@ -26,6 +26,130 @@ partial fills. This would also make the `geo → cutout → timeseries` chain mo
 coverage, and `build_res_cf_profile` would slice from the cache. When this lands, the backup
 hack and its README/HANDOFF callouts can come out.
 
+## Why `download_cutout` reads Natural Earth directly (DAG note)
+
+In the reference pipeline, `02_make_cutouts` read the *built* region files
+(`regions.geojson` + `offshore_regions.geojson`) and unioned land + offshore to get
+the cutout bounds — so the cutout rule implicitly depended on `01`/`01b`.
+
+The current `download_cutout` instead depends only on `ancient(ne_zip)` and re-derives
+its bounds from Natural Earth itself, with no dependency on `build_regions` /
+`build_offshore_regions`. This is **deliberate and tied to the cutout-cache stopgap above**:
+the CDS/ERA5 pull is the single slowest, most expensive step, so it must not be re-triggered
+by regeneration of the cheap geometry outputs (a code-trigger rerun, a `mainland_bbox` edit).
+`ancient()` on the input, the dropped `protected()` on the output, and the `_backup.nc` hack
+all serve the same goal: the cutout never auto-reruns once it (or its backup) exists. Reading
+NE directly is part of that insulation.
+
+**Cost of this decoupling:** the cutout box and the region masks are now derived from two
+independent reads of Natural Earth, and the offshore geometry is invisible to the bounds
+calculation (see next item). When the proper cutout cache lands, the chain can return to a
+natural `geo → cutout → timeseries` shape with `01`/`01b` defining the area.
+
+## Restore the land + offshore union for cutout bounds (drop bbox pad)
+
+`download_cutout` currently bounds the cutout with **land only** (Natural Earth +
+`mainland_bbox`) padded by `cutout.bbox_pad_deg: 1.0`. The reference `02_make_cutouts`
+instead unioned `regions ∪ offshore_regions` before taking bounds, so the box was guaranteed
+to cover the offshore deployment band.
+
+The 1° pad is **smaller than the offshore reach** (`offshore_max_distance_km: 200` km ≈ 1.8°),
+so the current box can clip offshore CF cells (e.g. DE North/Baltic Sea). The land-only
+approach was almost certainly a *consequence* of the DAG decoupling above (once `02` stopped
+reading `01b`'s output, it could no longer union the real offshore geometry), not an
+intentional coverage decision — worth confirming before changing.
+
+TODO: go back to the union approach. The clean version is unblocked by the cutout-cache work
+(restoring the union re-introduces a dependency on `build_offshore_regions`, which is fine once
+the cache decouples re-download from geometry regeneration). Interim option that keeps the DAG
+decoupled: bump `bbox_pad_deg` to ≥ the offshore reach in degrees (~2°) so the box provably
+covers the band — cruder, but a one-line stopgap.
+
+## Wire in best-site CF (`07`) — drop the quarterly-cutout requirement
+
+`07_make_bestsite_cf_timeseries` (and `_helpers.cutout_path()` / `QUARTERS`) still build the
+CF year by concatenating four quarterly cutouts `{cc}_{year}_{q}.nc`. Stage 2 now emits a
+single **annual** cutout `{cf_area}_{start_date}_{end_date}.nc`, so `07` cannot run against the
+live pipeline (this is the WIP gap flagged in its `build_cf_year` docstring).
+
+TODO:
+1. Make `build_cf_year` read the single annual cutout instead of looping `QUARTERS`
+   (drop `cutout_path()` / `QUARTERS` from `_helpers`).
+2. Add a Snakemake rule wiring `07` the way `build_res_cf_profile` is wired
+   (inputs: cutout + regions + offshore_regions; params from `config.res_cf`; output a
+   bestsite parquet under `resources/res_cf/`).
+3. Keep `07` driving its wind conversion off `config.res_cf.wind_cf` (`smooth` +
+   `add_cutout_windspeed`), so best-site and national (`03`) CFs use identical settings.
+   The reference pipeline was inconsistent here — national `03` was unsmoothed while
+   best-site `07` used `smooth=True` — which quietly broke the "best-site ≥ national,
+   same CF fields" claim in the res_cf README.
+
+This also retires the last reason the reference `04_concat_quaters` / `05_combine_techs` logic
+existed.
+
+The diagnostic `06_resource_spread` shares the same quarterly-cutout migration and is also
+unwired. If it gets wired, it needs one extra fix: `national_mean_from_csv()` reads
+`{cc}_cf_{year}.parquet` (the combined per-country file that `05_combine_techs` used to write),
+which the current pipeline no longer produces — so `nat_mean` silently falls back to the
+spatial mean and the `uplift_*_vs_national` columns become meaningless. Repoint it at the
+per-tech `{cf_area}_{tech}_country-average_{start}_{end}.parquet` files (from `03`), or drop
+the national-mean column.
+
+### Decision: keep best-site wind single-cell (do NOT restore the 3×3 block average)
+
+The reference `07` averaged a 3×3 cell block for wind to "approximate wind farm-scale
+variability and avoid artificial saturation at CF ≈ 1." Dropping it (single-cell sampling) was
+correct — do not reintroduce it:
+
+- **Cell-scale averaging is far too coarse.** ERA5 cells are tens of km across, so a 3×3 block
+  spans ~100 km — vastly larger than a wind farm. It smears together genuinely different
+  weather, not farm-internal spread.
+- **Farm-scale spread is already covered by the `smooth` flag.** atlite's `smooth=True` is
+  exactly the wind-farm-aggregation correction (it spreads the single-turbine power curve to
+  represent a distribution of turbines), so the thing the 3×3 was meant to approximate is
+  already handled at the right scale.
+- **Saturation at CF ≈ 1 is physically real, not an artifact.** Above rated wind speed a
+  turbine deliberately holds output flat at rated power by pitching its blades (pitch
+  control/regulation) to shed the excess — so flat CF≈1 stretches in high wind are the turbine
+  behaving correctly, and should be preserved, not smoothed away.
+
+## Wire in the complementarity screen (`08`) + fix its latent traps
+
+`08_complementarity_screen` chooses a RES-mix by *firmness* — it screens (onshore, offshore,
+solar) cell triplets within `max_radius_km` and ranks them by
+`score = w_coincidence·coincidence − w_correlation·mean_corr` (reward combined uptime, penalise
+correlated profiles). It's the only thing in the pipeline that picks a mix by complementarity
+rather than peak resource, and it's the closest stranded script to wireable (it already reads
+`wildcards.country` / `output.top` / `output.avg`). It feeds the best-site RES-mix scenarios in
+`h2_dri`. To wire it:
+
+1. Shares `07`'s quarterly→annual migration (it imports `build_cf_year` etc. from `07`), plus a
+   rule in `res_cf.smk` and moving the tuning constants out of `load_cfg`'s hardcoded block back
+   into `config.res_cf`.
+2. **Verify/fix the greedy bootstrap.** In `greedy_screen._find_best_triplet`, the step that
+   picks the offshore complement (before solar is chosen) passes the onshore series into the
+   solar slot: `score_triplet(ts_on[:, best_i], ts_off[:, j], ts_on[:, best_i], ...)`. So it
+   scores `onshore + offshore + onshore` — double-counting onshore, ignoring solar. Either an
+   intentional anchor-as-stand-in bootstrap or a copy-paste bug; only affects the greedy path
+   (large candidate spaces — brute force is unaffected). Confirm before trusting greedy output.
+3. **`quality_floor` is loaded but never applied** — the filter line is commented out
+   (`qualified = valid #& (...)`) so it screens all valid cells, and the docstring's
+   "pre-filter to quality_floor percentile" overstates what runs. Either re-enable it (shrinks
+   the candidate space, speeds the screen) or drop the param + docstring line.
+4. `save_average_profiles` reads the same nonexistent `{cc}_cf_{year}.parquet` as `06` (see the
+   `07` section) — but here it `FileNotFoundError`s rather than falling back. Repoint it when
+   fixing the `06` case.
+
+## Surface resource-spread diagnostics in viz (in spirit)
+
+The intra-country resource heterogeneity that `06_resource_spread` captures (best-site uplift,
+spatial P90/P95/max vs national mean) is a genuinely useful story for reports — "how much does
+siting matter in this country" — and currently lives only as a standalone CSV/parquet nobody
+looks at. At some point, surface it in the `viz` pipeline: e.g. an uplift bar/whisker per
+country × tech, or annotate the siting map with the P95-vs-national gap. Doesn't need to reuse
+`06` as-is — the point is to get the *concept* into the report, computed from whatever CF grids
+the live pipeline produces.
+
 ## CDS download monitoring
 
 Atlite ERA5 cutout downloads go through the CDS API. With `monthly_requests=True`

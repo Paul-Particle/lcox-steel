@@ -67,8 +67,7 @@ if "snakemake" not in globals():
 from common._logging import configure_logging
 from common._paths import RES_CF, SHAPES_RES
 from scripts.res_cf._helpers import (
-    QUARTERS,
-    cutout_path,
+    annual_cutout_path,
     haversine_distance_km,
     load_res_cf_cfg,
 )
@@ -122,46 +121,37 @@ def extract_cell_timeseries(
     return s.clip(0, 1)
 
 
-def build_cf_year(country_upper: str, tech: str) -> xr.DataArray:
-    """Build the full-year per-cell CF grid for `tech` by concatenating the quarterly cutouts."""
-    parts = []
+def build_cf_year(cutout_path: Path, tech: str) -> xr.DataArray:
+    """Build the full-year per-cell CF grid for `tech` from a single annual cutout."""
+    co = atlite.Cutout(path=str(cutout_path))
 
-    # NOTE (WIP): cutout_path() returns quarterly cutouts (e.g. de_2023_q1.nc) from
-    # the old pipeline layout. The current Snakemake pipeline produces annual cutouts
-    # (e.g. de_20230101_20231231.nc). This script needs updating when the cutout-cache
-    # refactor lands (see TODO.md).
-    for seg in QUARTERS:
-        co = atlite.Cutout(path=str(cutout_path(country_upper, YEAR, seg)))
+    if tech == "wind_onshore":
+        cf = co.wind(
+            turbine=WIND_ONSHORE_TURBINE,
+            capacity_factor_timeseries=True,
+            smooth=WIND_SMOOTH,
+            add_cutout_windspeed=WIND_ADD_CUTOUT_WS,
+        )
+    elif tech == "wind_offshore":
+        cf = co.wind(
+            turbine=WIND_OFFSHORE_TURBINE,
+            capacity_factor_timeseries=True,
+            smooth=WIND_SMOOTH,
+            add_cutout_windspeed=WIND_ADD_CUTOUT_WS,
+        )
+    elif tech == "solar":
+        cf = co.pv(
+            panel=PV_PANEL,
+            orientation=PV_ORIENTATION,
+            capacity_factor_timeseries=True,
+        )
+    else:
+        raise ValueError(f"Unknown tech: {tech}")
 
-        if tech == "wind_onshore":
-            cf = co.wind(
-                turbine=WIND_ONSHORE_TURBINE,
-                capacity_factor_timeseries=True,
-                smooth=WIND_SMOOTH,
-                add_cutout_windspeed=WIND_ADD_CUTOUT_WS,
-            )
-        elif tech == "wind_offshore":
-            cf = co.wind(
-                turbine=WIND_OFFSHORE_TURBINE,
-                capacity_factor_timeseries=True,
-                smooth=WIND_SMOOTH,
-                add_cutout_windspeed=WIND_ADD_CUTOUT_WS,
-            )
-        elif tech == "solar":
-            cf = co.pv(
-                panel=PV_PANEL,
-                orientation=PV_ORIENTATION,
-                capacity_factor_timeseries=True,
-            )
-        else:
-            raise ValueError(f"Unknown tech: {tech}")
+    if isinstance(cf, xr.Dataset):
+        cf = cf[list(cf.data_vars)[0]]
 
-        if isinstance(cf, xr.Dataset):
-            cf = cf[list(cf.data_vars)[0]]
-
-        parts.append(cf)
-
-    return xr.concat(parts, dim="time")
+    return cf
 
 
 def _load_land_geometry(iso2: str):
@@ -257,6 +247,7 @@ def find_nearest_valid_cell(
 
 
 def build_anchor_colocated_profiles(
+    cutout_path: Path,
     country_upper: str,
     anchor_tech: str,
     res_mix: dict[str, float],
@@ -273,7 +264,7 @@ def build_anchor_colocated_profiles(
 
     Returns (profiles_by_tech, selected_cells_by_tech).
     """
-    cf_year_by_tech = {tech: build_cf_year(country_upper, tech) for tech in TECHS}
+    cf_year_by_tech = {tech: build_cf_year(cutout_path, tech) for tech in TECHS}
 
     # 1) Anchor cell in its own geometry.
     anchor_cf_year = cf_year_by_tech[anchor_tech]
@@ -395,12 +386,13 @@ def main() -> None:
     """Write per-tech P95, generic anchor, and scenario-specific RES-mix bestsite parquets."""
     for cc in COUNTRIES:
         country_upper = cc.upper()
+        cutout = annual_cutout_path(cc, YEAR)
 
         # 1) Per-tech best-site P95 (each tech from its own P95 cell).
         results: dict[str, pd.Series] = {}
         selected_cells: dict[str, dict] = {}
         for tech in TECHS:
-            cf_year = build_cf_year(country_upper, tech)
+            cf_year = build_cf_year(cutout, tech)
             geom = geometry_for_tech(country_upper, tech)
 
             cell_mean = cf_year.mean("time")
@@ -423,7 +415,7 @@ def main() -> None:
         # 2) Generic anchor-co-located files (one land anchor per file).
         for anchor_tech in ["wind_onshore", "solar"]:
             profiles, cells = build_anchor_colocated_profiles(
-                country_upper, anchor_tech, res_mix={anchor_tech: 1.0}
+                cutout, country_upper, anchor_tech, res_mix={anchor_tech: 1.0}
             )
             df_anchor = _add_location_metadata(_to_dataframe(profiles), anchor_tech, None, cells)
             out_anchor = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95_anchor-{anchor_tech}.parquet"
@@ -443,7 +435,7 @@ def main() -> None:
                 )
                 continue
             mix_label = _format_res_mix_label(res_mix)
-            profiles, cells = build_anchor_colocated_profiles(country_upper, anchor_tech, res_mix)
+            profiles, cells = build_anchor_colocated_profiles(cutout, country_upper, anchor_tech, res_mix)
             df_mix = _add_location_metadata(_to_dataframe(profiles), anchor_tech, mix_label, cells)
             out_mix = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95_anchor-{anchor_tech}_mix-{mix_label}.parquet"
             df_mix.to_parquet(out_mix, index=False)

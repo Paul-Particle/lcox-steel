@@ -47,7 +47,7 @@ import yaml
 
 from common._logging import configure_logging, progress
 from common._paths import REPO_ROOT, RES_CF
-from scripts.res_cf._helpers import haversine_distance_km
+from scripts.res_cf._helpers import annual_cutout_path, haversine_distance_km
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -529,9 +529,10 @@ def main() -> None:
         save_average_profiles(cc, cfg["year"], avg_out=sm_avg_out)
 
         log.info("building CF grids (this takes a few minutes per tech)")
+        cutout = annual_cutout_path(cc, cfg["year"])
         cf_grids = {}
         for tech in TECHS:
-            cf_grids[tech] = build_cf_year(current_country, tech)
+            cf_grids[tech] = build_cf_year(cutout, tech)
             log.info(f"tech={tech} CF grid built")
 
         log.info("identifying candidate cells")

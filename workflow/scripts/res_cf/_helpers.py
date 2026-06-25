@@ -2,8 +2,7 @@
 
 Lives next to its consumers (07_make_bestsite_cf_timeseries, 08_complementarity_screen,
 06_resource_spread, 100_plot_bestsite_locations) rather than in a top-level
-common/ module — these helpers are specific to the quarterly-cutout workflow
-used by those scripts and are not used by the active Snakemake pipeline
+common/ module. Not used by the active Snakemake pipeline
 (01_build_regions, 01b_build_offshore_regions, 02_make_cutouts, 03_build_cf_timeseries).
 """
 
@@ -14,26 +13,23 @@ import yaml
 
 from common._paths import CUTOUTS, REPO_ROOT
 
-QUARTERS = ["q1", "q2", "q3", "q4"]
-
 
 def load_res_cf_cfg() -> dict:
     """Read the `res_cf` config block from config/config.yaml (standalone-mode default).
 
     Snakemake-driven runs receive this via snakemake.config instead.
     """
-    # --- Previous docstring (kept for reference) below ---
-    # Read the `res_cf` block from config/config.yaml. Standalone-mode default;
-    # Snakemake-driven runs go through snakemake.config instead.
     with open(REPO_ROOT / "config/config.yaml") as f:
         return yaml.safe_load(f)["res_cf"]
 
 
-def cutout_path(country: str, year: int, quarter: str) -> Path:
-    """Return the canonical path to an atlite cutout for (country, year, quarter)."""
-    # --- Previous docstring (kept for reference) below ---
-    # Canonical path to an atlite cutout.
-    return CUTOUTS / f"{country.lower()}_{year}_{quarter}.nc"
+def annual_cutout_path(cf_area: str, year: int) -> Path:
+    """Return the path to the single annual atlite cutout for (cf_area, year).
+
+    Matches the output pattern of the `download_cutout` rule:
+    cutouts/{cf_area}_{year}0101_{year}1231.nc
+    """
+    return CUTOUTS / f"{cf_area.lower()}_{year}0101_{year}1231.nc"
 
 
 def haversine_distance_km(

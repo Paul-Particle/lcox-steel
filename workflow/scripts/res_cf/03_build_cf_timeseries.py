@@ -1,3 +1,11 @@
+"""Compute a region-averaged hourly capacity-factor time series for a single technology.
+
+Aggregates solar, wind-onshore, or wind-offshore CF across the entire study region
+using atlite's indicator matrix (area-weighted spatial average), producing one
+national-average CF column written to parquet. See 03b for a single best-site
+multi-orientation solar variant.
+"""
+
 import logging
 from pathlib import Path
 
