@@ -54,7 +54,7 @@ def _assemble_multisite_cf(
             if "@" not in col:
                 raise ValueError(
                     f"multi-site CF column '{col}' in {p} is missing the "
-                    "'{tech}@{cell}' key — multi-site scenarios need grid-n* inputs"
+                    "'{tech}@{cell}' key — multi-site scenarios need multi-n* inputs"
                 )
             tech, cell = col.split("@", 1)
             # A cell id (c00, c01, …) is only unique within a tech's parquet —

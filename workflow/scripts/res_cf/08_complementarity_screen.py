@@ -60,6 +60,12 @@ _spec = importlib.util.spec_from_file_location(
 _bestsite = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_bestsite)
 
+# In Snakemake mode, override the imported module's path globals so that
+# geometry_for_tech reads from the rule's declared input files, not 07's defaults.
+if "snakemake" in globals() and hasattr(snakemake, "input"):
+    _bestsite.REGIONS_PATH = Path(snakemake.input.regions)
+    _bestsite.OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
+
 build_cf_year = _bestsite.build_cf_year
 extract_cell_timeseries = _bestsite.extract_cell_timeseries
 geometry_for_tech = _bestsite.geometry_for_tech
@@ -74,27 +80,34 @@ CF_DIR = RES_CF
 
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
 
+SM_CUTOUT_PATH: Path | None = None
+SM_SCREEN_OUT:  Path | None = None
+SM_CF_OUT:      Path | None = None
+
+if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
+    SM_CUTOUT_PATH = Path(snakemake.input.cutout)
+    SM_SCREEN_OUT  = Path(snakemake.output.screen)
+    SM_CF_OUT      = Path(snakemake.output.cf)
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
 def load_cfg() -> dict:
-    """Tuning constants for the WIP complementarity screen. Hardcoded here
-    (rather than read from config.yaml) since this script is off the active
-    Snakemake pipeline — see _helpers.py for the legacy-pipeline context."""
+    """Tuning constants for the complementarity screen; standalone-mode defaults."""
     with open(REPO_ROOT / "config/config.yaml") as f:
         c = yaml.safe_load(f)
     rc = c["res_cf"]
+    comp = rc.get("complementarity", {})
     return {
-        "countries":             [x.upper() for x in rc["countries"]],
-        "year":                  2023,
-        "top_n":                 10,
-        "coincidence_threshold": 0.20,
-        "w_coincidence":         0.6,
-        "w_correlation":         0.4,
-        "max_radius_km":         300.0,
-        "quality_floor":         0.90,
-        "max_triplets_brute_force": 500_000,
+        "countries":                [x.upper() for x in rc["countries"]],
+        "year":                     2023,
+        "top_n":                    comp.get("top_n", 10),
+        "coincidence_threshold":    comp.get("coincidence_threshold", 0.20),
+        "w_coincidence":            comp.get("w_coincidence", 0.6),
+        "w_correlation":            comp.get("w_correlation", 0.4),
+        "max_radius_km":            float(comp.get("max_radius_km", 300.0)),
+        "quality_floor":            float(comp.get("quality_floor", 0.90)),
+        "max_triplets_brute_force": comp.get("max_triplets_brute_force", 500_000),
     }
 
 
@@ -492,28 +505,86 @@ def greedy_screen(
 
 # ── Average profiles ──────────────────────────────────────────────────────────
 
-def save_average_profiles(cc: str, year: int, avg_out: Path | None = None) -> None:
-    """Copy the national-mean CF parquet to the average-profiles output for `cc`."""
-    src = CF_DIR / f"{cc.lower()}_cf_{year}.parquet"
-    dst = avg_out if avg_out is not None else CF_DIR / f"{cc.lower()}_average_profiles_{year}.parquet"
-    if not src.exists():
-        raise FileNotFoundError(f"National mean CF file not found: {src}")
-    df = pd.read_parquet(src)
-    df.to_parquet(dst, index=False)
+def save_average_profiles(cc: str, year: int) -> None:
+    """Combine per-tech country-average parquets into a single diagnostic file.
+
+    Source files are the outputs of `build_res_cf_profile`; they are written once
+    per tech, not per year, so we glob by the area+tech prefix.
+    """
+    frames = {}
+    for tech in TECHS:
+        pattern = f"{cc.lower()}_{tech.replace('_', '-')}_country-average_*.parquet"
+        matches = sorted(CF_DIR.glob(pattern))
+        if not matches:
+            log.warning(f"no country-average parquet for {tech} ({cc}) — skipping")
+            continue
+        src = matches[-1]  # most recent if multiple
+        df_tech = pd.read_parquet(src)
+        # The country-average parquet has a single CF column; rename it to the tech.
+        cf_col = [c for c in df_tech.columns if c != "time"]
+        frames[tech.replace("_", "-")] = df_tech.set_index("time")[cf_col[0]]
+
+    if not frames:
+        log.warning(f"no country-average sources found for {cc} — skipping average profiles")
+        return
+
+    dst = CF_DIR / f"{cc.lower()}_average_profiles_{year}.parquet"
+    pd.DataFrame(frames).to_parquet(dst, index=True)
     log.info(f"saved average profiles → {dst.name}")
+
+
+def _write_sm_outputs(
+    top_records: list[dict],
+    ts_matrices: dict[str, np.ndarray],
+    candidates: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]],
+) -> None:
+    """Write Snakemake outputs for the top-1 complementarity triplet.
+
+    screen: top-N metadata parquet (all triplets, not just top-1)
+    cf:     3-column timeseries parquet (wind-onshore, wind-offshore, solar)
+            for the top-1 triplet; columns match the naming convention used
+            by build_anchored_cf so solve_network.py can consume it unchanged.
+    """
+    if "snakemake" not in globals():
+        return
+
+    if SM_SCREEN_OUT is not None:
+        df_screen = pd.DataFrame(top_records)
+        df_screen.insert(0, "rank", range(1, len(df_screen) + 1))
+        df_screen.to_parquet(SM_SCREEN_OUT, index=False)
+        log.info(f"wrote screen output → {SM_SCREEN_OUT.name}")
+
+    if SM_CF_OUT is not None and top_records:
+        best = top_records[0]
+        ys_on,  xs_on,  _ = candidates["wind_onshore"]
+        ys_off, xs_off, _ = candidates["wind_offshore"]
+        ys_sol, xs_sol, _ = candidates["solar"]
+
+        i = int(np.where(
+            (ys_on == best["onshore_y_idx"]) & (xs_on == best["onshore_x_idx"])
+        )[0][0])
+        j = int(np.where(
+            (ys_off == best["offshore_y_idx"]) & (xs_off == best["offshore_x_idx"])
+        )[0][0])
+        k = int(np.where(
+            (ys_sol == best["solar_y_idx"]) & (xs_sol == best["solar_x_idx"])
+        )[0][0])
+
+        pd.DataFrame({
+            "wind-onshore":  ts_matrices["wind_onshore"][:, i],
+            "wind-offshore": ts_matrices["wind_offshore"][:, j],
+            "solar":         ts_matrices["solar"][:, k],
+        }).to_parquet(SM_CF_OUT, index=False)
+        log.info(f"wrote top-1 CF output → {SM_CF_OUT.name}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    """Screen complementary RES-cell triplets per country and write top-N + average-profile parquets."""
+    """Screen complementary RES-cell triplets per country and write top-N + CF parquets."""
     sm_country = None
-    sm_top_out = None
-    sm_avg_out = None
     if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-        sm_country = snakemake.wildcards.country.upper()
-        sm_top_out = Path(snakemake.output.top)
-        sm_avg_out = Path(snakemake.output.avg)
+        sm_country = snakemake.wildcards.cf_area.upper()
 
     cfg = load_cfg()
 
@@ -526,10 +597,10 @@ def main() -> None:
 
         log.info(f"country={current_country} start")
 
-        save_average_profiles(cc, cfg["year"], avg_out=sm_avg_out)
+        save_average_profiles(cc, cfg["year"])
 
         log.info("building CF grids (this takes a few minutes per tech)")
-        cutout = annual_cutout_path(cc, cfg["year"])
+        cutout = SM_CUTOUT_PATH if SM_CUTOUT_PATH is not None else annual_cutout_path(cc, cfg["year"])
         cf_grids = {}
         for tech in TECHS:
             cf_grids[tech] = build_cf_year(cutout, tech)
@@ -609,7 +680,7 @@ def main() -> None:
         df.insert(0, "rank",    range(1, len(df) + 1))
         df.insert(1, "country", current_country)
 
-        out_path = sm_top_out if sm_top_out is not None else OUTDIR / f"{cc}_complementarity_top{cfg['top_n']}_{cfg['year']}.parquet"
+        out_path = OUTDIR / f"{cc}_complementarity_top{cfg['top_n']}_{cfg['year']}.parquet"
         df.to_parquet(out_path, index=False)
 
         log.info(f"top {len(df)} complementary triplets → {out_path.name}")
@@ -618,6 +689,8 @@ def main() -> None:
             f"best score={best['score']:.4f} coincidence={best['coincidence']:.3f} "
             f"mean_corr={best['mean_corr']:.3f} dist_km={best['dist_km']:.1f}"
         )
+
+        _write_sm_outputs(top_records, ts_matrices, candidates)
 
 
 if __name__ == "__main__":

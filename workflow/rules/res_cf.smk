@@ -83,7 +83,7 @@ rule build_solar_tilt_mix_p95:
         "../scripts/res_cf/03b_build_solar_tilt_mix_p95.py"
 
 
-rule build_res_cf_profile:
+rule build_country_average_cf:
     input:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
         regions="resources/shapes/{cf_area}_geo.parquet",
@@ -115,7 +115,7 @@ rule build_bestsite_p95:
     wildcard_constraints:
         variant=r"bestsite-p95",
     log:
-        "logs/build_bestsite_p95/{cf_area}_{tech}_{start_date}_{end_date}.log",
+        "logs/build_bestsite_p95/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.log",
     params:
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
         wind_offshore_turbine=lookup(dpath="res_cf/wind_offshore_turbine", within=config),
@@ -129,7 +129,7 @@ rule build_bestsite_p95:
         "../scripts/res_cf/07_make_bestsite_cf_timeseries.py"
 
 
-rule build_anchored_cf:
+rule build_anchored_res_mix_cfs:
     input:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
         regions="resources/shapes/{cf_area}_geo.parquet",
@@ -153,17 +153,43 @@ rule build_anchored_cf:
         "../scripts/res_cf/07_make_bestsite_cf_timeseries.py"
 
 
-rule build_res_cf_candidates:
+rule build_complementarity_screen:
     input:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
         regions="resources/shapes/{cf_area}_geo.parquet",
         offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
     output:
-        "resources/res_cf/{cf_area}_{tech}_grid-n{n_cells}_{start_date}_{end_date}.parquet",
+        screen="resources/res_cf/{cf_area}_{tech}_complementarity-screen_{start_date}_{end_date}.parquet",
+        cf="resources/res_cf/{cf_area}_{tech}_complementarity-top1_{start_date}_{end_date}.parquet",
+    log:
+        "logs/build_complementarity_screen/{cf_area}_{tech}_{start_date}_{end_date}.log",
+    params:
+        top_n=lookup(dpath="res_cf/complementarity/top_n", within=config),
+        coincidence_threshold=lookup(
+            dpath="res_cf/complementarity/coincidence_threshold", within=config
+        ),
+        w_coincidence=lookup(dpath="res_cf/complementarity/w_coincidence", within=config),
+        w_correlation=lookup(dpath="res_cf/complementarity/w_correlation", within=config),
+        max_radius_km=lookup(dpath="res_cf/complementarity/max_radius_km", within=config),
+        quality_floor=lookup(dpath="res_cf/complementarity/quality_floor", within=config),
+        max_triplets_brute_force=lookup(
+            dpath="res_cf/complementarity/max_triplets_brute_force", within=config
+        ),
+    script:
+        "../scripts/res_cf/08_complementarity_screen.py"
+
+
+rule build_multi_site_cfs:
+    input:
+        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/{cf_area}_geo.parquet",
+        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
+    output:
+        "resources/res_cf/{cf_area}_{tech}_multi-n{n_cells}_{start_date}_{end_date}.parquet",
     wildcard_constraints:
         n_cells=r"\d+",
     log:
-        "logs/build_res_cf_candidates/{cf_area}_{tech}_grid-n{n_cells}_{start_date}_{end_date}.log",
+        "logs/build_multi_site_cfs/{cf_area}_{tech}_multi-n{n_cells}_{start_date}_{end_date}.log",
     params:
         region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),

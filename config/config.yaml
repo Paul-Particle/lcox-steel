@@ -73,6 +73,23 @@ res_cf:
     max_radius_km: 100
     quality_floor_fraction: 0.90
 
+  # Complementarity screening (08_complementarity_screen.py).
+  # top_n                    save this many top triplets in the screen output
+  # coincidence_threshold    fraction of combined CF that counts as "generating"
+  # w_coincidence            score weight for coincidence fraction
+  # w_correlation            score weight for pairwise correlations (subtracted)
+  # max_radius_km            max pairwise distance between triplet cells
+  # quality_floor            percentile floor for candidate cells (0–1)
+  # max_triplets_brute_force switch to greedy search above this triplet count
+  complementarity:
+    top_n: 10
+    coincidence_threshold: 0.20
+    w_coincidence: 0.6
+    w_correlation: 0.4
+    max_radius_km: 300.0
+    quality_floor: 0.90
+    max_triplets_brute_force: 500000
+
   # RES-mix scenarios needing scenario-specific co-located best-site files.
   # Each entry: {country, mix_anchor_tech, res_mix: {tech: weight, ...}} (weights sum to 1).
   # Land anchors (wind_onshore/solar) are skipped — identical to the generic anchor files;

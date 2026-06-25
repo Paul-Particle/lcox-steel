@@ -44,7 +44,6 @@ resources/res_cf/<cc>_cf_2023_bestsite_p95_anchor-<anchor>.parquet
 resources/res_cf/<cc>_cf_2023_bestsite_p95_anchor-<anchor>_mix-<label>.parquet
 """
 
-from __future__ import annotations
 
 import logging
 import re

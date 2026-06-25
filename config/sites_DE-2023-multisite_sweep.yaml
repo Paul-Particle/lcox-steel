@@ -1,7 +1,7 @@
 # Multi-site overlay: presence of this file switches the scenario into
 # multi-site mode (one electricity bus per candidate cell, distance-costed HVDC
 # links to the demand site). The candidate cells + their coordinates come from
-# the grid-n* CF parquets; only the demand site is declared here.
+# the multi-n* CF parquets; only the demand site is declared here.
 demand_site:
   # Electrolyser / DRI plant / grid connection point (Duisburg steel region).
   lat: 51.43
