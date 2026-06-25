@@ -20,7 +20,7 @@ Two families of output are produced:
 
 Method
 ------
-- Reads Atlite cutouts for each country segment (Q1-Q4)
+- Reads an annual Atlite cutout
 - Computes hourly CF per grid cell for each technology using:
     - wind: smoothed turbine power curve (smooth=True)
     - solar: standard PV conversion
@@ -151,7 +151,7 @@ def build_cf_year(cutout_path: Path, tech: str) -> xr.DataArray:
     return cf
 
 
-def _load_land_geometry(iso2: str):
+def load_land_geometry(iso2: str):
     gdf = gpd.read_parquet(REGIONS_PATH)
     row = gdf.loc[gdf["region"] == iso2]
     if row.empty:
@@ -159,7 +159,7 @@ def _load_land_geometry(iso2: str):
     return row.geometry.iloc[0]
 
 
-def _load_offshore_geometry(iso2: str):
+def load_offshore_geometry(iso2: str):
     gdf = gpd.read_parquet(OFFSHORE_REGIONS_PATH)
     row = gdf.loc[gdf["region"] == iso2]
     if row.empty:
@@ -167,8 +167,8 @@ def _load_offshore_geometry(iso2: str):
     return row.geometry.iloc[0]
 
 
-def geometry_for_tech(iso2: str, tech: str):  # returns shapely geometry
-    return _load_offshore_geometry(iso2) if tech == "wind_offshore" else _load_land_geometry(iso2)
+def geometry_for_tech(iso2: str, tech: str):
+    return load_offshore_geometry(iso2) if tech == "wind_offshore" else load_land_geometry(iso2)
 
 
 def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
@@ -181,7 +181,7 @@ def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
     return inside.values.reshape(cell_mean.shape)
 
 
-def _find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
+def find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
     """Return the (y, x) index of the in-region cell closest to the P95 annual-mean CF."""
     cell_mean = cf_year.mean("time")
     inside = mask_cells_inside(cell_mean, geom)
@@ -195,7 +195,7 @@ def _find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
     return int(y_idx), int(x_idx)
 
 
-def _cell_coords(cf_year: xr.DataArray, y_idx: int, x_idx: int) -> tuple[float, float]:
+def get_cell_coords(cf_year: xr.DataArray, y_idx: int, x_idx: int) -> tuple[float, float]:
     """Return the (lon, lat) centre of grid cell (y_idx, x_idx)."""
     return float(cf_year.x.values[x_idx]), float(cf_year.y.values[y_idx])
 
@@ -232,9 +232,14 @@ def find_nearest_valid_cell(
     nearby_mask = valid_mask & (dist_km <= max_radius_km)
 
     if np.any(nearby_mask):
-        best_nearby_cf = np.nanmax(np.where(nearby_mask, mean_vals, np.nan))
-        good_nearby = nearby_mask & (mean_vals >= quality_floor_fraction * best_nearby_cf)
-        candidate_dist_km = np.where(good_nearby, dist_km, np.nan)
+        nearby_cf = np.where(nearby_mask, mean_vals, np.nan)
+        best_nearby_cf = np.nanmax(nearby_cf)
+
+        good_nearby_mask = nearby_mask & (
+            mean_vals >= quality_floor_fraction * best_nearby_cf
+        )
+
+        candidate_dist_km = np.where(good_nearby_mask, dist_km, np.nan)
     else:
         candidate_dist_km = np.where(valid_mask, dist_km, np.nan)
 
@@ -261,90 +266,135 @@ def build_anchor_colocated_profiles(
 
     Returns (profiles_by_tech, selected_cells_by_tech).
     """
+    # Build CF grids once per tech
     cf_year_by_tech = {tech: build_cf_year(cutout_path, tech) for tech in TECHS}
 
-    # 1) Anchor cell in its own geometry.
+    # 1) Find anchor cell in its own valid geometry.
     anchor_cf_year = cf_year_by_tech[anchor_tech]
     anchor_geom = geometry_for_tech(country_upper, anchor_tech)
-    anchor_y_idx, anchor_x_idx = _find_p95_cell(anchor_cf_year, anchor_geom)
-    anchor_x, anchor_y = _cell_coords(anchor_cf_year, anchor_y_idx, anchor_x_idx)
+    anchor_y_idx, anchor_x_idx = find_p95_cell(anchor_cf_year, anchor_geom)
+    anchor_x, anchor_y = get_cell_coords(anchor_cf_year, anchor_y_idx, anchor_x_idx)
 
-    # 2) For an offshore anchor, pick one shared land counterpart cell weighted by res_mix.
-    selected_land_y_idx = selected_land_x_idx = None
+    selected_land_y_idx = None
+    selected_land_x_idx = None
     if anchor_tech == "wind_offshore":
         land_geom = geometry_for_tech(country_upper, "wind_onshore")
+
         wind_onshore_mean = cf_year_by_tech["wind_onshore"].mean("time")
         solar_mean = cf_year_by_tech["solar"].mean("time")
+
+        inside_land = mask_cells_inside(wind_onshore_mean, land_geom)
 
         xs = wind_onshore_mean.coords["x"].values
         ys = wind_onshore_mean.coords["y"].values
         xx, yy = np.meshgrid(xs, ys)
+
         dist_km = haversine_distance_km(anchor_x, anchor_y, xx, yy)
 
         w_onshore = float(res_mix.get("wind_onshore", 0.0))
         w_solar = float(res_mix.get("solar", 0.0))
+
         if (w_onshore + w_solar) <= 0:
             raise ValueError(
                 "Offshore anchor requires at least one land tech in res_mix "
                 "(wind_onshore and/or solar)."
             )
 
-        valid_land = mask_cells_inside(wind_onshore_mean, land_geom)
         land_score = np.zeros_like(wind_onshore_mean.values, dtype=float)
+        valid_land = inside_land.copy()
+
         if w_onshore > 0:
             onshore_vals = wind_onshore_mean.values
             valid_land = valid_land & np.isfinite(onshore_vals) & (onshore_vals > 0)
             land_score = land_score + w_onshore * onshore_vals
+
         if w_solar > 0:
             solar_vals = solar_mean.values
             valid_land = valid_land & np.isfinite(solar_vals) & (solar_vals > 0)
             land_score = land_score + w_solar * solar_vals
 
         nearby_land = valid_land & (dist_km <= MAX_RADIUS_KM)
+
         if np.any(nearby_land):
-            best_nearby_score = np.nanmax(np.where(nearby_land, land_score, np.nan))
-            good_nearby = nearby_land & (land_score >= QUALITY_FLOOR_FRAC * best_nearby_score)
-            candidate_dist_km = np.where(good_nearby, dist_km, np.nan)
+            nearby_scores = np.where(nearby_land, land_score, np.nan)
+            best_nearby_score = np.nanmax(nearby_scores)
+
+            good_nearby_land = nearby_land & (
+                land_score >= QUALITY_FLOOR_FRAC * best_nearby_score
+            )
+
+            candidate_dist_km = np.where(good_nearby_land, dist_km, np.nan)
         else:
             candidate_dist_km = np.where(valid_land, dist_km, np.nan)
 
         idx_flat = np.nanargmin(candidate_dist_km)
-        selected_land_y_idx, selected_land_x_idx = (
-            int(i) for i in np.unravel_index(idx_flat, dist_km.shape)
-        )
-        sl_x, sl_y = _cell_coords(
-            cf_year_by_tech["wind_onshore"], selected_land_y_idx, selected_land_x_idx
-        )
-        log.info(
-            f"{country_upper} | offshore anchor -> shared land cell (x={sl_x:.2f}, y={sl_y:.2f})"
+        selected_land_y_idx, selected_land_x_idx = np.unravel_index(idx_flat, dist_km.shape)
+        selected_land_y_idx = int(selected_land_y_idx)
+        selected_land_x_idx = int(selected_land_x_idx)
+
+        selected_land_x, selected_land_y = get_cell_coords(
+            cf_year_by_tech["wind_onshore"],
+            selected_land_y_idx,
+            selected_land_x_idx,
         )
 
-    results: dict[str, pd.Series] = {}
-    selected_cells: dict[str, dict] = {}
+        log.info(
+            f"{country_upper} | offshore anchor -> selected shared land cell "
+            f"(x={selected_land_x:.2f}, y={selected_land_y:.2f})"
+        )
+
+    results = {}
+    selected_cells = {}
+
     for tech in TECHS:
         tech_cf_year = cf_year_by_tech[tech]
 
         if tech == anchor_tech:
             y_idx, x_idx = anchor_y_idx, anchor_x_idx
+
         elif anchor_tech in {"wind_onshore", "solar"} and tech in {"wind_onshore", "solar"}:
-            y_idx, x_idx = anchor_y_idx, anchor_x_idx  # shared land cell
+            # same land cell basis for land-anchor cases
+            y_idx, x_idx = anchor_y_idx, anchor_x_idx
+
         elif anchor_tech in {"wind_onshore", "solar"} and tech == "wind_offshore":
+            # match offshore counterpart to the anchor land cell
+            offshore_geom = geometry_for_tech(country_upper, "wind_offshore")
             y_idx, x_idx = find_nearest_valid_cell(
-                anchor_x, anchor_y, tech_cf_year, geometry_for_tech(country_upper, "wind_offshore")
+                anchor_x,
+                anchor_y,
+                tech_cf_year,
+                offshore_geom,
+                max_radius_km=MAX_RADIUS_KM,
+                quality_floor_fraction=QUALITY_FLOOR_FRAC,
             )
+
         elif anchor_tech == "wind_offshore" and tech in {"wind_onshore", "solar"}:
+            # For now, both land techs use the same selected land counterpart cell.
+            # This could later be extended so solar and wind_onshore each get their
+            # own selected land counterpart cell.
             y_idx, x_idx = selected_land_y_idx, selected_land_x_idx
+
         else:
             raise ValueError(f"Unsupported anchor/counterpart combination: {anchor_tech} -> {tech}")
 
-        x, y = _cell_coords(tech_cf_year, y_idx, x_idx)
-        selected_cells[tech] = {"x": x, "y": y, "x_idx": int(x_idx), "y_idx": int(y_idx)}
-        results[tech] = extract_cell_timeseries(tech_cf_year, y_idx, x_idx)
+        # store coordinates of selected cell
+        x, y = get_cell_coords(tech_cf_year, y_idx, x_idx)
+
+        selected_cells[tech] = {
+            "x": x,
+            "y": y,
+            "x_idx": int(x_idx),
+            "y_idx": int(y_idx),
+        }
+
+        # extract time series
+        ts = extract_cell_timeseries(tech_cf_year, y_idx, x_idx)
+        results[tech] = ts
 
     return results, selected_cells
 
 
-def _format_res_mix_label(res_mix: dict[str, float]) -> str:
+def format_res_mix_label(res_mix: dict[str, float]) -> str:
     """Deterministic filename-safe label, e.g. {wind_onshore:0.8, solar:0.2} -> solar-0p2_wind_onshore-0p8."""
     parts = [f"{tech}-{str(float(res_mix[tech])).replace('.', 'p')}" for tech in sorted(res_mix)]
     return "_".join(parts)
@@ -360,7 +410,7 @@ def _to_dataframe(profiles: dict[str, pd.Series]) -> pd.DataFrame:
     })
 
 
-def _add_location_metadata(
+def add_location_metadata(
     df: pd.DataFrame,
     anchor_tech: str | None,
     mix_label: str | None,
@@ -421,14 +471,14 @@ def main() -> None:
             mask = xr.DataArray(inside, coords={"y": cf_year.y, "x": cf_year.x}, dims=("y", "x"))
             nat_mean = float(cf_year.where(mask).mean(dim=("y", "x")).mean().item())
 
-            y_idx, x_idx = _find_p95_cell(cf_year, geom)
-            x, y = _cell_coords(cf_year, y_idx, x_idx)
+            y_idx, x_idx = find_p95_cell(cf_year, geom)
+            x, y = get_cell_coords(cf_year, y_idx, x_idx)
             selected_cells[tech] = {"x": x, "y": y, "x_idx": int(x_idx), "y_idx": int(y_idx)}
             ts = extract_cell_timeseries(cf_year, y_idx, x_idx)
             results[tech] = ts
             log.info(f"{country_upper} | {tech}: national_mean={nat_mean:.3f} best_mean={float(ts.mean()):.3f}")
 
-        df_p95 = _add_location_metadata(_to_dataframe(results), None, None, selected_cells)
+        df_p95 = add_location_metadata(_to_dataframe(results), None, None, selected_cells)
         out_p95 = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95.parquet"
         df_p95.to_parquet(out_p95, index=False)
         log.info(f"{country_upper}: wrote {out_p95.name}")
@@ -444,7 +494,7 @@ def main() -> None:
             profiles, cells = build_anchor_colocated_profiles(
                 cutout, country_upper, anchor_tech, res_mix=anchor_res_mix
             )
-            df_anchor = _add_location_metadata(_to_dataframe(profiles), anchor_tech, None, cells)
+            df_anchor = add_location_metadata(_to_dataframe(profiles), anchor_tech, None, cells)
             out_anchor = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95_anchor-{anchor_tech}.parquet"
             df_anchor.to_parquet(out_anchor, index=False)
             log.info(f"{country_upper}: wrote {out_anchor.name}")
@@ -462,9 +512,9 @@ def main() -> None:
                     "(identical to the generic anchor file)."
                 )
                 continue
-            mix_label = _format_res_mix_label(res_mix)
+            mix_label = format_res_mix_label(res_mix)
             profiles, cells = build_anchor_colocated_profiles(cutout, country_upper, anchor_tech, res_mix)
-            df_mix = _add_location_metadata(_to_dataframe(profiles), anchor_tech, mix_label, cells)
+            df_mix = add_location_metadata(_to_dataframe(profiles), anchor_tech, mix_label, cells)
             out_mix = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95_anchor-{anchor_tech}_mix-{mix_label}.parquet"
             df_mix.to_parquet(out_mix, index=False)
             log.info(f"{country_upper}: wrote {out_mix.name}")
