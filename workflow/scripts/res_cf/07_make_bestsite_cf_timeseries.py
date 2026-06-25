@@ -74,12 +74,16 @@ YEAR       = 2023
 OUTDIR     = RES_CF
 COUNTRIES  = ["de"]  # lowercase to match filenames; standalone default
 
-if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    COUNTRIES  = [snakemake.wildcards.country.lower()]
-    RES_CF_CFG = snakemake.config["res_cf"]
+REGIONS_PATH:          Path = SHAPES_RES / "regions.parquet"
+OFFSHORE_REGIONS_PATH: Path = SHAPES_RES / "offshore_regions.parquet"
+CUTOUT_PATH:           Path | None = None
 
-REGIONS_PATH          = SHAPES_RES / "regions.parquet"
-OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"
+if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
+    COUNTRIES             = [snakemake.wildcards.cf_area.lower()]
+    RES_CF_CFG            = snakemake.config["res_cf"]
+    REGIONS_PATH          = Path(snakemake.input.regions)
+    OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
+    CUTOUT_PATH           = Path(snakemake.input.cutout)
 
 TECHS                 = ["wind_onshore", "wind_offshore", "solar"]
 WIND_ONSHORE_TURBINE  = RES_CF_CFG["wind_onshore_turbine"]
@@ -375,11 +379,35 @@ def _add_location_metadata(
     return df
 
 
+_ANCHOR_SM_PREFIX: dict[str | None, str] = {
+    None:            "p95",
+    "wind_onshore":  "anchored_on_onshore",
+    "wind_offshore": "anchored_on_offshore",
+    "solar":         "anchored_on_solar",
+}
+
+
+def _write_per_tech_parquets(profiles: dict[str, pd.Series], variant_prefix: str) -> None:
+    """Write one single-column per-tech parquet per TECH to snakemake.output in Snakemake mode.
+
+    Output key format: {variant_prefix}_{tech}  e.g. 'p95_wind_onshore'.
+    Column name is kebab-case to match assumptions.yaml ('wind-onshore', etc.).
+    """
+    if "snakemake" not in globals() or not hasattr(snakemake, "output"):
+        return
+    for tech in TECHS:
+        out_path = getattr(snakemake.output, f"{variant_prefix}_{tech}", None)
+        if out_path is None:
+            continue
+        kebab = tech.replace("_", "-")
+        profiles[tech].rename(kebab).to_frame().to_parquet(out_path, index=True)
+
+
 def main() -> None:
     """Write per-tech P95, generic anchor, and scenario-specific RES-mix bestsite parquets."""
     for cc in COUNTRIES:
         country_upper = cc.upper()
-        cutout = annual_cutout_path(cc, YEAR)
+        cutout = CUTOUT_PATH or annual_cutout_path(cc, YEAR)
 
         # 1) Per-tech best-site P95 (each tech from its own P95 cell).
         results: dict[str, pd.Series] = {}
@@ -404,16 +432,23 @@ def main() -> None:
         out_p95 = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95.parquet"
         df_p95.to_parquet(out_p95, index=False)
         log.info(f"{country_upper}: wrote {out_p95.name}")
+        _write_per_tech_parquets(results, _ANCHOR_SM_PREFIX[None])
 
-        # 2) Generic anchor-co-located files (one land anchor per file).
-        for anchor_tech in ["wind_onshore", "solar"]:
+        # 2) Anchor-co-located files (one per anchor tech: onshore, solar, offshore).
+        for anchor_tech in ["wind_onshore", "solar", "wind_offshore"]:
+            anchor_res_mix = (
+                {"wind_onshore": 0.5, "solar": 0.5}
+                if anchor_tech == "wind_offshore"
+                else {anchor_tech: 1.0}
+            )
             profiles, cells = build_anchor_colocated_profiles(
-                cutout, country_upper, anchor_tech, res_mix={anchor_tech: 1.0}
+                cutout, country_upper, anchor_tech, res_mix=anchor_res_mix
             )
             df_anchor = _add_location_metadata(_to_dataframe(profiles), anchor_tech, None, cells)
             out_anchor = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95_anchor-{anchor_tech}.parquet"
             df_anchor.to_parquet(out_anchor, index=False)
             log.info(f"{country_upper}: wrote {out_anchor.name}")
+            _write_per_tech_parquets(profiles, _ANCHOR_SM_PREFIX[anchor_tech])
 
         # 3) Scenario-specific RES-mix files (config-driven; offshore anchors etc.).
         for scenario in RES_MIX_SCENARIOS:
