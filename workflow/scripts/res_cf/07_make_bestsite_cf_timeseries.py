@@ -44,6 +44,7 @@ resources/res_cf/<cc>_cf_2023_bestsite_p95_anchor-<anchor>.parquet
 resources/res_cf/<cc>_cf_2023_bestsite_p95_anchor-<anchor>_mix-<label>.parquet
 """
 
+from __future__ import annotations
 
 import logging
 import re
@@ -72,7 +73,8 @@ log = logging.getLogger(__name__)
 RES_CF_CFG = load_res_cf_cfg()
 YEAR       = 2023
 OUTDIR     = RES_CF
-COUNTRIES  = ["de"]  # lowercase to match filenames; standalone default
+COUNTRIES         = ["de"]  # lowercase to match filenames
+COUNTRY_SEGMENTS  = None   # TODO: restore quarterly segmentation
 
 REGIONS_PATH:          Path = SHAPES_RES / "regions.parquet"
 OFFSHORE_REGIONS_PATH: Path = SHAPES_RES / "offshore_regions.parquet"
@@ -98,6 +100,7 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
 
 TECHS                 = ["wind_onshore", "wind_offshore", "solar"]
 WIND_ONSHORE_TURBINE  = RES_CF_CFG["wind_onshore_turbine"]
+WIND_TURBINE          = WIND_ONSHORE_TURBINE
 WIND_OFFSHORE_TURBINE = RES_CF_CFG["wind_offshore_turbine"]
 PV_PANEL              = RES_CF_CFG["pv_panel"]
 PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
@@ -130,12 +133,11 @@ def extract_cell_timeseries(
 
 
 def build_cf_year(cutout_path: Path, tech: str) -> xr.DataArray:
-    """Build the full-year per-cell CF grid for `tech` from a single annual cutout."""
     co = atlite.Cutout(path=str(cutout_path))
 
     if tech == "wind_onshore":
         cf = co.wind(
-            turbine=WIND_ONSHORE_TURBINE,
+            turbine=WIND_TURBINE,
             capacity_factor_timeseries=True,
             smooth=WIND_SMOOTH,
             add_cutout_windspeed=WIND_ADD_CUTOUT_WS,
@@ -183,7 +185,6 @@ def geometry_for_tech(iso2: str, tech: str):
 
 
 def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
-    """Return a boolean grid marking cells whose centre lies within `geom`."""
     xs = cell_mean.coords["x"].values
     ys = cell_mean.coords["y"].values
     xx, yy = np.meshgrid(xs, ys)
@@ -198,7 +199,8 @@ def find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
     inside = mask_cells_inside(cell_mean, geom)
     vals = np.where(inside, cell_mean.values, np.nan)
     valid = np.isfinite(vals)
-    p95 = np.nanpercentile(vals[valid], 95)
+    v = vals[valid]
+    p95 = np.nanpercentile(v, 95)
     # representative P95 cell = valid cell whose value is closest to the P95 threshold
     dist = np.abs(np.where(valid, vals, np.nan) - p95)
     idx_flat = np.nanargmin(dist)
@@ -207,8 +209,9 @@ def find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
 
 
 def get_cell_coords(cf_year: xr.DataArray, y_idx: int, x_idx: int) -> tuple[float, float]:
-    """Return the (lon, lat) centre of grid cell (y_idx, x_idx)."""
-    return float(cf_year.x.values[x_idx]), float(cf_year.y.values[y_idx])
+    x = float(cf_year.x.values[x_idx])
+    y = float(cf_year.y.values[y_idx])
+    return x, y
 
 
 def find_nearest_valid_cell(
@@ -459,7 +462,6 @@ def _write_sm_anchored_output(profiles: dict[str, pd.Series], anchor_tech: str) 
 
 
 def main() -> None:
-    """Write per-tech P95, generic anchor, and scenario-specific RES-mix bestsite parquets."""
     for cc in COUNTRIES:
         country_upper = cc.upper()
         cutout = CUTOUT_PATH or annual_cutout_path(cc, YEAR)
@@ -474,14 +476,16 @@ def main() -> None:
             cell_mean = cf_year.mean("time")
             inside = mask_cells_inside(cell_mean, geom)
             mask = xr.DataArray(inside, coords={"y": cf_year.y, "x": cf_year.x}, dims=("y", "x"))
-            nat_mean = float(cf_year.where(mask).mean(dim=("y", "x")).mean().item())
+            cf_national = cf_year.where(mask).mean(dim=("y", "x"))
+            nat_mean = float(cf_national.mean().item())
 
             y_idx, x_idx = find_p95_cell(cf_year, geom)
             x, y = get_cell_coords(cf_year, y_idx, x_idx)
             selected_cells[tech] = {"x": x, "y": y, "x_idx": int(x_idx), "y_idx": int(y_idx)}
             ts = extract_cell_timeseries(cf_year, y_idx, x_idx)
+            best_mean = float(ts.mean())
             results[tech] = ts
-            log.info(f"{country_upper} | {tech}: national_mean={nat_mean:.3f} best_mean={float(ts.mean()):.3f}")
+            log.info(f"{country_upper} | {tech}: national_mean={nat_mean:.3f} best_mean={best_mean:.3f}")
 
         df_p95 = add_location_metadata(_to_dataframe(results), None, None, selected_cells)
         out_p95 = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95.parquet"

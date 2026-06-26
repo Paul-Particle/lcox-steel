@@ -80,11 +80,11 @@ def bounds_for(region_name=REGIONS, pad=1.0):
         land_geom = [p for p in parts if lon_min <= p.centroid.x <= lon_max and lat_min <= p.centroid.y <= lat_max]
         if not land_geom:
             raise ValueError(f"No polygon parts inside mainland_bbox {_MAINLAND_BBOX}.")
-        geom = gpd.GeoSeries(
+        land_geom = gpd.GeoSeries(
             land_geom,
             crs=4326,
         ).union_all()
-    minx, miny, maxx, maxy = geom.bounds
+    minx, miny, maxx, maxy = land_geom.bounds
     return slice(minx - pad, maxx + pad), slice(miny - pad, maxy + pad)
 
 
@@ -100,8 +100,10 @@ def main():
             shutil.copyfileobj(fsrc, fdst)
         return
 
-    x, y = bounds_for(region_name=REGIONS,pad=_BBOX_PAD_DEG)
-    
+    x, y = bounds_for(region_name=REGIONS, pad=_BBOX_PAD_DEG)
+
+    # End at 23:00 so the full final day of hourly data is included.
+    time_range = slice(_iso(_START_DATE), f"{_iso(_END_DATE)} 23:00")
 
     cutout = atlite.Cutout(
         path=str(_OUTPUT_PATH),
@@ -110,7 +112,7 @@ def main():
         y=y,
         **({"dx": 0.5, 
             "dy": 0.5} if _COARSE else {}),
-        time=slice(_iso(_START_DATE), f"{_iso(_END_DATE)} 23:00"), # End at 23:00 so the full final day of hourly data is included.
+        time=slice(_iso(_START_DATE), f"{_iso(_END_DATE)} 23:00"),
     )
     log.info(
         f"starting CDS request: x={x} y={y} time={time_range} "
@@ -122,4 +124,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

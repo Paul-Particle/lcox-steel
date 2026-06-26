@@ -8,7 +8,6 @@ multi-orientation solar variant.
 
 import logging
 from pathlib import Path
-
 import atlite
 import geopandas as gpd
 import pandas as pd
@@ -31,7 +30,7 @@ _END_DATE = "20231231"
 _CUTOUT_PATH = CUTOUTS / "de_20230101_20231231.nc"
 _REGIONS_PATH = SHAPES_RES / "de_geo.parquet"
 _OFFSHORE_REGIONS_PATH = SHAPES_RES / "de_offshore_geo.parquet"
-_OUT = RES_CF / "de_wind-onshore_country-average_20230101_20231231.parquet"
+OUTDIR = RES_CF / "de_wind-onshore_country-average_20230101_20231231.parquet"
 _REGION = "DE"
 _WIND_ONSHORE_TURBINE = "Vestas_V112_3MW"
 _WIND_OFFSHORE_TURBINE = "NREL_ReferenceTurbine_5MW_offshore"
@@ -47,7 +46,7 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _CUTOUT_PATH = Path(snakemake.input.cutout)
     _REGIONS_PATH = Path(snakemake.input.regions)
     _OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
-    _OUT = Path(snakemake.output[0])
+    OUTDIR = Path(snakemake.output[0])
     _REGION = snakemake.params.region
     _WIND_ONSHORE_TURBINE = snakemake.params.wind_onshore_turbine
     _WIND_OFFSHORE_TURBINE = snakemake.params.wind_offshore_turbine
@@ -60,7 +59,7 @@ _WIND_SMOOTH = _WIND_CF.get("smooth", True)
 _WIND_ADD_CUTOUT_WS = _WIND_CF.get("add_cutout_windspeed", True)
 
 
-def to_cf_series(x, name: str = "cf") -> pd.Series:
+def to_cf_series(x, name="cf"):
     """Collapse an atlite result to one per-unit [0, 1] CF series on a 'time' index.
 
     atlite returns a Series (single-region indicator matrix) or a DataFrame (one
@@ -77,6 +76,7 @@ def to_cf_series(x, name: str = "cf") -> pd.Series:
     #   - multiple columns, region present → pick the named region
     #   - multiple columns, region absent → first column (shouldn't happen normally)
     obj = x.to_pandas()
+
     if not isinstance(obj, pd.DataFrame):
         s = obj
     elif obj.shape[1] == 1:
@@ -89,24 +89,24 @@ def to_cf_series(x, name: str = "cf") -> pd.Series:
     s.index.name = "time"
     return s.rename(name).clip(0, 1)
 
-
-def get_region_gdf(path: Path) -> gpd.GeoDataFrame:
-    """Read a region GeoParquet and return just the `_REGION` row (raises if missing)."""
+def get_region_gdf(path: Path, region_code: str = None) -> gpd.GeoDataFrame:
     gdf = gpd.read_parquet(path).to_crs(4326)
     gdf = gdf.loc[gdf["region"] == _REGION, ["region", "geometry"]].copy()
+
     if gdf.empty:
         raise ValueError(f"Region '{_REGION}' not found in {path}")
+
     return gdf
 
-
-def main() -> None:
+def main():
     """Compute the hourly CF series for the area+tech from the cutout and write parquet.
 
     Dispatches on `_TECH` (solar / wind-onshore / wind-offshore), aggregates over
     the region via atlite's indicator matrix, and names the output column by the
     tech wildcard so downstream scripts read the key straight off the parquet.
     """
-    _OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUTDIR.parent.mkdir(parents=True, exist_ok=True)
+
     cutout = atlite.Cutout(str(_CUTOUT_PATH))
 
     if _TECH == "solar":
@@ -152,8 +152,8 @@ def main() -> None:
 
     # Column name = tech wildcard, so downstream scripts (solve_network)
     # can read the tech key straight off the parquet without a separate param.
-    series.rename(_TECH).to_frame().to_parquet(_OUT, index=True)
-    log.info(f"wrote {_OUT} ({len(series)} rows, mean={series.mean():.3f})")
+    series.rename(_TECH).to_frame().to_parquet(OUTDIR, index=True)
+    log.info(f"wrote {OUTDIR} ({len(series)} rows, mean={series.mean():.3f})")
 
 
 if __name__ == "__main__":
