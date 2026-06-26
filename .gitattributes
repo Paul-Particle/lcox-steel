@@ -1,0 +1,38 @@
+# Force git to treat source/config files as text, even if they pick up stray
+# NUL bytes from the VM filesystem. This prevents git from misclassifying them
+# as binary blobs, which suppresses textual diffs and corrupts the object store.
+
+# Snakemake workflow files
+Snakefile        text eol=lf
+*.smk            text eol=lf
+
+# Python
+*.py             text eol=lf
+
+# Config / data
+*.yaml           text eol=lf
+*.yml            text eol=lf
+*.toml           text eol=lf
+*.cfg            text eol=lf
+*.csv            text eol=lf
+*.json           text eol=lf
+*.md             text eol=lf
+*.txt            text eol=lf
+*.sh             text eol=lf
+
+# Explicitly mark true binary types so git doesn't try to diff them as text
+*.parquet        binary
+*.feather        binary
+*.nc             binary
+*.png            binary
+*.jpg            binary
+*.jpeg           binary
+*.gif            binary
+*.ico            binary
+*.woff           binary
+*.woff2          binary
+*.zip            binary
+*.shp            binary
+*.dbf            binary
+*.shx            binary
+*.xlsx           binary
