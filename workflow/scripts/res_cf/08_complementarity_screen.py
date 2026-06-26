@@ -11,7 +11,7 @@ This script produces two outputs per country:
   (a) Top N complementary cell triplets for the best-site RES mix scenario
   (b) National mean profiles for the country-average scenario
 
-Both outputs feed directly into the PyPSA optimisation
+Both outputs feed directly into the PyPSA optimisation (scripts/h2_dri/solve_network.py).
 
 Method
 ------
@@ -37,27 +37,25 @@ resources/res_cf/<cc>_average_profiles_2023.parquet
 from __future__ import annotations
 
 import importlib.util
-import sys
+import logging
 from itertools import product
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import yaml
-import logging
+
 from common._logging import configure_logging, progress
 from common._paths import REPO_ROOT, RES_CF
 from scripts.res_cf._helpers import annual_cutout_path, haversine_distance_km
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
-configure_logging(snakemake)
-log = logging.getLogger(__name__)
 
-# ── Import reusable functions from script 07 ─────────────────────────────────
+# Reusable cell-grid helpers live in 07_make_bestsite_cf_timeseries.py; its
+# numbered filename isn't a valid module name, so load it via importlib.
 _spec = importlib.util.spec_from_file_location(
-    "bestsite",
-    Path(__file__).parent / "07_make_bestsite_cf_timeseries.py"
+    "bestsite", Path(__file__).parent / "07_make_bestsite_cf_timeseries.py"
 )
 _bestsite = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_bestsite)
@@ -68,6 +66,20 @@ if "snakemake" in globals() and hasattr(snakemake, "input"):
     _bestsite.REGIONS_PATH = Path(snakemake.input.regions)
     _bestsite.OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
 
+build_cf_year = _bestsite.build_cf_year
+extract_cell_timeseries = _bestsite.extract_cell_timeseries
+geometry_for_tech = _bestsite.geometry_for_tech
+mask_cells_inside = _bestsite.mask_cells_inside
+
+configure_logging(snakemake)
+log = logging.getLogger(__name__)
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+OUTDIR = RES_CF
+CF_DIR = RES_CF
+
+TECHS = ["wind_onshore", "wind_offshore", "solar"]
+
 SM_CUTOUT_PATH: Path | None = None
 SM_SCREEN_OUT:  Path | None = None
 SM_CF_OUT:      Path | None = None
@@ -77,54 +89,32 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     SM_SCREEN_OUT  = Path(snakemake.output.screen)
     SM_CF_OUT      = Path(snakemake.output.cf)
 
-build_cf_year           = _bestsite.build_cf_year
-extract_cell_timeseries = _bestsite.extract_cell_timeseries
-geometry_for_tech       = _bestsite.geometry_for_tech
-# haversine_distance_km   = _bestsite.haversine_distance_km #imported from helpers now
-mask_cells_inside       = _bestsite.mask_cells_inside
-
-# ── Paths ─────────────────────────────────────────────────────────────────────
-
-
-OUTDIR = RES_CF
-CF_DIR = RES_CF
-
-
-TECHS = ["wind_onshore", "wind_offshore", "solar"]
-
-MAX_TRIPLETS_BRUTE_FORCE = 500_000
-
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-def load_config() -> dict:
+def load_cfg() -> dict:
+    """Tuning constants for the complementarity screen; standalone-mode defaults."""
     with open(REPO_ROOT / "config/config.yaml") as f:
         c = yaml.safe_load(f)
-
-
-# just one config here, no def get_pypsa_config(config: dict) -> dict:
     rc = c["res_cf"]
     comp = rc.get("complementarity", {})
     return {
-        "countries":             [x.upper() for x in rc["countries"]],
-        "year":                  2023,
-        "top_n":                 comp.get("top_n", 10),
-        "coincidence_threshold": comp.get("coincidence_threshold", 0.20),
-        "w_coincidence":         comp.get("w_coincidence", 0.6),
-        "w_correlation":         comp.get("w_correlation", 0.4),
-        "max_radius_km":         float(comp.get("max_radius_km", 300.0)),
-        "quality_floor":         float(comp.get("quality_floor", 0.90)),
+        "countries":                [x.upper() for x in rc["countries"]],
+        "year":                     2023,
+        "top_n":                    comp.get("top_n", 10),
+        "coincidence_threshold":    comp.get("coincidence_threshold", 0.20),
+        "w_coincidence":            comp.get("w_coincidence", 0.6),
+        "w_correlation":            comp.get("w_correlation", 0.4),
+        "max_radius_km":            float(comp.get("max_radius_km", 300.0)),
+        "quality_floor":            float(comp.get("quality_floor", 0.90)),
         "max_triplets_brute_force": comp.get("max_triplets_brute_force", 500_000),
     }
 
 
 # ── Coordinate helpers ────────────────────────────────────────────────────────
 
-def get_candidate_coords(cf, ys: np.ndarray, xs: np.ndarray):
-    """
-    Return (lons, lats) arrays for all candidate cells.
-    ys, xs are grid indices into the DataArray dimensions.
-    """
+def get_candidate_coords(cf, ys: np.ndarray, xs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return (lons, lats) arrays for all candidate cells. `cf` is an xr.DataArray."""
     lons = np.array([float(cf.x.values[xi]) for xi in xs])
     lats = np.array([float(cf.y.values[yi]) for yi in ys])
     return lons, lats
@@ -155,10 +145,10 @@ def score_triplet(
     w_coincidence: float,
     w_correlation: float,
 ) -> tuple[float, float, float]:
-    """
-    Returns (score, coincidence, mean_pairwise_corr).
-    Higher score = better complementarity.
-    """
+    """Return (score, coincidence, mean_pairwise_corr); higher score = better complementarity."""
+    # --- Previous docstring (kept for reference) below ---
+    # Returns (score, coincidence, mean_pairwise_corr).
+    # Higher score = better complementarity.
     combined    = (ts_on + ts_off + ts_sol) / 3.0
     coincidence = float(np.mean(combined > threshold))
 
@@ -174,21 +164,23 @@ def score_triplet(
 # ── Brute-force screen ────────────────────────────────────────────────────────
 
 def brute_force_screen(
-    ys_on,  xs_on,  lons_on,  lats_on,
-    ys_off, xs_off, lons_off, lats_off,
-    ys_sol, xs_sol, lons_sol, lats_sol,
+    ys_on:  np.ndarray, xs_on:  np.ndarray, lons_on:  np.ndarray, lats_on:  np.ndarray,
+    ys_off: np.ndarray, xs_off: np.ndarray, lons_off: np.ndarray, lats_off: np.ndarray,
+    ys_sol: np.ndarray, xs_sol: np.ndarray, lons_sol: np.ndarray, lats_sol: np.ndarray,
     ts_on_all:  np.ndarray,
     ts_off_all: np.ndarray,
     ts_sol_all: np.ndarray,
-    cf_on, cf_off, cf_sol,
+    cf_on, cf_off, cf_sol,    # xr.DataArrays
     max_radius_km:  float,
     threshold:      float,
     w_coincidence:  float,
     w_correlation:  float,
     top_n:          int,
 ) -> list[dict]:
+    """Score every within-radius (onshore, offshore, solar) triplet and return the top N by score."""
     records = []
     n_total = len(ys_on) * len(ys_off) * len(ys_sol)
+
     triplets = product(range(len(ys_on)), range(len(ys_off)), range(len(ys_sol)))
     for i, j, k in progress(triplets, desc="brute-force triplets", total=n_total, unit="trip"):
 
@@ -230,41 +222,39 @@ def brute_force_screen(
 
 # ── Greedy search + neighbourhood top-N ──────────────────────────────────────
 
-MAX_TRIPLETS_BRUTE_FORCE = load_config()['max_triplets_brute_force']
-
-
 def greedy_screen(
-    ys_on,  xs_on,  lons_on,  lats_on,
-    ys_off, xs_off, lons_off, lats_off,
-    ys_sol, xs_sol, lons_sol, lats_sol,
+    ys_on:  np.ndarray, xs_on:  np.ndarray, lons_on:  np.ndarray, lats_on:  np.ndarray,
+    ys_off: np.ndarray, xs_off: np.ndarray, lons_off: np.ndarray, lats_off: np.ndarray,
+    ys_sol: np.ndarray, xs_sol: np.ndarray, lons_sol: np.ndarray, lats_sol: np.ndarray,
     ts_on_all:  np.ndarray,
     ts_off_all: np.ndarray,
     ts_sol_all: np.ndarray,
-    cf_on, cf_off, cf_sol,
+    cf_on, cf_off, cf_sol,    # xr.DataArrays
     max_radius_km:  float,
     threshold:      float,
     w_coincidence:  float,
     w_correlation:  float,
     top_n:          int,
 ) -> list[dict]:
+    """Greedy per-anchor selection + neighbourhood search, returning the top N diverse triplets.
+
+    WIP NOTE: the three `if anchor == ...` blocks share ~80% of their body and are
+    the highest-value refactor target here. Leave until the broader cutout-cache
+    refactor stabilises the API this script depends on.
     """
-    Greedy sequential selection tried from all three anchor techs,
-    followed by neighbourhood search to return top N diverse results.
-    """
+    # --- Previous docstring (kept for reference) below ---
+    # Greedy sequential selection tried from all three anchor techs,
+    # followed by neighbourhood search to return top N diverse results.
+    #
     # WIP NOTE: The three `if anchor == ...` blocks share ~80% of their body and
     # are the highest-value refactor target in this file. Leave until the broader
     # cutout-cache refactor stabilises the API this script depends on.
     log.info("using greedy search (candidate space too large for brute force)")
 
     def _find_best_triplet(anchor: str):
-        """
-        Run greedy from a given anchor tech.
-        Returns (best_i, best_j, best_k, best_score) or None if no valid triplet found.
-        """
         if anchor == "wind_onshore":
             best_i = int(np.argmax(ts_on_all.mean(axis=0)))
 
-            # Step 2: best offshore complement
             best_j, best_score = None, -np.inf
             for j in range(len(ys_off)):
                 d = max_pairwise_distance_km_coords(
@@ -287,7 +277,6 @@ def greedy_screen(
             if best_j is None:
                 return None
 
-            # Step 3: best solar complement
             best_k, best_score = None, -np.inf
             for k in range(len(ys_sol)):
                 d = max_pairwise_distance_km_coords(
@@ -310,7 +299,6 @@ def greedy_screen(
         elif anchor == "wind_offshore":
             best_j = int(np.argmax(ts_off_all.mean(axis=0)))
 
-            # Step 2: best onshore complement
             best_i, best_score = None, -np.inf
             for i in range(len(ys_on)):
                 d = max_pairwise_distance_km_coords(
@@ -331,7 +319,6 @@ def greedy_screen(
             if best_i is None:
                 return None
 
-            # Step 3: best solar complement
             best_k, best_score = None, -np.inf
             for k in range(len(ys_sol)):
                 d = max_pairwise_distance_km_coords(
@@ -354,7 +341,6 @@ def greedy_screen(
         else:  # anchor == "solar"
             best_k = int(np.argmax(ts_sol_all.mean(axis=0)))
 
-            # Step 2: best onshore complement
             best_i, best_score = None, -np.inf
             for i in range(len(ys_on)):
                 d = max_pairwise_distance_km_coords(
@@ -375,7 +361,6 @@ def greedy_screen(
             if best_i is None:
                 return None
 
-            # Step 3: best offshore complement
             best_j, best_score = None, -np.inf
             for j in range(len(ys_off)):
                 d = max_pairwise_distance_km_coords(
@@ -395,7 +380,7 @@ def greedy_screen(
             if best_j is None:
                 return None
 
-        # Step 4: swap passes until no improvement
+        # Swap passes until convergence
         best_score, _, _ = score_triplet(
             ts_on_all[:, best_i], ts_off_all[:, best_j], ts_sol_all[:, best_k],
             threshold, w_coincidence, w_correlation,
@@ -454,10 +439,9 @@ def greedy_screen(
 
         return best_i, best_j, best_k, best_score
 
-    # ── Run greedy from all three anchors ─────────────────────────────────────
+    # Run greedy from all three anchors
     anchor_results = []
     for anchor in ["wind_onshore", "wind_offshore", "solar"]:
-        log.info(f"trying anchor: {anchor} ...")
         result = _find_best_triplet(anchor)
         if result is None:
             log.info(f"anchor={anchor}: no valid triplet found")
@@ -469,7 +453,7 @@ def greedy_screen(
     if not anchor_results:
         return []
 
-    # ── Neighbourhood search around all anchor results ────────────────────────
+    # Neighbourhood search around all anchor results
     records = {}
 
     def _add(i, j, k):
@@ -506,7 +490,6 @@ def greedy_screen(
             "solar_y":        float(lats_sol[k]),
         }
 
-    # Add all anchor results and their neighbourhoods
     for best_i, best_j, best_k, _ in anchor_results:
         _add(best_i, best_j, best_k)
         for i in range(len(ys_on)):
@@ -598,37 +581,31 @@ def _write_sm_outputs(
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    """Screen complementary RES-cell triplets per country and write top-N + CF parquets."""
     sm_country = None
     if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
         sm_country = snakemake.wildcards.cf_area.upper()
 
-    config = load_config()
-    # no second config
+    cfg = load_cfg()
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
-    countries = [sm_country] if sm_country is not None else [c.upper() for c in config["countries"]]
+    countries = [sm_country] if sm_country is not None else [c.upper() for c in cfg["countries"]]
     log.info(f"countries: {countries}")
     for country in countries:
-        _current_country = country.upper()
+        current_country = country.upper()
         cc = country.lower()
 
-        log.info(f"country={_current_country} start")
+        log.info(f"country={current_country} start")
 
+        save_average_profiles(cc, cfg["year"])
 
-
-        # 1. Save average profiles
-        save_average_profiles(cc, config["year"])
-
-        # 2. Build full CF grids
         log.info("building CF grids (this takes a few minutes per tech)")
-        cutout = SM_CUTOUT_PATH if SM_CUTOUT_PATH is not None else annual_cutout_path(cc, config["year"])
+        cutout = SM_CUTOUT_PATH if SM_CUTOUT_PATH is not None else annual_cutout_path(cc, cfg["year"])
         cf_grids = {}
         for tech in TECHS:
-
             cf_grids[tech] = build_cf_year(cutout, tech)
             log.info(f"tech={tech} CF grid built")
 
-        # 3. Get candidate cells per tech
         log.info("identifying candidate cells")
         candidates   = {}
         ts_matrices  = {}
@@ -636,7 +613,7 @@ def main() -> None:
 
         for tech in TECHS:
             cf   = cf_grids[tech]
-            geom = geometry_for_tech(_current_country, tech)
+            geom = geometry_for_tech(current_country, tech)
 
             cell_mean = cf.mean("time")
             inside    = mask_cells_inside(cell_mean, geom)
@@ -647,14 +624,12 @@ def main() -> None:
             n      = len(ys)
             log.info(f"tech={tech}: {n} candidate cells")
 
-            # Extract time series matrix (8760, n)
             n_timesteps = int(cf.sizes["time"])
             ts_matrix   = np.zeros((n_timesteps, n), dtype=np.float32)
             for idx in progress(range(n), desc=f"extract {tech} cells", total=n, unit="cell"):
                 ts = extract_cell_timeseries(cf, int(ys[idx]), int(xs[idx]))
                 ts_matrix[:, idx] = ts.values
 
-            # Pre-compute actual coordinates
             lons, lats = get_candidate_coords(cf, ys, xs)
 
             candidates[tech]   = (ys, xs, mean_vals[valid])
@@ -672,7 +647,6 @@ def main() -> None:
         n_triplets = len(ys_on) * len(ys_off) * len(ys_sol)
         log.info(f"total candidate triplets: {n_triplets}")
 
-        # 4. Screen triplets
         screen_kwargs = dict(
             ys_on=ys_on,   xs_on=xs_on,   lons_on=lons_on,   lats_on=lats_on,
             ys_off=ys_off, xs_off=xs_off, lons_off=lons_off, lats_off=lats_off,
@@ -683,30 +657,30 @@ def main() -> None:
             cf_on=cf_grids["wind_onshore"],
             cf_off=cf_grids["wind_offshore"],
             cf_sol=cf_grids["solar"],
-            max_radius_km=config["max_radius_km"],
-            threshold=config["coincidence_threshold"],
-            w_coincidence=config["w_coincidence"],
-            w_correlation=config["w_correlation"],
-            top_n=config["top_n"],
+            max_radius_km=cfg["max_radius_km"],
+            threshold=cfg["coincidence_threshold"],
+            w_coincidence=cfg["w_coincidence"],
+            w_correlation=cfg["w_correlation"],
+            top_n=cfg["top_n"],
         )
 
-        if n_triplets <= config["max_triplets_brute_force"]:
+        if n_triplets <= cfg["max_triplets_brute_force"]:
             top_records = brute_force_screen(**screen_kwargs)
         else:
             top_records = greedy_screen(**screen_kwargs)
 
         if not top_records:
             log.warning(
-                f"no valid triplets found for {_current_country}. "
-                f"Try increasing max_radius_km (currently {config['max_radius_km']} km).")
+                f"no valid triplets found for {current_country}. "
+                f"Try increasing max_radius_km (currently {cfg['max_radius_km']} km)."
+            )
             continue
 
-        # 5. Save results
         df = pd.DataFrame(top_records)
         df.insert(0, "rank",    range(1, len(df) + 1))
-        df.insert(1, "country", _current_country)
+        df.insert(1, "country", current_country)
 
-        out_path = OUTDIR / f"{cc}_complementarity_top{config['top_n']}_{config['year']}.parquet"
+        out_path = OUTDIR / f"{cc}_complementarity_top{cfg['top_n']}_{cfg['year']}.parquet"
         df.to_parquet(out_path, index=False)
 
         log.info(f"top {len(df)} complementary triplets → {out_path.name}")
