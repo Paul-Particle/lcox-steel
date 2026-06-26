@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# pre-commit hook — strip NUL bytes from staged text files
+#
+# The VM filesystem occasionally writes trailing NUL padding bytes when a file
+# is flushed to disk.  If a corrupted file is staged, git stores it as a binary
+# blob, which silences textual diffs and breaks git fsck.
+#
+# This hook:
+#   1. Iterates every file that is about to be committed.
+#   2. Skips files that .gitattributes marks as 'binary' or that are not
+#      tracked as text (checked via `git check-attr`).
+#   3. For any remaining staged file whose blob contains NUL bytes:
+#        a. Strips the NULs from the working-tree copy.
+#        b. Re-stages (git add) the clean version.
+#        c. Prints a warning so the commit message can note the auto-fix.
+#   The commit is NOT aborted — the auto-cleaned version proceeds.
+#
+# Requires: bash, python3 (stdlib only), git.
+
+set -euo pipefail
+
+# Text extensions we always treat as strippable regardless of gitattributes
+# (belt-and-suspenders alongside .gitattributes).
+TEXT_EXTS="py smk yaml yml toml cfg csv json md txt sh"
+
+nul_found=0
+
+# Get list of staged files (added, modified, or renamed – not deleted).
+while IFS= read -r staged_file; do
+    [[ -z "$staged_file" ]] && continue
+    [[ ! -f "$staged_file" ]] && continue   # deleted in working tree
+
+    # ── 1. Check gitattributes ────────────────────────────────────────────
+    attr=$(git check-attr binary -- "$staged_file" 2>/dev/null | awk '{print $NF}')
+    if [[ "$attr" == "set" ]]; then
+        continue   # explicitly marked binary — leave it alone
+    fi
+
+    # Check if it's a text-attributed or known-text-extension file.
+    text_attr=$(git check-attr text -- "$staged_file" 2>/dev/null | awk '{print $NF}')
+    ext="${staged_file##*.}"
+    basename_only=$(basename "$staged_file")
+
+    is_text=0
+    if [[ "$text_attr" == "set" || "$basename_only" == "Snakefile" ]]; then
+        is_text=1
+    else
+        for te in $TEXT_EXTS; do
+            if [[ "$ext" == "$te" ]]; then
+                is_text=1
+                break
+            fi
+        done
+    fi
+    [[ $is_text -eq 0 ]] && continue
+
+    # ── 2. Read the staged blob and test for NUL bytes ────────────────────
+    blob_hash=$(git ls-files --stage -- "$staged_file" | awk '{print $2}')
+    [[ -z "$blob_hash" ]] && continue
+
+    has_nul=$(git cat-file blob "$blob_hash" | python3 -c "
+import sys
+data = sys.stdin.buffer.read()
+print('yes' if b'\x00' in data else 'no')
+")
+    [[ "$has_nul" != "yes" ]] && continue
+
+    # ── 3. Strip NULs from working-tree copy and re-stage ─────────────────
+    nul_count=$(git cat-file blob "$blob_hash" | python3 -c "
+import sys
+data = sys.stdin.buffer.read()
+print(data.count(b'\x00'))
+")
+
+    python3 -c "
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+data = p.read_bytes()
+p.write_bytes(data.replace(b'\x00', b''))
+" "$staged_file"
+
+    git add -- "$staged_file"
+
+    echo "⚠  pre-commit: stripped ${nul_count} NUL byte(s) from ${staged_file} and re-staged it"
+    nul_found=1
+
+done < <(git diff --cached --name-only --diff-filter=ACMR)
+
+if [[ $nul_found -eq 1 ]]; then
+    echo ""
+    echo "   NUL bytes were automatically removed before committing."
+    echo "   The committed version is clean.  No action required."
+    echo ""
+fi
+
+exit 0
