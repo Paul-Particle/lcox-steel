@@ -56,4 +56,4 @@ rule all:
         expand("results/plots/capacity_bars/{project}.png", project=PROJECTS),
         # Full ENTSO-E dataset (grid variant=full) for the German archive — a
         # top-level target for now until something downstream consumes it.
-        "resources/entsoe/DE_LU_grid_full_20230101_20231231.parquet",
+        "resources/entsoe/DE_LU_grid_full_20260625_20260627.parquet",
