@@ -1,4 +1,9 @@
 project,scenario,tech,variant,pipeline,area,start_date,end_date
+DEMO-VIC-2025,bestsite,wind-onshore,bestsite-p95,res_cf,vic,20250101,20251231
+DEMO-VIC-2025,bestsite,wind-offshore,bestsite-p95,res_cf,vic,20250101,20251231
+DEMO-VIC-2025,bestsite,solar,bestsite-p95,res_cf,vic,20250101,20251231
+DEMO-VIC-2025,anchored,wind-offshore,anchored-w7-s3,res_cf,vic,20250101,20251231
+DEMO-VIC-2025,complementarity,wind-offshore,complementarity-top1,res_cf,vic,20250101,20251231
 DE-2023-baseline,dedicated-res,wind-onshore,country-average,res_cf,de,20230101,20231231
 DE-2023-baseline,dedicated-res,solar,country-average,res_cf,de,20230101,20231231
 DE-2023-baseline,wind-only,wind-onshore,country-average,res_cf,de,20230101,20231231

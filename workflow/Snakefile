@@ -47,13 +47,21 @@ include: "rules/h2_dri.smk"
 include: "rules/viz.smk"
 
 
-rule all:
+# Default target: a small, self-contained demo that runs after a fresh clone
+# with no CDS download, no EEZ/NE zips, and no API keys. It ships a pre-sliced
+# Victoria (AUS) cutout backup + derived geo parquets, and exercises the
+# best-site (07) and complementarity (08) RES-CF science through to an h2_dri
+# solve and a viz report. Run the full set of real projects with `snakemake all`.
+rule demo:
     default_target: True
+    input:
+        "results/report_DEMO-VIC-2025.csv",
+        "results/plots/capacity_bars/DEMO-VIC-2025.png",
+
+
+rule all:
     input:
         # One report per project.
         expand("results/report_{project}.csv", project=PROJECTS),
         # One scenario-comparison bar chart per project.
         expand("results/plots/capacity_bars/{project}.png", project=PROJECTS),
-        # Full ENTSO-E dataset (grid variant=full) for the German archive — a
-        # top-level target for now until something downstream consumes it.
-        "resources/entsoe/DE_LU_grid_full_20260625_20260627.parquet",

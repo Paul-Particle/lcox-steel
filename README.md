@@ -169,14 +169,32 @@ Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` per th
 
 ## Running the pipelines
 
-`config/projects.csv` drives the full DAG. The first invocation should be a
-dry-run; the `profiles/default` profile sets `keep-going`, `rerun-incomplete`,
-and quiet rule chatter (per-rule log files carry the detail).
+### Quick start — the demo (no credentials, no downloads)
+
+The default target is a small, self-contained **demo** that runs after a fresh
+clone with **no CDS download, no EEZ/Natural-Earth zips, and no API keys**. It
+ships a pre-sliced Victoria (Australia) cutout backup plus the derived geometry
+parquets, and exercises the best-site (`07`) and complementarity (`08`)
+capacity-factor science through an `h2_dri` solve to a `viz` report:
 
 ```bash
-snakemake -n                                              # preview the DAG
-snakemake --profile profiles/default --cores 4            # run everything
-snakemake --profile profiles/default --cores 4 --verbose  # loud
+snakemake --profile profiles/default --cores 4        # builds the DEMO-VIC-2025 demo
+```
+
+Outputs land at `results/report_DEMO-VIC-2025.csv` and
+`results/plots/capacity_bars/DEMO-VIC-2025.png`, in a few minutes on a laptop.
+
+### The real projects
+
+`config/projects.csv` drives the full DAG. Building every real project needs the
+external data and credentials described under [Setup](#setup) — ERA5 cutouts via
+CDS, the EEZ/NE zips, and (for grid-connected scenarios) ENTSO-E or NEM access.
+Target them explicitly with `snakemake all`:
+
+```bash
+snakemake -n all                                              # preview the full DAG
+snakemake all --profile profiles/default --cores 4            # build every project
+snakemake all --profile profiles/default --cores 4 --verbose  # loud
 ```
 
 Drop `--profile profiles/default` for the bare invocation.

@@ -40,6 +40,10 @@ res_cf:
     es:  { iso3: ESP, region: ES,  coarse: false }
     aus: { iso3: AUS, region: AUS, coarse: true,  vic_bbox: [140.96, 149.97, -39.16, -34.00] }
     bra: { iso3: BRA, region: BRA, coarse: true  }
+    # Demo area: a Victoria (Australia) subset shipped with a pre-sliced backup
+    # cutout + derived geo parquets, so the default `snakemake` run needs no CDS
+    # download or EEZ/NE zips. region=VIC matches the committed vic_*_geo.parquet.
+    vic: { iso3: AUS, region: VIC, coarse: true }
 
   offshore_max_distance_km: 200
 
