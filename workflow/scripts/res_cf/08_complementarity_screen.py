@@ -34,7 +34,10 @@ resources/res_cf/<cc>_complementarity_top{N}_2023.parquet
 resources/res_cf/<cc>_average_profiles_2023.parquet
 """
 
-from __future__ import annotations
+# NOTE: `from __future__ import annotations` (present in the reference script)
+# cannot be used here — Snakemake prepends its preamble before running the
+# script, so this would no longer be the file's first statement (SyntaxError).
+# The type hints below are valid on the pinned Python (3.12) without it.
 
 import importlib.util
 import logging
@@ -520,9 +523,11 @@ def save_average_profiles(cc: str, year: int) -> None:
             continue
         src = matches[-1]  # most recent if multiple
         df_tech = pd.read_parquet(src)
-        # The country-average parquet has a single CF column; rename it to the tech.
-        cf_col = [c for c in df_tech.columns if c != "time"]
-        frames[tech.replace("_", "-")] = df_tech.set_index("time")[cf_col[0]]
+        # country-average parquet: time-indexed (DatetimeIndex named 'time'),
+        # single CF column. Tolerate 'time' arriving as a column too.
+        if "time" in df_tech.columns:
+            df_tech = df_tech.set_index("time")
+        frames[tech.replace("_", "-")] = df_tech.iloc[:, 0]
 
     if not frames:
         log.warning(f"no country-average sources found for {cc} — skipping average profiles")

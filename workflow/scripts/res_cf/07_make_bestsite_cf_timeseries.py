@@ -44,7 +44,10 @@ resources/res_cf/<cc>_cf_2023_bestsite_p95_anchor-<anchor>.parquet
 resources/res_cf/<cc>_cf_2023_bestsite_p95_anchor-<anchor>_mix-<label>.parquet
 """
 
-# from __future__ import annotations
+# NOTE: `from __future__ import annotations` (present in the reference script)
+# cannot be used here — Snakemake prepends its preamble before running the
+# script, so this would no longer be the file's first statement (SyntaxError).
+# The type hints below are valid on the pinned Python (3.12) without it.
 
 import logging
 import re
