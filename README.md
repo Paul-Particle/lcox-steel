@@ -51,15 +51,19 @@ lcox-steel/
 │   │   │   ├── download_nem.py     # NEMOSIS download primitives
 │   │   │   ├── _nemosis_patches.py # AEMO User-Agent / URL-encoding workarounds
 │   │   │   └── _helpers.py         # month iteration, UTC-naive coercion, cache checks
-│   │   ├── res_cf/                 # atlite capacity-factor pipeline
-│   │   │   ├── build_regions.py            # onshore country geometry (GeoParquet)
-│   │   │   ├── build_offshore_regions.py   # EEZ-clipped offshore geometry
-│   │   │   ├── download_cutout.py          # ERA5 cutout (honours `_backup.nc`; see below)
-│   │   │   ├── build_res_cf_profile.py     # country-average hourly CF per tech
-│   │   │   ├── build_solar_tilt_mix_p95.py # orientation-resolved solar CF sweep
-│   │   │   ├── determine_*.py / diag_*.py  # WIP analysis & QC (NOT in the active DAG)
-│   │   │   ├── _helpers.py                 # shared helpers for the WIP scripts
-│   │   │   └── README.md                   # author's notes on the CF methodology (WIP)
+│   │   ├── res_cf/                 # atlite capacity-factor pipeline (numbered by stage)
+│   │   │   ├── 01_build_regions.py            # onshore country geometry (GeoParquet)
+│   │   │   ├── 01b_build_offshore_regions.py  # EEZ-clipped offshore geometry
+│   │   │   ├── 02_make_cutouts.py             # ERA5 cutout (honours `_backup.nc`; see below)
+│   │   │   ├── 03_build_cf_timeseries.py      # country-average hourly CF per tech
+│   │   │   ├── 03b_build_solar_tilt_mix_p95.py # orientation-resolved solar CF sweep
+│   │   │   ├── 03c_build_res_cf_candidates.py # per-cell candidate grid (multi-site siting)
+│   │   │   ├── 07_make_bestsite_cf_timeseries.py # best-site P95 + anchored RES-mix CF
+│   │   │   ├── 08_complementarity_screen.py   # complementarity triplet screen
+│   │   │   ├── 06_resource_spread.py, 100_*, 101_*  # WIP diagnostics & plots (NOT in active DAG)
+│   │   │   ├── _helpers.py                    # shared helpers for the WIP scripts
+│   │   │   ├── reference/                     # Hannah's original scripts, verbatim (for side-by-side diffs)
+│   │   │   └── README.md                      # author's notes on the CF methodology (WIP)
 │   │   ├── h2_dri/                 # PyPSA investment model
 │   │   │   ├── build_network.py    # network construction (pure, importable)
 │   │   │   ├── solve_network.py    # rule entrypoint: load → build → solve → write
@@ -205,16 +209,16 @@ rm -rf data/entsoe_cache/*/2024-12       # one month, all areas
 ```
 
 The `res_cf` chain is `build_regions` → `build_offshore_regions` →
-`download_cutout` → `build_res_cf_profile`. The `{tech}` wildcard is
+`download_cutout` → `build_country_average_cf`. The `{tech}` wildcard is
 `wind-onshore`, `wind-offshore`, or `solar`.
 
 > [!NOTE]
 > **WIP — geometry computed twice.** `build_regions` produces the onshore
-> geometry for `build_res_cf_profile`, while `download_cutout` independently
+> geometry for `build_country_average_cf`, while `download_cutout` independently
 > re-derives the country boundary from the raw ZIP to set the ERA5 bounding box.
 > The box is padded (`res_cf.cutout.bbox_pad_deg`), so it usually covers the
 > feasible offshore band too. For a wide EEZ the cutout may not cover the full
-> offshore region, but `build_res_cf_profile` masks to the clipped offshore
+> offshore region, but `build_country_average_cf` masks to the clipped offshore
 > geometry, so far-offshore cells outside the cutout are simply absent. A proper
 > fix needs a cutout cache with explicit coverage checks (see `TODO.md`).
 
@@ -279,7 +283,7 @@ logs/
 ├── build_regions/{cf_area}.log
 ├── build_offshore_regions/{cf_area}.log
 ├── download_cutout/{cf_area}_{start}_{end}.log
-├── build_res_cf_profile/{cf_area}_{tech}_{start}_{end}.log
+├── build_country_average_cf/{cf_area}_{tech}_{start}_{end}.log
 ├── h2_dri_optimize/{project}_{scenario}.log
 └── compile_report/{project}.log
 ```

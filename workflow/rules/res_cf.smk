@@ -91,7 +91,7 @@ rule build_country_average_cf:
     output:
         "resources/res_cf/{cf_area}_{tech}_country-average_{start_date}_{end_date}.parquet",
     log:
-        "logs/build_res_cf_profile/{cf_area}_{tech}_{start_date}_{end_date}.log",
+        "logs/build_country_average_cf/{cf_area}_{tech}_{start_date}_{end_date}.log",
     params:
         region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
@@ -139,7 +139,7 @@ rule build_anchored_res_mix_cfs:
     wildcard_constraints:
         variant=r"anchored-w\d+-s\d+",
     log:
-        "logs/build_anchored_cf/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.log",
+        "logs/build_anchored_res_mix_cfs/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.log",
     params:
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
         wind_offshore_turbine=lookup(dpath="res_cf/wind_offshore_turbine", within=config),
