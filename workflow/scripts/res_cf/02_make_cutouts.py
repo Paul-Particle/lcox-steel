@@ -17,6 +17,7 @@ Backup caching: if a backup cutout file `<cutout>_backup.nc` exists it is copied
 of hitting CDS — useful to preserve expensive downloads across re-runs.
 """
 
+from pathlib import Path
 import logging
 import shutil
 from common._paths import ATLITE_CACHE, CUTOUTS, SHAPES_RES
