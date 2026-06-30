@@ -42,7 +42,13 @@ rule build_offshore_regions:
 
 rule download_cutout:
     input:
-        ne_zip=ancient("data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"),
+        # Cutout bounds are the bbox of the land ∪ offshore union (see
+        # 02_make_cutouts.py), so the cutout reaches far enough offshore to
+        # cover the offshore-wind zone. Both geometries are read from the
+        # pre-built parquets — the mainland_bbox filter / EEZ clip already
+        # applied by 01/01b — so no NE/EEZ zips are needed here.
+        regions="resources/shapes/{cf_area}_geo.parquet",
+        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
     output:
         # Not protected(): the 02_make_cutouts.py script preserves expensive
         # downloads via the `_backup.nc` sibling-file convention.
@@ -50,16 +56,9 @@ rule download_cutout:
     log:
         "logs/download_cutout/{cf_area}_{start_date}_{end_date}.log",
     params:
-        iso3=lookup(dpath="res_cf/countries/{cf_area}/iso3", within=config),
-        mainland_bbox=lookup(
-            dpath="res_cf/countries/{cf_area}/mainland_bbox",
-            within=config,
-            default=None,
-        ),
         coarse=lookup(
             dpath="res_cf/countries/{cf_area}/coarse", within=config, default=False
         ),
-        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
         bbox_pad_deg=lookup(dpath="res_cf/cutout/bbox_pad_deg", within=config),
         monthly_requests=lookup(dpath="res_cf/cutout/monthly_requests", within=config),
     script:

@@ -21,49 +21,27 @@ no longer used on the rule output — the backup IS the safety net.
 
 A proper cutout cache would: store ERA5 data by area in a persistent location (analogous to
 `data/entsoe_cache/`), check spatial and temporal coverage before requesting, and support
-partial fills. This would also make the `geo → cutout → timeseries` chain more natural:
-`build_regions`/`build_offshore_regions` would define the area, the cache layer would ensure
-coverage, and `build_res_cf_profile` would slice from the cache. When this lands, the backup
-hack and its README/HANDOFF callouts can come out.
+partial fills. The `geo → cutout → timeseries` chain already depends cleanly on
+`build_regions`/`build_offshore_regions` (the cutout bounds come from their union); the cache
+layer would slot in to ensure coverage before a request and let `build_country_average_cf`
+slice from it. When this lands, the backup hack and its README/HANDOFF callouts can come out.
 
-## Why `download_cutout` reads Natural Earth directly (DAG note)
+## Cutout bounds = land ∪ offshore (RESOLVED)
 
-In the reference pipeline, `02_make_cutouts` read the *built* region files
-(`regions.geojson` + `offshore_regions.geojson`) and unioned land + offshore to get
-the cutout bounds — so the cutout rule implicitly depended on `01`/`01b`.
+`download_cutout` now reads the pre-built `{cf_area}_geo.parquet` +
+`{cf_area}_offshore_geo.parquet` (outputs of `01`/`01b`), unions them, and takes the
+bounding box padded by `cutout.bbox_pad_deg` — matching the reference `02_make_cutouts`.
+This fixes the earlier land-only + 1° pad, which clipped offshore-wind cells for wide-EEZ
+areas (the offshore reach is `offshore_max_distance_km: 200` km ≈ 1.8°; e.g. AUS's offshore
+zone extends ~2° past the land bbox). The geometry is no longer re-derived from Natural Earth
+inside `02`, so the `geo → cutout → timeseries` chain is a single clean dependency line.
 
-The current `download_cutout` instead depends only on `ancient(ne_zip)` and re-derives
-its bounds from Natural Earth itself, with no dependency on `build_regions` /
-`build_offshore_regions`. This is **deliberate and tied to the cutout-cache stopgap above**:
-the CDS/ERA5 pull is the single slowest, most expensive step, so it must not be re-triggered
-by regeneration of the cheap geometry outputs (a code-trigger rerun, a `mainland_bbox` edit).
-`ancient()` on the input, the dropped `protected()` on the output, and the `_backup.nc` hack
-all serve the same goal: the cutout never auto-reruns once it (or its backup) exists. Reading
-NE directly is part of that insulation.
-
-**Cost of this decoupling:** the cutout box and the region masks are now derived from two
-independent reads of Natural Earth, and the offshore geometry is invisible to the bounds
-calculation (see next item). When the proper cutout cache lands, the chain can return to a
-natural `geo → cutout → timeseries` shape with `01`/`01b` defining the area.
-
-## Restore the land + offshore union for cutout bounds (drop bbox pad)
-
-`download_cutout` currently bounds the cutout with **land only** (Natural Earth +
-`mainland_bbox`) padded by `cutout.bbox_pad_deg: 1.0`. The reference `02_make_cutouts`
-instead unioned `regions ∪ offshore_regions` before taking bounds, so the box was guaranteed
-to cover the offshore deployment band.
-
-The 1° pad is **smaller than the offshore reach** (`offshore_max_distance_km: 200` km ≈ 1.8°),
-so the current box can clip offshore CF cells (e.g. DE North/Baltic Sea). The land-only
-approach was almost certainly a *consequence* of the DAG decoupling above (once `02` stopped
-reading `01b`'s output, it could no longer union the real offshore geometry), not an
-intentional coverage decision — worth confirming before changing.
-
-TODO: go back to the union approach. The clean version is unblocked by the cutout-cache work
-(restoring the union re-introduces a dependency on `build_offshore_regions`, which is fine once
-the cache decouples re-download from geometry regeneration). Interim option that keeps the DAG
-decoupled: bump `bbox_pad_deg` to ≥ the offshore reach in degrees (~2°) so the box provably
-covers the band — cruder, but a one-line stopgap.
+Re-trigger insulation now rests entirely on the `_backup.nc` hack (below), not on a
+`download_cutout` → NE decoupling: if geometry regenerates, `download_cutout` re-runs but
+copies the backup instead of hitting CDS. **Caveat:** that backup was built with whatever
+bounds were current when it was cached, so a `mainland_bbox` / `offshore_max_distance_km`
+edit won't actually re-bound a cutout that has a stale backup until the backup is refreshed —
+a known property of the stopgap, to be retired with the proper cutout cache below.
 
 ## Wire in best-site CF (`07`) — drop the quarterly-cutout requirement
 

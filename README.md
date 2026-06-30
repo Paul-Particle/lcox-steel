@@ -231,14 +231,14 @@ The `res_cf` chain is `build_regions` → `build_offshore_regions` →
 `wind-onshore`, `wind-offshore`, or `solar`.
 
 > [!NOTE]
-> **WIP — geometry computed twice.** `build_regions` produces the onshore
-> geometry for `build_country_average_cf`, while `download_cutout` independently
-> re-derives the country boundary from the raw ZIP to set the ERA5 bounding box.
-> The box is padded (`res_cf.cutout.bbox_pad_deg`), so it usually covers the
-> feasible offshore band too. For a wide EEZ the cutout may not cover the full
-> offshore region, but `build_country_average_cf` masks to the clipped offshore
-> geometry, so far-offshore cells outside the cutout are simply absent. A proper
-> fix needs a cutout cache with explicit coverage checks (see `TODO.md`).
+> **Cutout bounds = land ∪ offshore.** `download_cutout` reads the pre-built
+> `{cf_area}_geo.parquet` and `{cf_area}_offshore_geo.parquet`, unions them, and
+> takes the bounding box padded by `res_cf.cutout.bbox_pad_deg`. Unioning the
+> offshore zone in matters: it can reach `res_cf.offshore_max_distance_km`
+> (~200 km) from the coast — well beyond a land-only bbox + 1° pad — so without
+> it the offshore-wind cells get clipped out of the cutout. The mainland_bbox
+> filter and EEZ clip are already applied upstream by `build_regions` /
+> `build_offshore_regions`, so the geometry is computed once.
 
 ### Naming convention
 
