@@ -49,8 +49,6 @@ resources/res_cf/<cc>_cf_2023_bestsite_p95_anchor-<anchor>_mix-<label>.parquet
 # script, so this would no longer be the file's first statement (SyntaxError).
 # The type hints below are valid on the pinned Python (3.12) without it.
 
-import logging
-import re
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -59,7 +57,8 @@ import atlite
 import geopandas as gpd
 import yaml
 from shapely.geometry import box
-
+import logging
+import re
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
@@ -70,29 +69,27 @@ from scripts.res_cf._helpers import (
     haversine_distance_km,
     load_res_cf_cfg,
 )
-
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
-
 
 YEAR = 2023
 OUTDIR = RES_CF
 CONFIG_PATH = load_res_cf_cfg()
 COUNTRIES = ["de"]  # lowercase to match filenames
 
-REGIONS_PATH:          Path = SHAPES_RES / "regions.parquet"
-OFFSHORE_REGIONS_PATH: Path = SHAPES_RES / "offshore_regions.parquet"
-CUTOUT_PATH:           Path | None = None
+CUTOUT_DIR = None
+REGIONS_PATH = SHAPES_RES / "regions.parquet"
+OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"
+
 SM_VARIANT:            str | None = None   # "bestsite-p95" or "anchored-w{W}-s{S}"
 SM_ANCHOR:             str | None = None   # anchor tech in snake_case (from tech wildcard)
 SM_RES_MIX:            dict[str, float] | None = None  # parsed from variant; offshore anchor only
-
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     COUNTRIES             = [snakemake.wildcards.cf_area.lower()]
     CONFIG_PATH            = snakemake.config["res_cf"]
     REGIONS_PATH          = Path(snakemake.input.regions)
     OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
-    CUTOUT_PATH           = Path(snakemake.input.cutout)
+    CUTOUT_DIR           = Path(snakemake.input.cutout)
     SM_VARIANT            = snakemake.wildcards.variant
     SM_ANCHOR             = snakemake.wildcards.tech.replace("-", "_")
     if SM_VARIANT.startswith("anchored-"):
@@ -102,12 +99,14 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
         _s = int(_m.group(2)) / 10
         SM_RES_MIX = {"wind_onshore": _s, "solar": max(0.0, round(1.0 - _w - _s, 10))}
 
-TECHS                 = ["wind_onshore", "wind_offshore", "solar"]
-WIND_ONSHORE_TURBINE  = CONFIG_PATH["wind_onshore_turbine"]
-WIND_TURBINE          = WIND_ONSHORE_TURBINE
+TECHS = ["wind_onshore", "wind_offshore", "solar"]
+
+WIND_TURBINE          = CONFIG_PATH["wind_onshore_turbine"]
 WIND_OFFSHORE_TURBINE = CONFIG_PATH["wind_offshore_turbine"]
 PV_PANEL              = CONFIG_PATH["pv_panel"]
 PV_ORIENTATION        = CONFIG_PATH["pv_orientation"]
+
+WIND_ONSHORE_TURBINE  = WIND_TURBINE
 WIND_CF_CFG           = CONFIG_PATH.get("wind_cf", {})
 WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
 WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
@@ -468,7 +467,7 @@ def _write_sm_anchored_output(profiles: dict[str, pd.Series], anchor_tech: str) 
 def main() -> None:
     for cc in COUNTRIES:
         country_upper = cc.upper()
-        cutout = CUTOUT_PATH or annual_cutout_path(cc, YEAR)
+        cutout = CUTOUT_DIR or annual_cutout_path(cc, YEAR)
 
         # 1) Per-tech best-site P95 (each tech from its own P95 cell).
         results: dict[str, pd.Series] = {}
