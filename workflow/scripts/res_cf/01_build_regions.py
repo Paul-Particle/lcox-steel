@@ -69,49 +69,58 @@ def _one_country(world: gpd.GeoDataFrame, iso_a3: str) -> BaseGeometry:
                 return sel.union_all() if hasattr(sel, "union_all") else sel.unary_union
 
     raise ValueError(f"Code '{iso_a3}' not found in columns ADM0_A3/SOV_A3/ISO_A3.")
-
-def restrict_to_bbox(geom: BaseGeometry, bbox: list[float]) -> BaseGeometry:
+# generalzied version of France-only function
+def restrict_to_bbox(region_geom: BaseGeometry, bbox: list[float]) -> BaseGeometry:
     """Return only the polygon parts whose centroid falls inside `bbox`.
 
     `bbox` is [lon_min, lon_max, lat_min, lat_max]; raises if nothing remains.
     """
+    parts = list(region_geom.geoms) if region_geom.geom_type == "MultiPolygon" else [region_geom]
     lon_min, lon_max, lat_min, lat_max = bbox
-    parts = list(geom.geoms) if geom.geom_type == "MultiPolygon" else [geom]
-
-    # Keep only polygon parts whose centroid falls in [lon_min, lon_max, lat_min, lat_max].
-    kept = [
+    # Keep only polygons whose centroid is in [lon_min, lon_max, lat_min, lat_max].
+    mainland_parts = [
         p for p in parts
         if lon_min <= p.centroid.x <= lon_max and lat_min <= p.centroid.y <= lat_max
     ]
 
-    if not kept:
+    if not mainland_parts:
         raise ValueError(f"No polygon parts inside bbox {bbox}.")
 
-    return gpd.GeoSeries(kept, crs=4326).union_all()
+    return gpd.GeoSeries(mainland_parts, crs=4326).union_all()
 
 
 def main() -> None:
     if not NE_SHP.exists():
         raise FileNotFoundError(
-            f"Natural Earth shapefile ZIP not found: {NE_SHP}\n"
-            "Download 'Admin 0 - Countries'"
-            ""
-            )
+            f"Cannot find Natural Earth shapefile at: {NE_SHP}\n"
+            "Download 'Admin 0 – Countries' (1:110m) and extract into:\n"
+            "  data/shapes/ne_110m_admin_0_countries/"
+        )
 
     OUT_GEOJSON.parent.mkdir(parents=True, exist_ok=True)
 
     world = gpd.read_file(str(NE_SHP)).to_crs(4326)
 
-    geoms = _one_country(world, _ISO3)
+    geom = _one_country(world, _ISO3)
     if _MAINLAND_BBOX is not None:
-        geoms = restrict_to_bbox(geoms, _MAINLAND_BBOX)
-    region = gpd.GeoDataFrame({"region": [_REGION], "geometry": [geoms]}, crs=4326)
+        geom = restrict_to_bbox(geom, _MAINLAND_BBOX)
+
+    #de_lu = geoms["DE"].union(geoms["LU"])
+
+    region = gpd.GeoDataFrame(
+        {
+            "region": [_REGION], 
+            "geometry": [geom]
+        }, 
+        crs=4326
+        )
 
     # Fix occasional invalid geometries
     region["geometry"] = region["geometry"].buffer(0)
 
     region.to_parquet(OUT_GEOJSON)
-    log.info(f"wrote {OUT_GEOJSON} ({_CF_AREA} → {_REGION})")
+    log.info(f"wrote {OUT_GEOJSON}")
+    log.info(f"({_CF_AREA} → {_REGION})")
 
 
 if __name__ == "__main__":
