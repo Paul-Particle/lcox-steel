@@ -40,7 +40,7 @@ resources/res_cf/<cc>_average_profiles_2023.parquet
 # The type hints below are valid on the pinned Python (3.12) without it.
 
 import importlib.util
-import logging
+import sys
 from itertools import product
 from pathlib import Path
 
@@ -48,41 +48,40 @@ import numpy as np
 import pandas as pd
 import yaml
 
+import logging
 from common._logging import configure_logging, progress
 from common._paths import REPO_ROOT, RES_CF
 from scripts.res_cf._helpers import annual_cutout_path, haversine_distance_km
-
 if "snakemake" not in globals():
     from common._stubs import snakemake
-
-# Reusable cell-grid helpers live in 07_make_bestsite_cf_timeseries.py; its
-# numbered filename isn't a valid module name, so load it via importlib.
-_spec = importlib.util.spec_from_file_location(
-    "bestsite", Path(__file__).parent / "07_make_bestsite_cf_timeseries.py"
-)
-_bestsite = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_bestsite)
-
-# In Snakemake mode, override the imported module's path globals so that
-# geometry_for_tech reads from the rule's declared input files, not 07's defaults.
-if "snakemake" in globals() and hasattr(snakemake, "input"):
-    _bestsite.REGIONS_PATH = Path(snakemake.input.regions)
-    _bestsite.OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
-
-build_cf_year = _bestsite.build_cf_year
-extract_cell_timeseries = _bestsite.extract_cell_timeseries
-geometry_for_tech = _bestsite.geometry_for_tech
-mask_cells_inside = _bestsite.mask_cells_inside
-
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
+# ── Import reusable functions from script 07 ─────────────────────────────────
+_spec = importlib.util.spec_from_file_location(
+    "bestsite",
+    Path(__file__).parent.parent / "res_cf" / "07_make_bestsite_cf_timeseries.py"
+) # numbered filename aren't valid module names, so load it via importlib.
+_bestsite = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_bestsite)
+
+build_cf_year           = _bestsite.build_cf_year
+extract_cell_timeseries = _bestsite.extract_cell_timeseries
+geometry_for_tech       = _bestsite.geometry_for_tech
+#haversine_distance_km   = _bestsite.haversine_distance_km # imported from helpers
+mask_cells_inside       = _bestsite.mask_cells_inside
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
-OUTDIR = RES_CF
-CF_DIR = RES_CF
+PROJECT_ROOT = REPO_ROOT
+if "snakemake" in globals() and hasattr(snakemake, "input"):
+    _bestsite.REGIONS_PATH = Path(snakemake.input.regions)
+    _bestsite.OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
+OUTDIR       = RES_CF
+CF_DIR       = RES_CF
 
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
 
+MAX_TRIPLETS_BRUTE_FORCE = 500_000
 SM_CUTOUT_PATH: Path | None = None
 SM_SCREEN_OUT:  Path | None = None
 SM_CF_OUT:      Path | None = None
