@@ -55,6 +55,9 @@ res_cf:
   cutout:
     bbox_pad_deg: 1.0
     monthly_requests: false
+    # Seconds between CDS job-status log lines while a download waits in the
+    # queue (common._cds_monitor). Purely cosmetic — does not affect the download.
+    cds_poll_interval_s: 30
 
   # atlite technology settings (passed to cutout.wind / cutout.pv).
   wind_onshore_turbine:  Vestas_V112_3MW

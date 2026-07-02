@@ -9,22 +9,21 @@ it in `retrieve_entsoe.py`, so the list stays up to date automatically without m
 
 ## Cutout cache (like the grid data cache)
 
-Grid data uses a persistent per-variant processed cache (`resources/entsoe/{variant}.parquet`,
-`resources/nem/{variant}.parquet`) that accumulates area/month slices and avoids re-downloading
-covered periods. Cutouts have no equivalent: each `download_cutout` rule invocation is a
-one-shot ERA5 pull for a fixed `(cf_area, start_date, end_date)` triple.
+**Level 1 — keyed exact-match cache: DONE** (`common/_cutout_cache.py`). Each download is
+keyed on its *actual* request parameters (module, rounded bbox, dx/dy, time range) and stored
+under `cutouts/cache/<area>_<start>_<end>_<key>.nc` (+ a `.json` params sidecar). `02_make_cutouts`
+checks the cache before hitting CDS and hardlinks the entry into the rule output on a hit
+(copy fallback). This closes the stale-bounds hole of the old backup hack: a `mainland_bbox` /
+`offshore_max_distance_km` edit changes the key, so it re-downloads instead of silently reusing
+a differently-bounded cutout. The `_backup.nc` sibling is still honoured as a fallback (and gets
+promoted into the cache on use), so previously pinned backups keep working — it can be retired
+once nothing relies on it.
 
-**Current stopgap**: `download_cutout.py` checks for a sibling `cutouts/{name}_backup.nc`
-file at the start of its run and copies from it instead of hitting CDS. Renaming an
-existing cutout to `*_backup.nc` thus pins it across code-trigger reruns. `protected()` is
-no longer used on the rule output — the backup IS the safety net.
-
-A proper cutout cache would: store ERA5 data by area in a persistent location (analogous to
-`data/entsoe_cache/`), check spatial and temporal coverage before requesting, and support
-partial fills. The `geo → cutout → timeseries` chain already depends cleanly on
-`build_regions`/`build_offshore_regions` (the cutout bounds come from their union); the cache
-layer would slot in to ensure coverage before a request and let `build_country_average_cf`
-slice from it. When this lands, the backup hack and its README/HANDOFF callouts can come out.
+**Level 2 — coverage-aware reuse + partial fills: DEFERRED.** Slice a sub-request out of a larger
+cached cutout when it spatially/temporally covers the request, and download only missing months
+before concatenating. Worth it only if we start requesting overlapping sub-regions or extending
+time ranges — today we request whole country-years, which Level 1 already serves. The added
+slicing / grid-alignment / concat logic is where the subtle bugs live, hence deferred.
 
 ## Cutout bounds = land ∪ offshore (RESOLVED)
 
@@ -155,10 +154,13 @@ Key fields:
 - `user.queued` / `user.running` — your own per-user position (limit: 1 running at a time)
 - Global queue (`qos.limit`) gives context on overall wait times
 
-### Future: automatic status updates
+### Automatic status updates: DONE
 
-Wire this into Snakemake logging or a small polling script that prints progress
-as monthly jobs complete, so long cutout runs don't require manual checks.
+`common/_cds_monitor.py` (`cds_progress_logger`) wraps `cutout.prepare()` in `02_make_cutouts`
+with a daemon thread that polls the CDS jobs endpoint every `res_cf.cutout.cds_poll_interval_s`
+seconds (default 30) and logs one status line — running / queued / successful / failed plus your
+per-user queue position — so long cutout runs are observable instead of appearing hung. All CDS
+access is best-effort (poll errors are swallowed at DEBUG).
 
 ## Plotly PNG export needs Chrome (kaleido v1)
 
