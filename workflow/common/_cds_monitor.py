@@ -99,10 +99,18 @@ def cds_progress_logger(interval_s: float = 60.0, heartbeat_s: float = 300.0):
                         log.info(f"[+{_mins(now - start)}] CDS: {summary}{note}")
                     last_key, last_change, last_heartbeat = key, now, now
                 elif now - last_heartbeat >= heartbeat_s:
+                    if key[0] > 0:
+                        why = "a job is running (ERA5 jobs take ~20-25 min) — expected, not a stall"
+                    elif key[1] > 0:
+                        why = (
+                            "jobs queued but none started yet — waiting on the CDS global "
+                            "queue, which can be slow at peak times; not a stall"
+                        )
+                    else:
+                        why = "no active CDS jobs — atlite is likely processing/writing locally"
                     log.info(
                         f"[+{_mins(now - start)}] CDS: still working — {summary} "
-                        f"(unchanged {_mins(now - last_change)}; a normal ERA5 job "
-                        f"runs ~20-25 min, so this is expected, not a stall)"
+                        f"(unchanged {_mins(now - last_change)}; {why})"
                     )
                     last_heartbeat = now
             except Exception as exc:
