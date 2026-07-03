@@ -25,7 +25,13 @@ import logging
 import shutil
 from common._paths import ATLITE_CACHE, CUTOUTS, SHAPES_RES
 from common._cutout_qc import validate_cutout
-from common._cutout_cache import cache_params, cache_paths, link_or_copy, store_in_cache
+from common._cutout_cache import (
+    cache_params,
+    cache_paths,
+    link_or_copy,
+    store_in_cache,
+    warn_if_low_disk,
+)
 from common._cds_monitor import cds_progress_logger
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -43,6 +49,8 @@ _COARSE = False
 _BBOX_PAD_DEG = 1.0
 _MONTHLY_REQUESTS = False
 _CDS_POLL_INTERVAL_S = 30.0
+_CACHE_WARN_SIZE_GB = 100.0
+_MIN_FREE_DISK_GB = 20.0
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _REGIONS_PATH = Path(snakemake.input.regions)
     _OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
@@ -54,6 +62,8 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _BBOX_PAD_DEG = snakemake.params.bbox_pad_deg
     _MONTHLY_REQUESTS = snakemake.params.monthly_requests
     _CDS_POLL_INTERVAL_S = snakemake.params.cds_poll_interval_s
+    _CACHE_WARN_SIZE_GB = snakemake.params.cache_warn_size_gb
+    _MIN_FREE_DISK_GB = snakemake.params.min_free_disk_gb
 def _iso(yyyymmdd: str) -> str:
     return f"{yyyymmdd[:4]}-{yyyymmdd[4:6]}-{yyyymmdd[6:8]}"
 
@@ -108,10 +118,15 @@ def main():
             shutil.copyfileobj(fsrc, fdst)
         report = validate_cutout(_OUTPUT_PATH, _START_DATE, _END_DATE)
         log.info(f"cutout QC passed (from backup):\n{report.summary()}")
-        store_in_cache(_OUTPUT_PATH, _CF_AREA, params)
+        cached = store_in_cache(_OUTPUT_PATH, _CF_AREA, params, warn_size_gb=_CACHE_WARN_SIZE_GB)
+        # Backups are user-managed pins (one is git-tracked for the demo), so we
+        # never delete them — but once grandfathered into the cache they are
+        # redundant and can be removed by hand.
+        log.info(f"backup {backup.name} now cached as {cached.name}; it is redundant and may be removed manually")
         return
 
     # 3) Download from CDS.
+    warn_if_low_disk(_MIN_FREE_DISK_GB)
     time_range = slice(_iso(_START_DATE), f"{_iso(_END_DATE)} 23:00")  # 23:00 keeps the full final day
     cutout = atlite.Cutout(
         path=str(_OUTPUT_PATH),
@@ -134,7 +149,7 @@ def main():
     report = validate_cutout(_OUTPUT_PATH, _START_DATE, _END_DATE)
     log.info(f"cutout QC passed:\n{report.summary()}")
 
-    store_in_cache(_OUTPUT_PATH, _CF_AREA, params)
+    store_in_cache(_OUTPUT_PATH, _CF_AREA, params, warn_size_gb=_CACHE_WARN_SIZE_GB)
 
 
 if __name__ == "__main__":

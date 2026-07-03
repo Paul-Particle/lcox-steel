@@ -62,6 +62,8 @@ rule download_cutout:
         bbox_pad_deg=lookup(dpath="res_cf/cutout/bbox_pad_deg", within=config),
         monthly_requests=lookup(dpath="res_cf/cutout/monthly_requests", within=config),
         cds_poll_interval_s=lookup(dpath="res_cf/cutout/cds_poll_interval_s", within=config),
+        cache_warn_size_gb=lookup(dpath="res_cf/cutout/cache_warn_size_gb", within=config),
+        min_free_disk_gb=lookup(dpath="res_cf/cutout/min_free_disk_gb", within=config),
     script:
         "../scripts/res_cf/02_make_cutouts.py"
 

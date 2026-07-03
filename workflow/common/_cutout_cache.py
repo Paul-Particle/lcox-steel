@@ -80,20 +80,62 @@ def cache_paths(cf_area: str, params: dict) -> tuple[Path, Path]:
 
 
 def link_or_copy(src: Path, dst: Path) -> None:
-    """Materialise `dst` from `src`, preferring a hardlink over a full copy."""
+    """Materialise `dst` from `src`, preferring a hardlink over a full copy.
+
+    Hardlinks are available on all our platforms (POSIX + Windows/NTFS via
+    ``os.link``) but only *within a single filesystem*; they fail with EXDEV
+    across mounts and on filesystems that don't support them (FAT, some network
+    shares). In that case we fall back to a full copy — correct, but it uses
+    extra disk, so the fallback is logged (WARNING) rather than silently taken.
+    """
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists():
         dst.unlink()
     try:
         os.link(src, dst)
-    except OSError:
+        log.debug(f"hardlinked {dst.name} <- {src}")
+    except OSError as exc:
+        log.warning(
+            f"could not hardlink {dst.name} ({exc.strerror}); copying instead "
+            f"(uses extra disk). src={src}"
+        )
         shutil.copyfile(src, dst)
 
 
-def store_in_cache(source: Path, cf_area: str, params: dict) -> Path:
+def cache_size_bytes() -> int:
+    """Total size of cached cutout files (.nc) currently in the cache."""
+    return sum(f.stat().st_size for f in CACHE_DIR.glob("*.nc") if f.exists())
+
+
+def warn_if_cache_large(warn_size_gb: float) -> None:
+    """Log a warning (never prune) when the cache exceeds `warn_size_gb`. 0 disables."""
+    if warn_size_gb and warn_size_gb > 0:
+        size_gb = cache_size_bytes() / 1e9
+        if size_gb > warn_size_gb:
+            log.warning(
+                f"cutout cache at {CACHE_DIR} is {size_gb:.0f} GB "
+                f"(> {warn_size_gb} GB warn threshold). No automatic pruning — "
+                f"remove stale entries there manually if space is tight."
+            )
+
+
+def warn_if_low_disk(min_free_gb: float, where: Path = CACHE_DIR) -> None:
+    """Log a warning when free disk at `where` is below `min_free_gb`. 0 disables."""
+    if min_free_gb and min_free_gb > 0:
+        target = where if where.exists() else where.parent
+        free_gb = shutil.disk_usage(target).free / 1e9
+        if free_gb < min_free_gb:
+            log.warning(
+                f"low free disk: {free_gb:.0f} GB at {target} (< {min_free_gb} GB floor). "
+                f"ERA5 cutouts are ~0.5-2.5 GB each — a download (or a copy fallback) may fail."
+            )
+
+
+def store_in_cache(source: Path, cf_area: str, params: dict, warn_size_gb: float = 0.0) -> Path:
     """Add a freshly downloaded cutout to the cache; return the cache path."""
     cutout_path, params_path = cache_paths(cf_area, params)
     link_or_copy(source, cutout_path)
     params_path.write_text(json.dumps(params, indent=2, sort_keys=True))
     log.info(f"stored cutout in cache: {cutout_path.name}")
+    warn_if_cache_large(warn_size_gb)
     return cutout_path
