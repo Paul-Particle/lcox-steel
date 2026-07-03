@@ -184,3 +184,8 @@ Options to make this less of a footgun: pin `python-kaleido<1` (the old bundled
 renderer) in `environment.yaml`; or add a Snakemake `onstart`/setup check that
 fetches Chrome if missing; or make PNG export optional (HTML always, PNG only when
 a renderer is available) in the viz scripts.
+
+- script07 Colocation heuristic varification  @PP
+- write tests to make sure ERA5/CF/Atlite downloads dont fail silently for all 5 countries, year 2023 and hourly timesteps @PP
+- grid pipeline compare to Energycharts.info API
+- (low prio) azimuth sweep 270-0-90 degrees only for Southern hemisphere right now
