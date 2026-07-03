@@ -55,8 +55,10 @@ res_cf:
   cutout:
     bbox_pad_deg: 1.0
     monthly_requests: false
-    # Seconds between CDS job-status log lines while a download waits in the
-    # queue (common._cds_monitor). Purely cosmetic — does not affect the download.
+    # Seconds between CDS job-status *polls* while a download waits in the queue
+    # (common._cds_monitor). The log only prints on a status change plus a
+    # periodic "still working" heartbeat, so this controls how promptly changes
+    # are noticed, not log volume. Purely cosmetic — does not affect the download.
     cds_poll_interval_s: 60
 
   # atlite technology settings (passed to cutout.wind / cutout.pv).
