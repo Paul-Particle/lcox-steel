@@ -378,6 +378,18 @@ print(dict(Counter(j['status'] for j in cdsapi.Client(quiet=True).client.get_job
   `{queued: 3892, running: 460}`). Nothing is wrong — it drains as EU load drops in
   the evening. Kick off multi-cutout batches overnight (CET) for far better
   throughput.
+- **Cost/fair-use scheduling (QoS) — heavy usage slows *you* down.** The CDS runs a
+  Quality-of-Service scheduler that queues requests and picks what to run next from
+  "the user profile, the type of request, and the expected request cost (volume of
+  data, CPU usage, etc.)", with very large requests given very low priority and the
+  number of simultaneous requests per user capped ([CDS docs](https://confluence.ecmwf.int/display/CKB/Climate+Data+Store+%28CDS%29+documentation)).
+  The exact fair-share formula isn't published, but *observed* behaviour matches it:
+  after ~30 jobs across 6 cutouts in one day, later cutouts waited **2-4 h for their
+  first run slot even as the global queue shrank** — i.e. the account gets
+  deprioritised relative to lighter users once it has consumed a lot recently.
+  Practical upshot: it's genuinely per-account, so spreading a big batch over more
+  days (or overnight) beats hammering it in one sitting; there's no way to buy back
+  priority mid-run.
 - **Don't read a single snapshot as a stall.** `running=1 queued=4` holding steady
   for 20+ min is one job legitimately running, not a hang. Look at `done_this_run`
   climbing over time, or the heartbeat's "unchanged Xm" note — not one line.
