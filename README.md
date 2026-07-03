@@ -369,6 +369,15 @@ print(dict(Counter(j['status'] for j in cdsapi.Client(quiet=True).client.get_job
 ```
 
 **Gotchas (learned the hard way):**
+- **Daytime congestion — schedule big runs overnight.** The CDS-MARS archive has a
+  fixed global cap (~460 jobs running at once); during EU daytime the queue behind
+  it routinely holds several thousand jobs, so a request can wait **an hour or more
+  just to *start* running** even though your own per-user limit is free. The exact
+  same cutout that finished in ~20 min overnight can stall for hours mid-afternoon.
+  You can see this in the accepted job's metadata (`qos.status.limit`:
+  `{queued: 3892, running: 460}`). Nothing is wrong — it drains as EU load drops in
+  the evening. Kick off multi-cutout batches overnight (CET) for far better
+  throughput.
 - **Don't read a single snapshot as a stall.** `running=1 queued=4` holding steady
   for 20+ min is one job legitimately running, not a hang. Look at `done_this_run`
   climbing over time, or the heartbeat's "unchanged Xm" note — not one line.
