@@ -390,6 +390,18 @@ print(dict(Counter(j['status'] for j in cdsapi.Client(quiet=True).client.get_job
   ~5-day-to-3-month latency) can download partial or `expver`-mixed; the cutout QC
   gate catches this and fails the rule rather than passing bad data downstream.
 
+**Batch driver.** `workflow/scripts/res_cf/download_cutouts_batch.sh` downloads a
+set of cutouts one at a time through the QC-gated rule, logging to
+`logs/overnight_downloads.log` and QC-summarising at the end. It is **resume-safe**:
+cutouts already on disk / in `cutouts/cache/` are skipped, so re-running after an
+interruption or a VM crash picks up where it left off (the expensive downloads
+live in the cache, not the script). Run detached and overnight:
+
+```bash
+SMK=path/to/snakemake PY=path/to/python \
+  nohup bash workflow/scripts/res_cf/download_cutouts_batch.sh &
+```
+
 **For long multi-cutout runs, have an agent babysit.** A batch of country-years is
 many hours of mostly-waiting punctuated by rare failures — a good fit for a
 Claude Code agent that periodically tails `logs/overnight_downloads.log` +
