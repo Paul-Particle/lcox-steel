@@ -77,7 +77,7 @@ OUTDIR = RES_CF
 RES_CF_CFG = load_res_cf_cfg()
 COUNTRIES = ["de"]  # lowercase to match filenames
 
-CUTOUT_DIR = None  # test: Path("cutouts/vic_20250101_20251231.nc")
+CUTOUT_DIR = None # test: Path("cutouts/vic_20250101_20251231.nc")
 REGIONS_PATH = SHAPES_RES / "regions.parquet" # test: "vic_geo.parquet"
 OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"  # test: "vic_offshore_geo.parquet"
 
@@ -514,6 +514,7 @@ def main() -> None:
         # 1) Per-tech best-site P95 (each tech from its own P95 cell).
         results: dict[str, pd.Series] = {}
         selected_cells: dict[str, dict] = {}
+        summary_rows: list[dict] = []
         for tech in TECHS:
             cf_year = build_cf_year(cutout, tech)
             geom = geometry_for_tech(country_upper, tech)
@@ -526,6 +527,12 @@ def main() -> None:
             v_flat = cell_mean.ravel()
             nat_mean = float(np.nansum(v_flat * w_flat) / np.nansum(w_flat)) if np.nansum(w_flat) > 0 else np.nan
 
+            p95 = weighted_percentile(v_flat, w_flat, 0.95)
+            p90 = weighted_percentile(v_flat, w_flat, 0.90)
+
+            valid_mask = w_flat > 0
+            cell_max = float(np.nanmax(np.where(valid_mask, v_flat, np.nan))) if np.any(valid_mask) else np.nan
+
             y_idx, x_idx = find_p95_cell(cf_year, weights)
             x, y = get_cell_coords(cf_year, y_idx, x_idx)
             selected_cells[tech] = {"x": x, "y": y, "x_idx": int(x_idx), "y_idx": int(y_idx)}
@@ -533,12 +540,26 @@ def main() -> None:
             best_mean = float(ts.mean())
             results[tech] = ts
             log.info(f"{country_upper} | {tech}: national_mean={nat_mean:.3f} best_mean={best_mean:.3f}")
+            summary_rows.append({
+                "country": country_upper,
+                "tech": tech,
+                "national_mean": nat_mean,
+                "p90": p90,
+                "p95": p95,
+                "max": cell_max,
+            })
 
         df_p95 = add_location_metadata(_to_dataframe(results), None, None, selected_cells)
         out_p95 = OUTDIR / f"{cc}_cf_{YEAR}_bestsite_p95.parquet"
         df_p95.to_parquet(out_p95, index=False)
         log.info(f"{country_upper}: wrote {out_p95.name}")
         _write_sm_p95_output(results)
+
+        df_summary = pd.DataFrame(summary_rows)
+        df_summary["run_timestamp_utc"] = pd.Timestamp.now("UTC").isoformat()
+        out_summary = OUTDIR / f"{cc}_cf_{YEAR}_resource_summary.parquet"
+        df_summary.to_parquet(out_summary, index=False)
+        log.info(f"{country_upper}: wrote {out_summary.name}")
 
         # 2) Anchor-co-located files (one per anchor tech: onshore, solar, offshore).
         for anchor_tech in ["wind_onshore", "solar", "wind_offshore"]:
