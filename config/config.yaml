@@ -94,6 +94,14 @@ res_cf:
     quality_floor: 0.90
     max_triplets_brute_force: 500000
 
+  #script 07b
+  anchor_colocation:
+    max_radius_km: 100
+    n_candidates: 3
+    coincidence_threshold: 0.20
+    w_coincidence: 0.6
+    w_correlation: 0.4
+
   # RES-mix scenarios needing scenario-specific co-located best-site files.
   # Each entry: {country, mix_anchor_tech, res_mix: {tech: weight, ...}} (weights sum to 1).
   # Land anchors (wind_onshore/solar) are skipped — identical to the generic anchor files;
