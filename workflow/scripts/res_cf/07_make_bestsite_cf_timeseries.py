@@ -74,7 +74,7 @@ log = logging.getLogger(__name__)
 
 YEAR = 2023
 OUTDIR = RES_CF
-CONFIG_PATH = load_res_cf_cfg()
+RES_CF_CFG = load_res_cf_cfg()
 COUNTRIES = ["de"]  # lowercase to match filenames
 
 CUTOUT_DIR = None
@@ -86,7 +86,7 @@ SM_ANCHOR:             str | None = None   # anchor tech in snake_case (from tec
 SM_RES_MIX:            dict[str, float] | None = None  # parsed from variant; offshore anchor only
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     COUNTRIES             = [snakemake.wildcards.cf_area.lower()]
-    CONFIG_PATH            = snakemake.config["res_cf"]
+    RES_CF_CFG            = snakemake.config["res_cf"]
     REGIONS_PATH          = Path(snakemake.input.regions)
     OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
     CUTOUT_DIR           = Path(snakemake.input.cutout)
@@ -101,26 +101,26 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
 
 TECHS = ["wind_onshore", "wind_offshore", "solar"]
 
-WIND_TURBINE          = CONFIG_PATH["wind_onshore_turbine"]
-WIND_OFFSHORE_TURBINE = CONFIG_PATH["wind_offshore_turbine"]
-PV_PANEL              = CONFIG_PATH["pv_panel"]
-PV_ORIENTATION        = CONFIG_PATH["pv_orientation"]
+WIND_TURBINE          = RES_CF_CFG["wind_onshore_turbine"]
+WIND_OFFSHORE_TURBINE = RES_CF_CFG["wind_offshore_turbine"]
+PV_PANEL              = RES_CF_CFG["pv_panel"]
+PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
 
 WIND_ONSHORE_TURBINE  = WIND_TURBINE
-WIND_CF_CFG           = CONFIG_PATH.get("wind_cf", {})
+WIND_CF_CFG           = RES_CF_CFG.get("wind_cf", {})
 WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
 WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
 
 # Spatial matching for anchor co-location (max search radius + how close to the
 # best nearby cell a candidate must be to qualify).
-_SPATIAL_CFG          = CONFIG_PATH.get("spatial_matching_res_mix", {})
+_SPATIAL_CFG          = RES_CF_CFG.get("spatial_matching_res_mix", {})
 MAX_RADIUS_KM         = float(_SPATIAL_CFG.get("max_radius_km", 100.0))
 QUALITY_FLOOR_FRAC    = float(_SPATIAL_CFG.get("quality_floor_fraction", 0.90))
 
 # RES-mix scenarios needing scenario-specific co-located files. Each entry:
 #   {country, mix_anchor_tech, res_mix: {tech: weight, ...}}  (weights sum to 1).
 # Empty by default; populate the `res_cf.bestsite_res_mix_scenarios` config list.
-RES_MIX_SCENARIOS     = CONFIG_PATH.get("bestsite_res_mix_scenarios", [])
+RES_MIX_SCENARIOS     = RES_CF_CFG.get("bestsite_res_mix_scenarios", [])
 
 
 def extract_cell_timeseries(

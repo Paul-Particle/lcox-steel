@@ -15,7 +15,7 @@ from common._paths import DATA, SHAPES_RES
 
 #CONFIG_PATH = Path("config_hannah.yaml")
 EEZ_SHP = DATA / "shapes/offshore_zones/eez_v12.zip"
-OUT_GEOJSON = SHAPES_RES / "de_offshore_geo.parquet"
+OUT_PARQUET = SHAPES_RES / "de_offshore_geo.parquet"
 LAND_REGIONS = SHAPES_RES / "de_geo.parquet"
 
 # Standalone defaults
@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _OFFSHORE_ZONE_ZIP = Path(snakemake.input.offshore_zone)
     LAND_REGIONS = Path(snakemake.input.regions)
-    OUT_GEOJSON = Path(snakemake.output[0])
+    OUT_PARQUET = Path(snakemake.output[0])
     _ISO3 = snakemake.params.iso3
     _REGION = snakemake.params.region
     _OFFSHORE_MAX_KM = float(snakemake.params.offshore_max_distance_km)
@@ -47,7 +47,7 @@ def main():
     if not LAND_REGIONS.exists():
         raise FileNotFoundError(f"Cannot find land regions file at: {LAND_REGIONS}")
 
-    OUT_GEOJSON.parent.mkdir(parents=True, exist_ok=True)
+    OUT_PARQUET.parent.mkdir(parents=True, exist_ok=True)
     log.info(f"building offshore region for {_REGION} (ISO3={_ISO3}, max {max_distance_km:.0f} km)")
 
     eez = gpd.read_file(str(EEZ_SHP)).to_crs(4326)
@@ -85,10 +85,10 @@ def main():
         log.warning("Warning: some offshore geometries are invalid")
     # -----------------------------------
 
-    gdf.to_parquet(OUT_GEOJSON)
+    gdf.to_parquet(OUT_PARQUET)
     area_km2 = gdf.to_crs(6933)["geometry"].area.iloc[0] / 1e6
 
-    log.info(f"wrote {OUT_GEOJSON} ({_REGION}: "
+    log.info(f"wrote {OUT_PARQUET} ({_REGION}: "
              f"{area_km2:.0f} km²)")
 
 

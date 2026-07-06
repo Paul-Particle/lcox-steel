@@ -3,7 +3,7 @@ Create Atlite ERA5 cutouts for RES capacity factors.
 
 Start small + stable (DE, Jan–Feb 2023) to avoid CDS/GRIB flakiness on Windows.
 Output:
-- data/cutouts/de_2023_q1.nc
+- cutouts/{cf_area}_{start_date}_{end_date}.nc.
 """
 """
 The cutout extent is the bounding box of the union of the onshore land
@@ -59,7 +59,7 @@ OFFSHORE_REGIONS = _OFFSHORE_REGIONS_PATH
 TMPDIR = ATLITE_CACHE
 
 
-def bounds_for(region_names, pad=1.0):
+def bounds_for(pad=1.0):
     land_geom = gpd.read_parquet(REGIONS).to_crs(4326)
     offshore_geom = gpd.read_parquet(OFFSHORE_REGIONS).to_crs(4326)
 
@@ -82,8 +82,7 @@ def main():
         return
 
     # ✅ start with ONE country/annual time slice
-    region_names = REGIONS #[AUS]
-    x, y = bounds_for(region_names, pad=_BBOX_PAD_DEG)
+    x, y = bounds_for(pad=_BBOX_PAD_DEG)
     log.info("Cutout bounds:")
     log.info(f"x ={x}")
     log.info(f"y ={y}")
