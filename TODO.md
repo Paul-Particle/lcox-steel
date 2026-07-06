@@ -189,3 +189,5 @@ a renderer is available) in the viz scripts.
 - write tests to make sure ERA5/CF/Atlite downloads dont fail silently for all 5 countries, year 2023 and hourly timesteps @PP
 - grid pipeline compare to Energycharts.info API
 - (low prio) azimuth sweep 270-0-90 degrees only for Southern hemisphere right now
+
+- VIC test run finding: offshore-anchored scenario finds 0 candidates for both wind_onshore and solar within max_radius_km=100 — the offshore anchor's file has no co-located land options at all. Likely the offshore P95 cell sits >100km from any valid land cell for this region. Investigate: increase radius for offshore-anchor scenarios specifically, or revisit offshore P95 cell selection. Related to the broader anchor-selection review (BRA P95 issue).
