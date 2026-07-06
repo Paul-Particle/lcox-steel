@@ -77,9 +77,9 @@ OUTDIR = RES_CF
 RES_CF_CFG = load_res_cf_cfg()
 COUNTRIES = ["de"]  # lowercase to match filenames
 
-CUTOUT_DIR = None
-REGIONS_PATH = SHAPES_RES / "regions.parquet"
-OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"
+CUTOUT_DIR = None  # test: Path("cutouts/vic_20250101_20251231.nc")
+REGIONS_PATH = SHAPES_RES / "regions.parquet" # test: "vic_geo.parquet"
+OFFSHORE_REGIONS_PATH = SHAPES_RES / "offshore_regions.parquet"  # test: "vic_offshore_geo.parquet"
 
 SM_VARIANT:            str | None = None   # "bestsite-p95" or "anchored-w{W}-s{S}"
 SM_ANCHOR:             str | None = None   # anchor tech in snake_case (from tech wildcard)
@@ -195,21 +195,59 @@ def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
     inside = points.within(geom) | points.touches(geom)
     return inside.values.reshape(cell_mean.shape)
 
+def weighted_percentile(values: np.ndarray, weights: np.ndarray, q: float) -> float:
+    """Area-weighted percentile of `values` (nonnegative `weights`), q in [0, 1]."""
+    if not (0.0 <= q <= 1.0):
+        raise ValueError("q must be in [0, 1].")
 
-def find_p95_cell(cf_year: xr.DataArray, geom) -> tuple[int, int]:
-    """Return the (y, x) index of the in-region cell closest to the P95 annual-mean CF."""
-    cell_mean = cf_year.mean("time")
-    inside = mask_cells_inside(cell_mean, geom)
-    vals = np.where(inside, cell_mean.values, np.nan)
-    valid = np.isfinite(vals)
-    v = vals[valid]
-    p95 = np.nanpercentile(v, 95)
-    # representative P95 cell = valid cell whose value is closest to the P95 threshold
-    dist = np.abs(np.where(valid, vals, np.nan) - p95)
+    m = np.isfinite(values) & np.isfinite(weights) & (weights > 0)
+    v = values[m]
+    w = weights[m]
+
+    if v.size == 0:
+        return np.nan
+
+    order = np.argsort(v)
+    v = v[order]
+    w = w[order]
+
+    cw = np.cumsum(w)
+    cw /= cw[-1]
+
+    idx = np.searchsorted(cw, q, side="left")
+    idx = min(idx, v.size - 1)
+    return float(v[idx])
+
+def find_p95_cell(cf_year: xr.DataArray, weights: np.ndarray) -> tuple[int, int]:
+    """Return the (y, x) index of the cell closest to the area-weighted P95
+    annual-mean CF.
+
+    `weights` is a (y, x) array of area-based weights (e.g. from
+    cutout.indicatormatrix). Cells outside the region already have weight 0,
+    so they're naturally excluded — no separate geometry check needed here.
+    """
+    cell_mean = cf_year.mean("time").values
+
+    p95 = weighted_percentile(cell_mean.ravel(), weights.ravel(), 0.95)
+
+    valid = weights.ravel() > 0
+    vals = np.where(valid, cell_mean.ravel(), np.nan)
+    dist = np.abs(vals - p95)
     idx_flat = np.nanargmin(dist)
-    y_idx, x_idx = np.unravel_index(idx_flat, vals.shape)
+    y_idx, x_idx = np.unravel_index(idx_flat, cell_mean.shape)
+
     return int(y_idx), int(x_idx)
 
+def geom_weights(cutout: atlite.Cutout, geom) -> np.ndarray:
+    """Area-based weights for `geom` as a flat (y, x)-shaped array, built from
+    atlite's indicatormatrix (area-fraction overlap) — same method used in
+    scripts 03 and 06.
+    """
+    indicator = cutout.indicatormatrix([geom]).tocsr()
+    indicator_1d = np.asarray(indicator[0, :].todense()).ravel()
+    n_y = cutout.data.sizes["y"]
+    n_x = cutout.data.sizes["x"]
+    return indicator_1d.reshape(n_y, n_x)
 
 def get_cell_coords(cf_year: xr.DataArray, y_idx: int, x_idx: int) -> tuple[float, float]:
     x = float(cf_year.x.values[x_idx])
@@ -289,7 +327,11 @@ def build_anchor_colocated_profiles(
     # 1) Find anchor cell in its own valid geometry.
     anchor_cf_year = cf_year_by_tech[anchor_tech]
     anchor_geom = geometry_for_tech(country_upper, anchor_tech)
-    anchor_y_idx, anchor_x_idx = find_p95_cell(anchor_cf_year, anchor_geom)
+
+    co = atlite.Cutout(path=str(cutout_path))
+    anchor_weights = geom_weights(co, anchor_geom)
+
+    anchor_y_idx, anchor_x_idx = find_p95_cell(anchor_cf_year, anchor_weights)
     anchor_x, anchor_y = get_cell_coords(anchor_cf_year, anchor_y_idx, anchor_x_idx)
 
     selected_land_y_idx = None
@@ -476,13 +518,15 @@ def main() -> None:
             cf_year = build_cf_year(cutout, tech)
             geom = geometry_for_tech(country_upper, tech)
 
-            cell_mean = cf_year.mean("time")
-            inside = mask_cells_inside(cell_mean, geom)
-            mask = xr.DataArray(inside, coords={"y": cf_year.y, "x": cf_year.x}, dims=("y", "x"))
-            cf_national = cf_year.where(mask).mean(dim=("y", "x"))
-            nat_mean = float(cf_national.mean().item())
+            co = atlite.Cutout(path=str(cutout))
+            weights = geom_weights(co, geom)
 
-            y_idx, x_idx = find_p95_cell(cf_year, geom)
+            cell_mean = cf_year.mean("time").values
+            w_flat = weights.ravel()
+            v_flat = cell_mean.ravel()
+            nat_mean = float(np.nansum(v_flat * w_flat) / np.nansum(w_flat)) if np.nansum(w_flat) > 0 else np.nan
+
+            y_idx, x_idx = find_p95_cell(cf_year, weights)
             x, y = get_cell_coords(cf_year, y_idx, x_idx)
             selected_cells[tech] = {"x": x, "y": y, "x_idx": int(x_idx), "y_idx": int(y_idx)}
             ts = extract_cell_timeseries(cf_year, y_idx, x_idx)
