@@ -4,19 +4,16 @@
 Purpose
 -------
 Creates "best-site" hourly CF time series by extracting physically consistent,
-site-level CF profiles from Atlite CF grids for wind onshore, wind offshore, and solar.
+site-level CF profiles from Atlite CF grids for wind onshore, wind offshore, and
+solar — one independent best cell per technology (no co-location across techs).
 
 This replaces the previous uplift-factor-based approach with direct extraction
 from the underlying climate data.
 
-Two families of output are produced:
-
-1. Per-tech best-site P95 — each technology is taken from its own P95 grid cell
-   (not co-located across technologies).
-2. Anchor-co-located profiles — one "anchor" technology fixes the site, and the
-   other technologies are evaluated at that same location basis (land techs share
-   the anchor's land cell; offshore is matched to the nearest high-quality
-   offshore counterpart, and vice-versa). These feed RES-mix scenarios.
+Anchor-based co-location (one technology fixing the site for the others) has
+moved to 07b_make_anchor_colocated_cf_timeseries.py, which also replaces the
+old proximity+quality-floor counterpart matching with complementarity-based
+multi-candidate selection.
 
 Method
 ------
@@ -25,23 +22,33 @@ Method
     - wind: smoothed turbine power curve (smooth=True)
     - solar: standard PV conversion
 - Computes annual mean CF per grid cell
-- Identifies the representative P95 grid cell (mean-based ranking)
+- Builds area-based cell weights via atlite's indicatormatrix (area-fraction
+  overlap with the region), matching the method used in scripts 03 and 06
+- Identifies the representative P95 grid cell using area-weighted percentile
+  ranking (not a plain unweighted percentile — matters for large/distorted
+  countries where grid-cell area varies with latitude)
 - Extracts that cell's hourly CF time series
-- For anchor co-location, matches counterpart cells within `max_radius_km`
-  subject to a `quality_floor_fraction` of the best nearby CF
+- Also computes and saves a per-country/tech resource summary: area-weighted
+  national mean, P90, P95, and max CF (no uplift ratios — that was an obsolete
+  metric from the old methodology, dropped when 06_resource_spread.py was
+  folded into this script and then deleted)
 
 Notes
 -----
 - Purely climate-resource based (no land-use, grid, or permitting constraints)
 - Best-site CFs represent high-quality project locations within national boundaries
-- National CFs remain unchanged and are generated separately (Script 03-05)
+- National (country-average) CFs are generated separately by script 03
+- Internal consistency check (not enforced in code):
+    best-site mean CF >= national mean CF
 
-Outputs (parquet, columns: time, wind_onshore_cf, wind_offshore_cf, solar_cf,
-plus selected-cell metadata columns)
+Outputs
 -------
 resources/res_cf/<cc>_cf_2023_bestsite_p95.parquet
-resources/res_cf/<cc>_cf_2023_bestsite_p95_anchor-<anchor>.parquet
-resources/res_cf/<cc>_cf_2023_bestsite_p95_anchor-<anchor>_mix-<label>.parquet
+    Per-tech independent P95 CF time series (time, wind_onshore_cf,
+    wind_offshore_cf, solar_cf, plus selected-cell metadata columns).
+resources/res_cf/<cc>_cf_2023_resource_summary.parquet
+    One row per country/tech: national_mean, p90, p95, max (all area-weighted),
+    plus run_timestamp_utc.
 """
 
 # NOTE: `from __future__ import annotations` (present in the reference script)
@@ -101,12 +108,6 @@ WIND_ONSHORE_TURBINE  = WIND_TURBINE
 WIND_CF_CFG           = RES_CF_CFG.get("wind_cf", {})
 WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
 WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
-
-# Spatial matching for anchor co-location (max search radius + how close to the
-# best nearby cell a candidate must be to qualify).
-_SPATIAL_CFG          = RES_CF_CFG.get("spatial_matching_res_mix", {})
-MAX_RADIUS_KM         = float(_SPATIAL_CFG.get("max_radius_km", 100.0))
-QUALITY_FLOOR_FRAC    = float(_SPATIAL_CFG.get("quality_floor_fraction", 0.90))
 
 
 def extract_cell_timeseries(

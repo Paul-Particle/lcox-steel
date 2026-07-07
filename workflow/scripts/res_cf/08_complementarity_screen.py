@@ -17,7 +17,7 @@ Method
 ------
 For each country:
   1. Load per-cell CF grids from Atlite cutouts via build_cf_year() (reused from 07)
-  2. Pre-filter cells to quality_floor percentile within correct geometry
+  2. just a validity check: finite CF, positive, inside region — no percentile threshold
   3. Pre-compute actual lon/lat coordinates for all candidate cells
   4. Screen all valid triplets (onshore_i, offshore_j, solar_k):
      - spatial filter: max pairwise distance <= max_radius_km
@@ -40,7 +40,6 @@ resources/res_cf/<cc>_average_profiles_2023.parquet
 # The type hints below are valid on the pinned Python (3.12) without it.
 
 import importlib.util
-import sys
 from itertools import product
 from pathlib import Path
 
@@ -68,7 +67,6 @@ _spec.loader.exec_module(_bestsite)
 build_cf_year           = _bestsite.build_cf_year
 extract_cell_timeseries = _bestsite.extract_cell_timeseries
 geometry_for_tech       = _bestsite.geometry_for_tech
-#haversine_distance_km   = _bestsite.haversine_distance_km # imported from helpers
 mask_cells_inside       = _bestsite.mask_cells_inside
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -108,7 +106,6 @@ def load_cfg() -> dict:
         "w_coincidence":            comp.get("w_coincidence", 0.6),
         "w_correlation":            comp.get("w_correlation", 0.4),
         "max_radius_km":            float(comp.get("max_radius_km", 300.0)),
-        "quality_floor":            float(comp.get("quality_floor", 0.90)),
         "max_triplets_brute_force": comp.get("max_triplets_brute_force", 500_000),
     }
 
@@ -172,7 +169,6 @@ def brute_force_screen(
     ts_on_all:  np.ndarray,
     ts_off_all: np.ndarray,
     ts_sol_all: np.ndarray,
-    cf_on, cf_off, cf_sol,    # xr.DataArrays
     max_radius_km:  float,
     threshold:      float,
     w_coincidence:  float,
@@ -231,7 +227,6 @@ def greedy_screen(
     ts_on_all:  np.ndarray,
     ts_off_all: np.ndarray,
     ts_sol_all: np.ndarray,
-    cf_on, cf_off, cf_sol,    # xr.DataArrays
     max_radius_km:  float,
     threshold:      float,
     w_coincidence:  float,
@@ -658,9 +653,6 @@ def main() -> None:
             ts_on_all=ts_matrices["wind_onshore"],
             ts_off_all=ts_matrices["wind_offshore"],
             ts_sol_all=ts_matrices["solar"],
-            cf_on=cf_grids["wind_onshore"],
-            cf_off=cf_grids["wind_offshore"],
-            cf_sol=cf_grids["solar"],
             max_radius_km=cfg["max_radius_km"],
             threshold=cfg["coincidence_threshold"],
             w_coincidence=cfg["w_coincidence"],
