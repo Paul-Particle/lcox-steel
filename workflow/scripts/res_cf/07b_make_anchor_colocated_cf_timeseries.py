@@ -52,6 +52,7 @@ import logging
 import numpy as np
 import pandas as pd
 import xarray as xr
+import atlite
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -75,12 +76,16 @@ build_cf_year     = _bestsite.build_cf_year
 geometry_for_tech = _bestsite.geometry_for_tech
 mask_cells_inside = _bestsite.mask_cells_inside
 find_p95_cell      = _bestsite.find_p95_cell
+geom_weights = _bestsite.geom_weights
 get_cell_coords    = _bestsite.get_cell_coords
 extract_cell_timeseries = _bestsite.extract_cell_timeseries
 
 if "snakemake" in globals() and hasattr(snakemake, "input"):
     _bestsite.REGIONS_PATH = Path(snakemake.input.regions)
     _bestsite.OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
+#else:
+#    _bestsite.REGIONS_PATH = Path("resources/shapes/vic_geo.parquet")
+#    _bestsite.OFFSHORE_REGIONS_PATH = Path("resources/shapes/vic_offshore_geo.parquet")
 
 _RES_CF_CFG = load_res_cf_cfg()
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
@@ -98,7 +103,7 @@ YEAR = 2023
 OUTDIR = RES_CF
 COUNTRIES = ["de"]  # standalone default
 
-CUTOUT_DIR = None
+CUTOUT_DIR = None #Path("cutouts/vic_20250101_20251231.nc")
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     COUNTRIES = [snakemake.wildcards.cf_area.lower()]
     CUTOUT_DIR = Path(snakemake.input.cutout)
@@ -189,7 +194,11 @@ def build_anchor_scenario(cutout_path: Path, country_upper: str, anchor_tech: st
     """
     anchor_geom = geometry_for_tech(country_upper, anchor_tech)
     anchor_cf_year = build_cf_year(cutout_path, anchor_tech)
-    anchor_y_idx, anchor_x_idx = find_p95_cell(anchor_cf_year, anchor_geom)
+
+    co = atlite.Cutout(path=str(cutout_path))
+    anchor_weights = geom_weights(co, anchor_geom)
+
+    anchor_y_idx, anchor_x_idx = find_p95_cell(anchor_cf_year, anchor_weights)
     anchor_series = extract_cell_timeseries(anchor_cf_year, anchor_y_idx, anchor_x_idx)
     anchor_x, anchor_y = get_cell_coords(anchor_cf_year, anchor_y_idx, anchor_x_idx)
 
@@ -260,7 +269,7 @@ def assemble_output_dataframe(anchor_tech: str, anchor_series: pd.Series,
     df["cfg_coincidence_threshold"] = threshold
     df["cfg_w_coincidence"] = w_coincidence
     df["cfg_w_correlation"] = w_correlation
-    df["run_timestamp_utc"] = pd.Timestamp.utcnow().isoformat()
+    df["run_timestamp_utc"] = pd.Timestamp.now("UTC").isoformat()
 
 
     for tech, series_list in candidates_series.items():
