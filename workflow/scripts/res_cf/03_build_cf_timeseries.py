@@ -20,8 +20,6 @@ OUTDIR = RES_CF / "de_wind-onshore_country-average_20230101_20231231.parquet"
 
 # --- set these for each standalone run ---
 CUTOUT_PATH = CUTOUTS / "de_20230101_20231231.nc"
-TAG = None
-YEAR = None
 COUNTRY = "DE"
 # ----------------------------------
 
@@ -63,7 +61,7 @@ def to_cf_series(x, name="cf"):
     s.index.name = "time"
     return s.rename(name).clip(0, 1)
 
-def get_region_gdf(path: Path, region_code: str = None) -> gpd.GeoDataFrame:
+def get_region_gdf(path: Path) -> gpd.GeoDataFrame:
     gdf = gpd.read_parquet(path).to_crs(4326)
     gdf = gdf.loc[gdf["region"] == COUNTRY, ["region", "geometry"]].copy()
 

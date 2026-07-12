@@ -77,7 +77,7 @@ OFFSHORE_REGIONS = _OFFSHORE_REGIONS_PATH
 TMPDIR = ATLITE_CACHE
 
 
-def bounds_for(region_names, pad=1.0):
+def bounds_for(pad=1.0):
     land_geom = gpd.read_parquet(REGIONS).to_crs(4326)
     offshore_geom = gpd.read_parquet(OFFSHORE_REGIONS).to_crs(4326)
 
@@ -95,7 +95,7 @@ def main():
 
     # Cutout bounds = bbox of the land ∪ offshore union, padded. Computed up front
     # because the cache key is derived from the actual request parameters.
-    x, y = bounds_for(REGIONS, pad=_BBOX_PAD_DEG)
+    x, y = bounds_for(pad=_BBOX_PAD_DEG)
     dx = dy = 0.5 if _COARSE else None
     params = cache_params("era5", x, y, dx, dy, _START_DATE, _END_DATE)
     cached_cutout, _ = cache_paths(_CF_AREA, params)

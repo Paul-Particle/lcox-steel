@@ -38,12 +38,12 @@ res_cf:
     de:  { iso3: DEU, region: DE,  coarse: false }
     fr:  { iso3: FRA, region: FR,  coarse: false, mainland_bbox: [-10, 15, 41, 52] }
     es:  { iso3: ESP, region: ES,  coarse: false }
-    aus: { iso3: AUS, region: AUS, coarse: true,  vic_bbox: [140.96, 149.97, -39.16, -34.00] }
-    bra: { iso3: BRA, region: BRA, coarse: true  }
+    aus: { iso3: AUS, region: AUS, coarse: false,  vic_bbox: [140.96, 149.97, -39.16, -34.00] }
+    bra: { iso3: BRA, region: BRA, coarse: false  }
     # Demo area: a Victoria (Australia) subset shipped with a pre-sliced backup
     # cutout + derived geo parquets, so the default `snakemake` run needs no CDS
     # download or EEZ/NE zips. region=VIC matches the committed vic_*_geo.parquet.
-    vic: { iso3: AUS, region: VIC, coarse: true }
+    vic: { iso3: AUS, region: VIC, coarse: false }
 
   offshore_max_distance_km: 200
 
@@ -102,6 +102,14 @@ res_cf:
     max_radius_km: 300.0
     quality_floor: 0.90
     max_triplets_brute_force: 500000
+
+  #script 07b
+  anchor_colocation:
+    max_radius_km: 100
+    n_candidates: 3
+    coincidence_threshold: 0.20
+    w_coincidence: 0.6
+    w_correlation: 0.4
 
   # RES-mix scenarios needing scenario-specific co-located best-site files.
   # Each entry: {country, mix_anchor_tech, res_mix: {tech: weight, ...}} (weights sum to 1).

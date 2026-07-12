@@ -44,7 +44,7 @@ log = logging.getLogger(__name__)
 
 # Standalone defaults
 NE_SHP = DATA / "shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip"
-OUT_GEOJSON = SHAPES_RES / "de_geo.parquet"
+OUT_PARQUET = SHAPES_RES / "de_geo.parquet"
 _CF_AREA = "de"
 _ISO3 = "DEU"
 _REGION = "DE"
@@ -52,7 +52,7 @@ _MAINLAND_BBOX = None
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     NE_SHP = Path(snakemake.input[0])
-    OUT_GEOJSON = Path(snakemake.output[0])
+    OUT_PARQUET = Path(snakemake.output[0])
     _CF_AREA = snakemake.wildcards.cf_area
     _ISO3 = snakemake.params.iso3
     _REGION = snakemake.params.region
@@ -97,7 +97,7 @@ def main() -> None:
             "  data/shapes/ne_110m_admin_0_countries/"
         )
 
-    OUT_GEOJSON.parent.mkdir(parents=True, exist_ok=True)
+    OUT_PARQUET.parent.mkdir(parents=True, exist_ok=True)
 
     world = gpd.read_file(str(NE_SHP)).to_crs(4326)
 
@@ -118,8 +118,8 @@ def main() -> None:
     # Fix occasional invalid geometries
     region["geometry"] = region["geometry"].buffer(0)
 
-    region.to_parquet(OUT_GEOJSON)
-    log.info(f"wrote {OUT_GEOJSON}")
+    region.to_parquet(OUT_PARQUET)
+    log.info(f"wrote {OUT_PARQUET}")
     log.info(f"({_CF_AREA} → {_REGION})")
 
 
