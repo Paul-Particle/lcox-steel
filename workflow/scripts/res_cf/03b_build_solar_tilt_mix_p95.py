@@ -10,7 +10,9 @@ script:
      so all orientations compare at the same high-quality location. The
      site-selection helpers are copied from `07_make_bestsite_cf_timeseries.py`.
   2. Sweeps N equally spaced azimuths spanning ±90° around the cell's
-     equator-facing direction (west → equator-facing → east).
+     equator-facing direction — i.e. the full east–west range, passing
+     through equator-facing at the midpoint. Use an odd N so that midpoint
+     (the maximum annual-yield orientation) is actually sampled.
   3. For each azimuth, finds the slope that maximises annual plane-of-array (POA)
      irradiance using the Hay-Davies model and the cell's pre-computed ERA5 solar
      position data — pure numpy, no full-grid atlite call in the optimization loop.
@@ -196,7 +198,7 @@ def main() -> None:
     """Sweep east–west solar orientations at the P95 cell and write per-azimuth CF columns.
 
     Finds the P95 latitude-optimal cell, then for N azimuths spanning ±90°
-    around the cell's equator-facing direction (west→equator-facing→east)
+    around the cell's equator-facing direction (the full east–west range)
     picks the POA-maximising slope and computes the hourly CF, writing one
     `solar_az{az}` column per orientation.
     """
@@ -234,12 +236,19 @@ def main() -> None:
 
     # Step 3: N equally spaced azimuths spanning ±90° around the cell's
     # equator-facing direction — north (0°) in the southern hemisphere, south
-    # (180°) in the northern hemisphere. Sweeps west → equator-facing → east.
+    # (180°) in the northern hemisphere. Covers the full east–west range, with
+    # equator-facing at the midpoint (sampled only when N is odd).
     equator_facing_az = 0.0 if cell_lat < 0 else 180.0
     log.info(
         f"cell_lat={cell_lat:.2f} → equator-facing azimuth {equator_facing_az:.0f}° "
         f"({'north, SH' if cell_lat < 0 else 'south, NH'})"
     )
+    if _N_STEPS % 2 == 0:
+        log.warning(
+            f"n_steps={_N_STEPS} is even → the equator-facing azimuth "
+            f"({equator_facing_az:.0f}°, maximum annual yield) is not sampled; "
+            f"use an odd n_steps to include it"
+        )
     raw = np.linspace(equator_facing_az - 90.0, equator_facing_az + 90.0, _N_STEPS)
     azimuths = np.mod(raw, 360.0).round().astype(int)
 
