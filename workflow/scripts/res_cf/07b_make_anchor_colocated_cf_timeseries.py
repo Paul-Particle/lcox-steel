@@ -12,7 +12,7 @@ Anchor-based vs free triplet search (08)
 -----------------------------------------
 07b answers: given this location (P95), what are the best candidate sites to
 feed into an optimized mix?" — one cell is fixed first (the anchor), then
-candidate partners are shortlisted around it. PyPSA (09) then decides the
+candidate partners are shortlisted around it. PyPSA (solve_network) then decides the
 actual cost-minimizing capacities across those candidates. This is cheap
 and gives a realistic "flagship project" story.
 
