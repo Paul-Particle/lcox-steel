@@ -74,7 +74,6 @@ results/
 results.zip
 
 # other
-HANDOFF.md
 .snakemake
 WALKTHROUGH.md
 .mcp.json

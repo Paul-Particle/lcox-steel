@@ -282,10 +282,23 @@ capacities for every scenario in the project.
 ### Cutout caching
 
 ERA5 cutouts are expensive to (re-)download, so `cutouts/{name}.nc` is **not**
-marked `protected()`. Instead, `download_cutout.py` copies from a sibling
-`cutouts/{name}_backup.nc` when present, skipping CDS. To pin an existing cutout
-across code-triggered reruns, rename it: `mv foo.nc foo_backup.nc`. This is a
-stopgap until a content-addressed res_cf cache lands (see `TODO.md`).
+marked `protected()`. Instead, `download_cutout` keeps a persistent cache under
+`cutouts/cache/`, keyed on the *actual* request parameters (module, bounding box,
+`dx`/`dy`, time range) — see `workflow/common/_cutout_cache.py`. On a cache hit it
+hardlinks the entry into the rule output and skips CDS; on a miss it downloads,
+QC-validates, and stores the result. Keying on the real parameters means a
+`mainland_bbox` / `offshore_max_distance_km` edit correctly re-downloads instead
+of silently reusing a differently-bounded cutout. The legacy sibling
+`cutouts/{name}_backup.nc` still works as a fallback (`mv foo.nc foo_backup.nc`
+to pin one) and is promoted into the cache on use. Coverage-aware reuse (slicing
+a sub-request out of a larger cached cutout; partial-month fills) is a deferred
+follow-up — see `TODO.md`.
+
+Every finished cutout — freshly downloaded, cached, or from a backup — passes
+structural QC (`workflow/common/_cutout_qc.py`) before the rule succeeds:
+`expver`/ERA5T-mix marker, exact hourly time coverage, no gaps/duplicates, and no
+NaN / fully-NaN timesteps. A partial download or ERA5/ERA5T mix therefore fails
+the rule loudly instead of flowing into the CF pipeline.
 
 ## Logging & live output
 
@@ -325,6 +338,89 @@ snakemake --profile profiles/default --cores 4 > logs/snakemake.log 2>&1 &
 tail -F logs/snakemake.log logs/*/*.log
 ```
 
+### Watching CDS / ERA5 cutout downloads
+
+ERA5 downloads (`download_cutout`) can take **hours**: CDS allows one running job
+per user, each `download_cutout` submits ~5 feature requests (one per ERA5
+variable group), and a single request commonly spends 20-25 min actually running
+plus queue time. So a full country-year cutout is ~2-2.5 h. This is normal.
+
+`workflow/common/_cds_monitor.py` logs progress into
+`logs/download_cutout/{cf_area}_{start}_{end}.log`. To avoid drowning the log (and
+misleading anyone tailing it), it prints **only on a status change**, plus a
+periodic "still working" heartbeat:
+
+```
+[+0m]  CDS: monitoring queue (status logged on change; heartbeat every 5m)
+[+1m]  CDS: running=1 queued=4 done_this_run=0 failed=0
+[+24m] CDS: running=1 queued=3 done_this_run=1 failed=0  (a CDS job completed)
+[+30m] CDS: still working — running=1 queued=3 done_this_run=1 failed=0 (unchanged 6m; a normal ERA5 job runs ~20-25 min, so this is expected, not a stall)
+```
+
+Read `done_this_run` (completions since this download started, counts up to ~5)
+for progress. Tune the poll cadence with `res_cf.cutout.cds_poll_interval_s`.
+
+Check the account-wide queue directly at any time:
+
+```bash
+python -c "import cdsapi; from collections import Counter; \
+print(dict(Counter(j['status'] for j in cdsapi.Client(quiet=True).client.get_jobs()._json_dict['jobs'])))"
+# {'accepted': 4, 'running': 1, 'successful': 2}   # accepted = queued
+```
+
+**Gotchas (learned the hard way):**
+- **Daytime congestion — schedule big runs overnight.** The CDS-MARS archive has a
+  fixed global cap (~460 jobs running at once); during EU daytime the queue behind
+  it routinely holds several thousand jobs, so a request can wait **an hour or more
+  just to *start* running** even though your own per-user limit is free. The exact
+  same cutout that finished in ~20 min overnight can stall for hours mid-afternoon.
+  You can see this in the accepted job's metadata (`qos.status.limit`:
+  `{queued: 3892, running: 460}`). Nothing is wrong — it drains as EU load drops in
+  the evening. Kick off multi-cutout batches overnight (CET) for far better
+  throughput.
+- **Cost/fair-use scheduling (QoS) — heavy usage slows *you* down.** The CDS runs a
+  Quality-of-Service scheduler that queues requests and picks what to run next from
+  "the user profile, the type of request, and the expected request cost (volume of
+  data, CPU usage, etc.)", with very large requests given very low priority and the
+  number of simultaneous requests per user capped ([CDS docs](https://confluence.ecmwf.int/display/CKB/Climate+Data+Store+%28CDS%29+documentation)).
+  The exact fair-share formula isn't published, but *observed* behaviour matches it:
+  after ~30 jobs across 6 cutouts in one day, later cutouts waited **2-4 h for their
+  first run slot even as the global queue shrank** — i.e. the account gets
+  deprioritised relative to lighter users once it has consumed a lot recently.
+  Practical upshot: it's genuinely per-account, so spreading a big batch over more
+  days (or overnight) beats hammering it in one sitting; there's no way to buy back
+  priority mid-run.
+- **Don't read a single snapshot as a stall.** `running=1 queued=4` holding steady
+  for 20+ min is one job legitimately running, not a hang. Look at `done_this_run`
+  climbing over time, or the heartbeat's "unchanged Xm" note — not one line.
+- **One running job per user.** Launching more downloads doesn't parallelise; they
+  queue. Leftover/abandoned jobs from an interrupted run keep occupying the slot —
+  cancel them with `cdsapi.Client(quiet=True).client.get_remote(job_id).delete()`.
+- **Rate limits (HTTP 429)** appear under rapid polling/many API calls; cdsapi
+  retries automatically. Keep `cds_poll_interval_s` at 60s+.
+- **Recent years may be incomplete.** A year still partly in ERA5T (preliminary,
+  ~5-day-to-3-month latency) can download partial or `expver`-mixed; the cutout QC
+  gate catches this and fails the rule rather than passing bad data downstream.
+
+**Batch driver.** `workflow/scripts/res_cf/download_cutouts_batch.sh` downloads a
+set of cutouts one at a time through the QC-gated rule, logging to
+`logs/overnight_downloads.log` and QC-summarising at the end. It is **resume-safe**:
+cutouts already on disk / in `cutouts/cache/` are skipped, so re-running after an
+interruption or a VM crash picks up where it left off (the expensive downloads
+live in the cache, not the script). Run detached and overnight:
+
+```bash
+SMK=path/to/snakemake PY=path/to/python \
+  nohup bash workflow/scripts/res_cf/download_cutouts_batch.sh &
+```
+
+**For long multi-cutout runs, have an agent babysit.** A batch of country-years is
+many hours of mostly-waiting punctuated by rare failures — a good fit for a
+Claude Code agent that periodically tails `logs/overnight_downloads.log` +
+`logs/download_cutout/*.log`, distinguishes "still working" from a real failure
+using the signals above, and reports/retries. Run it as a background task and let
+it wake on a timer.
+
 ### HPC / cluster
 
 `profiles/slurm/config.yaml.template` is a SLURM executor placeholder. Copy it to
@@ -336,5 +432,6 @@ unchanged — per-rule files still land under `logs/{rule}/`.
 
 Project conventions (logging style, Snakefile/`.smk` rules, the two script
 patterns) live in `CLAUDE.md`. Known WIP and planned work — the ENTSO-E zone-list
-migration, a proper cutout cache, CDS download monitoring, and `viz/_helpers.py`
-cleanup — are tracked in `TODO.md`.
+migration, coverage-aware cutout-cache reuse (the keyed cache and CDS download
+monitoring already landed), and `viz/_helpers.py` cleanup — are tracked in
+`TODO.md`.
