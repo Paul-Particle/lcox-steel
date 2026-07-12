@@ -1,13 +1,16 @@
 """Build N solar CF time series spanning the east–west orientation trade-off.
 
-For a southern-hemisphere site, panels can be oriented anywhere from due west
-(azimuth 270°) through north (0°, maximum annual yield) to due east (90°,
-maximum morning shift). This script:
+Panels can be oriented anywhere from due west (azimuth 270°) through the
+equator-facing direction (maximum annual yield) to due east (90°, maximum
+morning shift). The equator-facing direction depends on hemisphere: north (0°)
+in the southern hemisphere, south (180°) in the northern hemisphere. This
+script:
 
   1. Identifies the bestsite cell — P95 of annual-mean latitude_optimal CF —
      so all orientations compare at the same high-quality location. The
      site-selection helpers are copied from `07_make_bestsite_cf_timeseries.py`.
-  2. Sweeps N equally spaced azimuths from 270° (west) → 0° (north) → 90° (east).
+  2. Sweeps N equally spaced azimuths spanning ±90° around the cell's
+     equator-facing direction (west → equator-facing → east).
   3. For each azimuth, finds the slope that maximises annual plane-of-array (POA)
      irradiance using the Hay-Davies model and the cell's pre-computed ERA5 solar
      position data — pure numpy, no full-grid atlite call in the optimization loop.
@@ -192,7 +195,8 @@ def _optimal_slope(
 def main() -> None:
     """Sweep east–west solar orientations at the P95 cell and write per-azimuth CF columns.
 
-    Finds the P95 latitude-optimal cell, then for N azimuths (west→north→east)
+    Finds the P95 latitude-optimal cell, then for N azimuths spanning ±90°
+    around the cell's equator-facing direction (west→equator-facing→east)
     picks the POA-maximising slope and computes the hourly CF, writing one
     `solar_az{az}` column per orientation.
     """
@@ -228,9 +232,16 @@ def main() -> None:
     sun_alt    = cell["solar_altitude"].values   # radians
     sun_az     = cell["solar_azimuth"].values    # radians, clockwise from North
 
-    # Step 3: N equally spaced azimuths, west (270°) → north (0°) → east (90°)
-    raw = np.linspace(-90.0, 90.0, _N_STEPS)
-    azimuths = np.where(raw < 0, raw + 360.0, raw).round().astype(int)
+    # Step 3: N equally spaced azimuths spanning ±90° around the cell's
+    # equator-facing direction — north (0°) in the southern hemisphere, south
+    # (180°) in the northern hemisphere. Sweeps west → equator-facing → east.
+    equator_facing_az = 0.0 if cell_lat < 0 else 180.0
+    log.info(
+        f"cell_lat={cell_lat:.2f} → equator-facing azimuth {equator_facing_az:.0f}° "
+        f"({'north, SH' if cell_lat < 0 else 'south, NH'})"
+    )
+    raw = np.linspace(equator_facing_az - 90.0, equator_facing_az + 90.0, _N_STEPS)
+    azimuths = np.mod(raw, 360.0).round().astype(int)
 
     # Step 4: optimize slope for each azimuth (pure numpy, milliseconds)
     opt_slopes: dict[int, int] = {}
