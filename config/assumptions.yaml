@@ -1,12 +1,28 @@
 finance:
   default_wacc: 0.07
 
+# Steelmaking route — one technology chain per optimisation. Scenarios switch
+# routes via their assumptions overlay (route: moe etc.); the levelised cost
+# of steel across routes/assumptions/locations is the core comparison.
+#   h2_only:    flat H2 load on the hydrogen bus, no steel chain (LCOH model)
+#   h2_dri_eaf: electrolyser → H2 → DRI shaft → sponge iron (storable) → EAF → steel
+#   moe:        molten oxide electrolysis, electricity → liquid steel directly
+#               (ladle metallurgy folded into the link; no intermediate storage)
+#   ew:         low-temperature iron electrowinning, electricity → iron plates
+#               (storable) → EAF → steel
+route: h2_only
+
 plant:
   dri_mt_per_year: 0.526  # 100 MW H2 LHV input × 8760 h / 33.33 kWh/kg / 50 kg/t
   h2_intensity_kg_per_t_dri: 50.0
   # Floor for electrolyser sizing — the optimiser may grow it further when the
   # extra capacity earns its capex via buffer-mediated arbitrage of cheap RES.
+  # Used by the h2_only route only; steel routes size the electrolyser freely
+  # from the steel chain's demand.
   availability_target: 0.95
+  # Demand anchor for the steel routes: a flat t/h load on the steel bus
+  # (supply-side model; steel demand itself is not flexible).
+  steel_mt_per_year: 1.0
 
 res:
   wind-onshore:
@@ -27,6 +43,9 @@ electrolyser:
   opex_per_mw_per_year_eur: 20_000
   lifetime_years: 20
   efficiency_kwh_per_kg: 55   # nominal; future: add overload_efficiency_kwh_per_kg
+  # Variable opex per MWh electricity input (water, consumables); applied as
+  # marginal_cost on the link's p0 side.
+  varopex_eur_per_mwh_el: 1.0
 
 battery:
   capex_per_mw_eur: 200_000   # power capacity cost
@@ -39,6 +58,87 @@ h2_buffer:
   capex_per_mwh_eur: 10_000   # compressed H2 tank, ~€10/kWh
   lifetime_years: 25
   # e_nom_extendable always True — PyPSA finds optimal buffer size
+
+# ---------------------------------------------------------------------------
+# Steel-route process steps. Capex is quoted per tonne of annual output
+# capacity (€/(t/yr), the standard industry quote); fixed opex likewise per
+# t/yr (≈3 % of capex). p_min_pu is the minimum turndown while built —
+# capacity can never run below that fraction of p_nom (candidates for
+# sweeping later). Ore enters as a variable cost per tonne of iron/steel
+# output; no ore bus. All numbers are order-of-magnitude eyeballs to be
+# reviewed — sources noted per section.
+# ---------------------------------------------------------------------------
+
+dri:
+  # H2 DRI shaft furnace. Capex from Vogl, Åhman & Nilsson (2018), 230 €/(t/yr).
+  capex_per_t_per_year_eur: 230
+  opex_per_t_per_year_eur: 7          # ≈3 % of capex
+  lifetime_years: 20
+  el_mwh_per_t: 0.35                  # shaft auxiliaries + electric H2 preheat
+  # DR-grade pellets: ~1.45 t pellets per t DRI at ~140 €/t incl. premium.
+  ore_eur_per_t: 200
+  p_min_pu: 0.5
+
+eaf:
+  # Shared by h2_dri_eaf and ew (melting HBI vs. electrolytic iron plates —
+  # close enough at this fidelity; override per scenario if needed).
+  # Capex from Vogl et al. (2018), 184 €/(t/yr).
+  capex_per_t_per_year_eur: 184
+  opex_per_t_per_year_eur: 6          # ≈3 % of capex
+  lifetime_years: 20
+  el_mwh_per_t: 0.65                  # per t liquid steel, cold charge
+  iron_t_per_t_steel: 1.1             # yield: gangue/losses in DRI melting
+  consumables_eur_per_t: 40           # electrodes, fluxes, alloys, carbon; per t steel
+  p_min_pu: 0.4
+
+moe:
+  # Molten oxide electrolysis (Boston Metal type), electricity → liquid steel.
+  # ~4 MWh/t steel and ~$1000/(t/yr) per Boston Metal's public estimates;
+  # capex highly uncertain (pre-commercial). Ladle metallurgy folded into the
+  # same link (see `ladle` below) — no intermediate bus or storage, and the
+  # cell can barely turn down (freeze risk), hence p_min_pu near 1.
+  capex_per_t_per_year_eur: 900
+  opex_per_t_per_year_eur: 27         # ≈3 % of capex
+  lifetime_years: 20
+  el_mwh_per_t: 4.0                   # per t steel, excl. ladle
+  # Non-DR-grade fines/concentrate: ~1.6 t per t steel at ~100 €/t.
+  ore_eur_per_t: 160
+  p_min_pu: 0.95
+
+ladle:
+  # Ladle metallurgy finishing for the MOE route, folded into the moe link
+  # (kept as separate numbers so a later EAF-finishing variant is a clean swap).
+  capex_per_t_per_year_eur: 50
+  opex_per_t_per_year_eur: 1.5
+  el_mwh_per_t: 0.1
+
+electrowinning:
+  # Low-temperature aqueous iron electrowinning (Electra type), electricity →
+  # solid iron plates. ~2–3 MWh/t iron claimed; capex very uncertain
+  # (500–3000 €/(t/yr) span in public estimates — sweep this).
+  capex_per_t_per_year_eur: 1200
+  opex_per_t_per_year_eur: 36         # ≈3 % of capex
+  lifetime_years: 20
+  el_mwh_per_t: 2.5                   # per t iron
+  # Tolerates lower-grade ore than DR pellets — part of the route's pitch.
+  ore_eur_per_t: 150
+  p_min_pu: 0.2                       # marketed as load-following
+
+iron_store:
+  # HBI / iron-plate stockpile on the iron bus (shed + handling). Cheap but
+  # deliberately non-zero so the optimal store size is unique and reportable.
+  capex_per_t_eur: 20
+  lifetime_years: 25
+
+grid:
+  # Grid connection charges for the grid_import generator: the connection is
+  # sized by the optimiser (extendable) and pays annuitised connection capex
+  # plus a yearly capacity fee per MW; energy drawn pays the day-ahead price
+  # plus a volumetric fee. German HV-level order-of-magnitude eyeballs.
+  connection_capex_eur_per_mw: 150_000
+  connection_lifetime_years: 40
+  fee_eur_per_mw_per_year: 60_000     # capacity charge (Leistungspreis)
+  fee_eur_per_mwh: 10.0               # volumetric charge (Arbeitspreis)
 
 transmission:
   # HVDC link connecting a candidate RES site to the electrolyser/demand site.
