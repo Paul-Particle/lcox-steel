@@ -101,6 +101,13 @@ def retrieve(snakemake) -> None:
     cached = pd.read_parquet(processed_cache_path) if processed_cache_path.exists() else None
 
     months = iter_months_str(start_date, end_date)
+    # NEM data is downloaded in market time (AEST, UTC+10) and converted to
+    # UTC, which shifts each month ~10 h earlier — the requested window's
+    # final UTC hours live in the *next* market-time month. Pad the download
+    # list by one month so the UTC window slice below is complete.
+    pad_month = (pd.Timestamp(iso(end_date)) + pd.offsets.MonthBegin(1)).strftime("%Y-%m")
+    if pad_month not in months:
+        months = [*months, pad_month]
 
     new_frames = []
     for ym in months:
