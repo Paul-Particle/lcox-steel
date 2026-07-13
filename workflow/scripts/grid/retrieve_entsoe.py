@@ -97,6 +97,11 @@ def _process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame
     xb      = to_utc_naive(xb_raw.copy());  xb.columns  = xb.columns.droplevel(0)
 
     df = pd.concat([price, load_fc, load, res, gen, xb], axis=1, sort=False)
+    # Sort by time first: concat leaves the hourly series (price, load_forecast)
+    # as a leading block, so their sub-hourly slots (:15/:30/:45) are not adjacent
+    # to the :00 value. ffill only reaches them once the index is time-ordered —
+    # otherwise those slots fall through to fillna(0.0) and dilute hourly means.
+    df = df.sort_index()
     df = df.ffill(limit=3).fillna(0.0)
 
     df["wind_forecast"]     = df.get("wind_onshore_forecast", 0) + df.get("wind_offshore_forecast", 0)

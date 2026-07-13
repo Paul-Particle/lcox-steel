@@ -38,6 +38,10 @@ dependencies:
   - jupyter
   - tqdm
 
+  # Testing (grid-pipeline validation vs energy-charts.info)
+  - pytest
+  - requests             # refresh the energy-charts reference (tests/data/)
+
   - pip:
       - nemosis
       - snakemake
