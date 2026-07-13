@@ -155,32 +155,6 @@ rule build_anchored_res_mix_cfs:
         "../scripts/res_cf/07_make_bestsite_cf_timeseries.py"
 
 
-rule build_complementarity_screen:
-    input:
-        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
-        regions="resources/shapes/{cf_area}_geo.parquet",
-        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
-    output:
-        screen="resources/res_cf/{cf_area}_{tech}_complementarity-screen_{start_date}_{end_date}.parquet",
-        cf="resources/res_cf/{cf_area}_{tech}_complementarity-top1_{start_date}_{end_date}.parquet",
-    log:
-        "logs/build_complementarity_screen/{cf_area}_{tech}_{start_date}_{end_date}.log",
-    params:
-        top_n=lookup(dpath="res_cf/complementarity/top_n", within=config),
-        coincidence_threshold=lookup(
-            dpath="res_cf/complementarity/coincidence_threshold", within=config
-        ),
-        w_coincidence=lookup(dpath="res_cf/complementarity/w_coincidence", within=config),
-        w_correlation=lookup(dpath="res_cf/complementarity/w_correlation", within=config),
-        max_radius_km=lookup(dpath="res_cf/complementarity/max_radius_km", within=config),
-        quality_floor=lookup(dpath="res_cf/complementarity/quality_floor", within=config),
-        max_triplets_brute_force=lookup(
-            dpath="res_cf/complementarity/max_triplets_brute_force", within=config
-        ),
-    script:
-        "../scripts/res_cf/08_complementarity_screen.py"
-
-
 rule build_multi_site_cfs:
     input:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
