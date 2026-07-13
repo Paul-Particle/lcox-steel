@@ -36,6 +36,7 @@ from scripts.viz.style import (
     green,
     highlight_blue,
     light_blue,
+    light_blue_gray,
     magenta_red,
     sand_yellow,
     save_figure,
@@ -62,7 +63,8 @@ WIND_SOLO_COLOR  = fca_blue
 _BAR_WIDTH = 0.12
 
 PROCESS_BARS = [
-    ("dri_t_per_h",            "DRI shaft (t/h iron)",        blue_gray),
+    ("dri_t_per_h",            "H2-DRI shaft (t/h iron)",     blue_gray),
+    ("dri_ng_t_per_h",         "NG-DRI shaft (t/h iron)",     light_blue_gray),
     ("eaf_t_per_h",            "EAF (t/h steel)",             very_dark_gray),
     ("moe_t_per_h",            "MOE (t/h steel)",             highlight_blue),
     ("electrowinning_t_per_h", "Electrowinning (t/h iron)",   turquois),
@@ -116,7 +118,7 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
             row["solar_mw"] = r.get("solar_gw_opt", 0) * 1e3
         for col in wind_cols:
             row[f"{col.replace('_gw_opt','')}_mw"] = r.get(col, 0) * 1e3
-        for link in ("dri", "eaf", "moe", "electrowinning"):
+        for link in ("dri", "dri_ng", "eaf", "moe", "electrowinning"):
             row[f"{link}_t_per_h"] = r.get(f"{link}_t_per_h_opt", 0)
         row["h2_buffer_hours_dri"]    = r.get("h2_buffer_hours_dri", 0)
         row["iron_store_hours_steel"] = r.get("iron_store_hours_steel", 0)

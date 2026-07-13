@@ -15,6 +15,8 @@ optimisation model into one Snakemake workflow:
   - `h2_dri_eaf` — electrolyser → H2 → DRI shaft → sponge iron (storable) → EAF → steel
   - `moe` — molten oxide electrolysis, electricity → liquid steel (ladle folded in)
   - `ew` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
+  - `ng_dri_eaf` — fossil benchmark: natural-gas DRI (flat gas price, optional CO2 price) → EAF → steel
+  - `mix_dri_eaf` — H2 and NG DRI shafts side by side; the optimiser picks the split
 - **`viz`** — a per-project LCOH/LCOS report plus Plotly figures.
 
 ## Architecture at a glance
@@ -261,7 +263,7 @@ keeps underscores, because official bidding-zone codes use them (`DE_LU`).
 | File | Holds |
 |------|-------|
 | `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (per-country metadata, turbines, CF flags, cutout settings). |
-| `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri`, `eaf`, `moe`, `ladle`, `electrowinning`, `iron_store`), grid connection charges, and the default `route`. Loaded by `h2_dri_optimize` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
+| `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri`, `dri_ng`, `eaf`, `moe`, `ladle`, `electrowinning`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and the default `route`. Loaded by `h2_dri_optimize` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
 | `config/assumptions_{project}_{scenario}.yaml` | *Optional* per-scenario overlay. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. Also how a scenario picks its steel route (`route: moe` etc.). |
 | `config/projects.csv` | Flat table, one row per `(project, scenario, tech)` input. Columns: `project, scenario, tech, variant, pipeline, area, start_date, end_date`. |
 

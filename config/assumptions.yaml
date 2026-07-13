@@ -10,6 +10,12 @@ finance:
 #               (ladle metallurgy folded into the link; no intermediate storage)
 #   ew:         low-temperature iron electrowinning, electricity → iron plates
 #               (storable) → EAF → steel
+#   ng_dri_eaf: fossil benchmark — natural-gas DRI shaft (gas at a fixed price
+#               from `natural_gas`) → sponge iron (storable) → EAF → steel
+#   mix_dri_eaf: H2 and NG DRI shafts side by side feeding one iron bus; the
+#               optimiser picks the production split (and the H2 share may be
+#               zero). Each shaft pays its own capex — this models a greenfield
+#               fuel choice, not co-firing in one retrofit shaft.
 route: h2_only
 
 plant:
@@ -123,6 +129,28 @@ electrowinning:
   # Tolerates lower-grade ore than DR pellets — part of the route's pitch.
   ore_eur_per_t: 150
   p_min_pu: 0.2                       # marketed as load-following
+
+natural_gas:
+  # Flat gas price for the fossil routes, €/MWh LHV. Fed to the gas_supply
+  # generator; scenarios override per geography (DE 2023 TTF avg ≈ 40,
+  # AUS east-coast ≈ 25).
+  price_eur_per_mwh: 35
+  co2_t_per_mwh: 0.20           # combustion emissions, LHV basis
+  # Carbon price applied to gas CO2 (goes into the gas marginal cost).
+  # Default 0 = pure fixed-gas-price benchmark; EU ETS 2023 avg ≈ 85 €/t.
+  co2_price_eur_per_t: 0
+
+dri_ng:
+  # Natural-gas DRI shaft (Midrex/HYL type) — the mature fossil benchmark.
+  # Same shaft capex level as the H2 shaft (Vogl et al. 2018); gas use
+  # ~10 GJ/t DRI. Electricity is lower than the H2 shaft (no H2 preheat).
+  capex_per_t_per_year_eur: 230
+  opex_per_t_per_year_eur: 7          # ≈3 % of capex
+  lifetime_years: 20
+  gas_mwh_per_t: 2.75                 # LHV, per t DRI
+  el_mwh_per_t: 0.1
+  ore_eur_per_t: 200                  # DR-grade pellets, same as H2 DRI
+  p_min_pu: 0.5
 
 iron_store:
   # HBI / iron-plate stockpile on the iron bus (shed + handling). Cheap but

@@ -32,6 +32,10 @@ DE-2023-steel,moe,grid,dayahead,entsoe,DE_LU,20230101,20231231
 DE-2023-steel,ew,wind-onshore,country-average,res_cf,de,20230101,20231231
 DE-2023-steel,ew,solar,country-average,res_cf,de,20230101,20231231
 DE-2023-steel,ew,grid,dayahead,entsoe,DE_LU,20230101,20231231
+DE-2023-steel,ng-dri-eaf,grid,dayahead,entsoe,DE_LU,20230101,20231231
+DE-2023-steel,mix-dri-eaf,wind-onshore,country-average,res_cf,de,20230101,20231231
+DE-2023-steel,mix-dri-eaf,solar,country-average,res_cf,de,20230101,20231231
+DE-2023-steel,mix-dri-eaf,grid,dayahead,entsoe,DE_LU,20230101,20231231
 DE-2023-steel-cf,h2-dri-eaf-avg,wind-onshore,country-average,res_cf,de,20230101,20231231
 DE-2023-steel-cf,h2-dri-eaf-avg,solar,country-average,res_cf,de,20230101,20231231
 DE-2023-steel-cf,h2-dri-eaf-p95,wind-onshore,bestsite-p95,res_cf,de,20230101,20231231
@@ -77,3 +81,7 @@ AUS-2023-steel,moe,grid,dayahead,nem,VIC1,20230101,20231231
 AUS-2023-steel,ew,wind-onshore,country-average,res_cf,aus,20230101,20231231
 AUS-2023-steel,ew,solar,country-average,res_cf,aus,20230101,20231231
 AUS-2023-steel,ew,grid,dayahead,nem,VIC1,20230101,20231231
+AUS-2023-steel,ng-dri-eaf,grid,dayahead,nem,VIC1,20230101,20231231
+AUS-2023-steel,mix-dri-eaf,wind-onshore,country-average,res_cf,aus,20230101,20231231
+AUS-2023-steel,mix-dri-eaf,solar,country-average,res_cf,aus,20230101,20231231
+AUS-2023-steel,mix-dri-eaf,grid,dayahead,nem,VIC1,20230101,20231231

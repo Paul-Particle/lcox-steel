@@ -1,0 +1,4 @@
+# H2 and NG DRI shafts side by side; the optimiser picks the production split.
+route: mix_dri_eaf
+natural_gas:
+  price_eur_per_mwh: 40   # DE 2023 TTF average, order of magnitude

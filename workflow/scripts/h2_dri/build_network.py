@@ -9,11 +9,16 @@ Each network contains exactly one process route (`assumptions["route"]`):
   h2_dri_eaf: electricity → electrolyser → H2 → DRI shaft → iron → EAF → steel
   moe:        electricity → molten oxide electrolysis (incl. ladle) → steel
   ew:         electricity → iron electrowinning → iron → EAF → steel
+  ng_dri_eaf: fossil benchmark — gas supply → NG-DRI shaft → iron → EAF → steel
+  mix_dri_eaf: H2 and NG DRI shafts side by side on one iron bus; the
+              optimiser picks the production split (each shaft pays its own
+              capex — a greenfield fuel choice, not co-firing in one shaft)
 
 Bus unit convention:
   electricity buses: MW AC
   hydrogen bus:      MW H2 LHV  (1 MWh H2 LHV ≈ 30 kg H2 at LHV ≈ 33.33 kWh/kg)
-  iron bus:          t/h  (sponge iron / HBI for h2_dri_eaf, electrolytic
+  gas bus:           MW CH4 LHV (supplied at a flat price incl. optional CO2 cost)
+  iron bus:          t/h  (sponge iron / HBI for the DRI routes, electrolytic
                      iron plates for ew — both treated as freely storable)
   steel bus:         t/h  (liquid steel)
 
@@ -39,7 +44,12 @@ from common._constants import H2_LHV_KWH_PER_KG
 
 HOURS_PER_YEAR = 8760.0
 
-ROUTES = ("h2_only", "h2_dri_eaf", "moe", "ew")
+ROUTES = ("h2_only", "h2_dri_eaf", "moe", "ew", "ng_dri_eaf", "mix_dri_eaf")
+
+# Route groups used when wiring buses/components.
+_H2_ROUTES  = ("h2_only", "h2_dri_eaf", "mix_dri_eaf")   # electrolyser + H2 buffer
+_GAS_ROUTES = ("ng_dri_eaf", "mix_dri_eaf")              # gas bus + NG-DRI shaft
+_IRON_ROUTES = ("h2_dri_eaf", "ew", "ng_dri_eaf", "mix_dri_eaf")  # iron bus + EAF
 
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
@@ -118,7 +128,7 @@ def build_network(
     _add_generators(n, cf_timeseries, assumptions["res"], wacc, multisite=multisite)
     _add_battery(n, assumptions["battery"], wacc, bus=elec_bus)
 
-    if route in ("h2_only", "h2_dri_eaf"):
+    if route in _H2_ROUTES:
         el_cfg = assumptions["electrolyser"]
         el_efficiency = H2_LHV_KWH_PER_KG / el_cfg["efficiency_kwh_per_kg"]
         if route == "h2_only":
@@ -141,15 +151,17 @@ def build_network(
     else:
         steel_t_per_h = plant["steel_mt_per_year"] * 1e6 / HOURS_PER_YEAR
         _add_steel_load(n, steel_t_per_h)
-        if route == "h2_dri_eaf":
+        if route in ("h2_dri_eaf", "mix_dri_eaf"):
             _add_dri_link(n, plant, assumptions["dri"], wacc, elec_bus)
-            _add_iron_store(n, assumptions["iron_store"], wacc)
-            _add_eaf_link(n, assumptions["eaf"], wacc, elec_bus)
-        elif route == "ew":
+        if route in _GAS_ROUTES:
+            _add_gas_supply(n, assumptions["natural_gas"])
+            _add_ng_dri_link(n, assumptions["dri_ng"], wacc, elec_bus)
+        if route == "ew":
             _add_electrowinning_link(n, assumptions["electrowinning"], wacc, elec_bus)
+        if route in _IRON_ROUTES:
             _add_iron_store(n, assumptions["iron_store"], wacc)
             _add_eaf_link(n, assumptions["eaf"], wacc, elec_bus)
-        elif route == "moe":
+        if route == "moe":
             _add_moe_link(n, assumptions["moe"], assumptions["ladle"], wacc, elec_bus)
 
     if multisite:
@@ -172,13 +184,15 @@ def _add_carriers(
     uses are added; the HVDC carrier is only added in multi-site mode.
     """
     base = ["AC", "battery"]
-    if route in ("h2_only", "h2_dri_eaf"):
+    if route in _H2_ROUTES:
         base += ["H2", "electrolyser"]
-    if route in ("h2_dri_eaf", "ew"):
+    if route in _GAS_ROUTES:
+        base += ["gas", "dri_ng"]
+    if route in _IRON_ROUTES:
         base += ["iron", "eaf"]
     if route != "h2_only":
         base += ["steel"]
-    if route == "h2_dri_eaf":
+    if route in ("h2_dri_eaf", "mix_dri_eaf"):
         base += ["dri"]
     if route == "ew":
         base += ["electrowinning"]
@@ -193,9 +207,11 @@ def _add_carriers(
 def _route_process_buses(route: str) -> list[tuple[str, str]]:
     """(bus name, carrier) pairs for the process buses the route needs."""
     buses = []
-    if route in ("h2_only", "h2_dri_eaf"):
+    if route in _H2_ROUTES:
         buses.append(("hydrogen", "H2"))
-    if route in ("h2_dri_eaf", "ew"):
+    if route in _GAS_ROUTES:
+        buses.append(("gas", "gas"))
+    if route in _IRON_ROUTES:
         buses.append(("iron", "iron"))
     if route != "h2_only":
         buses.append(("steel", "steel"))
@@ -400,6 +416,54 @@ def _add_dri_link(
         p_min_pu=dri_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(dri_cfg, wacc, t_iron_per_mwh_h2),
         marginal_cost=dri_cfg["ore_eur_per_t"] * t_iron_per_mwh_h2,
+    )
+
+
+def _add_gas_supply(n: pypsa.Network, ng_cfg: dict) -> None:
+    """Unlimited natural-gas supply (MW CH4 LHV) at a flat price on the gas bus.
+
+    An extendable zero-capex generator, so the optimiser draws freely; the
+    marginal cost is the gas price plus any carbon price on combustion CO2.
+    Kept as a generator (not a link marginal cost) so the gas bill lands in
+    its own cost group in reports.
+    """
+    marginal = ng_cfg["price_eur_per_mwh"] + (
+        ng_cfg["co2_t_per_mwh"] * ng_cfg["co2_price_eur_per_t"]
+    )
+    n.add(
+        "Generator",
+        "gas_supply",
+        bus="gas",
+        carrier="gas",
+        p_nom_extendable=True,
+        capital_cost=0.0,
+        marginal_cost=marginal,
+    )
+
+
+def _add_ng_dri_link(
+    n: pypsa.Network, dri_ng_cfg: dict, wacc: float, elec_bus: str
+) -> None:
+    """NG-DRI shaft: natural gas (MW LHV) → sponge iron (t/h), drawing shaft electricity.
+
+    Mirrors the H2 shaft (`_add_dri_link`) with gas as the reductant/fuel; the
+    gas itself is priced on the gas_supply generator, so only ore enters here
+    as marginal cost.
+    """
+    t_iron_per_mwh_gas = 1.0 / dri_ng_cfg["gas_mwh_per_t"]
+    n.add(
+        "Link",
+        "dri_ng",
+        bus0="gas",
+        bus1="iron",
+        bus2=elec_bus,
+        carrier="dri_ng",
+        p_nom_extendable=True,
+        efficiency=t_iron_per_mwh_gas,
+        efficiency2=-dri_ng_cfg["el_mwh_per_t"] * t_iron_per_mwh_gas,
+        p_min_pu=dri_ng_cfg["p_min_pu"],
+        capital_cost=_process_capital_cost(dri_ng_cfg, wacc, t_iron_per_mwh_gas),
+        marginal_cost=dri_ng_cfg["ore_eur_per_t"] * t_iron_per_mwh_gas,
     )
 
 

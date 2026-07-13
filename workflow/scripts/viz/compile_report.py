@@ -55,7 +55,7 @@ def _marginal_costs(static: pd.DataFrame, flow_t: pd.DataFrame, mc_t: pd.DataFra
     return total
 
 
-PROCESS_LINKS = ("dri", "eaf", "moe", "electrowinning")
+PROCESS_LINKS = ("dri", "dri_ng", "eaf", "moe", "electrowinning")
 
 
 def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
@@ -84,7 +84,8 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         return float(n.stores.at[name, "capital_cost"] * n.stores.at[name, "e_nom_opt"])
 
     gens = n.generators
-    res_idx = gens.index[gens.p_nom_extendable & (gens.index != "grid_import")]
+    non_res = ("grid_import", "gas_supply")
+    res_idx = gens.index[gens.p_nom_extendable & ~gens.index.isin(non_res)]
     grid_capital = 0.0
     if "grid_import" in gens.index and gens.at["grid_import", "p_nom_extendable"]:
         grid_capital = float(
@@ -99,10 +100,24 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
                 n.storage_units.p_nom_extendable
             ].sum()
         ),
-        # Generator marginal costs are all zero except grid imports (energy price
-        # + volumetric fee), so the generic sum lands in the grid bucket.
+        # Generator marginal costs are zero except grid imports (energy price
+        # + volumetric fee) and gas, which gets its own group below — so the
+        # generic sum minus gas lands in the grid bucket.
         "grid": grid_capital
-        + _marginal_costs(gens, n.generators_t.p, n.generators_t.marginal_cost) * annual_scale,
+        + _marginal_costs(
+            gens.drop(index="gas_supply", errors="ignore"),
+            n.generators_t.p,
+            n.generators_t.marginal_cost,
+        ) * annual_scale,
+        # Gas bill incl. any carbon price (both live on the gas_supply
+        # generator's marginal cost).
+        "gas": (
+            _marginal_costs(
+                gens.loc[["gas_supply"]], n.generators_t.p, n.generators_t.marginal_cost
+            ) * annual_scale
+            if "gas_supply" in gens.index
+            else 0.0
+        ),
         "electrolyser": link_capital(["electrolyser"]) + link_marginal(["electrolyser"]),
         "h2_buffer": store_capital("h2_buffer"),
         "process": link_capital(PROCESS_LINKS),
@@ -159,6 +174,17 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         summary[f"{link}_utilization"] = (
             float(n.links_t.p0[link].mean() / p_nom) if p_nom > 0 else float("nan")
         )
+
+    if "gas_supply" in n.generators.index:
+        gas_mwh = float(n.generators_t.p["gas_supply"].sum()) * (8760.0 / len(n.snapshots))
+        summary["ng_gwh_lhv"] = gas_mwh / 1e3
+    # Mix route: how much of the iron actually came from the H2 shaft
+    # (production share, not capacity share).
+    if "dri" in n.links.index and "dri_ng" in n.links.index:
+        iron_h2 = -float(n.links_t.p1["dri"].sum())
+        iron_ng = -float(n.links_t.p1["dri_ng"].sum())
+        total = iron_h2 + iron_ng
+        summary["iron_from_h2_share"] = iron_h2 / total if total else float("nan")
 
     if "iron_store" in n.stores.index:
         store_t = n.stores.at["iron_store", "e_nom_opt"]

@@ -1,0 +1,5 @@
+# Fossil benchmark: NG-DRI + EAF on grid electricity only (no RES rows in
+# projects.csv for this scenario).
+route: ng_dri_eaf
+natural_gas:
+  price_eur_per_mwh: 40   # DE 2023 TTF average, order of magnitude
