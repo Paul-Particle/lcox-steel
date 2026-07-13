@@ -180,11 +180,17 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     if "h2_buffer" in n.stores.index:
         buffer_mwh = n.stores.at["h2_buffer", "e_nom_opt"]
         summary["h2_buffer_gwh"] = buffer_mwh / 1e3
-        # Additionally as hours of flat H₂ demand (buffer MWh LHV / load MW LHV);
-        # only defined for the pure-H2 route, where that load exists.
+        # Additionally as hours of average H₂ demand: the flat dri_load on the
+        # pure-H2 route, or the DRI link's mean H₂ draw on the steel route.
         if "dri_load" in n.loads.index:
-            dri_mw = float(n.loads.at["dri_load", "p_set"])
-            summary["h2_buffer_hours_dri"] = buffer_mwh / dri_mw if dri_mw else float("nan")
+            h2_demand_mw = float(n.loads.at["dri_load", "p_set"])
+        elif "dri" in n.links.index:
+            h2_demand_mw = float(n.links_t.p0["dri"].mean())
+        else:
+            h2_demand_mw = 0.0
+        summary["h2_buffer_hours_dri"] = (
+            buffer_mwh / h2_demand_mw if h2_demand_mw else float("nan")
+        )
 
     if "electrolyser" in n.links.index:
         el_cap = n.links.at["electrolyser", "p_nom_opt"]
