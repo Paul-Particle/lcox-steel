@@ -1,15 +1,21 @@
-# lcox-steel: Levelized Cost of Hydrogen for DRI Steel
+# lcox-steel: Levelized Cost of Green Steel
 
-`lcox-steel` calculates the levelized cost of hydrogen (LCOH) for green-steel
-direct-reduced-iron (DRI) facilities powered by captive renewables, a grid
-connection, or both. It couples three data pipelines and an optimisation model
-into one Snakemake workflow:
+`lcox-steel` calculates levelized costs for green-steel plants powered by
+captive renewables, a grid connection, or both — the levelized cost of steel
+(LCOS) for full process routes, or the levelized cost of hydrogen (LCOH) for
+the pure hydrogen-supply model. It couples three data pipelines and an
+optimisation model into one Snakemake workflow:
 
 - **`res_cf`** — hourly renewable capacity factors from ERA5 reanalysis (via atlite).
 - **`grid`** — hourly electricity market data from ENTSO-E (Europe) and NEM (Australia).
-- **`h2_dri`** — a PyPSA investment model that sizes generation, storage, and the
-  electrolyser to meet a constant hydrogen demand at least cost.
-- **`viz`** — a per-project LCOH report plus Plotly figures.
+- **`h2_dri`** — a PyPSA investment model that sizes generation, storage, and one
+  steelmaking process route to meet a constant demand at least cost. Routes
+  (selected per scenario via `route:` in an assumptions overlay):
+  - `h2_only` — electrolyser meets a flat H2 demand (the original LCOH model)
+  - `h2_dri_eaf` — electrolyser → H2 → DRI shaft → sponge iron (storable) → EAF → steel
+  - `moe` — molten oxide electrolysis, electricity → liquid steel (ladle folded in)
+  - `ew` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
+- **`viz`** — a per-project LCOH/LCOS report plus Plotly figures.
 
 ## Architecture at a glance
 
@@ -255,8 +261,8 @@ keeps underscores, because official bidding-zone codes use them (`DE_LU`).
 | File | Holds |
 |------|-------|
 | `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (per-country metadata, turbines, CF flags, cutout settings). |
-| `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing. Loaded by `h2_dri_optimize` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
-| `config/assumptions_{project}_{scenario}.yaml` | *Optional* per-scenario overlay. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. |
+| `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri`, `eaf`, `moe`, `ladle`, `electrowinning`, `iron_store`), grid connection charges, and the default `route`. Loaded by `h2_dri_optimize` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
+| `config/assumptions_{project}_{scenario}.yaml` | *Optional* per-scenario overlay. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. Also how a scenario picks its steel route (`route: moe` etc.). |
 | `config/projects.csv` | Flat table, one row per `(project, scenario, tech)` input. Columns: `project, scenario, tech, variant, pipeline, area, start_date, end_date`. |
 
 ## Data formats
@@ -276,7 +282,8 @@ same index, **multiple columns** — one per orientation in the sweep (`solar_az
 multi-tech frame.
 
 **Results**: `results/<project>/<scenario>.nc` is the full solved PyPSA network;
-`results/report_<project>.csv` (from `compile_report`) carries LCOH and optimal
+`results/report_<project>.csv` (from `compile_report`) carries the levelized
+cost (LCOH for `h2_only` scenarios, LCOS €/t for steel routes) and optimal
 capacities for every scenario in the project.
 
 ### Cutout caching
