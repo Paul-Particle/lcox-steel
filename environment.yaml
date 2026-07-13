@@ -36,6 +36,7 @@ dependencies:
   # Config & workflow
   - pyyaml
   - jupyter
+  - nbstripout           # strips notebook outputs from git (see notebooks/README.md)
   - tqdm
 
   - pip:

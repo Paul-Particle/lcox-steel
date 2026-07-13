@@ -17,6 +17,12 @@ Snakefile        text eol=lf
 *.csv            text eol=lf
 *.json           text eol=lf
 *.md             text eol=lf
+
+# Jupyter notebooks: text (like JSON) plus the nbstripout clean filter, which
+# strips cell outputs/counts from the stored blob so notebooks stay small.
+# The filter itself is per-clone — run `nbstripout --install` once (see
+# notebooks/README.md); without it the entry is a harmless no-op.
+*.ipynb          text eol=lf filter=nbstripout
 *.txt            text eol=lf
 *.sh             text eol=lf
 
