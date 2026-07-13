@@ -166,7 +166,7 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     # Steel-route process links: capacity in output units (t/h of iron or
     # steel — p_nom is input-side, so scale by the link efficiency) plus
     # utilisation, which shows how far each step actually load-follows.
-    for link in ("dri", "eaf", "moe", "electrowinning"):
+    for link in PROCESS_LINKS:
         if link not in n.links.index:
             continue
         p_nom = n.links.at[link, "p_nom_opt"]
