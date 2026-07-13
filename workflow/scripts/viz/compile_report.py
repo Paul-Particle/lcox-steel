@@ -55,43 +55,61 @@ def _marginal_costs(static: pd.DataFrame, flow_t: pd.DataFrame, mc_t: pd.DataFra
     return total
 
 
-def _annual_cost(n: pypsa.Network) -> float:
-    """Annualised capital costs + variable costs (scaled to 8760 h).
+PROCESS_LINKS = ("dri", "eaf", "moe", "electrowinning")
 
-    Capital costs are already per-year (annualised CAPEX × p_nom_opt). Variable
+
+def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
+    """Annualised cost per system component group, €/yr; sums to the total.
+
+    Capital costs are already per-year (annualised CAPEX × p_nom_opt); variable
     costs — grid imports, ore, EAF consumables, electrolyser variable opex —
     are scaled from the simulation period up to 8760 h so levelised costs stay
-    meaningful on partial-year runs.
+    meaningful on partial-year runs. The reported total annual cost is the sum
+    of these groups, so breakdown and total cannot drift apart.
     """
     t_hours = len(n.snapshots)
     annual_scale = 8760.0 / t_hours
 
-    cost = 0.0
+    def link_capital(names) -> float:
+        idx = [l for l in names if l in n.links.index and n.links.at[l, "p_nom_extendable"]]
+        return float((n.links.loc[idx, "capital_cost"] * n.links.loc[idx, "p_nom_opt"]).sum())
 
-    mask = n.generators.p_nom_extendable
-    cost += (n.generators.loc[mask, "capital_cost"] * n.generators.loc[mask, "p_nom_opt"]).sum()
+    def link_marginal(names) -> float:
+        idx = [l for l in names if l in n.links.index]
+        return _marginal_costs(n.links.loc[idx], n.links_t.p0, n.links_t.marginal_cost) * annual_scale
 
-    mask = n.storage_units.p_nom_extendable
-    cost += (n.storage_units.loc[mask, "capital_cost"] * n.storage_units.loc[mask, "p_nom_opt"]).sum()
+    def store_capital(name: str) -> float:
+        if name not in n.stores.index or not n.stores.at[name, "e_nom_extendable"]:
+            return 0.0
+        return float(n.stores.at[name, "capital_cost"] * n.stores.at[name, "e_nom_opt"])
 
-    # All extendable links: electrolyser, the steel-route process links and, in
-    # multi-site runs, the HVDC transmission links.
-    mask = n.links.p_nom_extendable
-    cost += (n.links.loc[mask, "capital_cost"] * n.links.loc[mask, "p_nom_opt"]).sum()
+    gens = n.generators
+    res_idx = gens.index[gens.p_nom_extendable & (gens.index != "grid_import")]
+    grid_capital = 0.0
+    if "grid_import" in gens.index and gens.at["grid_import", "p_nom_extendable"]:
+        grid_capital = float(
+            gens.at["grid_import", "capital_cost"] * gens.at["grid_import", "p_nom_opt"]
+        )
+    hvdc = list(n.links.index[n.links.carrier == "HVDC"])
 
-    mask = n.stores.e_nom_extendable
-    cost += (n.stores.loc[mask, "capital_cost"] * n.stores.loc[mask, "e_nom_opt"]).sum()
-
-    cost += (
-        _marginal_costs(n.generators, n.generators_t.p, n.generators_t.marginal_cost)
-        + _marginal_costs(n.links, n.links_t.p0, n.links_t.marginal_cost)
-    ) * annual_scale
-
-    return float(cost)
-
-
-def _compute_lcoh(n: pypsa.Network) -> float:
-    return _annual_cost(n) / _h2_produced_kg(n)
+    return {
+        "res": float((gens.loc[res_idx, "capital_cost"] * gens.loc[res_idx, "p_nom_opt"]).sum()),
+        "battery": float(
+            (n.storage_units.capital_cost * n.storage_units.p_nom_opt)[
+                n.storage_units.p_nom_extendable
+            ].sum()
+        ),
+        # Generator marginal costs are all zero except grid imports (energy price
+        # + volumetric fee), so the generic sum lands in the grid bucket.
+        "grid": grid_capital
+        + _marginal_costs(gens, n.generators_t.p, n.generators_t.marginal_cost) * annual_scale,
+        "electrolyser": link_capital(["electrolyser"]) + link_marginal(["electrolyser"]),
+        "h2_buffer": store_capital("h2_buffer"),
+        "process": link_capital(PROCESS_LINKS),
+        "ore_consumables": link_marginal(PROCESS_LINKS),
+        "iron_store": store_capital("iron_store"),
+        "transmission": link_capital(hvdc),
+    }
 
 
 def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> dict:
@@ -103,20 +121,28 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     exists, but LCOH is only well-defined when H2 is the end product — on
     steel routes the annual cost covers the whole chain.
     """
+    breakdown = _cost_breakdown(n)
     summary = {
         "project": project_name,
         "scenario": scenario_name,
-        "total_annual_cost_meur": _annual_cost(n) / 1e6,
+        "total_annual_cost_meur": sum(breakdown.values()) / 1e6,
     }
+    # Per-group annual cost columns (zero groups omitted — a scenario without a
+    # component shouldn't grow the CSV). plot_lcos_bars stacks these.
+    for group, value in breakdown.items():
+        if value:
+            summary[f"cost_{group}_meur"] = value / 1e6
+
+    total_annual_cost = sum(breakdown.values())
 
     if "dri_load" in n.loads.index:
-        lcoh_eur_per_kg = _compute_lcoh(n)
+        lcoh_eur_per_kg = total_annual_cost / _h2_produced_kg(n)
         summary["lcoh_eur_per_kg"] = lcoh_eur_per_kg
         summary["lcoh_eur_per_mwh_lhv"] = lcoh_eur_per_kg * 1000.0 / H2_LHV_KWH_PER_KG
 
     if "steel_load" in n.loads.index:
         steel_t_per_year = float(n.loads.at["steel_load", "p_set"]) * 8760.0
-        summary["lcos_eur_per_t"] = _annual_cost(n) / steel_t_per_year
+        summary["lcos_eur_per_t"] = total_annual_cost / steel_t_per_year
         summary["steel_produced_mt"] = steel_t_per_year / 1e6
 
     if "electrolyser" in n.links.index:
