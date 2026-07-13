@@ -16,6 +16,8 @@ rule plot_cf_map:
     input:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
         regions="resources/shapes/{cf_area}_geo.parquet",
+        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
+        national_mean_cf="resources/res_cf/{cf_area}_{tech}_country-average_{start_date}_{end_date}.parquet",
     output:
         png="results/plots/cf_map/{cf_area}_{tech}_{start_date}_{end_date}_cf_map.png",
         html="results/plots/cf_map/{cf_area}_{tech}_{start_date}_{end_date}_cf_map.html",
@@ -26,6 +28,7 @@ rule plot_cf_map:
     params:
         pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
+        wind_offshore_turbine=lookup(dpath="res_cf/wind_offshore_turbine", within=config),
         region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
     script:
         "../scripts/viz/plot_cf_map.py"
