@@ -2,10 +2,10 @@
 
 Snakemake rule: plot_capacity_bars (in viz.smk).
 
-Shows per scenario:
-  DRI H2 demand (MW LHV) · Electrolyser (MW) · H2 buffer (MW·days LHV)
-  Solar stacked by orientation (MW) · Wind stacked by tech (MW)
-  Grid annual-average import (MW)
+Shows per scenario (slots with no data in the whole project are dropped):
+  Solar stacked by orientation (MW) · Wind stacked by tech (MW) · Battery (MW)
+  Electrolyser (MW) · H2 buffer (hours of DRI demand) · DRI H2 demand (MW LHV)
+  Grid connection (MW)
 """
 
 import logging
@@ -25,6 +25,7 @@ from scripts.viz.style import (
     fca_blue,
     fca_colormap,
     fca_template,
+    gray,
     green,
     magenta_red,
     sand_yellow,
@@ -47,9 +48,9 @@ WIND_PALETTE_RANGE  = (0.02, 0.40)
 SOLAR_SOLO_COLOR = sand_yellow
 WIND_SOLO_COLOR  = fca_blue
 
-# Slot positions (in "category widths") for the six grouped bars.
-_SLOTS = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]
-_BAR_WIDTH = 0.13
+# Slot positions (in "category widths") for the seven grouped bars.
+_SLOTS = [-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0]
+_BAR_WIDTH = 0.12
 
 
 def load_report(path: Path) -> pd.DataFrame:
@@ -94,7 +95,7 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
             row["solar_mw"] = r.get("solar_gw_opt", 0) * 1e3
         for col in wind_cols:
             row[f"{col.replace('_gw_opt','')}_mw"] = r.get(col, 0) * 1e3
-        row["grid_avg_mw"] = r.get("grid_avg_mw", 0)
+        row["grid_mw"] = r.get("grid_import_gw_opt", 0) * 1e3
         rows.append(row)
     return pd.DataFrame(rows).set_index("label")
 
@@ -180,29 +181,47 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
     Lays out six slots left→right: solar (stacked by orientation), wind (stacked
     by tech), battery, electrolyser, H2 buffer, and DRI H2 demand.
     """
-    solar_mw_cols = [c for c in plot_df.columns if c.startswith("solar_")]
-    wind_mw_cols  = [c for c in plot_df.columns if c.startswith("wind_")]
+    def _has_data(cols) -> bool:
+        """True if any scenario has a nonzero value in any of the columns.
 
-    # Slot order (left → right): solar, wind, battery, electrolyser, buffer, DRI demand.
+        Slots that are empty across the whole project (e.g. electrolyser on
+        MOE/EW routes, DRI H₂ demand on steel routes) are dropped entirely so
+        they don't leave gaps and phantom legend entries.
+        """
+        cols = [c for c in cols if c in plot_df.columns]
+        return bool(cols) and bool(plot_df[cols].fillna(0).to_numpy().any())
+
+    solar_mw_cols = [c for c in plot_df.columns if c.startswith("solar")]
+    wind_mw_cols  = [c for c in plot_df.columns
+                     if c.startswith(("wind-onshore", "wind-offshore"))]
+
+    # Slot order (left → right): solar, wind, battery, electrolyser, buffer,
+    # DRI demand, grid connection.
     fig = go.Figure()
 
-    if solar_mw_cols:
+    if _has_data(solar_mw_cols):
         for tr in _stacked_traces(plot_df, solar_mw_cols, SOLAR_PALETTE_RANGE,
                                   SOLAR_SOLO_COLOR, 0):
             fig.add_trace(tr)
 
-    if wind_mw_cols:
+    if _has_data(wind_mw_cols):
         for tr in _stacked_traces(plot_df, wind_mw_cols, WIND_PALETTE_RANGE,
                                   WIND_SOLO_COLOR, 1):
             fig.add_trace(tr)
 
-    fig.add_trace(_single_bar(plot_df, "battery_mw", 2, magenta_red, "Battery (MW)"))
-    fig.add_trace(_single_bar(plot_df, "electrolyser_mw", 3, green,
-                              "Electrolyser (MW input)", "MW input"))
-    fig.add_trace(_single_bar(plot_df, "h2_buffer_hours_dri", 4, dark_gray,
-                              "H₂ buffer (hours of DRI demand)", "h of DRI demand"))
-    fig.add_trace(_single_bar(plot_df, "dri_h2_mw_lhv", 5, blue_black,
-                              "DRI H₂ demand (MW H₂ LHV)", "MW H₂ LHV"))
+    if _has_data(["battery_mw"]):
+        fig.add_trace(_single_bar(plot_df, "battery_mw", 2, magenta_red, "Battery (MW)"))
+    if _has_data(["electrolyser_mw"]):
+        fig.add_trace(_single_bar(plot_df, "electrolyser_mw", 3, green,
+                                  "Electrolyser (MW input)", "MW input"))
+    if _has_data(["h2_buffer_hours_dri"]):
+        fig.add_trace(_single_bar(plot_df, "h2_buffer_hours_dri", 4, dark_gray,
+                                  "H₂ buffer (hours of DRI demand)", "h of DRI demand"))
+    if _has_data(["dri_h2_mw_lhv"]):
+        fig.add_trace(_single_bar(plot_df, "dri_h2_mw_lhv", 5, blue_black,
+                                  "DRI H₂ demand (MW H₂ LHV)", "MW H₂ LHV"))
+    if _has_data(["grid_mw"]):
+        fig.add_trace(_single_bar(plot_df, "grid_mw", 6, gray, "Grid connection (MW)"))
 
     n_sc = len(plot_df)
     fig.update_layout(
@@ -220,7 +239,11 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
     apply_header(
         fig,
         title=f"{project_label} capacity breakdown",
-        subtitle="MW; H₂ buffer in hours of DRI demand",
+        subtitle=(
+            "MW; H₂ buffer in hours of DRI demand"
+            if _has_data(["h2_buffer_hours_dri"])
+            else "MW"
+        ),
         fig_width=max(720, 220 * n_sc + 280), fig_height=600,
         margin_l=80, margin_r=260, margin_t=110, margin_b=80,
     )
