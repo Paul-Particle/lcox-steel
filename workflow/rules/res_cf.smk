@@ -155,6 +155,23 @@ rule build_anchored_res_mix_cfs:
         "../scripts/res_cf/07_make_bestsite_cf_timeseries.py"
 
 
+rule build_anchor_colocated_cfs:
+    input:
+        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/{cf_area}_geo.parquet",
+        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
+    output:
+        "resources/res_cf/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.parquet",
+    wildcard_constraints:
+        variant=r"anchor-colo-n\d+",
+    log:
+        "logs/build_anchor_colocated_cfs/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.log",
+    params:
+        anchor_colocation=lookup(dpath="res_cf/anchor_colocation", within=config),
+    script:
+        "../scripts/res_cf/07b_make_anchor_colocated_cf_timeseries.py"
+
+
 rule build_multi_site_cfs:
     input:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
