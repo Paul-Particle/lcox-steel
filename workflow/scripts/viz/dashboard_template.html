@@ -1,0 +1,307 @@
+<style>
+  /*FONT_CSS*/
+  .sd-root{
+    --paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8; --print:#FFFFFF;
+    --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7;
+    --border:#D6DBDF; --hair:#E4E9ED;
+    --accent:#0A5680; --accent-2:#0293D2;
+    --good:#4E8C6A; --mix:#C08A3A; --fossil:#C24463;
+    --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);
+    --tw:"Titillium Web",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:"SF Mono",ui-monospace,"Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    .sd-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
+      --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
+      --accent:#0293D2; --accent-2:#70D2F0; --good:#91C096; --mix:#E2B681; --fossil:#E0728C;
+      --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
+  }
+  :root[data-theme="dark"] .sd-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
+    --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
+    --accent:#0293D2; --accent-2:#70D2F0; --good:#91C096; --mix:#E2B681; --fossil:#E0728C;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
+  :root[data-theme="light"] .sd-root{--paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8;
+    --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7; --border:#D6DBDF; --hair:#E4E9ED;
+    --accent:#0A5680; --accent-2:#0293D2; --good:#4E8C6A; --mix:#C08A3A; --fossil:#C24463;
+    --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);}
+
+  .sd-root{background:var(--paper);color:var(--ink);font-family:var(--tw);line-height:1.5;
+    min-height:100vh;-webkit-font-smoothing:antialiased;}
+  .sd-root *{box-sizing:border-box;}
+  .sd-wrap{max-width:1200px;margin:0 auto;padding:34px 24px 72px;}
+
+  .sd-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;
+    flex-wrap:wrap;border-bottom:2px solid var(--accent);padding-bottom:18px;}
+  .sd-brand{display:flex;align-items:center;gap:11px;margin-bottom:11px;}
+  .sd-dot{width:12px;height:12px;border-radius:50%;background:var(--accent);flex:none;}
+  .sd-brand span{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent-2);font-weight:600;}
+  .sd-title{font-size:clamp(25px,3.4vw,38px);font-weight:700;letter-spacing:-.02em;margin:0;text-wrap:balance;line-height:1.05;}
+  .sd-sub{color:var(--muted);font-size:14px;margin:9px 0 0;max-width:62ch;}
+  .sd-meta{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:right;line-height:1.7;white-space:nowrap;}
+
+  .sd-controls{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end;margin:24px 0 26px;
+    padding:16px 18px;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);}
+  .sd-ctl{display:flex;flex-direction:column;gap:7px;}
+  .sd-ctl>label{font-family:var(--mono);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  .sd-pills{display:flex;gap:3px;background:var(--panel-2);padding:3px;border-radius:9px;border:1px solid var(--border);flex-wrap:wrap;}
+  .sd-pill{border:0;background:transparent;color:var(--muted);font-family:var(--tw);font-size:13px;font-weight:600;
+    padding:6px 13px;border-radius:7px;cursor:pointer;transition:background .13s,color .13s;white-space:nowrap;}
+  .sd-pill:hover{color:var(--ink);}
+  .sd-pill[aria-pressed="true"]{background:var(--accent);color:#fff;}
+  .sd-pill:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;}
+  .sd-pill:disabled{opacity:.32;cursor:not-allowed;}
+
+  .sd-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:24px;}
+  .sd-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;
+    box-shadow:var(--shadow);position:relative;overflow:hidden;}
+  .sd-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);}
+  .sd-card.is-fossil::before{background:var(--fossil);}
+  .sd-card.is-good::before{background:var(--good);}
+  .sd-card.is-mix::before{background:var(--mix);}
+  .sd-card .k{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;}
+  .sd-card .v{font-size:28px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1;}
+  .sd-card .v small{font-size:14px;font-weight:600;color:var(--muted);letter-spacing:0;}
+  .sd-card .d{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.4;}
+
+  .sd-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden;}
+  .sd-panel-h{padding:16px 18px 6px;}
+  .sd-panel-h h2{font-size:15px;font-weight:700;margin:0;letter-spacing:-.01em;}
+  .sd-panel-h p{font-size:12.5px;color:var(--muted);margin:4px 0 0;}
+  /* Pipeline figures are light "prints" — mount them on a white surface in both themes. */
+  .sd-print{background:var(--print);border-top:1px solid var(--hair);}
+  .sd-plot{width:100%;overflow-x:auto;}
+  .sd-grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  @media (max-width:900px){.sd-grid2{grid-template-columns:1fr;}}
+  .sd-empty{padding:44px 18px;text-align:center;color:var(--faint);font-size:13px;}
+
+  .sd-tblwrap{overflow-x:auto;padding:4px 6px 8px;}
+  .sd-tbl{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13.5px;}
+  .sd-tbl th,.sd-tbl td{padding:9px 16px;text-align:right;border-bottom:1px solid var(--hair);white-space:nowrap;}
+  .sd-tbl th{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700;vertical-align:bottom;}
+  .sd-tbl th span{display:block;font-weight:400;opacity:.65;letter-spacing:0;margin-top:2px;}
+  .sd-tbl th:first-child,.sd-tbl td.rt{text-align:left;}
+  .sd-tbl td.rt{font-weight:600;}
+  .sd-tbl tbody tr:hover{background:var(--panel-2);}
+  .sd-tbl tbody tr:last-child td{border-bottom:0;}
+  .sd-tbl .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:9px;vertical-align:middle;}
+  .sd-tbl .na{color:var(--faint);}
+  .sd-tbl .best td{font-weight:700;}
+
+  .sd-foot{margin-top:32px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);line-height:1.6;}
+  .sd-foot b{color:var(--ink);font-weight:600;} .sd-foot em{color:var(--ink);font-style:normal;font-weight:600;}
+  .sd-foot code{font-family:var(--mono);font-size:11px;background:var(--panel-2);padding:1px 5px;border-radius:4px;}
+</style>
+
+<div class="sd-root">
+ <div class="sd-wrap">
+  <header class="sd-head">
+    <div>
+      <div class="sd-brand"><span class="sd-dot"></span><span>FC Architects · Steel decarbonisation</span></div>
+      <h1 class="sd-title">Green Steel Route Economics</h1>
+      <p class="sd-sub">Levelised cost of steel across production routes, geographies and weather years — a capacity-expansion optimisation over hourly wind, solar and grid-price data. Figures are the project's own pipeline charts.</p>
+    </div>
+    <div class="sd-meta" id="sd-meta"></div>
+  </header>
+
+  <div class="sd-controls">
+    <div class="sd-ctl"><label>Geography</label><div class="sd-pills" id="sd-geo"></div></div>
+    <div class="sd-ctl"><label>Weather year</label><div class="sd-pills" id="sd-year"></div></div>
+    <div class="sd-ctl"><label>Grid connection</label><div class="sd-pills" id="sd-grid"></div></div>
+  </div>
+
+  <section class="sd-cards" id="sd-cards"></section>
+
+  <div class="sd-panel">
+    <div class="sd-panel-h"><h2>Levelised costs by route</h2><p id="sd-tbl-sub"></p></div>
+    <div class="sd-tblwrap"><div id="sd-table"></div></div>
+  </div>
+
+  <div class="sd-panel">
+    <div class="sd-panel-h"><h2>LCOS by route — all geographies</h2><p id="sd-ov-sub"></p></div>
+    <div class="sd-print"><div class="sd-plot" id="sd-overview"></div></div>
+  </div>
+
+  <div class="sd-panel">
+    <div class="sd-panel-h"><h2 id="sd-lcos-h">Cost breakdown</h2><p id="sd-lcos-sub"></p></div>
+    <div class="sd-print"><div class="sd-plot" id="sd-lcos"></div></div>
+  </div>
+
+  <div class="sd-panel">
+    <div class="sd-panel-h"><h2>Built capacity</h2><p id="sd-cap-sub"></p></div>
+    <div class="sd-print"><div class="sd-plot" id="sd-capacity"></div></div>
+  </div>
+
+  <footer class="sd-foot">
+    <p><b>Reading this.</b> LCOS is the full levelised cost per tonne of liquid steel: annualised capex plus operating cost of the whole system — renewables, storage, grid, process plant, ore and consumables — divided by annual output. The <em>cost breakdown</em> and <em>built capacity</em> panels are the project's exact pipeline figures (all route/siting scenarios). <b>Clean</b> means the zero-fossil routes (H2-DRI, MOE, EW); <b>clean premium</b> is the cheapest of those minus the fossil <code>NG-DRI-EAF</code> benchmark, and <b>break-even CO₂</b> is the carbon price that closes it, at <span id="sd-co2f"></span> tCO₂/MWh of natural gas. <b>LCOE</b> is the electricity-system cost (renewables + battery + grid + transmission) per MWh generated; <b>LCOH</b> is the hydrogen cost (electrolyser + buffer + its electricity at LCOE) per MWh LHV.</p>
+    <p style="margin-top:8px"><b>Routes.</b> <code>H2-DRI-EAF</code> hydrogen DRI + electric arc furnace · <code>MOE</code> molten-oxide electrolysis · <code>EW</code> aqueous electrowinning — these three are zero-fossil. <code>MIX-DRI-EAF</code> is a <em>transitional</em> route: H₂/gas co-fired DRI where the optimiser picks the blend, so it still burns natural gas and carries the CO₂ shown on its card. <code>NG-DRI-EAF</code> is natural-gas DRI on grid power (the fossil benchmark). Cards compare the best siting (<em>country-average</em> vs <em>best-site P95</em>) per route. Values are near-optimal within input uncertainty — read rankings and ranges, not the last digit.</p>
+  </footer>
+ </div>
+</div>
+
+<script>/*PLOTLY_JS*/</script>
+<script>
+const PAYLOAD = /*PAYLOAD_JSON*/;
+(function(){
+  const {figs, template:FCA, synth, geos:GEOS, years:YEARS, geo_names:GN,
+         clean_routes:CLEAN, route_label:RLAB, route_color:RCOL, co2_t_per_mwh:CO2F} = PAYLOAD;
+  const ROUTE_ORDER = ["h2-dri-eaf","moe","ew","mix-dri-eaf","ng-dri-eaf"];
+  const CONF = {responsive:true, displaylogo:false,
+    modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
+  const state = {geo:GEOS.includes("DE")?"DE":GEOS[0], year:YEARS[YEARS.length-1], grid:"grid"};
+
+  document.getElementById("sd-co2f").textContent = CO2F.toFixed(2);
+
+  const proj = () => `${state.geo}-${state.year}-${state.grid}`;
+  const gridHas = (geo,year,grid) => !!(synth[geo]?.[year]?.[grid]);
+  const bucket = () => synth[state.geo]?.[state.year]?.[state.grid] || {};
+
+  function renderMeta(){
+    let n=0; for(const g in synth) for(const y in synth[g]) for(const gr in synth[g][y]) n+=Object.keys(synth[g][y][gr]).length;
+    document.getElementById("sd-meta").innerHTML =
+      `${GEOS.length} geographies · ${YEARS.length} years<br>${Object.keys(figs).length} projects · ${n} scenarios<br>hourly · 8760 snapshots`;
+  }
+
+  const card = (cls,k,v,unit,d) =>
+    `<div class="sd-card ${cls}"><p class="k">${k}</p>
+     <div class="v">${typeof v==="number"?v.toFixed(0):v}<small> ${unit}</small></div><p class="d">${d}</p></div>`;
+  const co2Int = rec => (rec.ng_gwh*1000*CO2F)/((rec.steel_mt||1)*1e6); // tCO₂ / t steel
+
+  function renderCards(){
+    const b = bucket(), out=[];
+    const cleans = CLEAN.map(r=>({r,rec:b[r]})).filter(x=>x.rec);
+    const best = cleans.length ? cleans.reduce((a,c)=>c.rec.lcos<a.rec.lcos?c:a) : null;
+    const mix = b["mix-dri-eaf"], ng = b["ng-dri-eaf"];
+
+    if(best) out.push(card("is-good","Cheapest clean route", best.rec.lcos, "€/t", RLAB[best.r]+" · zero fossil"));
+    else out.push(card("","Clean route","—","","no solved scenarios here"));
+
+    if(mix){
+      const sh = mix.h2_share!=null ? Math.round(mix.h2_share*100) : null;
+      out.push(card("is-mix","Transitional · H₂/gas blend", mix.lcos, "€/t",
+        (sh!=null?`${sh}% iron from H₂ · `:"")+co2Int(mix).toFixed(2)+" tCO₂/t"));
+    }
+    if(ng){
+      out.push(card("is-fossil","Fossil benchmark · NG-DRI", ng.lcos, "€/t", co2Int(ng).toFixed(2)+" tCO₂ / t steel"));
+      if(best){
+        const prem = best.rec.lcos-ng.lcos, co2=co2Int(ng), be=co2>0?prem/co2:null;
+        out.push(card("","Clean premium", (prem>=0?"+":"")+prem.toFixed(0), "€/t", "cheapest clean vs. NG-DRI"));
+        out.push(card("","Break-even CO₂", be==null?"—":"≈"+be.toFixed(0), "€/tCO₂",
+          be==null?"n/a":(prem<=0?"clean already cheaper":"closes the premium")));
+      }
+    } else if(best){
+      const sp=cleans.map(x=>x.rec.lcos);
+      out.push(card("","Clean route range", `${Math.min(...sp).toFixed(0)}–${Math.max(...sp).toFixed(0)}`, "€/t",
+        `${cleans.length} zero-fossil routes · islanded`));
+    }
+
+    // Energy-carrier costs underlying the LCOS.
+    if(best && best.rec.lcoe!=null)
+      out.push(card("","Electricity · LCOE", best.rec.lcoe, "€/MWh", "cheapest clean route"));
+    let lcoh=null, lcohR=null;
+    for(const r of ["h2-dri-eaf","mix-dri-eaf"]){
+      const rec=b[r]; if(rec && rec.lcoh!=null && (lcoh==null || rec.lcoh<lcoh)){ lcoh=rec.lcoh; lcohR=r; }
+    }
+    if(lcoh!=null) out.push(card("","Hydrogen · LCOH", lcoh, "€/MWh", "LHV · "+RLAB[lcohR]));
+
+    document.getElementById("sd-cards").innerHTML=out.join("");
+  }
+
+  function overviewColors(){ // resolve current chrome colors for the light print surface
+    return {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB"};
+  }
+  function renderOverview(){
+    const t=overviewColors();
+    document.getElementById("sd-ov-sub").textContent =
+      `€/t · ${state.year} · ${state.grid==="grid"?"grid-connected":"islanded (no grid)"} · cheapest siting per route`;
+    const traces = ROUTE_ORDER.map(r=>({
+      type:"bar", name:RLAB[r], marker:{color:RCOL[r]},
+      x:GEOS.map(g=>GN[g]||g),
+      y:GEOS.map(g=>{const rec=synth[g]?.[state.year]?.[state.grid]?.[r];return rec?rec.lcos:null;}),
+      hovertemplate:"%{x} · "+RLAB[r]+"<br>%{y:.0f} €/t<extra></extra>"
+    })).filter(tr=>tr.y.some(v=>v!=null));
+    const lay={template:FCA, barmode:"group", height:360, autosize:true,
+      paper_bgcolor:"#FFFFFF", plot_bgcolor:"#FFFFFF",
+      font:{family:"'Titillium Web',sans-serif",color:t.ink,size:12},
+      margin:{l:58,r:16,t:16,b:46}, bargap:.3, bargroupgap:.08,
+      legend:{orientation:"h",y:1.02,x:0,font:{size:11,color:t.muted}},
+      xaxis:{gridcolor:t.grid,linecolor:t.border,tickfont:{color:t.muted}},
+      yaxis:{title:{text:"LCOS  (€ / t steel)",font:{size:11,color:t.muted}},gridcolor:t.grid,linecolor:t.border,tickfont:{color:t.muted},rangemode:"tozero"}};
+    Plotly.react("sd-overview", traces, lay, CONF);
+  }
+
+  function renderPipeline(id, key, subId, subText){
+    const el=document.getElementById(id);
+    document.getElementById(subId).textContent=subText;
+    const entry=figs[proj()];
+    if(!entry || !entry[key]){ el.innerHTML='<div class="sd-empty">No pipeline figure for this selection.</div>'; return; }
+    const f=entry[key];
+    const layout=Object.assign({}, f.layout, {template:FCA, autosize:true});
+    delete layout.width;
+    Plotly.react(el, f.data, layout, CONF);
+  }
+
+  function renderDetail(){
+    const label=`${GN[state.geo]} · ${state.year} · ${state.grid==="grid"?"grid":"islanded"}`;
+    renderPipeline("sd-lcos","lcos","sd-lcos-sub", label+" · levelised cost by group, per scenario");
+    renderPipeline("sd-capacity","capacity","sd-cap-sub", label+" · optimal build, per scenario");
+  }
+
+  function renderTable(){
+    const b = bucket();
+    const rows = ROUTE_ORDER.map(r=>({r,rec:b[r]})).filter(x=>x.rec)
+                            .sort((a,c)=>a.rec.lcos-c.rec.lcos);
+    document.getElementById("sd-tbl-sub").textContent =
+      `${GN[state.geo]} · ${state.year} · ${state.grid==="grid"?"grid-connected":"islanded"} · cheapest siting per route`;
+    const el = document.getElementById("sd-table");
+    if(!rows.length){ el.innerHTML='<div class="sd-empty">No solved scenarios here.</div>'; return; }
+    const num = (v,d)=> v==null ? '<span class="na">—</span>' : v.toFixed(d);
+    const body = rows.map(({r,rec},i)=>{
+      const co2 = co2Int(rec);
+      return `<tr class="${i===0?"best":""}">
+        <td class="rt"><span class="sw" style="background:${RCOL[r]}"></span>${RLAB[r]}</td>
+        <td>${num(rec.lcos,0)}</td>
+        <td>${num(rec.lcoe,0)}</td>
+        <td>${num(rec.lcoh,0)}</td>
+        <td>${co2>0?co2.toFixed(2):'<span class="na">0.00</span>'}</td></tr>`;
+    }).join("");
+    el.innerHTML = `<table class="sd-tbl"><thead><tr>
+        <th>Route</th><th>LCOS<span>€/t steel</span></th><th>LCOE<span>€/MWh</span></th>
+        <th>LCOH<span>€/MWh LHV</span></th><th>CO₂<span>t/t steel</span></th>
+      </tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  function renderAll(){ renderCards(); renderTable(); renderOverview(); renderDetail(); }
+
+  function buildPills(id, items, key){
+    const host=document.getElementById(id); host.innerHTML="";
+    items.forEach(([val,lab])=>{
+      const b=document.createElement("button");
+      b.className="sd-pill"; b.type="button"; b.textContent=lab; b.dataset.val=val;
+      b.onclick=()=>{ if(b.disabled) return; state[key]=val; refresh(); };
+      host.appendChild(b);
+    });
+  }
+  function refresh(){
+    document.querySelectorAll("#sd-grid .sd-pill").forEach(b=>{ b.disabled=!gridHas(state.geo,state.year,b.dataset.val); });
+    if(!gridHas(state.geo,state.year,state.grid))
+      state.grid = gridHas(state.geo,state.year,"grid")?"grid":"nogrid";
+    [["sd-geo","geo"],["sd-year","year"],["sd-grid","grid"]].forEach(([id,key])=>{
+      document.querySelectorAll("#"+id+" .sd-pill").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.val===state[key])));
+    });
+    renderAll();
+  }
+
+  buildPills("sd-geo", GEOS.map(g=>[g,GN[g]||g]), "geo");
+  buildPills("sd-year", YEARS.map(y=>[y,y]), "year");
+  buildPills("sd-grid", [["grid","Grid"],["nogrid","Islanded"]], "grid");
+  renderMeta();
+  refresh();
+
+  // Plotly measures SVG text on first paint; if the embedded Titillium woff2 isn't
+  // ready yet the figures render with a fallback face. Re-render once fonts load.
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(renderAll);
+
+  if(window.matchMedia) window.matchMedia("(prefers-color-scheme:dark)").addEventListener("change",()=>{ renderCards(); });
+  new MutationObserver(()=>renderCards()).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+})();
+</script>
