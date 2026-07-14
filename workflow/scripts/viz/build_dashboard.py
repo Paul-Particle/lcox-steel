@@ -15,6 +15,7 @@ import types
 from pathlib import Path
 
 import pandas as pd
+import yaml
 from plotly.utils import PlotlyJSONEncoder
 
 REPO = Path(__file__).resolve().parents[3]  # workflow/scripts/viz/ -> repo root
@@ -33,6 +34,9 @@ ROUTE_LABEL = {"h2-dri-eaf": "H2-DRI-EAF", "moe": "MOE", "ew": "Electrowinning",
 ROUTE_COLOR = {"h2-dri-eaf": "#0A5680", "moe": "#0293D2", "ew": "#83D1DD",
                "mix-dri-eaf": "#E2B681", "ng-dri-eaf": "#D75674"}
 CO2_T_PER_MWH = 0.20
+# Below this iron-from-H2 share the "MIX" route has effectively rejected hydrogen
+# and is economically the fossil NG-DRI route — flagged as such in the UI.
+H2_MIN = 0.02
 
 
 def _seed_stub():
@@ -88,9 +92,10 @@ def capture_figures(projects):
                 continue
             d = fig.to_dict()
             d.get("layout", {}).pop("template", None)  # template shared globally, not per-fig
-            # Let each figure fill its panel width while keeping its designed height.
-            d["layout"].pop("width", None)
-            d["layout"]["autosize"] = True
+            # Keep the figure's designed pixel width/height. Rendering it at native
+            # size (and letting the panel scroll horizontally) preserves the exact
+            # pipeline geometry — the header dot/logo, margins and 45° labels are all
+            # pixel-placed for that width, so shrinking to the panel collides them.
             _tune_layout(d, key)
             entry[key] = d
         if entry:
@@ -135,9 +140,28 @@ def _opt(v):
         return None
 
 
+def _gas_price(project):
+    """The €/MWh natural-gas price assumed for a project (per-geo overlay, else base).
+
+    The fossil routes (ng-dri-eaf on grid, mix on islanded) carry the gas-price
+    override; read it from whichever overlay exists, falling back to the base
+    assumptions value.
+    """
+    base = yaml.safe_load((REPO / "config" / "assumptions.yaml").read_text()) or {}
+    fallback = base.get("natural_gas", {}).get("price_eur_per_mwh")
+    for scen in ("ng-dri-eaf", "mix-dri-eaf-avg", "mix-dri-eaf-p95"):
+        p = REPO / "config" / f"assumptions_{project}_{scen}.yaml"
+        if p.exists():
+            ov = yaml.safe_load(p.read_text()) or {}
+            price = ov.get("natural_gas", {}).get("price_eur_per_mwh")
+            if price is not None:
+                return price
+    return fallback
+
+
 def load_synthesis(projects):
     """Per-(geo,year,grid,route) min-LCOS + fossil data for the cards & overview."""
-    data, geos, years = {}, set(), set()
+    data, gas, geos, years = {}, {}, set(), set()
     for project in projects:
         m = PROJ_RE.match(project)
         rp = RESULTS / f"report_{project}.csv"
@@ -146,6 +170,7 @@ def load_synthesis(projects):
         geo, year, grid = m.groups()
         geos.add(geo); years.add(year)
         df = pd.read_csv(rp)
+        gas.setdefault(geo, {}).setdefault(year, {})[grid] = _gas_price(project)
         bucket = data.setdefault(geo, {}).setdefault(year, {}).setdefault(grid, {})
         for _, row in df.iterrows():
             scen = str(row["scenario"])
@@ -162,7 +187,7 @@ def load_synthesis(projects):
                     "lcoh": _opt(row.get("lcoh_eur_per_mwh_lhv"))}
             if rec is None or cand["lcos"] < rec["lcos"]:  # keep cheapest variant per route
                 bucket[route] = cand
-    return data, sorted(geos), sorted(years)
+    return data, gas, sorted(geos), sorted(years)
 
 
 def main():
@@ -171,7 +196,7 @@ def main():
         if PROJ_RE.match(p) and (RESULTS / f"report_{p}.csv").exists()
     )
     figs, template = capture_figures(projects)
-    synth, geos, years = load_synthesis(projects)
+    synth, gas, geos, years = load_synthesis(projects)
 
     faces = []
     assets = REPO / "workflow" / "scripts" / "viz" / "assets"
@@ -199,10 +224,11 @@ def main():
     plotly_js = (Path(__import__("plotly").__file__).parent / "package_data" / "plotly.min.js").read_text()
 
     payload = {
-        "figs": figs, "template": template, "synth": synth,
+        "figs": figs, "template": template, "synth": synth, "gas": gas,
         "geos": geos, "years": years, "geo_names": GEO_NAMES,
         "clean_routes": CLEAN_ROUTES, "route_label": ROUTE_LABEL,
         "route_color": ROUTE_COLOR, "co2_t_per_mwh": CO2_T_PER_MWH,
+        "h2_min": H2_MIN,
     }
 
     template_html = TEMPLATE_HTML.read_text()

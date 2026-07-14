@@ -611,7 +611,7 @@ def apply_logo(fig, fig_width: int, fig_height: int,
         return
     plot_w_px = fig_width - margin_l - margin_r
     plot_h_px = fig_height - margin_t - margin_b
-    logo_h_px = 22
+    logo_h_px = 40
     fig.add_layout_image(
         source=logo["source"], xref="paper", yref="paper",
         xanchor="right", yanchor="bottom",

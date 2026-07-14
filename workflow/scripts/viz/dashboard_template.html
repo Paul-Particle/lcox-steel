@@ -86,6 +86,9 @@
   .sd-tbl .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:9px;vertical-align:middle;}
   .sd-tbl .na{color:var(--faint);}
   .sd-tbl .best td{font-weight:700;}
+  .tag{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--fossil);border:1px solid var(--fossil);border-radius:5px;
+    padding:1px 6px;margin-left:8px;vertical-align:middle;font-weight:700;}
 
   .sd-foot{margin-top:32px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);line-height:1.6;}
   .sd-foot b{color:var(--ink);font-weight:600;} .sd-foot em{color:var(--ink);font-style:normal;font-weight:600;}
@@ -133,7 +136,7 @@
 
   <footer class="sd-foot">
     <p><b>Reading this.</b> LCOS is the full levelised cost per tonne of liquid steel: annualised capex plus operating cost of the whole system — renewables, storage, grid, process plant, ore and consumables — divided by annual output. The <em>cost breakdown</em> and <em>built capacity</em> panels are the project's exact pipeline figures (all route/siting scenarios). <b>Clean</b> means the zero-fossil routes (H2-DRI, MOE, EW); <b>clean premium</b> is the cheapest of those minus the fossil <code>NG-DRI-EAF</code> benchmark, and <b>break-even CO₂</b> is the carbon price that closes it, at <span id="sd-co2f"></span> tCO₂/MWh of natural gas. <b>LCOE</b> is the electricity-system cost (renewables + battery + grid + transmission) per MWh generated; <b>LCOH</b> is the hydrogen cost (electrolyser + buffer + its electricity at LCOE) per MWh LHV.</p>
-    <p style="margin-top:8px"><b>Routes.</b> <code>H2-DRI-EAF</code> hydrogen DRI + electric arc furnace · <code>MOE</code> molten-oxide electrolysis · <code>EW</code> aqueous electrowinning — these three are zero-fossil. <code>MIX-DRI-EAF</code> is a <em>transitional</em> route: H₂/gas co-fired DRI where the optimiser picks the blend, so it still burns natural gas and carries the CO₂ shown on its card. <code>NG-DRI-EAF</code> is natural-gas DRI on grid power (the fossil benchmark). Cards compare the best siting (<em>country-average</em> vs <em>best-site P95</em>) per route. Values are near-optimal within input uncertainty — read rankings and ranges, not the last digit.</p>
+    <p style="margin-top:8px"><b>Routes.</b> <code>H2-DRI-EAF</code> hydrogen DRI + electric arc furnace · <code>MOE</code> molten-oxide electrolysis · <code>EW</code> aqueous electrowinning — these three are zero-fossil. <code>MIX-DRI-EAF</code> is a <em>transitional</em> route: two DRI shafts (H₂ and gas) feed one iron bus and the optimiser picks the blend — the <em>H₂ share</em> column shows how much iron it made from hydrogen. Where that share falls to ~zero (typically on grid power, where gas undercuts H₂) the route is flagged <em>H₂ rejected</em> and is economically identical to the fossil benchmark. <code>NG-DRI-EAF</code> is natural-gas DRI on grid power (the fossil benchmark); the natural-gas price assumed for these routes is shown above the table. Cards compare the best siting (<em>country-average</em> vs <em>best-site P95</em>) per route. Values are near-optimal within input uncertainty — read rankings and ranges, not the last digit.</p>
   </footer>
  </div>
 </div>
@@ -142,11 +145,15 @@
 <script>
 const PAYLOAD = /*PAYLOAD_JSON*/;
 (function(){
-  const {figs, template:FCA, synth, geos:GEOS, years:YEARS, geo_names:GN,
-         clean_routes:CLEAN, route_label:RLAB, route_color:RCOL, co2_t_per_mwh:CO2F} = PAYLOAD;
+  const {figs, template:FCA, synth, gas:GAS, geos:GEOS, years:YEARS, geo_names:GN,
+         clean_routes:CLEAN, route_label:RLAB, route_color:RCOL, co2_t_per_mwh:CO2F,
+         h2_min:H2MIN} = PAYLOAD;
   const ROUTE_ORDER = ["h2-dri-eaf","moe","ew","mix-dri-eaf","ng-dri-eaf"];
+  // Custom overview fills its panel (responsive); the captured pipeline figures
+  // render at their native pixel size and scroll — so they are NOT responsive.
   const CONF = {responsive:true, displaylogo:false,
     modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
+  const CONF_FIXED = Object.assign({}, CONF, {responsive:false});
   const state = {geo:GEOS.includes("DE")?"DE":GEOS[0], year:YEARS[YEARS.length-1], grid:"grid"};
 
   document.getElementById("sd-co2f").textContent = CO2F.toFixed(2);
@@ -154,6 +161,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const proj = () => `${state.geo}-${state.year}-${state.grid}`;
   const gridHas = (geo,year,grid) => !!(synth[geo]?.[year]?.[grid]);
   const bucket = () => synth[state.geo]?.[state.year]?.[state.grid] || {};
+  const gasPrice = () => GAS[state.geo]?.[state.year]?.[state.grid];
+  const mixIsFossil = rec => rec && rec.h2_share!=null && rec.h2_share < H2MIN;
 
   function renderMeta(){
     let n=0; for(const g in synth) for(const y in synth[g]) for(const gr in synth[g][y]) n+=Object.keys(synth[g][y][gr]).length;
@@ -176,9 +185,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     else out.push(card("","Clean route","—","","no solved scenarios here"));
 
     if(mix){
-      const sh = mix.h2_share!=null ? Math.round(mix.h2_share*100) : null;
-      out.push(card("is-mix","Transitional · H₂/gas blend", mix.lcos, "€/t",
-        (sh!=null?`${sh}% iron from H₂ · `:"")+co2Int(mix).toFixed(2)+" tCO₂/t"));
+      const sh = mix.h2_share!=null ? Math.round(Math.max(0,mix.h2_share)*100) : null;
+      if(mixIsFossil(mix)){
+        out.push(card("is-fossil","MIX blend · H₂ rejected", mix.lcos, "€/t",
+          `optimiser chose ~0% H₂ — economically NG-DRI · ${co2Int(mix).toFixed(2)} tCO₂/t`));
+      } else {
+        out.push(card("is-mix","Transitional · H₂/gas blend", mix.lcos, "€/t",
+          (sh!=null?`${sh}% iron from H₂ · `:"")+co2Int(mix).toFixed(2)+" tCO₂/t"));
+      }
     }
     if(ng){
       out.push(card("is-fossil","Fossil benchmark · NG-DRI", ng.lcos, "€/t", co2Int(ng).toFixed(2)+" tCO₂ / t steel"));
@@ -235,9 +249,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const entry=figs[proj()];
     if(!entry || !entry[key]){ el.innerHTML='<div class="sd-empty">No pipeline figure for this selection.</div>'; return; }
     const f=entry[key];
-    const layout=Object.assign({}, f.layout, {template:FCA, autosize:true});
-    delete layout.width;
-    Plotly.react(el, f.data, layout, CONF);
+    const layout=Object.assign({}, f.layout, {template:FCA});
+    // Mount Plotly in an inner div sized to the figure's native pixel width; the
+    // .sd-plot wrapper stays 100%-wide and scrolls horizontally — so the chart
+    // renders at its designed size (no squish/collisions) without being clipped.
+    let inner = el.querySelector(".sd-plotinner");
+    if(!inner){ el.innerHTML=""; inner=document.createElement("div"); inner.className="sd-plotinner"; el.appendChild(inner); }
+    inner.style.width = (layout.width || 960) + "px";
+    Plotly.react(inner, f.data, layout, CONF_FIXED);
   }
 
   function renderDetail(){
@@ -250,23 +269,31 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const b = bucket();
     const rows = ROUTE_ORDER.map(r=>({r,rec:b[r]})).filter(x=>x.rec)
                             .sort((a,c)=>a.rec.lcos-c.rec.lcos);
-    document.getElementById("sd-tbl-sub").textContent =
-      `${GN[state.geo]} · ${state.year} · ${state.grid==="grid"?"grid-connected":"islanded"} · cheapest siting per route`;
+    const gp = gasPrice();
+    document.getElementById("sd-tbl-sub").innerHTML =
+      `${GN[state.geo]} · ${state.year} · ${state.grid==="grid"?"grid-connected":"islanded"} · cheapest siting per route`
+      + (gp!=null ? ` · <b>fossil &amp; MIX routes at natural gas €${gp}/MWh</b>` : "");
     const el = document.getElementById("sd-table");
     if(!rows.length){ el.innerHTML='<div class="sd-empty">No solved scenarios here.</div>'; return; }
     const num = (v,d)=> v==null ? '<span class="na">—</span>' : v.toFixed(d);
     const body = rows.map(({r,rec},i)=>{
       const co2 = co2Int(rec);
+      const share = rec.h2_share==null ? '<span class="na">—</span>'
+                    : Math.round(Math.max(0,rec.h2_share)*100)+'%';
+      const flag = (r==="mix-dri-eaf" && mixIsFossil(rec))
+                   ? ' <span class="tag">≈ NG-DRI · H₂ rejected</span>' : '';
       return `<tr class="${i===0?"best":""}">
-        <td class="rt"><span class="sw" style="background:${RCOL[r]}"></span>${RLAB[r]}</td>
+        <td class="rt"><span class="sw" style="background:${RCOL[r]}"></span>${RLAB[r]}${flag}</td>
         <td>${num(rec.lcos,0)}</td>
         <td>${num(rec.lcoe,0)}</td>
         <td>${num(rec.lcoh,0)}</td>
+        <td>${r.includes("dri")?share:'<span class="na">—</span>'}</td>
         <td>${co2>0?co2.toFixed(2):'<span class="na">0.00</span>'}</td></tr>`;
     }).join("");
     el.innerHTML = `<table class="sd-tbl"><thead><tr>
         <th>Route</th><th>LCOS<span>€/t steel</span></th><th>LCOE<span>€/MWh</span></th>
-        <th>LCOH<span>€/MWh LHV</span></th><th>CO₂<span>t/t steel</span></th>
+        <th>LCOH<span>€/MWh LHV</span></th><th>H₂ share<span>iron from H₂</span></th>
+        <th>CO₂<span>t/t steel</span></th>
       </tr></thead><tbody>${body}</tbody></table>`;
   }
 
