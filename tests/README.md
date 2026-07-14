@@ -1,5 +1,24 @@
 # Tests
 
+## Grid pipeline output completeness
+
+`test_window_completeness.py` pins the behaviour of `retrieve_entsoe`'s
+`_assert_window_complete` guard, which runs on every pipeline output and fails
+loudly when the produced window has holes. Truncated raw-cache months (a fetch
+that stopped mid-month) and partial downloads are otherwise silent — the slice
+just has fewer rows, and the hole only surfaces far downstream as NaN after a
+reindex (e.g. a solve aligning prices to a full capacity-factor year). The
+energy-charts gate below does **not** catch this: it masks NaN before comparing
+and tolerates hundreds of missing hours.
+
+- `dayahead` is resampled to a clean hourly grid, so every hour of the window
+  must be present and non-null.
+- `full` spans a mixed 15-min/hourly resolution (ENTSO-E switched DE_LU
+  day-ahead to 15-min in Oct 2025), so instead of a fixed grid the guard flags
+  any gap larger than the ffill tolerance — which only occurs on truncation.
+
+These tests use synthetic frames, so they need no raw cache and run anywhere.
+
 ## Grid pipeline vs. energy-charts.info (issue #20)
 
 `test_entsoe_vs_energycharts.py` cross-checks the ENTSO-E grid pipeline against
