@@ -123,6 +123,7 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         "process": link_capital(PROCESS_LINKS),
         "ore_consumables": link_marginal(PROCESS_LINKS),
         "iron_store": store_capital("iron_store"),
+        "steel_store": store_capital("steel_store"),
         "transmission": link_capital(hvdc),
     }
 
@@ -215,6 +216,15 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         if "steel_load" in n.loads.index:
             steel_t_per_h = float(n.loads.at["steel_load", "p_set"])
             summary["iron_store_hours_steel"] = (
+                store_t / steel_t_per_h if steel_t_per_h else float("nan")
+            )
+
+    if "steel_store" in n.stores.index:
+        store_t = n.stores.at["steel_store", "e_nom_opt"]
+        summary["steel_store_kt"] = store_t / 1e3
+        if "steel_load" in n.loads.index:
+            steel_t_per_h = float(n.loads.at["steel_load", "p_set"])
+            summary["steel_store_hours_steel"] = (
                 store_t / steel_t_per_h if steel_t_per_h else float("nan")
             )
 

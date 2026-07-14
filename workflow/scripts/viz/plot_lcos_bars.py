@@ -23,6 +23,7 @@ from common._logging import configure_logging
 from scripts.viz.style import (
     apply_header,
     blue_black,
+    blue_gray,
     dark_gray,
     fca_blue,
     fca_template,
@@ -49,6 +50,7 @@ COST_GROUPS = [
     ("ore_consumables", "Ore & consumables",            sand_yellow),
     ("gas",             "Natural gas (fuel + CO₂)",     very_dark_gray),
     ("iron_store",      "Iron stockpile",               gray),
+    ("steel_store",     "Steel inventory",              blue_gray),
     ("electrolyser",    "Electrolyser",                 green),
     ("h2_buffer",       "H₂ buffer",                    light_blue),
     ("res",             "Renewables (capex+opex)",      fca_blue),

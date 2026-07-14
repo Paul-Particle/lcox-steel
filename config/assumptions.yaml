@@ -158,6 +158,19 @@ iron_store:
   capex_per_t_eur: 20
   lifetime_years: 25
 
+steel_store:
+  # Finished-steel inventory buffer on the steel bus. The supply-side way to
+  # represent periodic (not hour-by-hour) demand: production flexes to build
+  # stock while the flat steel load draws it down, so the plant decouples
+  # hourly production from steady delivery by carrying inventory — the demand
+  # itself stays fixed. Capped to a realistic inventory horizon (`max_weeks`)
+  # so the flexibility can't degenerate into whole-year arbitrage. Covered
+  # yard + handling for solid product (slabs/billets), a bit above the iron
+  # stockpile; the cap, not the cost, is the binding limit.
+  capex_per_t_eur: 30
+  lifetime_years: 25
+  max_weeks: 8   # inventory cap = 8 weeks of flat production
+
 grid:
   # Grid connection charges for the grid_import generator: the connection is
   # sized by the optimiser (extendable) and pays annuitised connection capex

@@ -73,6 +73,7 @@ PROCESS_BARS = [
 STORAGE_BARS = [
     ("h2_buffer_hours_dri",   "H₂ buffer (h of avg DRI H₂ draw)", light_blue),
     ("iron_store_hours_steel", "Iron store (h of steel output)",  gray),
+    ("steel_store_hours_steel", "Steel inventory (h of steel output)", blue_gray),
 ]
 
 
@@ -122,6 +123,7 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
             row[f"{link}_t_per_h"] = r.get(f"{link}_t_per_h_opt", 0)
         row["h2_buffer_hours_dri"]    = r.get("h2_buffer_hours_dri", 0)
         row["iron_store_hours_steel"] = r.get("iron_store_hours_steel", 0)
+        row["steel_store_hours_steel"] = r.get("steel_store_hours_steel", 0)
         rows.append(row)
     return pd.DataFrame(rows).set_index("label")
 

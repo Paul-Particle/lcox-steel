@@ -151,6 +151,7 @@ def build_network(
     else:
         steel_t_per_h = plant["steel_mt_per_year"] * 1e6 / HOURS_PER_YEAR
         _add_steel_load(n, steel_t_per_h)
+        _add_steel_store(n, assumptions["steel_store"], wacc, steel_t_per_h)
         if route in ("h2_dri_eaf", "mix_dri_eaf"):
             _add_dri_link(n, plant, assumptions["dri"], wacc, elec_bus)
         if route in _GAS_ROUTES:
@@ -550,6 +551,33 @@ def _add_iron_store(n: pypsa.Network, store_cfg: dict, wacc: float) -> None:
         bus="iron",
         carrier="iron",
         e_nom_extendable=True,
+        e_cyclic=True,
+        capital_cost=cap_cost,
+        marginal_cost=0.0,
+    )
+
+
+def _add_steel_store(
+    n: pypsa.Network, store_cfg: dict, wacc: float, steel_t_per_h: float
+) -> None:
+    """Add the extendable, cyclic finished-steel inventory buffer (t) on the steel bus.
+
+    The supply-side representation of periodic demand: production flexes to fill
+    inventory while the flat steel load draws it down, so the plant decouples
+    hourly production from steady delivery by carrying stock — demand itself
+    stays fixed. `max_weeks` caps the buffer at a realistic inventory horizon so
+    the flexibility can't degenerate into whole-year arbitrage; the annuitised
+    per-tonne capex keeps the built size unique and reportable.
+    """
+    cap_cost = annuity_factor(wacc, store_cfg["lifetime_years"]) * store_cfg["capex_per_t_eur"]
+    e_nom_max = steel_t_per_h * store_cfg["max_weeks"] * 7 * 24
+    n.add(
+        "Store",
+        "steel_store",
+        bus="steel",
+        carrier="steel",
+        e_nom_extendable=True,
+        e_nom_max=e_nom_max,
         e_cyclic=True,
         capital_cost=cap_cost,
         marginal_cost=0.0,
