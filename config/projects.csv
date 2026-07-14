@@ -14,9 +14,9 @@ VIC-2025-test,grid-only,grid,dayahead,nem,VIC1,20250101,20251231
 VIC-2025-solar-ew,baseline,solar,tilt-mix-n7,res_cf,aus,20250101,20251231
 VIC-2025-solar-ew,high-el-cost,solar,tilt-mix-n7,res_cf,aus,20250101,20251231
 VIC-2025-solar-ew,high-all-cost,solar,tilt-mix-n7,res_cf,aus,20250101,20251231
-DE-2023-cf-variants,bestsite,wind-onshore,bestsite-p95,res_cf,de,20230101,20231231
-DE-2023-cf-variants,bestsite,wind-offshore,bestsite-p95,res_cf,de,20230101,20231231
-DE-2023-cf-variants,bestsite,solar,bestsite-p95,res_cf,de,20230101,20231231
+DE-2023-cf-variants,bestsite-wind-onshore,wind-onshore,bestsite-p95,res_cf,de,20230101,20231231
+DE-2023-cf-variants,bestsite-wind-offshore,wind-offshore,bestsite-p95,res_cf,de,20230101,20231231
+DE-2023-cf-variants,bestsite-solar,solar,bestsite-p95,res_cf,de,20230101,20231231
 DE-2023-multisite,sweep,solar,multi-n3,res_cf,de,20230101,20231231
 DE-2023-multisite,sweep,wind-onshore,multi-n3,res_cf,de,20230101,20231231
 DE-2023-anchor-colo,anchor-wind-onshore,wind-onshore,anchor-colo-n3,res_cf,de,20230101,20231231
