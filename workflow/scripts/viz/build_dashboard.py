@@ -92,10 +92,20 @@ def capture_figures(projects):
                 continue
             d = fig.to_dict()
             d.get("layout", {}).pop("template", None)  # template shared globally, not per-fig
-            # Keep the figure's designed pixel width/height. The dashboard renders it
-            # at native size (collision-free, as in the pipeline PNGs) and scales the
-            # whole figure down uniformly to fit the panel — so nothing overlaps and
-            # there is no horizontal scroll.
+            # Let each figure fill its panel width responsively (drop the designed
+            # pixel width, turn on autosize). At the narrower web width the 45°
+            # scenario labels would clip/collide, so give every x-axis automargin
+            # (grow the margin to fit them) and a smaller tick font (so adjacent
+            # labels don't touch). The dot/monogram are already off (style.py).
+            lay = d["layout"]
+            lay.pop("width", None)
+            lay["autosize"] = True
+            for axis_key in [k for k in lay if re.match(r"xaxis\d*$", k)]:
+                axis = lay[axis_key]
+                axis["automargin"] = True
+                tickfont = dict(axis.get("tickfont") or {})
+                tickfont["size"] = 11
+                axis["tickfont"] = tickfont
             entry[key] = d
         if entry:
             figs[project] = entry
