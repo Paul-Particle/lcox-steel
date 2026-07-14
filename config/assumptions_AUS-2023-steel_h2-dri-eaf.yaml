@@ -1,4 +1,0 @@
-# Grid-connected AUS counterpart to DE-2023-steel (same grid fees — the
-# German-flavoured eyeballs — so only CF profiles and market prices differ);
-# route switch only, all process assumptions from the base file.
-route: h2_dri_eaf

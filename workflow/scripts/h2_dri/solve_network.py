@@ -7,6 +7,7 @@ isolation). This file is the IO + orchestration shell driven by the
 
 import json
 import logging
+import os
 from pathlib import Path
 
 # pandas 3.0 defaults to ArrowStringArray for strings; xarray (used by PyPSA
@@ -165,7 +166,26 @@ def main() -> None:
         assumptions, cf_timeseries, price_series, sites=sites, demand_site=demand_site
     )
     log.info(f"optimising with HiGHS (snapshots={len(n.snapshots)})")
-    n.optimize(solver_name="highs")
+    # HiGHS parallelises across cores by default (not governed by OMP_NUM_THREADS).
+    # When running many independent solves in parallel (batch runs), pin each to a
+    # single thread via HIGHS_THREADS=1 so N solves use N cores instead of each
+    # grabbing all of them and thrashing. Unset => HiGHS default (all cores), which
+    # is best for a single interactive solve.
+    solver_options = {}
+    highs_threads = os.environ.get("HIGHS_THREADS")
+    if highs_threads:
+        solver_options["threads"] = int(highs_threads)
+    # HIGHS_SOLVER selects the algorithm: "ipm" (interior-point / barrier) converges
+    # in a small, degeneracy-insensitive iteration count and is far faster than the
+    # default simplex on the large degenerate grid+p95 LPs. We only read off the
+    # objective and capacities (no basis needed), so crossover to a vertex is skipped
+    # unless HIGHS_CROSSOVER=on. Unset => HiGHS default (simplex), best for easy LPs.
+    highs_solver = os.environ.get("HIGHS_SOLVER")
+    if highs_solver:
+        solver_options["solver"] = highs_solver
+        if highs_solver == "ipm":
+            solver_options["run_crossover"] = os.environ.get("HIGHS_CROSSOVER", "off")
+    n.optimize(solver_name="highs", solver_options=solver_options)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     n.export_to_netcdf(out_path)

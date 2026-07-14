@@ -1,5 +1,0 @@
-# Fossil benchmark: NG-DRI + EAF on grid electricity only (no RES rows in
-# projects.csv for this scenario).
-route: ng_dri_eaf
-natural_gas:
-  price_eur_per_mwh: 25   # AUS east-coast ~11 AUD/GJ at 0.61 FX, order of magnitude

@@ -163,6 +163,29 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     if "electrolyser" in n.links.index:
         summary["h2_produced_kt"] = _h2_produced_kg(n) / 1e6
 
+    # Levelised cost of the underlying energy carriers, €/MWh, so LCOS can be read
+    # against the electricity and hydrogen that drive it.
+    #   LCOE = electricity-system cost (renewables + battery + grid + transmission)
+    #          per MWh of electricity generated (renewable dispatch + grid import).
+    #   LCOH = (electrolyser capex/opex + H2 buffer + the electrolyser's electricity
+    #          valued at LCOE) per MWh of H2 produced, LHV.
+    annual_scale = 8760.0 / len(n.snapshots)
+    elec_gens = [g for g in n.generators.index if g != "gas_supply"]
+    elec_mwh = (float(n.generators_t.p[elec_gens].sum().sum()) * annual_scale) if elec_gens else 0.0
+    elec_cost = sum(breakdown.get(k, 0.0) for k in ("res", "battery", "grid", "transmission"))
+    lcoe = elec_cost / elec_mwh if elec_mwh > 0 and elec_cost > 0 else float("nan")
+    if lcoe == lcoe:  # not NaN
+        summary["lcoe_eur_per_mwh"] = lcoe
+
+    if "electrolyser" in n.links.index and "steel_load" in n.loads.index:
+        el_mwh = float(n.links_t.p0["electrolyser"].sum()) * annual_scale
+        h2_mwh = _h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
+        if h2_mwh > 0:
+            elec_for_h2 = el_mwh * (lcoe if lcoe == lcoe else 0.0)
+            lcoh = (breakdown.get("electrolyser", 0.0) + breakdown.get("h2_buffer", 0.0)
+                    + elec_for_h2) / h2_mwh
+            summary["lcoh_eur_per_mwh_lhv"] = lcoh
+
     # Steel-route process links: capacity in output units (t/h of iron or
     # steel — p_nom is input-side, so scale by the link efficiency) plus
     # utilisation, which shows how far each step actually load-follows.
