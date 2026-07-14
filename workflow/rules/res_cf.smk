@@ -131,30 +131,6 @@ rule build_bestsite_p95:
         "../scripts/res_cf/07_make_bestsite_cf_timeseries.py"
 
 
-rule build_anchored_res_mix_cfs:
-    input:
-        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
-        regions="resources/shapes/{cf_area}_geo.parquet",
-        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
-    output:
-        "resources/res_cf/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.parquet",
-    wildcard_constraints:
-        variant=r"anchored-w\d+-s\d+",
-    log:
-        "logs/build_anchored_res_mix_cfs/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.log",
-    params:
-        wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
-        wind_offshore_turbine=lookup(dpath="res_cf/wind_offshore_turbine", within=config),
-        pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
-        pv_orientation=lookup(dpath="res_cf/pv_orientation", within=config),
-        wind_cf=lookup(dpath="res_cf/wind_cf", within=config),
-        spatial_matching_res_mix=lookup(
-            dpath="res_cf/spatial_matching_res_mix", within=config
-        ),
-    script:
-        "../scripts/res_cf/07_make_bestsite_cf_timeseries.py"
-
-
 rule build_anchor_colocated_cfs:
     input:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
