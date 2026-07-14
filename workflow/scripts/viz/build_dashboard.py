@@ -92,35 +92,14 @@ def capture_figures(projects):
                 continue
             d = fig.to_dict()
             d.get("layout", {}).pop("template", None)  # template shared globally, not per-fig
-            # Keep the figure's designed pixel width/height. Rendering it at native
-            # size (and letting the panel scroll horizontally) preserves the exact
-            # pipeline geometry — the header dot/logo, margins and 45° labels are all
-            # pixel-placed for that width, so shrinking to the panel collides them.
-            _tune_layout(d, key)
+            # Keep the figure's designed pixel width/height. The dashboard renders it
+            # at native size (collision-free, as in the pipeline PNGs) and scales the
+            # whole figure down uniformly to fit the panel — so nothing overlaps and
+            # there is no horizontal scroll.
             entry[key] = d
         if entry:
             figs[project] = entry
     return figs, template
-
-
-def _tune_layout(d, key):
-    """Dashboard-display tweaks on the captured pipeline figure (no pipeline change)."""
-    lay = d["layout"]
-    if key == "lcos":
-        # 45° scenario labels get clipped for long names — let plotly grow the margin.
-        lay.setdefault("xaxis", {})["automargin"] = True
-    elif key == "capacity":
-        # Move the shared 45° scenario labels from the bottom to the top of panel 1,
-        # so they read right where the panels start. Hide them on the bottom axis.
-        xkeys = [k for k in lay if re.match(r"xaxis\d*$", k)]
-        xnum = lambda k: int(k[5:]) if k[5:] else 1
-        bottom = max(xkeys, key=xnum)
-        lay.setdefault("xaxis", {}).update(
-            side="top", showticklabels=True, tickangle=-45, automargin=True)
-        if bottom != "xaxis":
-            lay.setdefault(bottom, {})["showticklabels"] = False
-        m = lay.setdefault("margin", {})
-        m["t"] = max(m.get("t", 0), 200)
 
 
 def _num(v):

@@ -69,7 +69,8 @@
   .sd-panel-h p{font-size:12.5px;color:var(--muted);margin:4px 0 0;}
   /* Pipeline figures are light "prints" — mount them on a white surface in both themes. */
   .sd-print{background:var(--print);border-top:1px solid var(--hair);}
-  .sd-plot{width:100%;overflow-x:auto;}
+  .sd-plot{width:100%;overflow:hidden;}
+  .sd-plotinner{transform-origin:top left;}
   .sd-grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
   @media (max-width:900px){.sd-grid2{grid-template-columns:1fr;}}
   .sd-empty{padding:44px 18px;text-align:center;color:var(--faint);font-size:13px;}
@@ -247,17 +248,27 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const el=document.getElementById(id);
     document.getElementById(subId).textContent=subText;
     const entry=figs[proj()];
-    if(!entry || !entry[key]){ el.innerHTML='<div class="sd-empty">No pipeline figure for this selection.</div>'; return; }
+    if(!entry || !entry[key]){ el.style.height=""; el.innerHTML='<div class="sd-empty">No pipeline figure for this selection.</div>'; return; }
     const f=entry[key];
     const layout=Object.assign({}, f.layout, {template:FCA});
-    // Mount Plotly in an inner div sized to the figure's native pixel width; the
-    // .sd-plot wrapper stays 100%-wide and scrolls horizontally — so the chart
-    // renders at its designed size (no squish/collisions) without being clipped.
+    // Render at native pixel size (collision-free) in an inner div, then scale the
+    // whole figure uniformly to the panel width — no distortion, no overlaps, no scroll.
     let inner = el.querySelector(".sd-plotinner");
     if(!inner){ el.innerHTML=""; inner=document.createElement("div"); inner.className="sd-plotinner"; el.appendChild(inner); }
-    inner.style.width = (layout.width || 960) + "px";
-    Plotly.react(inner, f.data, layout, CONF_FIXED);
+    const w=layout.width||960, h=layout.height||540;
+    inner.style.width=w+"px"; inner.style.height=h+"px";
+    inner.dataset.w=w; inner.dataset.h=h;
+    Plotly.react(inner, f.data, layout, CONF_FIXED).then(()=>fitPipe(el, inner));
   }
+  function fitPipe(el, inner){
+    const w=+inner.dataset.w, h=+inner.dataset.h;
+    const s=Math.min(1, (el.clientWidth||w)/w);
+    inner.style.transform = "scale("+s+")";
+    el.style.height = (h*s)+"px";   // reserve the scaled height (transform doesn't affect layout)
+  }
+  let _fitT; window.addEventListener("resize", ()=>{ clearTimeout(_fitT); _fitT=setTimeout(()=>{
+    ["sd-lcos","sd-capacity"].forEach(id=>{ const el=document.getElementById(id); const inner=el&&el.querySelector(".sd-plotinner"); if(inner) fitPipe(el, inner); });
+  }, 150); });
 
   function renderDetail(){
     const label=`${GN[state.geo]} · ${state.year} · ${state.grid==="grid"?"grid":"islanded"}`;
