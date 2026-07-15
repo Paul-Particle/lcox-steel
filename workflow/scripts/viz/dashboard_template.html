@@ -50,6 +50,12 @@
   .sd-pill[aria-pressed="true"]{background:var(--accent);color:#fff;}
   .sd-pill:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;}
   .sd-pill:disabled{opacity:.32;cursor:not-allowed;}
+  .sd-select{font-family:var(--tw);font-size:13px;font-weight:600;color:var(--ink);
+    background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:8px 32px 8px 13px;
+    cursor:pointer;appearance:none;-webkit-appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23808C97' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 11px center;}
+  .sd-select:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;}
 
   .sd-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:24px;}
   .sd-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;
@@ -67,7 +73,7 @@
   .sd-panel-h{padding:16px 18px 6px;}
   .sd-panel-h h2{font-size:15px;font-weight:700;margin:0;letter-spacing:-.01em;}
   .sd-panel-h p{font-size:12.5px;color:var(--muted);margin:4px 0 0;}
-  /* Pipeline figures are light "prints" — mount them on a white surface in both themes. */
+  /* Client-rendered charts are light "prints" — mount them on a white surface in both themes. */
   .sd-print{background:var(--print);border-top:1px solid var(--hair);}
   .sd-plot{width:100%;overflow-x:auto;}
   .sd-grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
@@ -81,6 +87,7 @@
   .sd-tbl th span{display:block;font-weight:400;opacity:.65;letter-spacing:0;margin-top:2px;}
   .sd-tbl th:first-child,.sd-tbl td.rt{text-align:left;}
   .sd-tbl td.rt{font-weight:600;}
+  .sd-tbl td.cf{text-align:left;color:var(--muted);font-weight:600;}
   .sd-tbl tbody tr:hover{background:var(--panel-2);}
   .sd-tbl tbody tr:last-child td{border-bottom:0;}
   .sd-tbl .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:9px;vertical-align:middle;}
@@ -101,7 +108,7 @@
     <div>
       <div class="sd-brand"><span class="sd-dot"></span><span>FC Architects · Steel decarbonisation</span></div>
       <h1 class="sd-title">Green Steel Route Economics</h1>
-      <p class="sd-sub">Levelised cost of steel across production routes, geographies and weather years — a capacity-expansion optimisation over hourly wind, solar and grid-price data. Figures are the project's own pipeline charts.</p>
+      <p class="sd-sub">Levelised cost of steel across production routes, geographies and weather years — a capacity-expansion optimisation over hourly wind, solar and grid-price data. Use the controls to switch geography, year, grid connection, capacity-factor mode and sensitivity variant.</p>
     </div>
     <div class="sd-meta" id="sd-meta"></div>
   </header>
@@ -110,6 +117,8 @@
     <div class="sd-ctl"><label>Geography</label><div class="sd-pills" id="sd-geo"></div></div>
     <div class="sd-ctl"><label>Weather year</label><div class="sd-pills" id="sd-year"></div></div>
     <div class="sd-ctl"><label>Grid connection</label><div class="sd-pills" id="sd-grid"></div></div>
+    <div class="sd-ctl"><label>Capacity factor</label><div class="sd-pills" id="sd-cf"></div></div>
+    <div class="sd-ctl"><label>Sensitivity</label><select class="sd-select" id="sd-variant" aria-label="Sensitivity variant"></select></div>
   </div>
 
   <section class="sd-cards" id="sd-cards"></section>
@@ -135,8 +144,8 @@
   </div>
 
   <footer class="sd-foot">
-    <p><b>Reading this.</b> LCOS is the full levelised cost per tonne of liquid steel: annualised capex plus operating cost of the whole system — renewables, storage, grid, process plant, ore and consumables — divided by annual output. The <em>cost breakdown</em> and <em>built capacity</em> panels are the project's exact pipeline figures (all route/siting scenarios). <b>Clean</b> means the zero-fossil routes (H2-DRI, MOE, EW); <b>clean premium</b> is the cheapest of those minus the fossil <code>NG-DRI-EAF</code> benchmark, and <b>break-even CO₂</b> is the carbon price that closes it, at <span id="sd-co2f"></span> tCO₂/MWh of natural gas. <b>LCOE</b> is the electricity-system cost (renewables + battery + grid + transmission) per MWh generated; <b>LCOH</b> is the hydrogen cost (electrolyser + buffer + its electricity at LCOE) per MWh LHV.</p>
-    <p style="margin-top:8px"><b>Routes.</b> <code>H2-DRI-EAF</code> hydrogen DRI + electric arc furnace · <code>MOE</code> molten-oxide electrolysis · <code>EW</code> aqueous electrowinning — these three are zero-fossil. <code>MIX-DRI-EAF</code> is a <em>transitional</em> route: two DRI shafts (H₂ and gas) feed one iron bus and the optimiser picks the blend — the <em>H₂ share</em> column shows how much iron it made from hydrogen. Where that share falls to ~zero (typically on grid power, where gas undercuts H₂) the route is flagged <em>H₂ rejected</em> and is economically identical to the fossil benchmark. <code>NG-DRI-EAF</code> is natural-gas DRI on grid power (the fossil benchmark); the natural-gas price assumed for these routes is shown above the table. Cards compare the best siting (<em>country-average</em> vs <em>best-site P95</em>) per route. Values are near-optimal within input uncertainty — read rankings and ranges, not the last digit.</p>
+    <p><b>Reading this.</b> LCOS is the full levelised cost per tonne of liquid steel: annualised capex plus operating cost of the whole system — renewables, storage, grid, process plant, ore and consumables — divided by annual output. The <em>cost breakdown</em> and <em>built capacity</em> panels are rendered from the model's per-scenario results; the <em>Sensitivity</em> and <em>Capacity-factor</em> controls change what they show. <b>Clean</b> means the zero-fossil routes (H2-DRI, MOE, EW); <b>clean premium</b> is the cheapest of those minus the fossil <code>NG-DRI-EAF</code> benchmark, and <b>break-even CO₂</b> is the carbon price that closes it, at <span id="sd-co2f"></span> tCO₂/MWh of natural gas. <b>LCOE</b> is the electricity-system cost (renewables + battery + grid + transmission) per MWh generated; <b>LCOH</b> is the hydrogen cost (electrolyser + buffer + its electricity at LCOE) per MWh LHV.</p>
+    <p style="margin-top:8px"><b>Routes.</b> <code>H2-DRI-EAF</code> hydrogen DRI + electric arc furnace · <code>MOE</code> molten-oxide electrolysis · <code>EW</code> aqueous electrowinning — these three are zero-fossil. <code>MIX-DRI-EAF</code> is a <em>transitional</em> route: two DRI shafts (H₂ and gas) feed one iron bus and the optimiser picks the blend — the <em>H₂ share</em> column shows how much iron it made from hydrogen. Where that share falls to ~zero (typically on grid power, where gas undercuts H₂) the route is flagged <em>H₂ rejected</em> and is economically identical to the fossil benchmark. <code>NG-DRI-EAF</code> is natural-gas DRI on grid power (the fossil benchmark); the natural-gas price assumed for these routes is shown above the table. The <em>Capacity-factor</em> control switches between <em>country-average</em> and <em>best-site P95</em> siting (or compares them); the <em>Sensitivity</em> control swaps a route to a variant assumption — MOE 70% turndown, or salt-cavern H₂ storage — leaving the other routes at baseline. Values are near-optimal within input uncertainty — read rankings and ranges, not the last digit.</p>
   </footer>
  </div>
 </div>
@@ -145,38 +154,64 @@
 <script>
 const PAYLOAD = /*PAYLOAD_JSON*/;
 (function(){
-  const {figs, template:FCA, synth, gas:GAS, geos:GEOS, years:YEARS, geo_names:GN,
-         clean_routes:CLEAN, route_label:RLAB, route_color:RCOL, co2_t_per_mwh:CO2F,
-         h2_min:H2MIN} = PAYLOAD;
-  const ROUTE_ORDER = ["h2-dri-eaf","moe","ew","mix-dri-eaf","ng-dri-eaf"];
+  const {cases:CASES, synth:SYNTH, gas:GAS, template:FCA, geos:GEOS, years:YEARS,
+    geo_names:GN, clean_routes:CLEAN, route_order:ROUTE_ORDER, route_label:RLAB,
+    route_color:RCOL, co2_t_per_mwh:CO2F, h2_min:H2MIN, cost_groups:COST_GROUPS,
+    cap_panels:CAP_PANELS, variant_routes:VARIANT_ROUTES, variant_label:VLAB} = PAYLOAD;
+
   const CONF = {responsive:true, displaylogo:false,
     modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
-  const state = {geo:GEOS.includes("DE")?"DE":GEOS[0], year:YEARS[YEARS.length-1], grid:"grid"};
+  const CFLABEL = {avg:"Average CF", p95:"Best-site P95", compare:"Compare CF"};
+  const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
+  const state = {geo:GEOS.includes("DE")?"DE":GEOS[0], year:YEARS[YEARS.length-1],
+                 grid:"grid", cf:"p95", variant:"base"};
 
   document.getElementById("sd-co2f").textContent = CO2F.toFixed(2);
 
   const proj = () => `${state.geo}-${state.year}-${state.grid}`;
-  const gridHas = (geo,year,grid) => !!(synth[geo]?.[year]?.[grid]);
-  const bucket = () => synth[state.geo]?.[state.year]?.[state.grid] || {};
+  const gridHas = (geo,year,grid) => !!(SYNTH[geo]?.[year]?.[grid]);
   const gasPrice = () => GAS[state.geo]?.[state.year]?.[state.grid];
   const mixIsFossil = rec => rec && rec.h2_share!=null && rec.h2_share < H2MIN;
+  const co2Int = rec => (rec.ng_gwh*1000*CO2F)/((rec.steel_mt||1)*1e6); // tCO₂ / t steel
+
+  // Which variant applies to a route under the current sensitivity (base otherwise).
+  function effVariant(route){
+    return (VARIANT_ROUTES[state.variant]||[]).includes(route) ? state.variant : "base";
+  }
+  // Record for (route, cf) in the current case+variant; falls back to base variant.
+  function recFor(route, cf){
+    const rc = CASES[proj()]?.[route]; if(!rc) return null;
+    const v = rc[effVariant(route)] || rc["base"]; if(!v) return null;
+    return v[route==="ng-dri-eaf" ? "na" : cf] || null;
+  }
+  const routesHere = () => ROUTE_ORDER.filter(r => CASES[proj()]?.[r]);
+  const cfKey = (route, cf) => route==="ng-dri-eaf" ? "na" : cf;      // ng has no CF
+  const cfsShown = () => state.cf==="compare" ? ["avg","p95"] : [state.cf];
+  const cfsForRow = route => route==="ng-dri-eaf" ? ["na"] : cfsShown();
+  // One "effective" record per route for the cards (compare → cheaper of avg/p95).
+  function bestRec(route){
+    if(route==="ng-dri-eaf") return recFor(route,"na");
+    if(state.cf!=="compare") return recFor(route,state.cf);
+    const a=recFor(route,"avg"), p=recFor(route,"p95");
+    if(a&&p) return a.lcos<=p.lcos?a:p; return a||p;
+  }
 
   function renderMeta(){
-    let n=0; for(const g in synth) for(const y in synth[g]) for(const gr in synth[g][y]) n+=Object.keys(synth[g][y][gr]).length;
+    let nrec=0;
+    for(const p in CASES) for(const r in CASES[p]) for(const v in CASES[p][r]) nrec+=Object.keys(CASES[p][r][v]).length;
     document.getElementById("sd-meta").innerHTML =
-      `${GEOS.length} geographies · ${YEARS.length} years<br>${Object.keys(figs).length} projects · ${n} scenarios<br>hourly · 8760 snapshots`;
+      `${GEOS.length} geographies · ${YEARS.length} years<br>${Object.keys(CASES).length} projects · ${nrec} scenarios<br>hourly · 8760 snapshots`;
   }
 
   const card = (cls,k,v,unit,d) =>
     `<div class="sd-card ${cls}"><p class="k">${k}</p>
      <div class="v">${typeof v==="number"?v.toFixed(0):v}<small> ${unit}</small></div><p class="d">${d}</p></div>`;
-  const co2Int = rec => (rec.ng_gwh*1000*CO2F)/((rec.steel_mt||1)*1e6); // tCO₂ / t steel
 
   function renderCards(){
-    const b = bucket(), out=[];
-    const cleans = CLEAN.map(r=>({r,rec:b[r]})).filter(x=>x.rec);
+    const out=[];
+    const cleans = CLEAN.map(r=>({r,rec:bestRec(r)})).filter(x=>x.rec);
     const best = cleans.length ? cleans.reduce((a,c)=>c.rec.lcos<a.rec.lcos?c:a) : null;
-    const mix = b["mix-dri-eaf"], ng = b["ng-dri-eaf"];
+    const mix = bestRec("mix-dri-eaf"), ng = bestRec("ng-dri-eaf");
 
     if(best) out.push(card("is-good","Cheapest clean route", best.rec.lcos, "€/t", RLAB[best.r]+" · zero fossil"));
     else out.push(card("","Clean route","—","","no solved scenarios here"));
@@ -205,87 +240,140 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         `${cleans.length} zero-fossil routes · islanded`));
     }
 
-    // Energy-carrier costs underlying the LCOS.
     if(best && best.rec.lcoe!=null)
       out.push(card("","Electricity · LCOE", best.rec.lcoe, "€/MWh", "cheapest clean route"));
     let lcoh=null, lcohR=null;
     for(const r of ["h2-dri-eaf","mix-dri-eaf"]){
-      const rec=b[r]; if(rec && rec.lcoh!=null && (lcoh==null || rec.lcoh<lcoh)){ lcoh=rec.lcoh; lcohR=r; }
+      const rec=bestRec(r); if(rec && rec.lcoh!=null && (lcoh==null || rec.lcoh<lcoh)){ lcoh=rec.lcoh; lcohR=r; }
     }
     if(lcoh!=null) out.push(card("","Hydrogen · LCOH", lcoh, "€/MWh", "LHV · "+RLAB[lcohR]));
 
     document.getElementById("sd-cards").innerHTML=out.join("");
   }
 
-  function overviewColors(){ // resolve current chrome colors for the light print surface
-    return {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB"};
+  function subLabel(){
+    const g=`${GN[state.geo]} · ${state.year} · ${state.grid==="grid"?"grid-connected":"islanded"}`;
+    const cf = state.cf==="compare" ? "avg vs best-site P95" : CFLABEL[state.cf];
+    const v = state.variant==="base" ? "baseline" : VLAB[state.variant];
+    return `${g} · ${cf} · ${v}`;
   }
+
+  // Shared "print" layout base — white surface, FCA ink, in both page themes.
+  function printBase(extra){
+    return Object.assign({template:FCA, autosize:true, paper_bgcolor:PRINT.paper, plot_bgcolor:PRINT.paper,
+      font:{family:"'Titillium Web',sans-serif", color:PRINT.ink, size:12}}, extra);
+  }
+  const axis = extra => Object.assign({gridcolor:PRINT.grid, linecolor:PRINT.border,
+    tickfont:{color:PRINT.muted}, zeroline:false}, extra);
+
   function renderOverview(){
-    const t=overviewColors();
     document.getElementById("sd-ov-sub").textContent =
-      `€/t · ${state.year} · ${state.grid==="grid"?"grid-connected":"islanded (no grid)"} · cheapest siting per route`;
+      `€/t · ${state.year} · ${state.grid==="grid"?"grid-connected":"islanded (no grid)"} · baseline · cheapest siting per route`;
     const traces = ROUTE_ORDER.map(r=>({
       type:"bar", name:RLAB[r], marker:{color:RCOL[r]},
       x:GEOS.map(g=>GN[g]||g),
-      y:GEOS.map(g=>{const rec=synth[g]?.[state.year]?.[state.grid]?.[r];return rec?rec.lcos:null;}),
+      y:GEOS.map(g=>{const rec=SYNTH[g]?.[state.year]?.[state.grid]?.[r];return rec?rec.lcos:null;}),
       hovertemplate:"%{x} · "+RLAB[r]+"<br>%{y:.0f} €/t<extra></extra>"
     })).filter(tr=>tr.y.some(v=>v!=null));
-    const lay={template:FCA, barmode:"group", height:360, autosize:true,
-      paper_bgcolor:"#FFFFFF", plot_bgcolor:"#FFFFFF",
-      font:{family:"'Titillium Web',sans-serif",color:t.ink,size:12},
-      margin:{l:58,r:16,t:16,b:46}, bargap:.3, bargroupgap:.08,
-      legend:{orientation:"h",y:1.02,x:0,font:{size:11,color:t.muted}},
-      xaxis:{gridcolor:t.grid,linecolor:t.border,tickfont:{color:t.muted}},
-      yaxis:{title:{text:"LCOS  (€ / t steel)",font:{size:11,color:t.muted}},gridcolor:t.grid,linecolor:t.border,tickfont:{color:t.muted},rangemode:"tozero"}};
+    const lay=printBase({barmode:"group", height:360, margin:{l:58,r:16,t:16,b:46},
+      bargap:.3, bargroupgap:.08,
+      legend:{orientation:"h",y:1.02,x:0,font:{size:11,color:PRINT.muted}},
+      xaxis:axis({}),
+      yaxis:axis({title:{text:"LCOS  (€ / t steel)",font:{size:11,color:PRINT.muted}},rangemode:"tozero"})});
     Plotly.react("sd-overview", traces, lay, CONF);
   }
 
-  function renderPipeline(id, key, subId, subText){
-    const el=document.getElementById(id);
-    document.getElementById(subId).textContent=subText;
-    const entry=figs[proj()];
-    if(!entry || !entry[key]){ el.innerHTML='<div class="sd-empty">No pipeline figure for this selection.</div>'; return; }
-    const f=entry[key];
-    // Fill the panel responsively (drop the designed width, autosize on). Label
-    // clipping/collision is handled in the capture (automargin + smaller tick font).
-    const layout=Object.assign({}, f.layout, {template:FCA, autosize:true});
-    delete layout.width;
-    Plotly.react(el, f.data, layout, CONF);
+  function renderLcos(){
+    const el=document.getElementById("sd-lcos");
+    const routes=routesHere(), xCats=routes.map(r=>RLAB[r]), cfs=cfsShown();
+    if(!routes.length){ el.innerHTML='<div class="sd-empty">No solved scenarios here.</div>'; return; }
+    const traces=[], legended=new Set();
+    COST_GROUPS.forEach(([g,glabel,gcolor])=>{
+      cfs.forEach(cf=>{
+        const y=routes.map(r=>{const rec=recFor(r,cfKey(r,cf));return rec?(rec.costs[g]||0):0;});
+        if(y.every(v=>!v)) return;
+        const show=!legended.has(g); if(show) legended.add(g);
+        traces.push({type:"bar", x:xCats, y, name:glabel, marker:{color:gcolor},
+          offsetgroup:(cfs.length>1?cf:"one"), legendgroup:g, showlegend:show,
+          hovertemplate:`${glabel}${cfs.length>1?" · "+cf:""}: %{y:.0f} €/t<extra></extra>`});
+      });
+    });
+    if(state.cf!=="compare"){
+      const totals=routes.map(r=>{const rec=recFor(r,cfKey(r,state.cf));return rec?rec.lcos:null;});
+      traces.push({type:"scatter", x:xCats, y:totals, mode:"text",
+        text:totals.map(v=>v==null?"":Math.round(v).toLocaleString()),
+        textposition:"top center", textfont:{size:12,color:PRINT.ink}, showlegend:false, hoverinfo:"skip"});
+    }
+    const lay=printBase({barmode:"stack", height:470, bargap:0.4, margin:{l:66,r:214,t:16,b:60},
+      legend:{x:1.01,y:1,xanchor:"left",yanchor:"top",traceorder:"reversed",font:{size:11,color:PRINT.muted}},
+      xaxis:axis({type:"category", automargin:true, tickfont:{color:PRINT.muted,size:12}}),
+      yaxis:axis({title:{text:"LCOS  (€ / t steel)",font:{size:11,color:PRINT.muted}},rangemode:"tozero"})});
+    Plotly.react(el, traces, lay, CONF);
+  }
+
+  function renderCapacity(){
+    const el=document.getElementById("sd-capacity");
+    const routes=routesHere(), xCats=routes.map(r=>RLAB[r]), cfs=cfsShown();
+    if(!routes.length){ el.innerHTML='<div class="sd-empty">No solved scenarios here.</div>'; return; }
+    const AX=["y","y2","y3"], DOM=[[0.72,1.0],[0.38,0.64],[0.0,0.28]];
+    const traces=[], anns=[], legended=new Set();
+    CAP_PANELS.forEach((panel,pi)=>{
+      const [ptitle,unit,bars]=panel;
+      bars.forEach(([key,label,color])=>{
+        cfs.forEach(cf=>{
+          const y=routes.map(r=>{const rec=recFor(r,cfKey(r,cf));return rec?(rec.caps[key]||0):0;});
+          if(y.every(v=>!v)) return;
+          const show=!legended.has(key); if(show) legended.add(key);
+          traces.push({type:"bar", x:xCats, y, name:label, marker:{color:color}, yaxis:AX[pi],
+            offsetgroup:(cfs.length>1?key+"_"+cf:key), legendgroup:key, showlegend:show,
+            hovertemplate:`${label}${cfs.length>1?" · "+cf:""}: %{y:.1f} ${unit}<extra></extra>`});
+        });
+      });
+      anns.push({text:ptitle, xref:"paper", yref:"paper", x:0, xanchor:"left",
+        y:DOM[pi][1], yanchor:"bottom", showarrow:false,
+        font:{size:13,color:PRINT.muted,family:"'Titillium Web',sans-serif"}});
+    });
+    const lay=printBase({barmode:"group", height:760, bargap:0.28, bargroupgap:0.06,
+      margin:{l:60,r:196,t:18,b:44}, annotations:anns,
+      legend:{x:1.01,y:1,xanchor:"left",yanchor:"top",font:{size:11,color:PRINT.muted}},
+      xaxis:axis({domain:[0,1], anchor:"y3", type:"category", automargin:true, tickfont:{color:PRINT.muted,size:12}}),
+      yaxis:axis({domain:DOM[0], rangemode:"tozero"}),
+      yaxis2:axis({domain:DOM[1], rangemode:"tozero"}),
+      yaxis3:axis({domain:DOM[2], rangemode:"tozero"})});
+    Plotly.react(el, traces, lay, CONF);
   }
 
   function renderDetail(){
-    const label=`${GN[state.geo]} · ${state.year} · ${state.grid==="grid"?"grid":"islanded"}`;
-    renderPipeline("sd-lcos","lcos","sd-lcos-sub", label+" · levelised cost by group, per scenario");
-    renderPipeline("sd-capacity","capacity","sd-cap-sub", label+" · optimal build, per scenario");
+    document.getElementById("sd-lcos-sub").textContent = subLabel()+" · €/t by cost group";
+    document.getElementById("sd-cap-sub").textContent = subLabel()+" · optimised build";
+    renderLcos(); renderCapacity();
   }
 
   function renderTable(){
-    const b = bucket();
-    const rows = ROUTE_ORDER.map(r=>({r,rec:b[r]})).filter(x=>x.rec)
-                            .sort((a,c)=>a.rec.lcos-c.rec.lcos);
-    const gp = gasPrice();
+    const routes=routesHere(), gp=gasPrice(), compare=state.cf==="compare";
     document.getElementById("sd-tbl-sub").innerHTML =
-      `${GN[state.geo]} · ${state.year} · ${state.grid==="grid"?"grid-connected":"islanded"} · cheapest siting per route`
-      + (gp!=null ? ` · <b>fossil &amp; MIX routes at natural gas €${gp}/MWh</b>` : "");
-    const el = document.getElementById("sd-table");
+      subLabel() + (gp!=null ? ` · <b>fossil &amp; MIX routes at natural gas €${gp}/MWh</b>` : "");
+    const el=document.getElementById("sd-table");
+    let rows=[];
+    routes.forEach(r=> cfsForRow(r).forEach(cf=>{ const rec=recFor(r,cf); if(rec) rows.push({r,cf,rec}); }));
+    rows.sort((a,c)=>a.rec.lcos-c.rec.lcos);
     if(!rows.length){ el.innerHTML='<div class="sd-empty">No solved scenarios here.</div>'; return; }
-    const num = (v,d)=> v==null ? '<span class="na">—</span>' : v.toFixed(d);
-    const body = rows.map(({r,rec},i)=>{
-      const co2 = co2Int(rec);
-      const share = rec.h2_share==null ? '<span class="na">—</span>'
-                    : Math.round(Math.max(0,rec.h2_share)*100)+'%';
-      const flag = (r==="mix-dri-eaf" && mixIsFossil(rec))
-                   ? ' <span class="tag">≈ NG-DRI · H₂ rejected</span>' : '';
+    const num=(v,d)=> v==null ? '<span class="na">—</span>' : v.toFixed(d);
+    const body=rows.map(({r,cf,rec},i)=>{
+      const co2=co2Int(rec);
+      const share = rec.h2_share==null ? '<span class="na">—</span>' : Math.round(Math.max(0,rec.h2_share)*100)+'%';
+      const flag = (r==="mix-dri-eaf" && mixIsFossil(rec)) ? ' <span class="tag">≈ NG-DRI · H₂ rejected</span>' : '';
+      const cfcell = compare ? `<td class="cf">${cf==="na"?"—":(cf==="avg"?"Avg":"P95")}</td>` : "";
       return `<tr class="${i===0?"best":""}">
         <td class="rt"><span class="sw" style="background:${RCOL[r]}"></span>${RLAB[r]}${flag}</td>
-        <td>${num(rec.lcos,0)}</td>
-        <td>${num(rec.lcoe,0)}</td>
-        <td>${num(rec.lcoh,0)}</td>
+        ${cfcell}
+        <td>${num(rec.lcos,0)}</td><td>${num(rec.lcoe,0)}</td><td>${num(rec.lcoh,0)}</td>
         <td>${r.includes("dri")?share:'<span class="na">—</span>'}</td>
         <td>${co2>0?co2.toFixed(2):'<span class="na">0.00</span>'}</td></tr>`;
     }).join("");
+    const cfhead = compare ? '<th>Siting<span>CF</span></th>' : '';
     el.innerHTML = `<table class="sd-tbl"><thead><tr>
-        <th>Route</th><th>LCOS<span>€/t steel</span></th><th>LCOE<span>€/MWh</span></th>
+        <th>Route</th>${cfhead}<th>LCOS<span>€/t steel</span></th><th>LCOE<span>€/MWh</span></th>
         <th>LCOH<span>€/MWh LHV</span></th><th>H₂ share<span>iron from H₂</span></th>
         <th>CO₂<span>t/t steel</span></th>
       </tr></thead><tbody>${body}</tbody></table>`;
@@ -306,15 +394,23 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     document.querySelectorAll("#sd-grid .sd-pill").forEach(b=>{ b.disabled=!gridHas(state.geo,state.year,b.dataset.val); });
     if(!gridHas(state.geo,state.year,state.grid))
       state.grid = gridHas(state.geo,state.year,"grid")?"grid":"nogrid";
-    [["sd-geo","geo"],["sd-year","year"],["sd-grid","grid"]].forEach(([id,key])=>{
+    [["sd-geo","geo"],["sd-year","year"],["sd-grid","grid"],["sd-cf","cf"]].forEach(([id,key])=>{
       document.querySelectorAll("#"+id+" .sd-pill").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.val===state[key])));
     });
+    document.getElementById("sd-variant").value = state.variant;
     renderAll();
   }
 
   buildPills("sd-geo", GEOS.map(g=>[g,GN[g]||g]), "geo");
   buildPills("sd-year", YEARS.map(y=>[y,y]), "year");
   buildPills("sd-grid", [["grid","Grid"],["nogrid","Islanded"]], "grid");
+  buildPills("sd-cf", [["avg","Average"],["p95","Best-site P95"],["compare","Compare"]], "cf");
+
+  const vsel=document.getElementById("sd-variant");
+  Object.keys(VLAB).forEach(v=>{ const o=document.createElement("option"); o.value=v; o.textContent=VLAB[v]; vsel.appendChild(o); });
+  vsel.value=state.variant;
+  vsel.onchange=()=>{ state.variant=vsel.value; refresh(); };
+
   renderMeta();
   refresh();
 
