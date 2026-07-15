@@ -5,11 +5,12 @@ Delete this file and that import once the upstream package ships fixes.
 
 Patch 1: AEMO now blocks NEMOSIS's stale Chrome 80 User-Agent with HTTP 403.
 
-Patch 2: MMSDM filenames from Aug-2024 contain literal '#' characters.
-  requests percent-encodes '#' → '%23', which AEMO's Azure endpoint rejects (HTTP 400).
-  Sending a literal '#' also fails (proxies strip it as a fragment). The only working
-  encoding is double-encoding '%2523'; Azure decodes one layer to '%23' as expected.
-  requests would re-normalise '%2523' → '%23', so we bypass it entirely with http.client.
+Patch 2: MMSDM filenames from Aug-2024 contain literal '#' characters
+  (e.g. PUBLIC_ARCHIVE#DISPATCHPRICE#FILE01#202408010000.zip). The nemweb.com.au
+  MMSDM archive serves these when the '#' is percent-encoded once as '%23'
+  (a literal '#' is treated as a URL fragment and stripped, giving a 404).
+  requests re-normalises the path and strips the fragment, so we bypass it with
+  http.client, which sends the pre-encoded path verbatim.
 """
 
 import http.client
@@ -27,9 +28,9 @@ _dl.USR_AGENT_HEADER["User-Agent"] = (
 
 
 def _download_unzip_csv_patched(url: str, down_load_to: str) -> None:
-    """Download and extract a NEMOSIS MMSDM zip, double-encoding '#' to dodge Azure (Patch 2)."""
+    """Download and extract a NEMOSIS MMSDM zip, single-encoding '#' as '%23' (Patch 2)."""
     from urllib.parse import urlsplit
-    url_fixed = url.replace("#", "%2523").replace("%23", "%2523")
+    url_fixed = url.replace("#", "%23")
     u = urlsplit(url_fixed)
     path = u.path + (f"?{u.query}" if u.query else "")
     conn = http.client.HTTPSConnection(
