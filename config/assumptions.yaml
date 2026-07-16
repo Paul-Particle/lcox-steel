@@ -43,7 +43,8 @@ h2_buffer:
 transmission:
   # HVDC link connecting a candidate RES site to the electrolyser/demand site.
   # Only used by multi-site scenarios (those with a config/sites_{project}_{scenario}.yaml
-  # overlay); single-site scenarios never add a transmission link.
+  # overlay, or anchor-colo-n* CF inputs where the anchor cell is the demand
+  # site); single-site scenarios never add a transmission link.
   cost_per_mw_per_km_eur: 400   # HVDC overhead, order-of-magnitude (PyPSA-Eur-ish)
   lifetime_years: 40
   losses_pct_per_1000km: 3.0    # ~3% / 1000 km, applied as link efficiency

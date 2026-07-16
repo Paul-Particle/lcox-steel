@@ -131,7 +131,7 @@ rule build_bestsite_p95:
         "../scripts/res_cf/07_make_bestsite_cf_timeseries.py"
 
 
-rule build_anchored_res_mix_cfs:
+rule build_anchor_colocated_cfs:
     input:
         cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
         regions="resources/shapes/{cf_area}_geo.parquet",
@@ -139,46 +139,13 @@ rule build_anchored_res_mix_cfs:
     output:
         "resources/res_cf/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.parquet",
     wildcard_constraints:
-        variant=r"anchored-w\d+-s\d+",
+        variant=r"anchor-colo-n\d+",
     log:
-        "logs/build_anchored_res_mix_cfs/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.log",
+        "logs/build_anchor_colocated_cfs/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.log",
     params:
-        wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
-        wind_offshore_turbine=lookup(dpath="res_cf/wind_offshore_turbine", within=config),
-        pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
-        pv_orientation=lookup(dpath="res_cf/pv_orientation", within=config),
-        wind_cf=lookup(dpath="res_cf/wind_cf", within=config),
-        spatial_matching_res_mix=lookup(
-            dpath="res_cf/spatial_matching_res_mix", within=config
-        ),
+        anchor_colocation=lookup(dpath="res_cf/anchor_colocation", within=config),
     script:
-        "../scripts/res_cf/07_make_bestsite_cf_timeseries.py"
-
-
-rule build_complementarity_screen:
-    input:
-        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
-        regions="resources/shapes/{cf_area}_geo.parquet",
-        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
-    output:
-        screen="resources/res_cf/{cf_area}_{tech}_complementarity-screen_{start_date}_{end_date}.parquet",
-        cf="resources/res_cf/{cf_area}_{tech}_complementarity-top1_{start_date}_{end_date}.parquet",
-    log:
-        "logs/build_complementarity_screen/{cf_area}_{tech}_{start_date}_{end_date}.log",
-    params:
-        top_n=lookup(dpath="res_cf/complementarity/top_n", within=config),
-        coincidence_threshold=lookup(
-            dpath="res_cf/complementarity/coincidence_threshold", within=config
-        ),
-        w_coincidence=lookup(dpath="res_cf/complementarity/w_coincidence", within=config),
-        w_correlation=lookup(dpath="res_cf/complementarity/w_correlation", within=config),
-        max_radius_km=lookup(dpath="res_cf/complementarity/max_radius_km", within=config),
-        quality_floor=lookup(dpath="res_cf/complementarity/quality_floor", within=config),
-        max_triplets_brute_force=lookup(
-            dpath="res_cf/complementarity/max_triplets_brute_force", within=config
-        ),
-    script:
-        "../scripts/res_cf/08_complementarity_screen.py"
+        "../scripts/res_cf/07b_make_anchor_colocated_cf_timeseries.py"
 
 
 rule build_multi_site_cfs:
