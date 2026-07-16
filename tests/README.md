@@ -2,20 +2,25 @@
 
 ## Grid pipeline output completeness
 
-`test_window_completeness.py` pins the behaviour of `retrieve_entsoe`'s
-`_assert_window_complete` guard, which runs on every pipeline output and fails
-loudly when the produced window has holes. Truncated raw-cache months (a fetch
-that stopped mid-month) and partial downloads are otherwise silent — the slice
-just has fewer rows, and the hole only surfaces far downstream as NaN after a
-reindex (e.g. a solve aligning prices to a full capacity-factor year). The
-energy-charts gate below does **not** catch this: it masks NaN before comparing
-and tolerates hundreds of missing hours.
+`test_window_completeness.py` pins the behaviour of `_helpers.assert_window_complete`,
+the guard shared by `retrieve_entsoe` and `retrieve_nem`. It runs on every
+pipeline output and fails loudly when the produced window has holes. Truncated
+raw-cache months (a fetch that stopped mid-month) and partial downloads are
+otherwise silent — the slice just has fewer rows, and the hole only surfaces far
+downstream as NaN after a reindex (e.g. a solve aligning prices to a full
+capacity-factor year). The energy-charts gate below does **not** catch this: it
+masks NaN before comparing and tolerates hundreds of missing hours.
 
 - `dayahead` is resampled to a clean hourly grid, so every hour of the window
   must be present and non-null.
-- `full` spans a mixed 15-min/hourly resolution (ENTSO-E switched DE_LU
-  day-ahead to 15-min in Oct 2025), so instead of a fixed grid the guard flags
-  any gap larger than the ffill tolerance — which only occurs on truncation.
+- `full` spans a mixed resolution (ENTSO-E switched DE_LU day-ahead to 15-min in
+  Oct 2025; NEM tables are 5-min), so instead of a fixed grid the guard flags any
+  gap larger than `full_gap_tolerance` — which only occurs on truncation.
+
+`test_nem_market_month_cache.py` pins the companion NEM fix: because NEM prices
+are downloaded by *market* month (AEST) but stored in UTC, cache-membership must
+be matched in market time (`area_month_in_cache(..., tz=NEM_MARKET_TZ)`), else a
+neighbouring month's spillover masks a real month and it never downloads.
 
 These tests use synthetic frames, so they need no raw cache and run anywhere.
 

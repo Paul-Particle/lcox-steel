@@ -1,18 +1,18 @@
-"""Unit tests for the ENTSO-E output completeness guard.
+"""Unit tests for the grid output completeness guard.
 
-`_assert_window_complete` is the pipeline's defence against silently truncated
-raw-cache months and partial downloads — holes that otherwise only surface far
-downstream as NaN after a reindex (e.g. a solve aligning prices to a full CF
-year). These tests pin the guard's behaviour on synthetic frames, so they need
-no raw cache and run anywhere.
+`assert_window_complete` (in _helpers, shared by retrieve_entsoe and retrieve_nem)
+is the pipeline's defence against silently truncated raw-cache months and partial
+downloads — holes that otherwise only surface far downstream as NaN after a
+reindex (e.g. a solve aligning prices to a full CF year). These tests pin the
+guard's behaviour on synthetic frames, so they need no raw cache and run anywhere.
 """
 
 import pandas as pd
 import pytest
 
-import retrieve_entsoe  # sys.path set by conftest
+import _helpers  # sys.path set by conftest
 
-_assert_window_complete = retrieve_entsoe._assert_window_complete
+_assert_window_complete = _helpers.assert_window_complete
 
 
 def _dayahead_frame(start="2024-01-01", end="2024-12-31"):
