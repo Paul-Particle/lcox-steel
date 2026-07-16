@@ -24,7 +24,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from _helpers import area_month_in_cache, iso, to_utc_naive
+from _helpers import area_month_in_cache, assert_window_complete, iso, to_utc_naive
 from download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client, iter_months
 
 configure_logging(snakemake)
@@ -116,72 +116,6 @@ def _process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame
 
 # ── Completeness guard ─────────────────────────────────────────────────────────
 
-def _summarise_runs(times: pd.DatetimeIndex, step: pd.Timedelta, limit: int = 3) -> str:
-    """Compress a sorted DatetimeIndex into 'start→end' run descriptions, largest first."""
-    times = times.sort_values()
-    runs = []
-    start = prev = times[0]
-    for t in times[1:]:
-        if t - prev == step:
-            prev = t
-        else:
-            runs.append((start, prev))
-            start = prev = t
-    runs.append((start, prev))
-    runs.sort(key=lambda ab: ab[1] - ab[0], reverse=True)
-    parts = [f"{a}→{b}" for a, b in runs[:limit]]
-    if len(runs) > limit:
-        parts.append(f"…+{len(runs) - limit} more")
-    return ", ".join(parts)
-
-
-def _assert_window_complete(
-    out_df: pd.DataFrame, start_date: str, end_date: str, variant: str
-) -> None:
-    """Fail loudly if the produced window has holes over the requested date range.
-
-    Truncated raw-cache months (a fetch that stopped mid-month) and partial
-    downloads are otherwise silent: the slice simply has fewer rows, and the hole
-    only surfaces far downstream as NaN after a reindex. This guard catches them
-    at the source.
-
-    dayahead is resampled to a clean hourly grid, so every hour of the window must
-    be present and non-null. full spans a mixed 15-min/hourly resolution (ENTSO-E
-    switched DE_LU day-ahead to 15-min in Oct 2025), so a fixed grid would
-    false-positive; instead we flag any gap larger than the ffill tolerance, which
-    only occurs on truncated months.
-    """
-    idx = out_df.index
-    want_start = pd.Timestamp(iso(start_date))
-    want_end = pd.Timestamp(f"{iso(end_date)} 23:00")
-    problems = []
-
-    if len(idx) < 2:
-        raise ValueError(f"{variant} {start_date}–{end_date}: only {len(idx)} rows produced")
-    if idx.min() > want_start:
-        problems.append(f"starts at {idx.min()}, after {want_start}")
-    if idx.max() < want_end:
-        problems.append(f"ends at {idx.max()}, before {want_end}")
-
-    if variant == "dayahead":
-        expected = pd.date_range(want_start, want_end, freq="h")
-        missing = expected.difference(idx)
-        if len(missing):
-            problems.append(
-                f"{len(missing)} missing hours: {_summarise_runs(missing, pd.Timedelta('1h'))}"
-            )
-        n_nan = int(out_df.isna().any(axis=1).sum())
-        if n_nan:
-            problems.append(f"{n_nan} rows still NaN after fill")
-    else:
-        gaps = idx.to_series().diff()
-        if gaps.max() > pd.Timedelta("3h"):
-            problems.append(f"gap of {gaps.max()} ending {gaps.idxmax()}")
-
-    if problems:
-        raise ValueError(f"{variant} {start_date}–{end_date} incomplete: " + "; ".join(problems))
-
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def retrieve(snakemake) -> None:
@@ -245,7 +179,7 @@ def retrieve(snakemake) -> None:
         out_df = out_df.fillna(0.0)
     out_df.index.name = "time"
 
-    _assert_window_complete(out_df, start_date, end_date, variant)
+    assert_window_complete(out_df, start_date, end_date, variant)
 
     out_path = Path(snakemake.output[0])
     out_path.parent.mkdir(parents=True, exist_ok=True)
