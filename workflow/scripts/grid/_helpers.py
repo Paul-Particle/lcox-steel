@@ -50,7 +50,7 @@ def area_month_in_cache(
     index = cached[area].dropna(how="all").index
     if tz is not None:
         index = index.tz_localize("UTC").tz_convert(tz).tz_localize(None)
-    return (index.to_period("M") == pd.Period(ym, freq="M")).any()
+    return bool((index.to_period("M") == pd.Period(ym, freq="M")).any())
 
 
 def summarise_runs(times: pd.DatetimeIndex, step: pd.Timedelta, limit: int = 3) -> str:
