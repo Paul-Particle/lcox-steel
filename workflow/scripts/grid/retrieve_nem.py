@@ -22,7 +22,14 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from _helpers import area_month_in_cache, iso, iter_months_str, to_utc_naive
+from _helpers import (
+    NEM_MARKET_TZ,
+    area_month_in_cache,
+    assert_window_complete,
+    iso,
+    iter_months_str,
+    to_utc_naive,
+)
 from download_nem import DOWNLOADERS
 
 configure_logging(snakemake)
@@ -111,7 +118,11 @@ def retrieve(snakemake) -> None:
 
     new_frames = []
     for ym in months:
-        if area_month_in_cache(cached, area, ym):
+        # Match cache membership in market time: NEM downloads whole market months
+        # (AEST) but stores them in UTC, so a market month spills across two UTC
+        # months. A UTC-month check would see the pad month's spillover and wrongly
+        # skip the real month (dropping ~a month of data). See area_month_in_cache.
+        if area_month_in_cache(cached, area, ym, tz=NEM_MARKET_TZ):
             continue
         log.info(f"{area}/{ym}/{variant}: processing")
         if variant == "dayahead":
@@ -132,6 +143,8 @@ def retrieve(snakemake) -> None:
     window = slice(iso(start_date), f"{iso(end_date)} 23:59")
     out_df = cached[area].loc[window]
     out_df.index.name = "time"
+
+    assert_window_complete(out_df, start_date, end_date, variant)
 
     out_path = Path(snakemake.output[0])
     out_path.parent.mkdir(parents=True, exist_ok=True)
