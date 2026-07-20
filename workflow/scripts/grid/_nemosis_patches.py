@@ -57,7 +57,9 @@ def _download_unzip_csv_patched(url: str, down_load_to: str) -> None:
     """Download and extract a NEMOSIS MMSDM zip, trying each '#' encoding (Patch 2)."""
     literal = url.replace("%2523", "#").replace("%23", "#")  # normalise to a literal '#'
     # Single '%23' (current nemweb) first, then double '%2523' (historical Azure front-end).
-    candidates = [literal.replace("#", "%23"), literal.replace("#", "%2523")]
+    # dedupe: pre-Aug-2024 filenames have no '#', so both encodings collapse to the
+    # same URL and there's no point fetching it twice.
+    candidates = list(dict.fromkeys([literal.replace("#", "%23"), literal.replace("#", "%2523")]))
     last_err: Exception | None = None
     for candidate in candidates:
         try:

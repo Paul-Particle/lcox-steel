@@ -202,11 +202,12 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     if "gas_supply" in n.generators.index:
         gas_mwh = float(n.generators_t.p["gas_supply"].sum()) * (8760.0 / len(n.snapshots))
         summary["ng_gwh_lhv"] = gas_mwh / 1e3
-    # Mix route: how much of the iron actually came from the H2 shaft
-    # (production share, not capacity share).
-    if "dri" in n.links.index and "dri_ng" in n.links.index:
-        iron_h2 = -float(n.links_t.p1["dri"].sum())
-        iron_ng = -float(n.links_t.p1["dri_ng"].sum())
+    # How much of the iron came from the H2 shaft (production share, not capacity
+    # share). Emitted for any DRI route so a pure H2-DRI reads 1.0 and a pure
+    # NG-DRI 0.0 — not a missing value that downstream would coerce to 0.
+    if "dri" in n.links.index or "dri_ng" in n.links.index:
+        iron_h2 = -float(n.links_t.p1["dri"].sum()) if "dri" in n.links.index else 0.0
+        iron_ng = -float(n.links_t.p1["dri_ng"].sum()) if "dri_ng" in n.links.index else 0.0
         total = iron_h2 + iron_ng
         summary["iron_from_h2_share"] = iron_h2 / total if total else float("nan")
 

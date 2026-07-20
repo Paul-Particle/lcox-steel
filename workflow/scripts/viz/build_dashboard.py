@@ -72,6 +72,7 @@ CAP_PANELS = [
     ["Power capacity (MW)", "MW", [
         ["solar_mw",         "Solar",                "#E2B681"],
         ["wind-onshore_mw",  "Wind onshore",         "#0A5680"],
+        ["wind-offshore_mw", "Wind offshore",        "#3E7CB1"],
         ["battery_mw",       "Battery",              "#D75674"],
         ["electrolyser_mw",  "Electrolyser (input)", "#91C096"],
         ["grid_mw",          "Grid connection",      "#71828F"],
@@ -153,11 +154,14 @@ def _record(row, lcos_row, cap_row):
     caps = {}
     solar = sum(_num(cap_row[c]) for c in cap_row.index if str(c).startswith("solar"))
     wind = sum(_num(cap_row[c]) for c in cap_row.index if str(c).startswith("wind-onshore"))
+    wind_off = sum(_num(cap_row[c]) for c in cap_row.index if str(c).startswith("wind-offshore"))
     for key in _CAP_KEYS:
         if key == "solar_mw":
             v = solar
         elif key == "wind-onshore_mw":
             v = wind
+        elif key == "wind-offshore_mw":
+            v = wind_off
         else:
             v = _num(cap_row[key]) if key in cap_row.index else 0.0
         if v > 0.001:
@@ -186,6 +190,12 @@ def _gas_price(project):
             if price is not None:
                 return price
     return fallback
+
+
+def _co2_t_per_mwh():
+    """Gas combustion CO2 intensity (t/MWh LHV) from assumptions; constant as fallback."""
+    base = yaml.safe_load((REPO / "config" / "assumptions.yaml").read_text()) or {}
+    return base.get("natural_gas", {}).get("co2_t_per_mwh", CO2_T_PER_MWH)
 
 
 def build_payload(projects):
@@ -274,7 +284,7 @@ def main():
         "geos": geos, "years": years, "geo_names": GEO_NAMES,
         "clean_routes": CLEAN_ROUTES, "route_order": ROUTE_ORDER,
         "route_label": ROUTE_LABEL, "route_color": ROUTE_COLOR,
-        "co2_t_per_mwh": CO2_T_PER_MWH, "h2_min": H2_MIN,
+        "co2_t_per_mwh": _co2_t_per_mwh(), "h2_min": H2_MIN,
         "cost_groups": COST_GROUPS, "cap_panels": CAP_PANELS,
         "variant_routes": VARIANT_ROUTES, "variant_label": VARIANT_LABEL,
     }

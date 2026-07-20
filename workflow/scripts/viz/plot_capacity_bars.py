@@ -82,13 +82,22 @@ def load_report(path: Path) -> pd.DataFrame:
 
 
 def _solar_cols(df):
-    return [c for c in df.columns if c.startswith("solar_az") and c.endswith("_gw_opt")]
+    # Orientation-resolved (solar_az*) or per-site (multisite: solar-c00 …) solar
+    # capacities. Excludes the bare single-site `solar_gw_opt` (handled by the
+    # fallback in build_plot_data) and the multisite `_total` aggregate, which
+    # would otherwise stack on top of the per-site columns it already sums.
+    return [c for c in df.columns
+            if c.startswith("solar") and c.endswith("_gw_opt")
+            and c != "solar_gw_opt" and not c.endswith("_total_gw_opt")]
 
 
 def _wind_cols(df):
-    return [c for c in df.columns if
-            (c.startswith("wind-onshore") or c.startswith("wind-offshore"))
-            and c.endswith("_gw_opt")]
+    # Per-tech (single-site) or per-site (multisite) wind capacities. Excludes the
+    # multisite `{tech}_total_gw_opt` aggregate so it isn't double-counted against
+    # the per-site columns it sums.
+    return [c for c in df.columns
+            if c.startswith(("wind-onshore", "wind-offshore"))
+            and c.endswith("_gw_opt") and not c.endswith("_total_gw_opt")]
 
 
 def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
