@@ -85,6 +85,14 @@
   .sd-card .v{font-size:27px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1;}
   .sd-card .v small{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:0;}
   .sd-card .d{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.4;}
+  .sd-card .prem{display:flex;align-items:baseline;gap:9px;margin-top:6px;}
+  .sd-card .pchip{font-family:var(--mono);font-size:9px;font-weight:700;border-radius:4px;padding:1px 6px;line-height:1.7;}
+  .sd-card .pchip.A{background:var(--scnA);color:var(--onA);}
+  .sd-card .pchip.B{background:var(--scnB);color:#fff;}
+  .sd-card .pv{font-size:20px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1;}
+  .sd-card .pv small{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0;}
+  .sd-card .pv.na{color:var(--faint);}
+  .sd-card .pp{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-left:auto;}
   .sd-card .cls{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;
     font-weight:700;border-radius:4px;padding:1px 6px;margin-top:8px;}
   .cls.good{color:var(--good);border:1px solid var(--good);}
@@ -178,7 +186,7 @@
     </div>
 
     <div class="sd-panel">
-      <div class="sd-panel-h row"><h2>Built capacity</h2><p id="cap-sub"></p>
+      <div class="sd-panel-h row"><div class="ht"><h2>Built capacity</h2><p id="cap-sub"></p></div>
         <span class="ab-key"><span><i id="ksw-a" style="background:#0A5680"></i>A</span><span><i style="background:#0293D2"></i>B</span></span>
       </div>
       <div class="sd-print"><div class="sd-plot" id="plot-cap"></div></div>
@@ -233,9 +241,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
 
   // ---- state: A is a full scenario; Bov holds per-axis overrides (null = track A).
   // Default view: H2-DRI-EAF with H₂ salt-cavern storage vs MOE at 70% turndown,
-  // both at the synthetic best site (P95) in Australia, 2025, islanded (salt-cavern
-  // seasonal storage is only meaningful off-grid).
-  const A = {geo:"AUS", year:"2025", grid:"nogrid",
+  // both at the synthetic best site (P95) in Australia, 2025, grid-connected.
+  const A = {geo:"AUS", year:"2025", grid:"grid",
              route:"h2-dri-eaf", cf:"p95", variant:"salt"};
   const Bov = {geo:null, year:null, grid:null, route:"moe", cf:null, variant:"moe70"};
   // B before clamping: A with per-axis overrides applied.
@@ -263,17 +270,23 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // route, sensitivity) invalid — clamp those back so both scenarios always plot.
   function clamp(ctx){
     const c={...ctx}, notes=[];
+    // Grid is a primary axis the user browses. If the geo/year has no project for
+    // the selected grid, do NOT silently flip it to the other mode — leave the
+    // selection and mark the scenario unavailable, so the panels say so instead
+    // of quietly showing the other grid mode (e.g. Brazil has no grid case).
     if(!gridHas(c.geo,c.year,c.grid)){
-      const g = gridHas(c.geo,c.year,"grid") ? "grid" : "nogrid";
-      if(g!==c.grid) notes.push("grid → "+(g==="grid"?"grid":"islanded"));
-      c.grid=g;
+      c._notes=[];
+      c._unavail = (c.grid==="grid"?"Grid-connected":"Islanded")+" results for "
+        + geoName(c.geo)+" "+c.year+" aren’t available yet — switch to "
+        + (c.grid==="grid"?"islanded":"grid")+".";
+      return c;
     }
     if(!routeHas(c.geo,c.year,c.grid,c.route)){
       const rs = ROUTE_ORDER.filter(r=>routeHas(c.geo,c.year,c.grid,r));
       if(rs.length){ const nr = rs.includes("h2-dri-eaf")?"h2-dri-eaf":rs[0]; notes.push("route → "+RLAB[nr]); c.route=nr; }
     }
     if(!variantOk(c.route,c.variant)){ if(c.variant!=="base") notes.push("sensitivity → baseline"); c.variant="base"; }
-    c._notes=notes; return c;
+    c._notes=notes; c._unavail=null; return c;
   }
   const B = () => clamp(resolveRaw());
 
@@ -281,6 +294,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // overrides are never mutated here — invalid options are disabled in the matrix.
   function normalise(){
     const a = clamp(A); for(const k of AXES) A[k]=a[k];
+    A._notes = a._notes; A._unavail = a._unavail;
   }
 
   // ---- formatting / identity
@@ -355,13 +369,35 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       <div class="v">${val(rA)}</div><p class="d">${identity(sA)}</p></div>`);
     out.push(`<div class="sd-card b"><p class="k">Scenario B · levelised cost of steel</p>
       <div class="v">${val(rB)}</div><p class="d">${bothSame()?"same as A — set an override":identity(sB)}</p></div>`);
-    if(rA&&rB){
-      const d=rB.lcos-rA.lcos, pct = rA.lcos? Math.round(d/rA.lcos*100):0;
-      const sign = d>0?"+":"";
-      const who = d===0 ? "identical" : (d<0 ? "B is cheaper" : "A is cheaper");
-      out.push(`<div class="sd-card gap"><p class="k">Levelised cost gap (B − A)</p>
-        <div class="v">${sign}${Math.round(d).toLocaleString()}<small> €/t</small></div>
-        <p class="d">${sign}${pct}% · ${who}</p></div>`);
+    // Cost vs the NG-DRI-EAF benchmark — the global fossil reference. NG-DRI-EAF
+    // is inherently a grid-connected run, so grid AND islanded scenarios of a
+    // geography/year compare to that same per-geo/year benchmark.
+    const ngLcos = s => {
+      const r = CASES[`${s.geo}-${s.year}-grid`]?.["ng-dri-eaf"]?.["base"]?.["na"];
+      return r ? r.lcos : null;
+    };
+    const premRow = (tag, s, rec) => {
+      const ng = ngLcos(s);
+      if(!rec || ng==null){
+        const why = !rec ? "" : "no NG benchmark";
+        return `<div class="prem"><span class="pchip ${tag}">${tag}</span>`
+          + `<span class="pv na">—</span><span class="pp">${why}</span></div>`;
+      }
+      const d=rec.lcos-ng, sign = d>0?"+":(d<0?"−":""), pct = ng?Math.round(Math.abs(d)/ng*100):0;
+      return `<div class="prem"><span class="pchip ${tag}">${tag}</span>`
+        + `<span class="pv">${sign}${Math.round(Math.abs(d)).toLocaleString()}<small> €/t</small></span>`
+        + `<span class="pp">${sign}${pct}%</span></div>`;
+    };
+    if(rA||rB){
+      const ngA=ngLcos(sA), ngB=ngLcos(sB), fmt = v => v==null?"—":Math.round(v).toLocaleString();
+      const sharedNg = bothSame() || (sA.geo===sB.geo && sA.year===sB.year);
+      const foot = sharedNg
+        ? (ngA==null ? "NG-DRI-EAF benchmark not available"
+                     : `NG-DRI-EAF benchmark: ${fmt(ngA)} €/t`)
+        : `NG-DRI-EAF: A ${fmt(ngA)} · B ${fmt(ngB)} €/t`;
+      out.push(`<div class="sd-card gap"><p class="k">Cost vs NG-DRI-EAF benchmark</p>
+        ${premRow("A",sA,rA)}${bothSame()?"":premRow("B",sB,rB)}
+        <p class="d">${foot}</p></div>`);
     }
     return out.join("");
   }
@@ -381,7 +417,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   function renderCost(){
     const el=document.getElementById("plot-cost");
     const sA=A, sB=B(), rA=recFor(sA), rB=recFor(sB);
-    if(!rA&&!rB){ el.innerHTML='<div class="sd-empty">Neither scenario is solved.</div>'; return; }
+    if(!rA&&!rB){ el.innerHTML=`<div class="sd-empty">${sA._unavail||sB._unavail||"Neither scenario is solved."}</div>`; return; }
     const X=["A","B"], traces=[];
     const eur = v => v==null ? "n/a" : Math.round(v).toLocaleString()+" €/MWh";
     const lp = (rec,k) => rec && rec.lcoe_parts ? rec.lcoe_parts[k] : null;   // €/MWh contribution to LCOE
@@ -490,8 +526,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const el=document.getElementById("plot-cap");
     const CH=chrome();
     const keyA=document.getElementById("ksw-a"); if(keyA) keyA.style.background=CH.A;
-    const rA=recFor(A), rB=recFor(B());
-    if(!rA&&!rB){ capH=460; el.innerHTML='<div class="sd-empty">Neither scenario is solved.</div>'; return; }
+    const sA=A, sB=B(), rA=recFor(sA), rB=recFor(sB);
+    if(!rA&&!rB){ capH=460; el.innerHTML=`<div class="sd-empty">${sA._unavail||sB._unavail||"No built capacity."}</div>`; return; }
     const fmtVal = v => Math.round(v).toLocaleString();
     // "· capacity factor: P%" for a capacity bar, when a CF is available for it
     // (rec.cf values are already integer percent).
@@ -589,7 +625,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         <th>CO2<span>t/t steel</span></th></tr></thead>`;
 
     const rowsA = groupRows(groupCtx(sA));
-    if(!rowsA.length){ el.innerHTML='<div class="sd-empty">No solved routes for Scenario A.</div>'; return; }
+    if(!rowsA.length){ el.innerHTML=`<div class="sd-empty">${sA._unavail||"No solved routes for Scenario A."}</div>`; return; }
     const picksA={}; picksA[sA.route]="A";
     if(sameGroup){ picksA[sB.route] = (sB.route===sA.route) ? "AB" : "B"; }
     const ghdrA = `<tr class="ghdr"><td colspan="6">Scenario A group — ${groupLabel(sA)}</td></tr>`;
@@ -619,9 +655,12 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     document.getElementById("cost-sub").textContent = "€/t by cost group · A vs B";
     document.getElementById("cap-sub").textContent = "optimised build · A vs B";
     document.getElementById("reset-b").disabled = bothSame();
-    // clamp notes: an override left an inherited axis invalid and B was moved back
-    document.getElementById("clamp-a").textContent = "";
-    document.getElementById("clamp-b").textContent = sB._notes.length ? "clamped: "+sB._notes.join(", ") : "";
+    // Scenario note: either an unavailable grid case (not silently switched), or a
+    // clamp where an override left an inherited axis (route/sensitivity) invalid.
+    const noteFor = s => s._unavail ? s._unavail
+      : (s._notes && s._notes.length ? "clamped: "+s._notes.join(", ") : "");
+    document.getElementById("clamp-a").textContent = noteFor(A);
+    document.getElementById("clamp-b").textContent = noteFor(sB);
   }
 
   // ---- main
