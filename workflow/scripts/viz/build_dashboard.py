@@ -203,6 +203,39 @@ def _record(row, lcos_row, cap_row):
         v = _opt(row.get(col))
         if v is not None:
             lcoh_parts[key] = v
+    # €/t-steel cost detail: per-plant capex (sums to the "process" group) plus the
+    # ore/consumables split (sums to "ore_consumables"). For the segment hovers.
+    cost_detail = {}
+    for col, key in (
+        ("plant_dri_eur_per_t", "dri"),
+        ("plant_dri_ng_eur_per_t", "dri_ng"),
+        ("plant_eaf_eur_per_t", "eaf"),
+        ("plant_moe_eur_per_t", "moe"),
+        ("plant_electrowinning_eur_per_t", "electrowinning"),
+        ("ore_eur_per_t_steel", "ore"),
+        ("consumables_eur_per_t_steel", "consumables"),
+    ):
+        v = _opt(row.get(col))
+        if v is not None:
+            cost_detail[key] = v
+    # Capacity factors as integer percent (0–1 fraction × 100 — 1 dp would collapse
+    # a 13% CF to 10%), keyed by the capacity-panel bar key they annotate.
+    cf = {}
+    for capkey, col in (
+        ("solar_mw", "cf_solar"),
+        ("wind-onshore_mw", "cf_wind_onshore"),
+        ("wind-offshore_mw", "cf_wind_offshore"),
+        ("grid_mw", "cf_grid_connection"),
+        ("electrolyser_mw", "electrolyser_utilization"),
+        ("dri_t_per_h", "dri_utilization"),
+        ("dri_ng_t_per_h", "dri_ng_utilization"),
+        ("eaf_t_per_h", "eaf_utilization"),
+        ("moe_t_per_h", "moe_utilization"),
+        ("electrowinning_t_per_h", "electrowinning_utilization"),
+    ):
+        raw = row.get(col)
+        if raw is not None and pd.notna(raw):
+            cf[capkey] = round(float(raw) * 100)
     return {
         "lcos": round(_num(row.get("lcos_eur_per_t")), 0),
         "lcoe": _opt(row.get("lcoe_eur_per_mwh")),
@@ -218,6 +251,8 @@ def _record(row, lcos_row, cap_row):
         "grid_price": _opt(row.get("grid_price_eur_per_mwh")),
         "grid_fee": _opt(row.get("grid_fee_eur_per_mwh")),
         "grid_conn_imported": _opt(row.get("grid_connection_eur_per_mwh_imported")),
+        "cost_detail": cost_detail,
+        "cf": cf,
     }
 
 

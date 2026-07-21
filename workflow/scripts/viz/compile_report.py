@@ -255,6 +255,22 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         if res_total > 0 and res_mwh > 0:
             summary["lcoe_renewables_own_eur_per_mwh"] = res_total / res_mwh
 
+        # Capacity factors (annual generation / nameplate × 8760) for the renewables
+        # and the grid connection, surfaced next to the built capacities.
+        def _res_cap(prefix: str) -> float:
+            idx = [g for g in res_idx if str(g).startswith(prefix)]
+            return float(n.generators.loc[idx, "p_nom_opt"].sum()) if idx else 0.0
+
+        for prefix, tech in (("solar", "solar"), ("wind-onshore", "wind_onshore"),
+                             ("wind-offshore", "wind_offshore")):
+            cap = _res_cap(prefix)
+            if cap > 0:
+                summary[f"cf_{tech}"] = _res_mwh(prefix) / (cap * 8760.0)
+        if grid_mwh > 0:
+            grid_p_nom = float(n.generators.at["grid_import", "p_nom_opt"])
+            if grid_p_nom > 0:
+                summary["cf_grid_connection"] = grid_mwh / (grid_p_nom * 8760.0)
+
         # Split the average priced grid energy into the day-ahead market price and
         # the constant volumetric fee, and levelise the connection capex over the
         # same imported-MWh denominator — so all three are €/MWh *imported* and add
@@ -283,6 +299,35 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
             summary["lcoh_electricity_eur_per_mwh_lhv"] = elec_for_h2 / h2_mwh
             if buf_cost > 0:
                 summary["lcoh_h2_storage_eur_per_mwh_lhv"] = buf_cost / h2_mwh
+
+    # Cost detail for the hover: per-plant levelised capex and the ore-vs-consumables
+    # split, all €/t steel on the same denominator as the LCOS cost groups — so the
+    # per-plant figures sum to the "process" group and ore+consumables to the
+    # "ore_consumables" group. Ore is the feedstock priced on the reduction/
+    # electrolysis links; consumables is the EAF's marginal cost.
+    if "steel_load" in n.loads.index:
+        steel_t = float(n.loads.at["steel_load", "p_set"]) * 8760.0
+        if steel_t > 0:
+            def _link_capex(link_name: str) -> float:
+                return (float(n.links.at[link_name, "capital_cost"] * n.links.at[link_name, "p_nom_opt"])
+                        if link_name in n.links.index and bool(n.links.at[link_name, "p_nom_extendable"])
+                        else 0.0)
+
+            def _link_marginal(link_name: str) -> float:
+                if link_name not in n.links.index or link_name not in n.links_t.p0.columns:
+                    return 0.0
+                return float((n.links_t.p0[link_name] * n.links.at[link_name, "marginal_cost"]).sum()) * annual_scale
+
+            for link in PROCESS_LINKS:
+                capex = _link_capex(link)
+                if capex > 0:
+                    summary[f"plant_{link}_eur_per_t"] = capex / steel_t
+            ore = sum(_link_marginal(l) for l in ("dri", "dri_ng", "moe", "electrowinning"))
+            consumables = _link_marginal("eaf")
+            if ore > 0:
+                summary["ore_eur_per_t_steel"] = ore / steel_t
+            if consumables > 0:
+                summary["consumables_eur_per_t_steel"] = consumables / steel_t
 
     # Steel-route process links: capacity in output units (t/h of iron or
     # steel — p_nom is input-side, so scale by the link efficiency) plus
