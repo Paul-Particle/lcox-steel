@@ -285,12 +285,6 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     if(effVariant(s)!=="base") parts.push(VLAB[effVariant(s)]);
     return parts.join(" · ");
   }
-  function classOf(s, rec){
-    if(s.route==="ng-dri-eaf") return ["fossil","Fossil benchmark"];
-    if(s.route==="mix-dri-eaf") return mixIsFossil(rec) ? ["fossil","H2 rejected ~ NG-DRI"] : ["mix","Transitional blend"];
-    if(CLEAN.includes(s.route)) return ["good","Zero fossil"];
-    return ["","—"];
-  }
 
   // ---- matrix rendering
   function pill(axis, val, lab, pressed, disabled, onclick, extraCls){
@@ -349,12 +343,11 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   function cardsHtml(){
     const sA=A, sB=B(), rA=recFor(sA), rB=recFor(sB);
     const out=[];
-    const clsChip = (s,rec)=>{ const [c,txt]=classOf(s,rec); return c?`<span class="cls ${c}">${txt}</span>`:""; };
     const val = (rec,d)=> rec ? `${Math.round(rec.lcos).toLocaleString()}<small> €/t</small>` : `—`;
     out.push(`<div class="sd-card a"><p class="k">Scenario A · levelised cost of steel</p>
-      <div class="v">${val(rA)}</div><p class="d">${identity(sA)}</p>${clsChip(sA,rA)}</div>`);
+      <div class="v">${val(rA)}</div><p class="d">${identity(sA)}</p></div>`);
     out.push(`<div class="sd-card b"><p class="k">Scenario B · levelised cost of steel</p>
-      <div class="v">${val(rB)}</div><p class="d">${bothSame()?"same as A — set an override":identity(sB)}</p>${rB?clsChip(sB,rB):""}</div>`);
+      <div class="v">${val(rB)}</div><p class="d">${bothSame()?"same as A — set an override":identity(sB)}</p></div>`);
     if(rA&&rB){
       const d=rB.lcos-rA.lcos, pct = rA.lcos? Math.round(d/rA.lcos*100):0;
       const sign = d>0?"+":"";
@@ -384,22 +377,44 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     if(!rA&&!rB){ el.innerHTML='<div class="sd-empty">Neither scenario is solved.</div>'; return; }
     const X=["A","B"], traces=[];
     const eur = v => v==null ? "n/a" : Math.round(v).toLocaleString()+" €/MWh";
-    // per-scenario LCOE / LCOH and the assumed gas price, surfaced in hover
-    // (the report has no finer cost split to stack). customdata: [LCOE, LCOH, gas].
-    const cd = [[eur(rA?rA.lcoe:null), eur(rA?rA.lcoh:null), eur(gasPrice(sA))],
-                [eur(rB?rB.lcoe:null), eur(rB?rB.lcoh:null), eur(gasPrice(sB))]];
+    const lp = (rec,k) => rec && rec.lcoe_parts ? rec.lcoe_parts[k] : null;
+    const has = k => lp(rA,k)!=null || lp(rB,k)!=null;   // component present in either scenario
+    // Per-electricity-segment hover: the segment's own LCOE component (€/MWh),
+    // split finer where the data allows. Each trace carries its own customdata.
+    function elecHover(g){
+      if(g==="res"){
+        let ex="<br>renewables LCOE: %{customdata[0]}";
+        if(has("solar"))         ex+="<br>· solar %{customdata[1]}";
+        if(has("wind_onshore"))  ex+="<br>· wind onshore %{customdata[2]}";
+        if(has("wind_offshore")) ex+="<br>· wind offshore %{customdata[3]}";
+        return {ex, cd:[[eur(lp(rA,"renewables")),eur(lp(rA,"solar")),eur(lp(rA,"wind_onshore")),eur(lp(rA,"wind_offshore"))],
+                        [eur(lp(rB,"renewables")),eur(lp(rB,"solar")),eur(lp(rB,"wind_onshore")),eur(lp(rB,"wind_offshore"))]]};
+      }
+      if(g==="battery") return {ex:"<br>storage LCOE: %{customdata[0]}",
+        cd:[[eur(lp(rA,"storage"))],[eur(lp(rB,"storage"))]]};
+      if(g==="transmission") return {ex:"<br>transmission LCOE: %{customdata[0]}",
+        cd:[[eur(lp(rA,"transmission"))],[eur(lp(rB,"transmission"))]]};
+      if(g==="grid") return {ex:"<br>grid connection LCOE: %{customdata[0]}"
+        +"<br>grid electricity LCOE: %{customdata[1]}<br>avg grid price: %{customdata[2]}",
+        cd:[[eur(lp(rA,"grid_connection")),eur(lp(rA,"grid_energy")),eur(rA?rA.grid_price:null)],
+            [eur(lp(rB,"grid_connection")),eur(lp(rB,"grid_energy")),eur(rB?rB.grid_price:null)]]};
+      return null;
+    }
     COST_GROUPS.forEach(([g,glabel,gcolor])=>{
       const y=[rA?(rA.costs[g]||0):0, rB?(rB.costs[g]||0):0];
       if(!y.some(v=>v)) return;
-      let extra="";
-      if(g==="gas") extra="<br>gas price: %{customdata[2]}";
-      else if(ELEC.has(g)) extra="<br>levelised cost of electricity (LCOE, incl. storage): %{customdata[0]}";
-      else if(H2G.has(g)) extra="<br>levelised cost of hydrogen (LCOH): %{customdata[1]}";
-      traces.push({type:"bar", x:X, y, name:glabel, marker:{color:gcolor}, legendgroup:g, customdata:cd,
-        hovertemplate:`${glabel}: %{y:.0f} €/t${extra}<extra></extra>`});
+      let extra="", customdata;
+      if(g==="gas"){ extra="<br>gas price: %{customdata[0]}"; customdata=[[eur(gasPrice(sA))],[eur(gasPrice(sB))]]; }
+      else if(H2G.has(g)){ extra="<br>hydrogen LCOH: %{customdata[0]}"; customdata=[[eur(rA?rA.lcoh:null)],[eur(rB?rB.lcoh:null)]]; }
+      else if(ELEC.has(g)){ const h=elecHover(g); if(h){ extra=h.ex; customdata=h.cd; } }
+      const tr={type:"bar", x:X, y, name:glabel, marker:{color:gcolor}, legendgroup:g,
+        hovertemplate:`${glabel}: %{y:.0f} €/t${extra}<extra></extra>`};
+      if(customdata) tr.customdata=customdata;
+      traces.push(tr);
     });
     const totals=[rA?rA.lcos:null, rB?rB.lcos:null];
-    traces.push({type:"scatter", x:X, y:totals, mode:"text", customdata:cd,
+    const cdTot=[[eur(rA?rA.lcoe:null), eur(rA?rA.lcoh:null)],[eur(rB?rB.lcoe:null), eur(rB?rB.lcoh:null)]];
+    traces.push({type:"scatter", x:X, y:totals, mode:"text", customdata:cdTot,
       text:totals.map(v=>v==null?"":Math.round(v).toLocaleString()+" €/t"),
       textposition:"top center", textfont:{size:14,color:PRINT.ink}, showlegend:false,
       hovertemplate:`levelised cost of steel (LCOS): %{y:.0f} €/t<br>electricity (LCOE): %{customdata[0]}<br>hydrogen (LCOH): %{customdata[1]}<extra></extra>`});

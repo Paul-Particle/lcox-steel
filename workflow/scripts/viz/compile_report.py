@@ -178,6 +178,44 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     if lcoe == lcoe:  # not NaN
         summary["lcoe_eur_per_mwh"] = lcoe
 
+    # LCOE decomposition, €/MWh over the same electricity denominator so the parts
+    # sum back to LCOE: renewables split by tech, grid split into connection
+    # (capacity capital) vs energy (imports). Plus the average grid import price.
+    if lcoe == lcoe and elec_mwh > 0:
+        res_idx = n.generators.index[
+            n.generators.p_nom_extendable & ~n.generators.index.isin(("grid_import", "gas_supply"))
+        ]
+
+        def _res_cost(prefix: str) -> float:
+            idx = [g for g in res_idx if str(g).startswith(prefix)]
+            return float((n.generators.loc[idx, "capital_cost"] * n.generators.loc[idx, "p_nom_opt"]).sum())
+
+        grid_conn = grid_energy = grid_mwh = 0.0
+        if "grid_import" in n.generators.index:
+            gi = n.generators.loc[["grid_import"]]
+            if bool(gi.at["grid_import", "p_nom_extendable"]):
+                grid_conn = float(gi.at["grid_import", "capital_cost"] * gi.at["grid_import", "p_nom_opt"])
+            grid_energy = _marginal_costs(gi, n.generators_t.p, n.generators_t.marginal_cost) * annual_scale
+            grid_mwh = float(n.generators_t.p["grid_import"].sum()) * annual_scale
+
+        components = {
+            "lcoe_solar": _res_cost("solar"),
+            "lcoe_wind_onshore": _res_cost("wind-onshore"),
+            "lcoe_wind_offshore": _res_cost("wind-offshore"),
+            "lcoe_storage": breakdown.get("battery", 0.0),
+            "lcoe_grid_connection": grid_conn,
+            "lcoe_grid_energy": grid_energy,
+            "lcoe_transmission": breakdown.get("transmission", 0.0),
+        }
+        res_total = components["lcoe_solar"] + components["lcoe_wind_onshore"] + components["lcoe_wind_offshore"]
+        if res_total > 0:
+            summary["lcoe_renewables_eur_per_mwh"] = res_total / elec_mwh
+        for key, cost in components.items():
+            if cost > 0:
+                summary[f"{key}_eur_per_mwh"] = cost / elec_mwh
+        if grid_mwh > 0 and grid_energy > 0:
+            summary["grid_price_eur_per_mwh"] = grid_energy / grid_mwh
+
     if "electrolyser" in n.links.index and "steel_load" in n.loads.index:
         el_mwh = float(n.links_t.p0["electrolyser"].sum()) * annual_scale
         h2_mwh = _h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0

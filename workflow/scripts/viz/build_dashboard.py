@@ -166,6 +166,21 @@ def _record(row, lcos_row, cap_row):
             v = _num(cap_row[key]) if key in cap_row.index else 0.0
         if v > 0.001:
             caps[key] = round(v, 1)
+    # LCOE breakdown in €/MWh (parts sum to LCOE); absent parts stay absent.
+    lcoe_parts = {}
+    for col, key in (
+        ("lcoe_renewables_eur_per_mwh", "renewables"),
+        ("lcoe_solar_eur_per_mwh", "solar"),
+        ("lcoe_wind_onshore_eur_per_mwh", "wind_onshore"),
+        ("lcoe_wind_offshore_eur_per_mwh", "wind_offshore"),
+        ("lcoe_storage_eur_per_mwh", "storage"),
+        ("lcoe_grid_connection_eur_per_mwh", "grid_connection"),
+        ("lcoe_grid_energy_eur_per_mwh", "grid_energy"),
+        ("lcoe_transmission_eur_per_mwh", "transmission"),
+    ):
+        v = _opt(row.get(col))
+        if v is not None:
+            lcoe_parts[key] = v
     return {
         "lcos": round(_num(row.get("lcos_eur_per_t")), 0),
         "lcoe": _opt(row.get("lcoe_eur_per_mwh")),
@@ -175,6 +190,8 @@ def _record(row, lcos_row, cap_row):
         "h2_share": round(_num(row.get("iron_from_h2_share")), 3),
         "costs": costs,
         "caps": caps,
+        "lcoe_parts": lcoe_parts,
+        "grid_price": _opt(row.get("grid_price_eur_per_mwh")),
     }
 
 
