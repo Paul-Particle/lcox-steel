@@ -185,6 +185,7 @@ def _record(row, lcos_row, cap_row):
     # renewable itself), distinct from the lcoe_parts contribution above.
     lcoe_own = {}
     for col, key in (
+        ("lcoe_renewables_own_eur_per_mwh", "renewables"),
         ("lcoe_solar_own_eur_per_mwh", "solar"),
         ("lcoe_wind_onshore_own_eur_per_mwh", "wind_onshore"),
         ("lcoe_wind_offshore_own_eur_per_mwh", "wind_offshore"),
@@ -216,6 +217,7 @@ def _record(row, lcos_row, cap_row):
         "lcoh_parts": lcoh_parts,
         "grid_price": _opt(row.get("grid_price_eur_per_mwh")),
         "grid_fee": _opt(row.get("grid_fee_eur_per_mwh")),
+        "grid_conn_imported": _opt(row.get("grid_connection_eur_per_mwh_imported")),
     }
 
 

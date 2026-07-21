@@ -14,13 +14,13 @@
   @media (prefers-color-scheme:dark){
     .sd-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
       --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
-      --accent:#0293D2; --accent-2:#70D2F0; --scnA:#83D1DD; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16); --onA:#0E1A20;
+      --accent:#0293D2; --accent-2:#70D2F0; --scnA:#91C096; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16); --onA:#0E1A20;
       --good:#91C096; --mix:#E2B681; --fossil:#E0728C;
       --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
   }
   :root[data-theme="dark"] .sd-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
     --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
-    --accent:#0293D2; --accent-2:#70D2F0; --scnA:#83D1DD; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16); --onA:#0E1A20;
+    --accent:#0293D2; --accent-2:#70D2F0; --scnA:#91C096; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16); --onA:#0E1A20;
     --good:#91C096; --mix:#E2B681; --fossil:#E0728C;
     --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
   :root[data-theme="light"] .sd-root{--paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8;
@@ -179,7 +179,7 @@
 
     <div class="sd-panel">
       <div class="sd-panel-h row"><h2>Built capacity</h2><p id="cap-sub"></p>
-        <span class="ab-key"><span><i style="background:#0A5680"></i>A</span><span><i style="background:#0293D2"></i>B</span></span>
+        <span class="ab-key"><span><i id="ksw-a" style="background:#0A5680"></i>A</span><span><i style="background:#0293D2"></i>B</span></span>
       </div>
       <div class="sd-print"><div class="sd-plot" id="plot-cap"></div></div>
     </div>
@@ -209,7 +209,12 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const CONF = {responsive:true, displaylogo:false,
     modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
   const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
-  const CHROME = {A:"#0A5680", B:"#0293D2"};   // FCA fca-blue / highlight-blue (fixed, print surface)
+  // Scenario bar colours on the (always-white) print surface. B is fixed; A is
+  // FCA fca-blue in light mode, FCA green in dark mode — matching the --scnA UI accent.
+  const A_LIGHT="#0A5680", A_DARK="#91C096", B_COL="#0293D2";
+  const isDark = () => { const t=document.documentElement.getAttribute("data-theme");
+    return t ? t==="dark" : !!(window.matchMedia && window.matchMedia("(prefers-color-scheme:dark)").matches); };
+  const chrome = () => ({A: isDark()?A_DARK:A_LIGHT, B:B_COL});
   const ELEC = new Set(["res","battery","transmission","grid"]);   // segments priced by system LCOE
   const H2G  = new Set(["electrolyser","h2_buffer"]);              // segments priced by hydrogen LCOH
   let capH = 520;                              // capacity-plot height; cost plot matches it
@@ -381,42 +386,45 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const lo = (rec,k) => rec && rec.lcoe_own   ? rec.lcoe_own[k]   : null;   // the tech's own LCOE
     const lh = (rec,k) => rec && rec.lcoh_parts ? rec.lcoh_parts[k] : null;   // €/MWh LHV contribution to LCOH
     const has = k => lp(rA,k)!=null || lp(rB,k)!=null;   // component present in either scenario
-    const pctOf  = (part,total) => (total && part!=null) ? ` (${Math.round(part/total*100)}% of LCOE)` : "";
-    const pctOfH = (part,total) => (total && part!=null) ? ` (${Math.round(part/total*100)}% of LCOH)` : "";
-    // "own €/MWh (x% of LCOE)": the tech's own LCOE, plus its share of system LCOE.
-    const techStr = (rec,ownK,contribK) => {
-      const own=lo(rec,ownK), contrib=lp(rec,contribK);
-      return (own==null && contrib==null) ? "n/a" : eur(own!=null?own:contrib)+pctOf(contrib, rec&&rec.lcoe);
+    // Uniform hover line: "N €/MWh (P% of BASIS)". `val` is the figure shown;
+    // `share`/`total` give the parenthetical share; either may be null/absent.
+    const line = (val, share, total, basis) => {
+      if(val==null && share==null) return "n/a";
+      const pct = (total && share!=null) ? ` (${Math.round(share/total*100)}% of ${basis})` : "";
+      return eur(val!=null?val:share) + pct;
     };
-    // "€/MWh (x% of LCOE)": a component's LCOE contribution and its share.
-    const contribStr = (rec,k) => { const c=lp(rec,k); return c==null?"n/a":eur(c)+pctOf(c, rec&&rec.lcoe); };
-    // "€/MWh LHV (x% of LCOH)": an LCOH component and its share.
-    const lcohStr = (rec,k) => { const v=lh(rec,k); return v==null?"n/a":eur(v)+pctOfH(v, rec&&rec.lcoh); };
-    // Per-electricity-segment hover: each LCOE component with its % of total LCOE.
-    // Renewables break into per-tech own LCOE; grid electricity into market price
-    // + volumetric fee + levelised connection. Each trace carries its own customdata.
+    // generation tech — value = its own LCOE, share = its contribution to system LCOE
+    const techLine = (rec,ownK,contribK) => line(lo(rec,ownK), lp(rec,contribK), rec&&rec.lcoe, "LCOE");
+    // system add-on (storage, transmission) — value = its LCOE contribution, same for the share
+    const contribLine = (rec,k) => line(lp(rec,k), lp(rec,k), rec&&rec.lcoe, "LCOE");
+    // hydrogen cost component — value = its LCOH contribution, share of LCOH
+    const lcohLine = (rec,k) => line(lh(rec,k), lh(rec,k), rec&&rec.lcoh, "LCOH");
+    // Every electricity segment hovers as a headline line plus "· " sub-lines,
+    // each formatted "N €/MWh (P% of LCOE)". Grid electricity's headline is the
+    // all-in delivered price (market + fee + connection, all per imported MWh).
     function elecHover(g){
       if(g==="res"){
         let ex="<br>renewables: %{customdata[0]}";
         if(has("solar"))         ex+="<br>· solar %{customdata[1]}";
         if(has("wind_onshore"))  ex+="<br>· wind onshore %{customdata[2]}";
         if(has("wind_offshore")) ex+="<br>· wind offshore %{customdata[3]}";
-        const row = rec => [contribStr(rec,"renewables"), techStr(rec,"solar","solar"),
-                            techStr(rec,"wind_onshore","wind_onshore"), techStr(rec,"wind_offshore","wind_offshore")];
+        const row = rec => [techLine(rec,"renewables","renewables"), techLine(rec,"solar","solar"),
+                            techLine(rec,"wind_onshore","wind_onshore"), techLine(rec,"wind_offshore","wind_offshore")];
         return {ex, cd:[row(rA),row(rB)]};
       }
       if(g==="battery") return {ex:"<br>storage: %{customdata[0]}",
-        cd:[[contribStr(rA,"storage")],[contribStr(rB,"storage")]]};
+        cd:[[contribLine(rA,"storage")],[contribLine(rB,"storage")]]};
       if(g==="transmission") return {ex:"<br>transmission: %{customdata[0]}",
-        cd:[[contribStr(rA,"transmission")],[contribStr(rB,"transmission")]]};
+        cd:[[contribLine(rA,"transmission")],[contribLine(rB,"transmission")]]};
       if(g==="grid"){
         const row = rec => {
-          const conn=lp(rec,"grid_connection"), energy=lp(rec,"grid_energy");
-          const share = (rec&&rec.lcoe) ? Math.round(((conn||0)+(energy||0))/rec.lcoe*100)+"% of LCOE" : "n/a";
-          return [eur(rec?rec.grid_price:null), eur(rec?rec.grid_fee:null), conn==null?"n/a":eur(conn), share];
+          const price=rec?rec.grid_price:null, fee=rec?rec.grid_fee:null, ci=rec?rec.grid_conn_imported:null;
+          const delivered = [price,fee,ci].some(v=>v!=null) ? (price||0)+(fee||0)+(ci||0) : null;
+          const contrib = (lp(rec,"grid_connection")||0)+(lp(rec,"grid_energy")||0);
+          return [line(delivered, contrib||null, rec&&rec.lcoe, "LCOE"), eur(price), eur(fee), eur(ci)];
         };
-        return {ex:"<br>avg market price: %{customdata[0]}<br>volumetric fee: %{customdata[1]}"
-          +"<br>connection (levelised): %{customdata[2]}<br>grid share: %{customdata[3]}",
+        return {ex:"<br>grid electricity: %{customdata[0]}<br>· market price %{customdata[1]}"
+          +"<br>· volumetric fee %{customdata[2]}<br>· connection %{customdata[3]}",
           cd:[row(rA),row(rB)]};
       }
       return null;
@@ -430,8 +438,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         let ex="<br>hydrogen LCOH: %{customdata[0]}<br>· electrolyser %{customdata[1]}<br>· electricity %{customdata[2]}";
         if(lh(rA,"storage")!=null || lh(rB,"storage")!=null) ex+="<br>· H2 storage %{customdata[3]}";
         extra=ex;
-        const row = rec => [eur(rec?rec.lcoh:null), lcohStr(rec,"electrolyser"),
-                            lcohStr(rec,"electricity"), lcohStr(rec,"storage")];
+        const row = rec => [eur(rec?rec.lcoh:null), lcohLine(rec,"electrolyser"),
+                            lcohLine(rec,"electricity"), lcohLine(rec,"storage")];
         customdata=[row(rA),row(rB)];
       }
       else if(ELEC.has(g)){ const h=elecHover(g); if(h){ extra=h.ex; customdata=h.cd; } }
@@ -459,6 +467,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // axis (with unit) along the top.
   function renderCapacity(){
     const el=document.getElementById("plot-cap");
+    const CH=chrome();
+    const keyA=document.getElementById("ksw-a"); if(keyA) keyA.style.background=CH.A;
     const rA=recFor(A), rB=recFor(B());
     if(!rA&&!rB){ capH=460; el.innerHTML='<div class="sd-empty">Neither scenario is solved.</div>'; return; }
     const fmtVal = v => Math.round(v).toLocaleString();
@@ -486,7 +496,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       const sfx = i===0 ? "" : String(i+1);
       const cats = p.comps.map(c=>c.label);
       const maxv = Math.max(...p.comps.flatMap(c=>[c.a,c.b]));
-      [["a",CHROME.A,"A"],["b",CHROME.B,"B"]].forEach(([k,col,tag])=>{
+      [["a",CH.A,"A"],["b",CH.B,"B"]].forEach(([k,col,tag])=>{
         traces.push({type:"bar", orientation:"h", x:p.comps.map(c=>c[k]), y:cats,
           xaxis:"x"+sfx, yaxis:"y"+sfx, marker:{color:col}, showlegend:false, cliponaxis:false,
           text:p.comps.map(c=> c[k]>0.05 ? fmtVal(c[k]) : ""),

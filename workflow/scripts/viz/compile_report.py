@@ -247,13 +247,25 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
             if cost > 0 and mwh > 0:
                 summary[f"lcoe_{tech}_own_eur_per_mwh"] = cost / mwh
 
+        # Blended renewable own LCOE (over renewable generation only) — the
+        # generation-weighted mean of the per-tech own LCOEs, so it sits between
+        # them. Distinct from lcoe_renewables (contribution over all electricity,
+        # which grid imports drag below the per-tech figures).
+        res_mwh = _res_mwh("solar") + _res_mwh("wind-onshore") + _res_mwh("wind-offshore")
+        if res_total > 0 and res_mwh > 0:
+            summary["lcoe_renewables_own_eur_per_mwh"] = res_total / res_mwh
+
         # Split the average priced grid energy into the day-ahead market price and
-        # the constant volumetric fee (both €/MWh imported), so the hover can name
-        # them separately alongside the levelised connection cost.
-        if grid_mwh > 0 and grid_energy > 0:
-            fee = _grid_volumetric_fee_eur_per_mwh()
-            summary["grid_price_eur_per_mwh"] = max(grid_energy / grid_mwh - fee, 0.0)
-            summary["grid_fee_eur_per_mwh"] = fee
+        # the constant volumetric fee, and levelise the connection capex over the
+        # same imported-MWh denominator — so all three are €/MWh *imported* and add
+        # up to the all-in delivered electricity price (not mixed bases).
+        if grid_mwh > 0:
+            if grid_energy > 0:
+                fee = _grid_volumetric_fee_eur_per_mwh()
+                summary["grid_price_eur_per_mwh"] = max(grid_energy / grid_mwh - fee, 0.0)
+                summary["grid_fee_eur_per_mwh"] = fee
+            if grid_conn > 0:
+                summary["grid_connection_eur_per_mwh_imported"] = grid_conn / grid_mwh
 
     if "electrolyser" in n.links.index and "steel_load" in n.loads.index:
         el_mwh = float(n.links_t.p0["electrolyser"].sum()) * annual_scale
