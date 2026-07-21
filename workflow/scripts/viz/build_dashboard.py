@@ -245,7 +245,27 @@ def build_payload(projects):
     return cases, synth, gas, sorted(geos), sorted(years)
 
 
-def main():
+def _font_css():
+    """Inline the bundled Titillium Web woff2 subsets as @font-face data-URIs."""
+    assets = REPO / "workflow" / "scripts" / "viz" / "assets"
+    faces = []
+    for weight, name in ((400, "TitilliumWeb-Regular.woff2"), (600, "TitilliumWeb-SemiBold.woff2")):
+        p = assets / name
+        if p.exists():
+            b64 = base64.b64encode(p.read_bytes()).decode("ascii")
+            faces.append(f"@font-face{{font-family:'Titillium Web';font-style:normal;font-weight:{weight};"
+                         f"src:url('data:font/woff2;base64,{b64}') format('woff2');}}")
+    return "".join(faces)
+
+
+def build_html(template_path: Path):
+    """Assemble a self-contained dashboard HTML from a template, returning (html, cases, geos).
+
+    The payload (cases/synth/gas + FCA template + label/colour maps) is identical
+    for every template — v1 and the scenario-comparison v2 differ only in markup
+    and client JS. Templates carry the /*FONT_CSS*/, /*PLOTLY_JS*/ and
+    /*PAYLOAD_JSON*/ placeholders.
+    """
     projects = sorted(
         p for p in {r["project"] for r in _read_projects()}
         if PROJ_RE.match(p) and (RESULTS / f"report_{p}.csv").exists()
@@ -259,24 +279,6 @@ def main():
     tpl = L.fca_template
     template = tpl.to_plotly_json() if hasattr(tpl, "to_plotly_json") else tpl
 
-    faces = []
-    assets = REPO / "workflow" / "scripts" / "viz" / "assets"
-    b64 = {}
-    for name in ("TitilliumWeb-Regular.woff2", "TitilliumWeb-SemiBold.woff2"):
-        p = assets / name
-        if p.exists():
-            b64[name] = base64.b64encode(p.read_bytes()).decode("ascii")
-
-    def face(family, weight, name):
-        return (f"@font-face{{font-family:'{family}';font-style:normal;font-weight:{weight};"
-                f"src:url('data:font/woff2;base64,{b64[name]}') format('woff2');}}")
-
-    if "TitilliumWeb-Regular.woff2" in b64:
-        faces.append(face("Titillium Web", 400, "TitilliumWeb-Regular.woff2"))
-    if "TitilliumWeb-SemiBold.woff2" in b64:
-        faces.append(face("Titillium Web", 600, "TitilliumWeb-SemiBold.woff2"))
-    font_css = "".join(faces)
-
     plotly_js = (Path(__import__("plotly").__file__).parent / "package_data" / "plotly.min.js").read_text()
 
     payload = {
@@ -289,11 +291,15 @@ def main():
         "variant_routes": VARIANT_ROUTES, "variant_label": VARIANT_LABEL,
     }
 
-    template_html = TEMPLATE_HTML.read_text()
-    html = (template_html
-            .replace("/*FONT_CSS*/", font_css)
+    html = (template_path.read_text()
+            .replace("/*FONT_CSS*/", _font_css())
             .replace("/*PLOTLY_JS*/", plotly_js)
             .replace("/*PAYLOAD_JSON*/", json.dumps(payload, cls=PlotlyJSONEncoder)))
+    return html, cases, geos
+
+
+def main():
+    html, cases, geos = build_html(TEMPLATE_HTML)
     OUT.write_text(html)
     print(f"wrote {OUT} ({OUT.stat().st_size/1e6:.2f} MB) — {len(cases)} projects, {len(geos)} geos")
 
