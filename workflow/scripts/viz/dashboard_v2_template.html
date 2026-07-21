@@ -419,7 +419,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         return out;
       }
       if(g==="process"){
-        [["dri","H2-DRI shaft"],["dri_ng","NG-DRI shaft"],["moe","MOE"],
+        [["dri","H2-DRI shaft"],["dri_ng","NG-DRI shaft"],["moe","MOE"],["ladle","Ladle metallurgy"],
          ["electrowinning","Electrowinning"],["eaf","EAF"]].forEach(([k,lab])=>{
            if(cdv(rec,k)!=null) push("· "+lab, tLine(rec,k)); });
         return out;

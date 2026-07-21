@@ -211,6 +211,7 @@ def _record(row, lcos_row, cap_row):
         ("plant_dri_ng_eur_per_t", "dri_ng"),
         ("plant_eaf_eur_per_t", "eaf"),
         ("plant_moe_eur_per_t", "moe"),
+        ("plant_ladle_eur_per_t", "ladle"),
         ("plant_electrowinning_eur_per_t", "electrowinning"),
         ("ore_eur_per_t_steel", "ore"),
         ("consumables_eur_per_t_steel", "consumables"),

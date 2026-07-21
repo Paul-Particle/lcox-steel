@@ -25,6 +25,30 @@ _ASSUMPTIONS_PATH = Path(__file__).resolve().parents[3] / "config" / "assumption
 
 
 @lru_cache(maxsize=1)
+def _ladle_capital_fraction() -> float:
+    """Ladle metallurgy's share of the folded MOE link capital.
+
+    `_add_moe_link` folds ladle capex+opex into the single moe link, both
+    annuitised over the MOE lifetime — so the split is a config constant (the
+    dashboard's projects don't overlay moe/ladle/wacc). Returns the ladle
+    fraction of the combined annualised (capex+opex), used to break the reported
+    MOE plant cost into MOE proper vs ladle. Zero if unavailable.
+    """
+    try:
+        cfg = yaml.safe_load(_ASSUMPTIONS_PATH.read_text()) or {}
+        moe, ladle = cfg["moe"], cfg["ladle"]
+        wacc = cfg["finance"]["default_wacc"]
+        life = moe["lifetime_years"]
+        annuity = (wacc * (1.0 + wacc) ** life) / ((1.0 + wacc) ** life - 1.0)
+        moe_per_t = annuity * moe["capex_per_t_per_year_eur"] + moe["opex_per_t_per_year_eur"]
+        ladle_per_t = annuity * ladle["capex_per_t_per_year_eur"] + ladle["opex_per_t_per_year_eur"]
+        total = moe_per_t + ladle_per_t
+        return ladle_per_t / total if total > 0 else 0.0
+    except (OSError, ValueError, TypeError, KeyError, ZeroDivisionError):
+        return 0.0
+
+
+@lru_cache(maxsize=1)
 def _grid_volumetric_fee_eur_per_mwh() -> float:
     """The volumetric grid fee (€/MWh) added on top of the day-ahead price.
 
@@ -320,7 +344,15 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
 
             for link in PROCESS_LINKS:
                 capex = _link_capex(link)
-                if capex > 0:
+                if capex <= 0:
+                    continue
+                if link == "moe":
+                    # Split the folded MOE link capital into MOE proper vs ladle
+                    # metallurgy, so both are visible (they sum to the moe link).
+                    frac = _ladle_capital_fraction()
+                    summary["plant_moe_eur_per_t"] = capex * (1.0 - frac) / steel_t
+                    summary["plant_ladle_eur_per_t"] = capex * frac / steel_t
+                else:
                     summary[f"plant_{link}_eur_per_t"] = capex / steel_t
             ore = sum(_link_marginal(l) for l in ("dri", "dri_ng", "moe", "electrowinning"))
             consumables = _link_marginal("eaf")
