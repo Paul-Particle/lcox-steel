@@ -179,7 +179,7 @@
 
     <div class="sd-panel">
       <div class="sd-panel-h row"><h2>Built capacity</h2><p id="cap-sub"></p>
-        <span class="ab-key"><span><i style="background:#2E6A93"></i>A</span><span><i style="background:#6E6ABF"></i>B</span></span>
+        <span class="ab-key"><span><i style="background:#0A5680"></i>A</span><span><i style="background:#0293D2"></i>B</span></span>
       </div>
       <div class="sd-print"><div class="sd-plot" id="plot-cap"></div></div>
     </div>
@@ -209,7 +209,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const CONF = {responsive:true, displaylogo:false,
     modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
   const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
-  const CHROME = {A:"#2E6A93", B:"#6E6ABF"};   // for plot x-tick colouring (stable, print surface)
+  const CHROME = {A:"#0A5680", B:"#0293D2"};   // FCA fca-blue / highlight-blue (fixed, print surface)
+  const ELEC = new Set(["res","battery","transmission","grid"]);   // segments priced by system LCOE
+  const H2G  = new Set(["electrolyser","h2_buffer"]);              // segments priced by hydrogen LCOH
+  let capH = 520;                              // capacity-plot height; cost plot matches it
 
   const AXES = ["geo","year","grid","route","cf","variant"];
   const OPTS = {
@@ -380,17 +383,25 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const sA=A, sB=B(), rA=recFor(sA), rB=recFor(sB);
     if(!rA&&!rB){ el.innerHTML='<div class="sd-empty">Neither scenario is solved.</div>'; return; }
     const X=["A","B"], traces=[];
+    const mwh = v => v==null ? "n/a" : Math.round(v).toLocaleString()+" €/MWh";
+    // per-scenario LCOE / LCOH, surfaced in hover (the report has no finer cost split).
+    const cd = [[mwh(rA?rA.lcoe:null), mwh(rA?rA.lcoh:null)],
+                [mwh(rB?rB.lcoe:null), mwh(rB?rB.lcoh:null)]];
     COST_GROUPS.forEach(([g,glabel,gcolor])=>{
       const y=[rA?(rA.costs[g]||0):0, rB?(rB.costs[g]||0):0];
       if(!y.some(v=>v)) return;
-      traces.push({type:"bar", x:X, y, name:glabel, marker:{color:gcolor}, legendgroup:g,
-        hovertemplate:`${glabel}: %{y:.0f} €/t<extra></extra>`});
+      let extra="";
+      if(ELEC.has(g)) extra="<br>system LCOE: %{customdata[0]}";
+      else if(H2G.has(g)) extra="<br>hydrogen LCOH: %{customdata[1]}";
+      traces.push({type:"bar", x:X, y, name:glabel, marker:{color:gcolor}, legendgroup:g, customdata:cd,
+        hovertemplate:`${glabel}: %{y:.0f} €/t${extra}<extra></extra>`});
     });
     const totals=[rA?rA.lcos:null, rB?rB.lcos:null];
-    traces.push({type:"scatter", x:X, y:totals, mode:"text",
+    traces.push({type:"scatter", x:X, y:totals, mode:"text", customdata:cd,
       text:totals.map(v=>v==null?"":Math.round(v).toLocaleString()+" €/t"),
-      textposition:"top center", textfont:{size:13,color:PRINT.ink}, showlegend:false, hoverinfo:"skip"});
-    const lay=printBase({barmode:"stack", height:498, bargap:0.5, margin:{l:66,r:18,t:24,b:132},
+      textposition:"top center", textfont:{size:14,color:PRINT.ink}, showlegend:false,
+      hovertemplate:`LCOS %{y:.0f} €/t<br>system LCOE: %{customdata[0]}<br>hydrogen LCOH: %{customdata[1]}<extra></extra>`});
+    const lay=printBase({barmode:"stack", height:capH, bargap:0.5, margin:{l:66,r:18,t:24,b:132},
       legend:{orientation:"h", x:0, y:-0.13, xanchor:"left", yanchor:"top", font:{size:10.5,color:PRINT.muted}},
       xaxis:axis(xTicks(sA,sB)),
       yaxis:axis({title:{text:"LCOS  (€ / t steel)",font:{size:11,color:PRINT.muted}},rangemode:"tozero"})});
@@ -404,8 +415,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   function renderCapacity(){
     const el=document.getElementById("plot-cap");
     const rA=recFor(A), rB=recFor(B());
-    if(!rA&&!rB){ el.innerHTML='<div class="sd-empty">Neither scenario is solved.</div>'; return; }
-    const fmtVal=(v,pi)=> pi===0 ? Math.round(v).toLocaleString() : v.toFixed(1);
+    if(!rA&&!rB){ capH=460; el.innerHTML='<div class="sd-empty">Neither scenario is solved.</div>'; return; }
+    const fmtVal = v => Math.round(v).toLocaleString();
     const built = CAP_PANELS.map((panel,pi)=>{
       const [ptitle,unit,bars]=panel;
       const comps = bars.map(([key,label])=>({label,
@@ -413,17 +424,18 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         .filter(c => Math.max(c.a,c.b) > 0.05);
       return {ptitle,unit,pi,comps};
     }).filter(p=>p.comps.length);
-    if(!built.length){ el.innerHTML='<div class="sd-empty">No built capacity.</div>'; return; }
+    if(!built.length){ capH=460; el.innerHTML='<div class="sd-empty">No built capacity.</div>'; return; }
 
     // Pixel budget → paper-fraction domains so bar thickness is uniform across panels.
-    const rowPx=38, headPx=50, topPx=14, botPx=10;
+    const rowPx=52, headPx=58, topPx=12, botPx=10;
     const bodies = built.map(p=>p.comps.length*rowPx);
     const H = topPx + botPx + bodies.reduce((s,v)=>s+v,0) + built.length*headPx;
-    const traces=[], lay=printBase({barmode:"group", height:H, bargap:0.30, bargroupgap:0.12,
-      margin:{l:8,r:70,t:8,b:botPx}, showlegend:false});
+    capH = H;
+    const traces=[], lay=printBase({barmode:"group", height:H, bargap:0.36, bargroupgap:0.16,
+      margin:{l:8,r:78,t:8,b:botPx}, showlegend:false});
     let y = 1 - topPx/H;
     built.forEach((p,i)=>{
-      y -= headPx/H;                       // room above panel for its top axis + unit title
+      y -= headPx/H;                       // room above panel for its top axis + title
       const top_=y, bot_=Math.max(0, y - bodies[i]/H);
       y = bot_;
       const sfx = i===0 ? "" : String(i+1);
@@ -432,13 +444,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       [["a",CHROME.A,"A"],["b",CHROME.B,"B"]].forEach(([k,col,tag])=>{
         traces.push({type:"bar", orientation:"h", x:p.comps.map(c=>c[k]), y:cats,
           xaxis:"x"+sfx, yaxis:"y"+sfx, marker:{color:col}, showlegend:false, cliponaxis:false,
-          text:p.comps.map(c=> c[k]>0.05 ? fmtVal(c[k],p.pi) : ""),
-          textposition:"outside", textfont:{size:10.5,color:PRINT.muted},
+          text:p.comps.map(c=> c[k]>0.05 ? fmtVal(c[k]) : ""),
+          textposition:"outside", textfont:{size:13,color:PRINT.ink},
           hovertemplate:`%{y} · ${tag}: %{x:.1f} ${p.unit}<extra></extra>`});
       });
       lay["xaxis"+sfx]=axis({domain:[0,1], anchor:"y"+sfx, side:"top",
-        range:[0, maxv*1.16], rangemode:"tozero", ticks:"",
-        title:{text:p.unit,font:{size:10.5,color:PRINT.muted}}, tickfont:{size:10,color:PRINT.muted}});
+        range:[0, maxv*1.18], rangemode:"tozero", ticks:"",
+        title:{text:`<b>${p.ptitle}</b>`, standoff:4, font:{size:12,color:PRINT.ink}},
+        tickfont:{size:10,color:PRINT.muted}});
       lay["yaxis"+sfx]=axis({domain:[bot_,top_], anchor:"x"+sfx, autorange:"reversed",
         automargin:true, ticks:"", showgrid:false, linecolor:"rgba(0,0,0,0)",
         tickfont:{size:11.5,color:PRINT.ink}});
@@ -533,7 +546,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // ---- main
   function renderAll(){
     document.getElementById("sd-cards").innerHTML = cardsHtml();
-    renderCost(); renderCapacity(); renderTable();
+    renderCapacity(); renderCost(); renderTable();   // capacity first: it sets the shared height
   }
   function refresh(){
     normalise();
