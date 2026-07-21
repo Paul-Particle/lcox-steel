@@ -5,7 +5,7 @@
     --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7;
     --border:#D6DBDF; --hair:#E4E9ED;
     --accent:#0A5680; --accent-2:#0293D2;
-    --scnA:#0A5680; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.08);
+    --scnA:#0A5680; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.08); --onA:#fff;
     --good:#4E8C6A; --mix:#C08A3A; --fossil:#C24463;
     --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);
     --tw:"Titillium Web",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
@@ -14,18 +14,18 @@
   @media (prefers-color-scheme:dark){
     .sd-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
       --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
-      --accent:#0293D2; --accent-2:#70D2F0; --scnA:#5AA9D6; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16);
+      --accent:#0293D2; --accent-2:#70D2F0; --scnA:#83D1DD; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16); --onA:#0E1A20;
       --good:#91C096; --mix:#E2B681; --fossil:#E0728C;
       --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
   }
   :root[data-theme="dark"] .sd-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
     --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
-    --accent:#0293D2; --accent-2:#70D2F0; --scnA:#5AA9D6; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16);
+    --accent:#0293D2; --accent-2:#70D2F0; --scnA:#83D1DD; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16); --onA:#0E1A20;
     --good:#91C096; --mix:#E2B681; --fossil:#E0728C;
     --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
   :root[data-theme="light"] .sd-root{--paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8;
     --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7; --border:#D6DBDF; --hair:#E4E9ED;
-    --accent:#0A5680; --accent-2:#0293D2; --scnA:#0A5680; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.08);
+    --accent:#0A5680; --accent-2:#0293D2; --scnA:#0A5680; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.08); --onA:#fff;
     --good:#4E8C6A; --mix:#C08A3A; --fossil:#C24463;
     --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);}
 
@@ -35,7 +35,7 @@
   .sd-wrap{max-width:1200px;margin:0 auto;padding:34px 24px 72px;}
 
   .sd-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;
-    flex-wrap:wrap;border-bottom:2px solid var(--accent);padding-bottom:18px;}
+    flex-wrap:wrap;padding-bottom:6px;}
   .sd-brand{display:flex;align-items:center;gap:11px;margin-bottom:11px;}
   .sd-dot{width:12px;height:12px;border-radius:50%;background:var(--accent);flex:none;}
   .sd-brand span{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent-2);font-weight:600;}
@@ -50,8 +50,8 @@
   .scn.b::before{background:var(--scnB);}
   .scn-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:13px;}
   .scn-tag{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;
-    color:#fff;background:var(--scnA);border-radius:5px;padding:3px 9px;flex:none;}
-  .scn.b .scn-tag{background:var(--scnB);}
+    color:var(--onA);background:var(--scnA);border-radius:5px;padding:3px 9px;flex:none;}
+  .scn.b .scn-tag{background:var(--scnB);color:#fff;}
   .scn-name{font-size:14px;font-weight:700;letter-spacing:-.01em;}
   .scn-clamp{font-family:var(--mono);font-size:10.5px;color:var(--mix);letter-spacing:.02em;}
   .scn-reset{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
@@ -66,7 +66,7 @@
   .sd-pill{border:0;background:transparent;color:var(--muted);font-family:var(--tw);font-size:13px;font-weight:600;
     padding:5px 12px;border-radius:7px;cursor:pointer;transition:background .13s,color .13s;white-space:nowrap;}
   .sd-pill:hover{color:var(--ink);}
-  .sd-pill[aria-pressed="true"]{background:var(--scnA);color:#fff;}
+  .sd-pill[aria-pressed="true"]{background:var(--scnA);color:var(--onA);}
   .scn.b .sd-pill[aria-pressed="true"]{background:var(--scnB);color:#fff;}
   .scn.b .sd-pill.same[aria-pressed="true"]{background:transparent;color:var(--muted);box-shadow:inset 0 0 0 1.5px var(--border);}
   .sd-pill:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;}
@@ -127,7 +127,7 @@
   .sd-tbl tr.pick td.rt{box-shadow:inset 3px 0 0 var(--mark);}
   .sd-tbl .chip{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.04em;
     color:#fff;border-radius:4px;padding:1px 6px;margin-left:9px;vertical-align:middle;}
-  .chip.A{background:var(--scnA);} .chip.B{background:var(--scnB);}
+  .chip.A{background:var(--scnA);color:var(--onA);} .chip.B{background:var(--scnB);}
   .tag{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;
     text-transform:uppercase;color:var(--fossil);border:1px solid var(--fossil);border-radius:5px;
     padding:1px 6px;margin-left:8px;vertical-align:middle;font-weight:700;}
@@ -377,27 +377,48 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     if(!rA&&!rB){ el.innerHTML='<div class="sd-empty">Neither scenario is solved.</div>'; return; }
     const X=["A","B"], traces=[];
     const eur = v => v==null ? "n/a" : Math.round(v).toLocaleString()+" €/MWh";
-    const lp = (rec,k) => rec && rec.lcoe_parts ? rec.lcoe_parts[k] : null;
+    const lp = (rec,k) => rec && rec.lcoe_parts ? rec.lcoe_parts[k] : null;   // €/MWh contribution to LCOE
+    const lo = (rec,k) => rec && rec.lcoe_own   ? rec.lcoe_own[k]   : null;   // the tech's own LCOE
+    const lh = (rec,k) => rec && rec.lcoh_parts ? rec.lcoh_parts[k] : null;   // €/MWh LHV contribution to LCOH
     const has = k => lp(rA,k)!=null || lp(rB,k)!=null;   // component present in either scenario
-    // Per-electricity-segment hover: the segment's own LCOE component (€/MWh),
-    // split finer where the data allows. Each trace carries its own customdata.
+    const pctOf  = (part,total) => (total && part!=null) ? ` (${Math.round(part/total*100)}% of LCOE)` : "";
+    const pctOfH = (part,total) => (total && part!=null) ? ` (${Math.round(part/total*100)}% of LCOH)` : "";
+    // "own €/MWh (x% of LCOE)": the tech's own LCOE, plus its share of system LCOE.
+    const techStr = (rec,ownK,contribK) => {
+      const own=lo(rec,ownK), contrib=lp(rec,contribK);
+      return (own==null && contrib==null) ? "n/a" : eur(own!=null?own:contrib)+pctOf(contrib, rec&&rec.lcoe);
+    };
+    // "€/MWh (x% of LCOE)": a component's LCOE contribution and its share.
+    const contribStr = (rec,k) => { const c=lp(rec,k); return c==null?"n/a":eur(c)+pctOf(c, rec&&rec.lcoe); };
+    // "€/MWh LHV (x% of LCOH)": an LCOH component and its share.
+    const lcohStr = (rec,k) => { const v=lh(rec,k); return v==null?"n/a":eur(v)+pctOfH(v, rec&&rec.lcoh); };
+    // Per-electricity-segment hover: each LCOE component with its % of total LCOE.
+    // Renewables break into per-tech own LCOE; grid electricity into market price
+    // + volumetric fee + levelised connection. Each trace carries its own customdata.
     function elecHover(g){
       if(g==="res"){
-        let ex="<br>renewables LCOE: %{customdata[0]}";
+        let ex="<br>renewables: %{customdata[0]}";
         if(has("solar"))         ex+="<br>· solar %{customdata[1]}";
         if(has("wind_onshore"))  ex+="<br>· wind onshore %{customdata[2]}";
         if(has("wind_offshore")) ex+="<br>· wind offshore %{customdata[3]}";
-        return {ex, cd:[[eur(lp(rA,"renewables")),eur(lp(rA,"solar")),eur(lp(rA,"wind_onshore")),eur(lp(rA,"wind_offshore"))],
-                        [eur(lp(rB,"renewables")),eur(lp(rB,"solar")),eur(lp(rB,"wind_onshore")),eur(lp(rB,"wind_offshore"))]]};
+        const row = rec => [contribStr(rec,"renewables"), techStr(rec,"solar","solar"),
+                            techStr(rec,"wind_onshore","wind_onshore"), techStr(rec,"wind_offshore","wind_offshore")];
+        return {ex, cd:[row(rA),row(rB)]};
       }
-      if(g==="battery") return {ex:"<br>storage LCOE: %{customdata[0]}",
-        cd:[[eur(lp(rA,"storage"))],[eur(lp(rB,"storage"))]]};
-      if(g==="transmission") return {ex:"<br>transmission LCOE: %{customdata[0]}",
-        cd:[[eur(lp(rA,"transmission"))],[eur(lp(rB,"transmission"))]]};
-      if(g==="grid") return {ex:"<br>grid connection LCOE: %{customdata[0]}"
-        +"<br>grid electricity LCOE: %{customdata[1]}<br>avg grid price: %{customdata[2]}",
-        cd:[[eur(lp(rA,"grid_connection")),eur(lp(rA,"grid_energy")),eur(rA?rA.grid_price:null)],
-            [eur(lp(rB,"grid_connection")),eur(lp(rB,"grid_energy")),eur(rB?rB.grid_price:null)]]};
+      if(g==="battery") return {ex:"<br>storage: %{customdata[0]}",
+        cd:[[contribStr(rA,"storage")],[contribStr(rB,"storage")]]};
+      if(g==="transmission") return {ex:"<br>transmission: %{customdata[0]}",
+        cd:[[contribStr(rA,"transmission")],[contribStr(rB,"transmission")]]};
+      if(g==="grid"){
+        const row = rec => {
+          const conn=lp(rec,"grid_connection"), energy=lp(rec,"grid_energy");
+          const share = (rec&&rec.lcoe) ? Math.round(((conn||0)+(energy||0))/rec.lcoe*100)+"% of LCOE" : "n/a";
+          return [eur(rec?rec.grid_price:null), eur(rec?rec.grid_fee:null), conn==null?"n/a":eur(conn), share];
+        };
+        return {ex:"<br>avg market price: %{customdata[0]}<br>volumetric fee: %{customdata[1]}"
+          +"<br>connection (levelised): %{customdata[2]}<br>grid share: %{customdata[3]}",
+          cd:[row(rA),row(rB)]};
+      }
       return null;
     }
     COST_GROUPS.forEach(([g,glabel,gcolor])=>{
@@ -405,7 +426,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       if(!y.some(v=>v)) return;
       let extra="", customdata;
       if(g==="gas"){ extra="<br>gas price: %{customdata[0]}"; customdata=[[eur(gasPrice(sA))],[eur(gasPrice(sB))]]; }
-      else if(H2G.has(g)){ extra="<br>hydrogen LCOH: %{customdata[0]}"; customdata=[[eur(rA?rA.lcoh:null)],[eur(rB?rB.lcoh:null)]]; }
+      else if(H2G.has(g)){
+        let ex="<br>hydrogen LCOH: %{customdata[0]}<br>· electrolyser %{customdata[1]}<br>· electricity %{customdata[2]}";
+        if(lh(rA,"storage")!=null || lh(rB,"storage")!=null) ex+="<br>· H2 storage %{customdata[3]}";
+        extra=ex;
+        const row = rec => [eur(rec?rec.lcoh:null), lcohStr(rec,"electrolyser"),
+                            lcohStr(rec,"electricity"), lcohStr(rec,"storage")];
+        customdata=[row(rA),row(rB)];
+      }
       else if(ELEC.has(g)){ const h=elecHover(g); if(h){ extra=h.ex; customdata=h.cd; } }
       const tr={type:"bar", x:X, y, name:glabel, marker:{color:gcolor}, legendgroup:g,
         hovertemplate:`${glabel}: %{y:.0f} €/t${extra}<extra></extra>`};

@@ -4,10 +4,12 @@ Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
 """
 
 import logging
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
 import pypsa
+import yaml
 
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
@@ -17,6 +19,24 @@ if "snakemake" not in globals():
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
+
+# repo root: workflow/scripts/viz/compile_report.py -> parents[3]
+_ASSUMPTIONS_PATH = Path(__file__).resolve().parents[3] / "config" / "assumptions.yaml"
+
+
+@lru_cache(maxsize=1)
+def _grid_volumetric_fee_eur_per_mwh() -> float:
+    """The volumetric grid fee (€/MWh) added on top of the day-ahead price.
+
+    A global assumption (config/assumptions.yaml), constant across scenarios, so
+    the grid import's average priced energy can be split into the market price
+    and the fee. Zero if unavailable — the split then collapses to price-only.
+    """
+    try:
+        cfg = yaml.safe_load(_ASSUMPTIONS_PATH.read_text()) or {}
+        return float(cfg.get("grid", {}).get("fee_eur_per_mwh", 0.0))
+    except (OSError, ValueError, TypeError):
+        return 0.0
 
 
 def _h2_produced_kg(n: pypsa.Network) -> float:
@@ -190,6 +210,10 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
             idx = [g for g in res_idx if str(g).startswith(prefix)]
             return float((n.generators.loc[idx, "capital_cost"] * n.generators.loc[idx, "p_nom_opt"]).sum())
 
+        def _res_mwh(prefix: str) -> float:
+            idx = [g for g in res_idx if str(g).startswith(prefix)]
+            return float(n.generators_t.p[idx].sum().sum()) * annual_scale if idx else 0.0
+
         grid_conn = grid_energy = grid_mwh = 0.0
         if "grid_import" in n.generators.index:
             gi = n.generators.loc[["grid_import"]]
@@ -213,17 +237,40 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         for key, cost in components.items():
             if cost > 0:
                 summary[f"{key}_eur_per_mwh"] = cost / elec_mwh
+
+        # Per-technology LCOE (€/MWh over that tech's own generation, not the
+        # system total) — a fair unit cost for the renewable itself, distinct from
+        # its lcoe_<tech> contribution to the system LCOE above.
+        for prefix, tech in (("solar", "solar"), ("wind-onshore", "wind_onshore"),
+                             ("wind-offshore", "wind_offshore")):
+            cost, mwh = _res_cost(prefix), _res_mwh(prefix)
+            if cost > 0 and mwh > 0:
+                summary[f"lcoe_{tech}_own_eur_per_mwh"] = cost / mwh
+
+        # Split the average priced grid energy into the day-ahead market price and
+        # the constant volumetric fee (both €/MWh imported), so the hover can name
+        # them separately alongside the levelised connection cost.
         if grid_mwh > 0 and grid_energy > 0:
-            summary["grid_price_eur_per_mwh"] = grid_energy / grid_mwh
+            fee = _grid_volumetric_fee_eur_per_mwh()
+            summary["grid_price_eur_per_mwh"] = max(grid_energy / grid_mwh - fee, 0.0)
+            summary["grid_fee_eur_per_mwh"] = fee
 
     if "electrolyser" in n.links.index and "steel_load" in n.loads.index:
         el_mwh = float(n.links_t.p0["electrolyser"].sum()) * annual_scale
         h2_mwh = _h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
         if h2_mwh > 0:
             elec_for_h2 = el_mwh * (lcoe if lcoe == lcoe else 0.0)
-            lcoh = (breakdown.get("electrolyser", 0.0) + breakdown.get("h2_buffer", 0.0)
-                    + elec_for_h2) / h2_mwh
+            el_cost = breakdown.get("electrolyser", 0.0)
+            buf_cost = breakdown.get("h2_buffer", 0.0)
+            lcoh = (el_cost + buf_cost + elec_for_h2) / h2_mwh
             summary["lcoh_eur_per_mwh_lhv"] = lcoh
+            # LCOH decomposition, €/MWh LHV over the same H2 denominator so the
+            # parts sum back to LCOH: the electrolyser plant, its electricity
+            # (valued at LCOE) and — where built — the H2 buffer store.
+            summary["lcoh_electrolyser_eur_per_mwh_lhv"] = el_cost / h2_mwh
+            summary["lcoh_electricity_eur_per_mwh_lhv"] = elec_for_h2 / h2_mwh
+            if buf_cost > 0:
+                summary["lcoh_h2_storage_eur_per_mwh_lhv"] = buf_cost / h2_mwh
 
     # Steel-route process links: capacity in output units (t/h of iron or
     # steel — p_nom is input-side, so scale by the link efficiency) plus

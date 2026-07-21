@@ -181,6 +181,27 @@ def _record(row, lcos_row, cap_row):
         v = _opt(row.get(col))
         if v is not None:
             lcoe_parts[key] = v
+    # Per-tech LCOE over each tech's own generation (the unit cost of the
+    # renewable itself), distinct from the lcoe_parts contribution above.
+    lcoe_own = {}
+    for col, key in (
+        ("lcoe_solar_own_eur_per_mwh", "solar"),
+        ("lcoe_wind_onshore_own_eur_per_mwh", "wind_onshore"),
+        ("lcoe_wind_offshore_own_eur_per_mwh", "wind_offshore"),
+    ):
+        v = _opt(row.get(col))
+        if v is not None:
+            lcoe_own[key] = v
+    # LCOH breakdown in €/MWh LHV (parts sum to LCOH); absent parts stay absent.
+    lcoh_parts = {}
+    for col, key in (
+        ("lcoh_electrolyser_eur_per_mwh_lhv", "electrolyser"),
+        ("lcoh_electricity_eur_per_mwh_lhv", "electricity"),
+        ("lcoh_h2_storage_eur_per_mwh_lhv", "storage"),
+    ):
+        v = _opt(row.get(col))
+        if v is not None:
+            lcoh_parts[key] = v
     return {
         "lcos": round(_num(row.get("lcos_eur_per_t")), 0),
         "lcoe": _opt(row.get("lcoe_eur_per_mwh")),
@@ -191,7 +212,10 @@ def _record(row, lcos_row, cap_row):
         "costs": costs,
         "caps": caps,
         "lcoe_parts": lcoe_parts,
+        "lcoe_own": lcoe_own,
+        "lcoh_parts": lcoh_parts,
         "grid_price": _opt(row.get("grid_price_eur_per_mwh")),
+        "grid_fee": _opt(row.get("grid_fee_eur_per_mwh")),
     }
 
 
