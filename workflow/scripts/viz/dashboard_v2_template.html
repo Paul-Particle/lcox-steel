@@ -232,10 +232,12 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
                  route:"Route", cf:"Capacity factor", variant:"Sensitivity"};
 
   // ---- state: A is a full scenario; Bov holds per-axis overrides (null = track A).
-  const firstGeo = GEOS.includes("DE") ? "DE" : GEOS[0];
-  const A = {geo:firstGeo, year:String(YEARS[YEARS.length-1]), grid:"grid",
-             route:"h2-dri-eaf", cf:"p95", variant:"base"};
-  const Bov = {geo:null, year:null, grid:null, route:"moe", cf:null, variant:null};
+  // Default view: H2-DRI-EAF with H₂ salt-cavern storage vs MOE at 70% turndown,
+  // both at the synthetic best site (P95) in Australia, 2025, islanded (salt-cavern
+  // seasonal storage is only meaningful off-grid).
+  const A = {geo:"AUS", year:"2025", grid:"nogrid",
+             route:"h2-dri-eaf", cf:"p95", variant:"salt"};
+  const Bov = {geo:null, year:null, grid:null, route:"moe", cf:null, variant:"moe70"};
   // B before clamping: A with per-axis overrides applied.
   const resolveRaw = () => { const b={}; for(const k of AXES) b[k] = Bov[k]==null ? A[k] : Bov[k]; return b; };
 
