@@ -5,7 +5,7 @@
     --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7;
     --border:#D6DBDF; --hair:#E4E9ED;
     --accent:#0A5680; --accent-2:#0293D2;
-    --scnA:#0A5680; --scnB:#5E5AA8; --scnB-tint:rgba(94,90,168,.07);
+    --scnA:#0A5680; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.08);
     --good:#4E8C6A; --mix:#C08A3A; --fossil:#C24463;
     --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);
     --tw:"Titillium Web",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
@@ -14,18 +14,18 @@
   @media (prefers-color-scheme:dark){
     .sd-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
       --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
-      --accent:#0293D2; --accent-2:#70D2F0; --scnA:#0293D2; --scnB:#9AA0E6; --scnB-tint:rgba(154,160,230,.10);
+      --accent:#0293D2; --accent-2:#70D2F0; --scnA:#5AA9D6; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16);
       --good:#91C096; --mix:#E2B681; --fossil:#E0728C;
       --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
   }
   :root[data-theme="dark"] .sd-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
     --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
-    --accent:#0293D2; --accent-2:#70D2F0; --scnA:#0293D2; --scnB:#9AA0E6; --scnB-tint:rgba(154,160,230,.10);
+    --accent:#0293D2; --accent-2:#70D2F0; --scnA:#5AA9D6; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16);
     --good:#91C096; --mix:#E2B681; --fossil:#E0728C;
     --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
   :root[data-theme="light"] .sd-root{--paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8;
     --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7; --border:#D6DBDF; --hair:#E4E9ED;
-    --accent:#0A5680; --accent-2:#0293D2; --scnA:#0A5680; --scnB:#5E5AA8; --scnB-tint:rgba(94,90,168,.07);
+    --accent:#0A5680; --accent-2:#0293D2; --scnA:#0A5680; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.08);
     --good:#4E8C6A; --mix:#C08A3A; --fossil:#C24463;
     --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);}
 
@@ -192,7 +192,7 @@
 
   <footer class="sd-foot">
     <p><b>Reading this.</b> LCOS is the full levelised cost per tonne of liquid steel — annualised capex plus operating cost of the whole system (renewables, storage, grid, process plant, ore and consumables) divided by annual output. Every panel compares <b>Scenario A</b> against <b>Scenario B</b>. B starts equal to A; each override you set in its strip makes B deviate on one axis, everything else tracks A. Where an override would be invalid (a geography without a grid, a route not solved there) it is clamped back and noted next to the scenario name.</p>
-    <p style="margin-top:8px"><b>The table</b> shows the full route group behind each scenario: every route at that scenario's geography, year, grid, siting and sensitivity, cheapest first. The route A actually plots is highlighted and chipped <span class="chip A" style="margin:0">A</span>; if B sits in the same group its route is chipped <span class="chip B" style="margin:0">B</span> in place, otherwise B's group is appended below with a tinted background. <b>Routes.</b> <code>H2-DRI-EAF</code>, <code>MOE</code> and <code>EW</code> are zero-fossil; <code>MIX-DRI-EAF</code> is transitional (the optimiser blends H2 and gas DRI — the H2-share column shows how much iron came from hydrogen, and near ~0 it is flagged as economically the fossil route); <code>NG-DRI-EAF</code> is the natural-gas benchmark. <b>LCOE</b> is €/MWh of the electricity system, <b>LCOH</b> is €/MWh LHV of hydrogen. Values are near-optimal within input uncertainty — read rankings and ranges, not the last digit.</p>
+    <p style="margin-top:8px"><b>The table</b> shows the full route group behind each scenario: every route at that scenario's geography, year, grid, siting and sensitivity, cheapest first. The route A actually plots is highlighted and chipped <span class="chip A" style="margin:0">A</span>; if B sits in the same group its route is chipped <span class="chip B" style="margin:0">B</span> in place, otherwise B's group is appended below with a tinted background. <b>Routes.</b> <code>H2-DRI-EAF</code>, <code>MOE</code> and <code>EW</code> are zero-fossil; <code>NG-H2-DRI-EAF</code> is transitional (the optimiser blends H2 and gas DRI — the H2-share column shows how much iron came from hydrogen, and near ~0 it is flagged as economically the fossil route); <code>NG-DRI-EAF</code> is the natural-gas benchmark. <b>LCOE</b> is the electricity-system cost — renewables + battery + grid + transmission, storage included — per MWh generated; <b>LCOH</b> is €/MWh LHV of hydrogen (electrolyser + buffer + its electricity valued at LCOE). Values are near-optimal within input uncertainty — read rankings and ranges, not the last digit.</p>
   </footer>
  </div>
 </div>
@@ -351,15 +351,15 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const out=[];
     const clsChip = (s,rec)=>{ const [c,txt]=classOf(s,rec); return c?`<span class="cls ${c}">${txt}</span>`:""; };
     const val = (rec,d)=> rec ? `${Math.round(rec.lcos).toLocaleString()}<small> €/t</small>` : `—`;
-    out.push(`<div class="sd-card a"><p class="k">Scenario A · LCOS</p>
+    out.push(`<div class="sd-card a"><p class="k">Scenario A · levelised cost of steel</p>
       <div class="v">${val(rA)}</div><p class="d">${identity(sA)}</p>${clsChip(sA,rA)}</div>`);
-    out.push(`<div class="sd-card b"><p class="k">Scenario B · LCOS</p>
+    out.push(`<div class="sd-card b"><p class="k">Scenario B · levelised cost of steel</p>
       <div class="v">${val(rB)}</div><p class="d">${bothSame()?"same as A — set an override":identity(sB)}</p>${rB?clsChip(sB,rB):""}</div>`);
     if(rA&&rB){
       const d=rB.lcos-rA.lcos, pct = rA.lcos? Math.round(d/rA.lcos*100):0;
       const sign = d>0?"+":"";
       const who = d===0 ? "identical" : (d<0 ? "B is cheaper" : "A is cheaper");
-      out.push(`<div class="sd-card gap"><p class="k">LCOS gap (B − A)</p>
+      out.push(`<div class="sd-card gap"><p class="k">Levelised cost gap (B − A)</p>
         <div class="v">${sign}${Math.round(d).toLocaleString()}<small> €/t</small></div>
         <p class="d">${sign}${pct}% · ${who}</p></div>`);
     }
@@ -383,16 +383,18 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const sA=A, sB=B(), rA=recFor(sA), rB=recFor(sB);
     if(!rA&&!rB){ el.innerHTML='<div class="sd-empty">Neither scenario is solved.</div>'; return; }
     const X=["A","B"], traces=[];
-    const mwh = v => v==null ? "n/a" : Math.round(v).toLocaleString()+" €/MWh";
-    // per-scenario LCOE / LCOH, surfaced in hover (the report has no finer cost split).
-    const cd = [[mwh(rA?rA.lcoe:null), mwh(rA?rA.lcoh:null)],
-                [mwh(rB?rB.lcoe:null), mwh(rB?rB.lcoh:null)]];
+    const eur = v => v==null ? "n/a" : Math.round(v).toLocaleString()+" €/MWh";
+    // per-scenario LCOE / LCOH and the assumed gas price, surfaced in hover
+    // (the report has no finer cost split to stack). customdata: [LCOE, LCOH, gas].
+    const cd = [[eur(rA?rA.lcoe:null), eur(rA?rA.lcoh:null), eur(gasPrice(sA))],
+                [eur(rB?rB.lcoe:null), eur(rB?rB.lcoh:null), eur(gasPrice(sB))]];
     COST_GROUPS.forEach(([g,glabel,gcolor])=>{
       const y=[rA?(rA.costs[g]||0):0, rB?(rB.costs[g]||0):0];
       if(!y.some(v=>v)) return;
       let extra="";
-      if(ELEC.has(g)) extra="<br>system LCOE: %{customdata[0]}";
-      else if(H2G.has(g)) extra="<br>hydrogen LCOH: %{customdata[1]}";
+      if(g==="gas") extra="<br>gas price: %{customdata[2]}";
+      else if(ELEC.has(g)) extra="<br>levelised cost of electricity (LCOE, incl. storage): %{customdata[0]}";
+      else if(H2G.has(g)) extra="<br>levelised cost of hydrogen (LCOH): %{customdata[1]}";
       traces.push({type:"bar", x:X, y, name:glabel, marker:{color:gcolor}, legendgroup:g, customdata:cd,
         hovertemplate:`${glabel}: %{y:.0f} €/t${extra}<extra></extra>`});
     });
@@ -400,7 +402,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     traces.push({type:"scatter", x:X, y:totals, mode:"text", customdata:cd,
       text:totals.map(v=>v==null?"":Math.round(v).toLocaleString()+" €/t"),
       textposition:"top center", textfont:{size:14,color:PRINT.ink}, showlegend:false,
-      hovertemplate:`LCOS %{y:.0f} €/t<br>system LCOE: %{customdata[0]}<br>hydrogen LCOH: %{customdata[1]}<extra></extra>`});
+      hovertemplate:`levelised cost of steel (LCOS): %{y:.0f} €/t<br>electricity (LCOE): %{customdata[0]}<br>hydrogen (LCOH): %{customdata[1]}<extra></extra>`});
     const lay=printBase({barmode:"stack", height:capH, bargap:0.5, margin:{l:66,r:18,t:24,b:132},
       legend:{orientation:"h", x:0, y:-0.13, xanchor:"left", yanchor:"top", font:{size:10.5,color:PRINT.muted}},
       xaxis:axis(xTicks(sA,sB)),

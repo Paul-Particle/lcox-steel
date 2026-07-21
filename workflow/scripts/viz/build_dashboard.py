@@ -36,7 +36,7 @@ GEO_NAMES = {"DE": "Germany", "ES": "Spain", "FR": "France", "AUS": "Australia",
 CLEAN_ROUTES = ["h2-dri-eaf", "moe", "ew"]
 ROUTE_ORDER = ["h2-dri-eaf", "moe", "ew", "mix-dri-eaf", "ng-dri-eaf"]
 ROUTE_LABEL = {"h2-dri-eaf": "H2-DRI-EAF", "moe": "MOE", "ew": "Electrowinning",
-               "mix-dri-eaf": "MIX-DRI-EAF", "ng-dri-eaf": "NG-DRI-EAF"}
+               "mix-dri-eaf": "NG-H2-DRI-EAF", "ng-dri-eaf": "NG-DRI-EAF"}
 # Blues = clean; sand = transitional (partial gas); red = fossil.
 ROUTE_COLOR = {"h2-dri-eaf": "#0A5680", "moe": "#0293D2", "ew": "#83D1DD",
                "mix-dri-eaf": "#E2B681", "ng-dri-eaf": "#D75674"}
@@ -54,7 +54,7 @@ VARIANT_LABEL = {"base": "Baseline", "moe70": "MOE turndown 70%", "salt": "H₂ 
 COST_GROUPS = [
     ["process",         "Process plant (capex+opex)", "#33434D"],
     ["ore_consumables", "Ore & consumables",          "#E2B681"],
-    ["gas",             "Natural gas (fuel + CO₂)",    "#525F6A"],
+    ["gas",             "Natural gas (fuel)",         "#525F6A"],
     ["iron_store",      "Iron stockpile",             "#B7C1C8"],
     ["steel_store",     "Steel inventory",            "#8CA5B7"],
     ["electrolyser",    "Electrolyser",               "#91C096"],
