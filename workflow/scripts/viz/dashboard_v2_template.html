@@ -385,7 +385,6 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const lp = (rec,k) => rec && rec.lcoe_parts ? rec.lcoe_parts[k] : null;   // €/MWh contribution to LCOE
     const lo = (rec,k) => rec && rec.lcoe_own   ? rec.lcoe_own[k]   : null;   // the tech's own LCOE
     const lh = (rec,k) => rec && rec.lcoh_parts ? rec.lcoh_parts[k] : null;   // €/MWh LHV contribution to LCOH
-    const has = k => lp(rA,k)!=null || lp(rB,k)!=null;   // component present in either scenario
     // Uniform hover line: "N €/MWh (P% of BASIS)". `val` is the figure shown;
     // `share`/`total` give the parenthetical share; either may be null/absent.
     const line = (val, share, total, basis) => {
@@ -402,69 +401,71 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     // €/t cost-detail helpers (per-plant capex, ore/consumables split).
     const eurT = v => v==null ? "n/a" : Math.round(v).toLocaleString()+" €/t";
     const cdv = (rec,k) => rec && rec.cost_detail ? rec.cost_detail[k] : null;
-    const hasCD = k => cdv(rA,k)!=null || cdv(rB,k)!=null;
     const tLine = (rec,k) => { const v=cdv(rec,k); if(v==null) return "n/a";
       const p=(rec&&rec.lcos)?` (${Math.round(v/rec.lcos*100)}% of LCOS)`:""; return eurT(v)+p; };
     // Each cost segment's share of total LCOS (customdata[0] on every bar trace).
     const pctLcos = (rec,g) => (rec&&rec.lcos) ? Math.round((rec.costs[g]||0)/rec.lcos*100) : 0;
-    // Every electricity segment hovers as a headline line plus "· " sub-lines,
-    // each formatted "N €/MWh (P% of LCOE)". Grid electricity's headline is the
-    // all-in delivered price (market + fee + connection, all per imported MWh).
-    function elecHover(g){
+    // Per-scenario detail lines for a cost group (headline handled separately).
+    // Built from *that* scenario's own components only — so a scenario missing a
+    // tech simply omits the line rather than showing "n/a" when A and B differ.
+    // Each entry {t, v}: t is the leading text ("· solar"), v the formatted value.
+    function linesFor(rec, s, g){
+      if(!rec) return [];
+      const out=[]; const push=(t,v)=>out.push({t,v});
+      if(g==="gas"){ if(rec.ng_gwh>0) push("gas price:", eur(gasPrice(s))); return out; }
+      if(g==="ore_consumables"){
+        if(cdv(rec,"ore")!=null)         push("· iron ore", tLine(rec,"ore"));
+        if(cdv(rec,"consumables")!=null) push("· EAF consumables (electrodes, fluxes, alloys)", tLine(rec,"consumables"));
+        return out;
+      }
+      if(g==="process"){
+        [["dri","H2-DRI shaft"],["dri_ng","NG-DRI shaft"],["moe","MOE"],
+         ["electrowinning","Electrowinning"],["eaf","EAF"]].forEach(([k,lab])=>{
+           if(cdv(rec,k)!=null) push("· "+lab, tLine(rec,k)); });
+        return out;
+      }
+      if(H2G.has(g)){
+        if(rec.lcoh!=null)               push("hydrogen LCOH:", eur(rec.lcoh));
+        if(lh(rec,"electrolyser")!=null) push("· electrolyser", lcohLine(rec,"electrolyser"));
+        if(lh(rec,"electricity")!=null)  push("· electricity",  lcohLine(rec,"electricity"));
+        if(lh(rec,"storage")!=null)      push("· H2 storage",   lcohLine(rec,"storage"));
+        return out;
+      }
       if(g==="res"){
-        let ex="<br>renewables: %{customdata[1]}";
-        if(has("solar"))         ex+="<br>· solar %{customdata[2]}";
-        if(has("wind_onshore"))  ex+="<br>· wind onshore %{customdata[3]}";
-        if(has("wind_offshore")) ex+="<br>· wind offshore %{customdata[4]}";
-        const row = rec => [techLine(rec,"renewables","renewables"), techLine(rec,"solar","solar"),
-                            techLine(rec,"wind_onshore","wind_onshore"), techLine(rec,"wind_offshore","wind_offshore")];
-        return {ex, cd:[row(rA),row(rB)]};
+        if(lo(rec,"renewables")!=null || lp(rec,"renewables")!=null) push("renewables:", techLine(rec,"renewables","renewables"));
+        if(lp(rec,"solar")!=null)         push("· solar", techLine(rec,"solar","solar"));
+        if(lp(rec,"wind_onshore")!=null)  push("· wind onshore", techLine(rec,"wind_onshore","wind_onshore"));
+        if(lp(rec,"wind_offshore")!=null) push("· wind offshore", techLine(rec,"wind_offshore","wind_offshore"));
+        return out;
       }
-      if(g==="battery") return {ex:"<br>storage: %{customdata[1]}",
-        cd:[[contribLine(rA,"storage")],[contribLine(rB,"storage")]]};
-      if(g==="transmission") return {ex:"<br>transmission: %{customdata[1]}",
-        cd:[[contribLine(rA,"transmission")],[contribLine(rB,"transmission")]]};
+      if(g==="battery"){ if(lp(rec,"storage")!=null) push("storage:", contribLine(rec,"storage")); return out; }
+      if(g==="transmission"){ if(lp(rec,"transmission")!=null) push("transmission:", contribLine(rec,"transmission")); return out; }
       if(g==="grid"){
-        const row = rec => {
-          const price=rec?rec.grid_price:null, fee=rec?rec.grid_fee:null, ci=rec?rec.grid_conn_imported:null;
-          const delivered = [price,fee,ci].some(v=>v!=null) ? (price||0)+(fee||0)+(ci||0) : null;
-          const contrib = (lp(rec,"grid_connection")||0)+(lp(rec,"grid_energy")||0);
-          return [line(delivered, contrib||null, rec&&rec.lcoe, "LCOE"), eur(price), eur(fee), eur(ci)];
-        };
-        return {ex:"<br>grid electricity: %{customdata[1]}<br>· market price %{customdata[2]}"
-          +"<br>· volumetric fee %{customdata[3]}<br>· connection %{customdata[4]}",
-          cd:[row(rA),row(rB)]};
+        const price=rec.grid_price, fee=rec.grid_fee, ci=rec.grid_conn_imported;
+        const delivered=[price,fee,ci].some(v=>v!=null)?(price||0)+(fee||0)+(ci||0):null;
+        const contrib=(lp(rec,"grid_connection")||0)+(lp(rec,"grid_energy")||0);
+        if(delivered!=null) push("grid electricity:", line(delivered, contrib||null, rec.lcoe, "LCOE"));
+        if(price!=null) push("· market price", eur(price));
+        if(fee!=null)   push("· volumetric fee", eur(fee));
+        if(ci!=null)    push("· connection", eur(ci));
+        return out;
       }
-      return null;
+      return out;
     }
-    // Break a cost group into "· <label> N €/t (P% of LCOS)" sub-lines, over
-    // whichever detail keys are present. Returns {ex, cd} with cd = [A[],B[]].
-    function detailLines(items){
-      const present = items.filter(([k])=>hasCD(k));
-      let ex=""; present.forEach(([k,lab],i)=> ex+=`<br>· ${lab} %{customdata[${i+1}]}`);
-      return {ex, cd:[present.map(([k])=>tLine(rA,k)), present.map(([k])=>tLine(rB,k))]};
-    }
+    // Each bar trace carries a per-point hovertemplate + customdata, so A and B
+    // each show only their own components (customdata[0] = that point's % of LCOS).
     COST_GROUPS.forEach(([g,glabel,gcolor])=>{
       const y=[rA?(rA.costs[g]||0):0, rB?(rB.costs[g]||0):0];
       if(!y.some(v=>v)) return;
-      // customdata[0] = % of LCOS (headline); customdata[1..] = detail sub-lines.
-      let extra="", det=null;
-      if(g==="gas"){ extra="<br>gas price: %{customdata[1]}"; det=[[eur(gasPrice(sA))],[eur(gasPrice(sB))]]; }
-      else if(g==="ore_consumables"){ const d=detailLines([["ore","ore"],["consumables","consumables"]]); extra=d.ex; det=d.cd; }
-      else if(g==="process"){ const d=detailLines([["dri","H2-DRI shaft"],["dri_ng","NG-DRI shaft"],
-          ["moe","MOE"],["electrowinning","Electrowinning"],["eaf","EAF"]]); extra=d.ex; det=d.cd; }
-      else if(H2G.has(g)){
-        let ex="<br>hydrogen LCOH: %{customdata[1]}<br>· electrolyser %{customdata[2]}<br>· electricity %{customdata[3]}";
-        if(lh(rA,"storage")!=null || lh(rB,"storage")!=null) ex+="<br>· H2 storage %{customdata[4]}";
-        extra=ex;
-        const row = rec => [eur(rec?rec.lcoh:null), lcohLine(rec,"electrolyser"),
-                            lcohLine(rec,"electricity"), lcohLine(rec,"storage")];
-        det=[row(rA),row(rB)];
-      }
-      else if(ELEC.has(g)){ const h=elecHover(g); if(h){ extra=h.ex; det=h.cd; } }
-      const customdata=[[pctLcos(rA,g), ...(det?det[0]:[])], [pctLcos(rB,g), ...(det?det[1]:[])]];
-      traces.push({type:"bar", x:X, y, name:glabel, marker:{color:gcolor}, legendgroup:g, customdata,
-        hovertemplate:`${glabel}: %{y:.0f} €/t (%{customdata[0]}% of LCOS)${extra}<extra></extra>`});
+      const mk = (rec,s) => {
+        const lines=linesFor(rec,s,g), cd=[pctLcos(rec,g), ...lines.map(l=>l.v)];
+        let ht=`${glabel}: %{y:.0f} €/t (%{customdata[0]}% of LCOS)`;
+        lines.forEach((l,i)=> ht+=`<br>${l.t} %{customdata[${i+1}]}`);
+        return {cd, ht:ht+"<extra></extra>"};
+      };
+      const a=mk(rA,sA), b=mk(rB,sB);
+      traces.push({type:"bar", x:X, y, name:glabel, marker:{color:gcolor}, legendgroup:g,
+        customdata:[a.cd,b.cd], hovertemplate:[a.ht,b.ht]});
     });
     const totals=[rA?rA.lcos:null, rB?rB.lcos:null];
     const cdTot=[[eur(rA?rA.lcoe:null), eur(rA?rA.lcoh:null)],[eur(rB?rB.lcoe:null), eur(rB?rB.lcoh:null)]];
