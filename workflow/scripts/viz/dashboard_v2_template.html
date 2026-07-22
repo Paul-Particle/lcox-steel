@@ -107,6 +107,7 @@
   .sd-panel-h{padding:16px 18px 6px;}
   .sd-panel-h.row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
   .sd-panel-h h2{font-size:15px;font-weight:700;margin:0;letter-spacing:-.01em;}
+  .sd-panel-h .hint{font-size:11.5px;font-weight:400;color:var(--muted);letter-spacing:0;}
   .sd-panel-h p{font-size:12.5px;color:var(--muted);margin:4px 0 0;}
   .sd-print{background:var(--print);border-top:1px solid var(--hair);}
   .sd-plot{width:100%;overflow-x:auto;}
@@ -181,7 +182,7 @@
 
   <div class="sd-grid2">
     <div class="sd-panel">
-      <div class="sd-panel-h"><h2>Cost breakdown</h2><p id="cost-sub"></p></div>
+      <div class="sd-panel-h"><h2>Cost breakdown <span class="hint">(hover over bar segments for additional info)</span></h2><p id="cost-sub"></p></div>
       <div class="sd-print"><div class="sd-plot" id="plot-cost"></div></div>
     </div>
 
