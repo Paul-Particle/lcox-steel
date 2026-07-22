@@ -16,8 +16,12 @@ terminate the host <script> element) and assigned to the iframe lazily on first
 tab activation. The outer wrapper propagates the viewer's light/dark theme into
 the active iframe.
 
-Output is written to results/dashboard_hub.html (git-ignored, like the other
-built dashboards). Publish that file to the artifact.
+Two outputs (both git-ignored, like the other built dashboards):
+  * results/dashboard_hub.html            — body-only; publish THIS to the artifact
+                                            (the host wraps body-only content).
+  * results/dashboard_hub_standalone.html — the same content wrapped in a full
+                                            HTML document, so it opens/shares as a
+                                            complete standalone page.
 """
 import json
 import re
@@ -27,7 +31,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]        # workflow/scripts/viz/ -> repo root
 RESULTS = REPO / "results"
 HUB_PAGES = Path(__file__).with_name("hub_pages")  # tracked static source pages
-OUT_PATH = RESULTS / "dashboard_hub.html"
+OUT_PATH = RESULTS / "dashboard_hub.html"                    # body-only, for the artifact
+STANDALONE_PATH = RESULTS / "dashboard_hub_standalone.html"  # full document, opens directly
+
+TITLE = "Green steel model — scenarios, network & workflow"
+# Emoji favicon as an inline SVG data URI (matches the 🏭 used on the artifact).
+# Angle brackets/spaces are percent-encoded so the unquoted markup can't confuse
+# an HTML parser inside the href attribute.
+FAVICON = ("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22"
+           "%20viewBox=%220%200%20100%20100%22%3E%3Ctext%20y=%22.9em%22"
+           "%20font-size=%2290%22%3E🏭%3C/text%3E%3C/svg%3E")
 
 # (key, path, tab label). "compare" is the dashboard build artifact; the other two
 # are static source pages tracked under hub_pages/.
@@ -56,7 +69,9 @@ def js_string(s: str) -> str:
     return json.dumps(s).replace("</", "<\\/")
 
 
-def build_hub() -> str:
+def build_core() -> str:
+    """The body-only page content (everything from <style> onward), shared by the
+    publishable body-only file and the standalone document."""
     build_date = date.today().strftime("%-d %b %Y")   # stamped into the WIP banner
 
     docs, raw = {}, {}
@@ -77,8 +92,7 @@ def build_hub() -> str:
         for k in TAB_ORDER
     )
 
-    return f"""<title>Green steel model — scenarios, network & workflow</title>
-<style>
+    return f"""<style>
 {font_faces}
   :root {{
     --bg:#ffffff; --nav-bg:#eef2f5; --fg:#1b2a33; --muted:#5b6b75;
@@ -209,11 +223,33 @@ def build_hub() -> str:
 """
 
 
+def standalone(core: str) -> str:
+    """Wrap the body-only content in a full HTML document so the file opens and
+    renders on its own — the same skeleton the artifact host adds at publish time
+    (doctype/head/body + a minimal reset), applied here so the results file is a
+    complete, shareable page. Content stays self-contained (fonts + Plotly inlined)
+    and theme-aware via prefers-color-scheme."""
+    return (
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n"
+        "<meta charset=\"utf-8\">\n"
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n"
+        f"<title>{TITLE}</title>\n"
+        f"<link rel=\"icon\" href=\"{FAVICON}\">\n"
+        "<style>*,*::before,*::after{box-sizing:border-box}html,body{margin:0;padding:0}</style>\n"
+        f"</head>\n<body>\n{core}</body>\n</html>\n"
+    )
+
+
 def main():
-    html = build_hub()
+    core = build_core()
+    body_only = f"<title>{TITLE}</title>\n{core}"   # body-only: the artifact publish source
+    doc = standalone(core)                          # full document: opens directly
+
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUT_PATH.write_text(html, encoding="utf-8")
-    print(f"wrote {OUT_PATH} ({OUT_PATH.stat().st_size/1e6:.2f} MB, {html.count(chr(0))} NULs)")
+    OUT_PATH.write_text(body_only, encoding="utf-8")
+    STANDALONE_PATH.write_text(doc, encoding="utf-8")
+    print(f"wrote {OUT_PATH} ({OUT_PATH.stat().st_size/1e6:.2f} MB, {body_only.count(chr(0))} NULs) — body-only, publish this to the artifact")
+    print(f"wrote {STANDALONE_PATH} ({STANDALONE_PATH.stat().st_size/1e6:.2f} MB, {doc.count(chr(0))} NULs) — standalone, opens directly")
 
 
 if __name__ == "__main__":
