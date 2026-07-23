@@ -1,9 +1,9 @@
-"""Thematic helpers shared across WIP res_cf analysis scripts.
+"""Thematic helpers shared across res_cf scripts.
 
-Lives next to its consumers (07_make_bestsite_cf_timeseries, 08_complementarity_screen,
-06_resource_spread, 100_plot_bestsite_locations) rather than in a top-level
-common/ module. Not used by the active Snakemake pipeline
-(01_build_regions, 01b_build_offshore_regions, 02_make_cutouts, 03_build_cf_timeseries).
+Consumed by active Snakemake-pipeline scripts (03_build_cf_timeseries,
+07b_make_anchor_colocated_cf_timeseries) as well as the WIP analysis script
+07_make_bestsite_cf_timeseries. Lives next to its consumers rather than in the
+top-level common/ package.
 """
 
 from pathlib import Path
@@ -30,6 +30,24 @@ def annual_cutout_path(cf_area: str, year: int) -> Path:
     cutouts/{cf_area}_{year}0101_{year}1231.nc
     """
     return CUTOUTS / f"{cf_area.lower()}_{year}0101_{year}1231.nc"
+
+
+def cos_lat_weights(cutout) -> np.ndarray:
+    """Per-cell cos(latitude) weights, flat in cutout-grid order.
+
+    atlite's indicatormatrix returns land-coverage fractions computed in
+    EPSG:4326, so every cell counts equally regardless of latitude. A lat/lon
+    cell's physical area is proportional to cos(lat), so multiplying the
+    fraction weights by these values turns a degree-area average into a
+    physical-area average (issue #37). Unlike a region-specific equal-area CRS
+    (e.g. EPSG:3035, Europe-only), cos(lat) is valid for every cf_area.
+
+    The ordering matches cutout.grid rows, which is also the column order of
+    cutout.indicatormatrix(...) and the ravel of a (y, x) weight grid — so the
+    result can scale either directly.
+    """
+    lats = cutout.grid["y"].to_numpy()
+    return np.cos(np.deg2rad(lats))
 
 
 def haversine_distance_km(

@@ -2,9 +2,11 @@ from pathlib import Path
 import atlite
 import geopandas as gpd
 import pandas as pd
+from scipy.sparse import diags
 
 import logging
 from common._paths import CUTOUTS, RES_CF, SHAPES_RES
+from scripts.res_cf._helpers import cos_lat_weights
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -77,8 +79,13 @@ def main():
     offshore_gdf = get_region_gdf(OFFSHORE_REGIONS_PATH)
 
     cutout = atlite.Cutout(str(CUTOUT_PATH))
-    matrix = cutout.indicatormatrix(gdf)
-    offshore_matrix = cutout.indicatormatrix(offshore_gdf)
+    # Scale each grid cell's overlap fraction by its physical area (cos(lat)),
+    # so the per_unit national average is an area-weighted mean rather than a
+    # degree-area one (issue #37). indicatormatrix columns are in cutout.grid
+    # order, matching cos_lat_weights.
+    cell_weights = diags(cos_lat_weights(cutout))
+    matrix = cutout.indicatormatrix(gdf).tocsr() @ cell_weights
+    offshore_matrix = cutout.indicatormatrix(offshore_gdf).tocsr() @ cell_weights
 
     if _TECH == "wind-onshore":
         wind_cf = cutout.wind(
