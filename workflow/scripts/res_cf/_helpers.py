@@ -50,6 +50,72 @@ def cos_lat_weights(cutout) -> np.ndarray:
     return np.cos(np.deg2rad(lats))
 
 
+def weighted_percentile(values: np.ndarray, weights: np.ndarray, q: float) -> float:
+    """Weighted percentile of `values` (nonnegative `weights`), q in [0, 1].
+
+    Entries with a non-finite value, non-finite weight, or zero weight are
+    dropped. Returns NaN if nothing survives.
+    """
+    if not (0.0 <= q <= 1.0):
+        raise ValueError("q must be in [0, 1].")
+
+    m = np.isfinite(values) & np.isfinite(weights) & (weights > 0)
+    v = values[m]
+    w = weights[m]
+
+    if v.size == 0:
+        return np.nan
+
+    order = np.argsort(v)
+    v = v[order]
+    w = w[order]
+
+    cw = np.cumsum(w)
+    cw /= cw[-1]
+
+    idx = np.searchsorted(cw, q, side="left")
+    idx = min(idx, v.size - 1)
+    return float(v[idx])
+
+
+def geom_area_weights(cutout, geom) -> np.ndarray:
+    """Physical-area cell weights for `geom` as a (y, x) grid.
+
+    atlite's indicatormatrix gives each cell's fractional overlap with `geom`
+    (computed in EPSG:4326); scaling by cos_lat_weights turns those degree-area
+    fractions into physical-area weights (issue #37). Cells outside `geom` get
+    weight 0. Shared by scripts 03b, 07, 07b and viz/plot_cf_map so the whole
+    pipeline uses one definition of area weighting.
+    """
+    indicator = cutout.indicatormatrix([geom]).tocsr()
+    weights_1d = np.asarray(indicator[0, :].todense()).ravel() * cos_lat_weights(cutout)
+    n_y = cutout.data.sizes["y"]
+    n_x = cutout.data.sizes["x"]
+    return weights_1d.reshape(n_y, n_x)
+
+
+def pick_p95_cell(cell_mean, weights: np.ndarray, q: float = 0.95) -> tuple[int, int]:
+    """(y, x) index of the in-region cell whose annual-mean CF is closest to the
+    area-weighted q-percentile.
+
+    `cell_mean` is a 2-D (y, x) grid of annual-mean CF (xr.DataArray or ndarray);
+    `weights` is the matching (y, x) grid from geom_area_weights. Cells with
+    weight 0 (outside the region) are excluded. This is the single definition of
+    "the P95 cell" shared by scripts 03b, 07, 07b and viz/plot_cf_map.
+    """
+    vals2d = np.asarray(getattr(cell_mean, "values", cell_mean))
+    w = np.asarray(weights)
+
+    p = weighted_percentile(vals2d.ravel(), w.ravel(), q)
+
+    valid = w.ravel() > 0
+    vals = np.where(valid, vals2d.ravel(), np.nan)
+    dist = np.abs(vals - p)
+    idx_flat = np.nanargmin(dist)
+    y_idx, x_idx = np.unravel_index(idx_flat, vals2d.shape)
+    return int(y_idx), int(x_idx)
+
+
 def haversine_distance_km(
     lon1: float,
     lat1: float,

@@ -43,6 +43,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
+from scripts.res_cf._helpers import geom_area_weights, pick_p95_cell
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
@@ -85,30 +86,6 @@ def _get_region_geometry(path: Path, region: str):
     if row.empty:
         raise ValueError(f"Region '{region}' not found in {path}")
     return row.geometry.iloc[0]
-
-
-def _mask_cells_inside(cell_mean, geom) -> np.ndarray:
-    """Return a boolean grid marking cutout cells whose centre lies within `geom`."""
-    xs = cell_mean.coords["x"].values
-    ys = cell_mean.coords["y"].values
-    xx, yy = np.meshgrid(xs, ys)
-    points = gpd.GeoSeries(gpd.points_from_xy(xx.ravel(), yy.ravel()), crs=4326)
-    inside = points.within(geom) | points.touches(geom)
-    return inside.values.reshape(cell_mean.shape)
-
-
-def _find_p95_cell(cf_grid, geom) -> tuple[int, int]:
-    """Return the (y, x) index of the in-region cell closest to the P95 annual-mean CF."""
-    # --- Previous docstring (kept for reference) below ---
-    # Return (y_idx, x_idx) of the cell closest to the P95 annual-mean CF.
-    cell_mean = cf_grid.mean("time")
-    inside = _mask_cells_inside(cell_mean, geom)
-    vals = np.where(inside, cell_mean.values, np.nan)
-    valid = np.isfinite(vals)
-    p95 = np.nanpercentile(vals[valid], 95)
-    dist = np.abs(np.where(valid, vals, np.nan) - p95)
-    idx_flat = np.nanargmin(dist)
-    return tuple(int(i) for i in np.unravel_index(idx_flat, vals.shape))
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +191,8 @@ def main() -> None:
         orientation="latitude_optimal",
         capacity_factor_timeseries=True,
     )
-    y_idx, x_idx = _find_p95_cell(cf_ref, geom)
+    weights = geom_area_weights(cutout, geom)
+    y_idx, x_idx = pick_p95_cell(cf_ref.mean("time"), weights)
     cell_lat = float(cutout.data.coords["y"].isel(y=y_idx))
     cell_lon = float(cutout.data.coords["x"].isel(x=x_idx))
     annual_mean_ref = float(cf_ref.isel(y=y_idx, x=x_idx).mean())
