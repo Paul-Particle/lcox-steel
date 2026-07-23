@@ -72,6 +72,7 @@ from common._logging import configure_logging
 from common._paths import RES_CF, SHAPES_RES
 from scripts.res_cf._helpers import (
     annual_cutout_path,
+    cos_lat_weights,
     load_res_cf_cfg,
 )
 configure_logging(snakemake)
@@ -227,11 +228,14 @@ def find_p95_cell(cf_year: xr.DataArray, weights: np.ndarray) -> tuple[int, int]
 
 def geom_weights(cutout: atlite.Cutout, geom) -> np.ndarray:
     """Area-based weights for `geom` as a flat (y, x)-shaped array, built from
-    atlite's indicatormatrix (area-fraction overlap) — same method used in
-    scripts 03 and 06.
+    atlite's indicatormatrix (area-fraction overlap) and scaled by cos(lat) so
+    the weights are physical-area weights, not degree-area ones (issue #37).
+    Same weighting as script 03; feeds the national mean and the area-weighted
+    P95 cell selection.
     """
     indicator = cutout.indicatormatrix([geom]).tocsr()
     indicator_1d = np.asarray(indicator[0, :].todense()).ravel()
+    indicator_1d = indicator_1d * cos_lat_weights(cutout)
     n_y = cutout.data.sizes["y"]
     n_x = cutout.data.sizes["x"]
     return indicator_1d.reshape(n_y, n_x)
