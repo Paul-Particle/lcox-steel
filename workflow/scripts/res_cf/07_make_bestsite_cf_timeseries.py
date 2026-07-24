@@ -176,15 +176,6 @@ def load_offshore_geometry(iso2: str):
 def geometry_for_tech(iso2: str, tech: str):
     return load_offshore_geometry(iso2) if tech == "wind_offshore" else load_land_geometry(iso2)
 
-
-def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
-    xs = cell_mean.coords["x"].values
-    ys = cell_mean.coords["y"].values
-    xx, yy = np.meshgrid(xs, ys)
-    points = gpd.GeoSeries(gpd.points_from_xy(xx.ravel(), yy.ravel()), crs=4326)
-    inside = points.within(geom) | points.touches(geom)
-    return inside.values.reshape(cell_mean.shape)
-
 def get_cell_coords(cf_year: xr.DataArray, y_idx: int, x_idx: int) -> tuple[float, float]:
     x = float(cf_year.x.values[x_idx])
     y = float(cf_year.y.values[y_idx])

@@ -76,6 +76,7 @@ from scripts.res_cf._helpers import (
     geom_area_weights,
     haversine_distance_km,
     load_res_cf_cfg,
+    mask_cells_inside,
     pick_p95_cell,
 )
 
@@ -92,7 +93,6 @@ _spec.loader.exec_module(_bestsite)
 
 build_cf_year     = _bestsite.build_cf_year
 geometry_for_tech = _bestsite.geometry_for_tech
-mask_cells_inside = _bestsite.mask_cells_inside
 get_cell_coords    = _bestsite.get_cell_coords
 extract_cell_timeseries = _bestsite.extract_cell_timeseries
 

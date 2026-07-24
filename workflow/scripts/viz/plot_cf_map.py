@@ -18,7 +18,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from scripts.res_cf._helpers import geom_area_weights, pick_p95_cell
+from scripts.res_cf._helpers import geom_area_weights, mask_cells_inside, pick_p95_cell
 from scripts.viz.style import (
     apply_header,
     blue_black,
@@ -45,19 +45,9 @@ _WIND_OFFSHORE_TURBINE = snakemake.params.wind_offshore_turbine
 _OUT = Path(snakemake.output[0])
 
 
-def _mask_cells_inside(cell_mean, geom) -> np.ndarray:
-    """Return a boolean grid marking cutout cells whose centre lies within `geom`."""
-    xs = cell_mean.coords["x"].values
-    ys = cell_mean.coords["y"].values
-    xx, yy = np.meshgrid(xs, ys)
-    points = gpd.GeoSeries(gpd.points_from_xy(xx.ravel(), yy.ravel()), crs=4326)
-    inside = points.within(geom) | points.touches(geom)
-    return inside.values.reshape(cell_mean.shape)
-
-
 def _find_best_cell(cell_mean, geom):
     """Return the (y, x) index of the single highest-CF in-region cell."""
-    inside = _mask_cells_inside(cell_mean, geom)
+    inside = mask_cells_inside(cell_mean, geom)
     vals = np.where(inside, cell_mean.values, np.nan)
     idx_flat = np.nanargmax(vals)
     y_idx, x_idx = np.unravel_index(idx_flat, vals.shape)
@@ -67,7 +57,7 @@ def _find_best_cell(cell_mean, geom):
 def _grid_mean_unweighted(cell_mean, geom) -> float:
     """Plain (point-in-polygon, unweighted) mean CF over in-region cells.
     NOT the area-weighted national mean — see _national_mean_cf."""
-    inside = _mask_cells_inside(cell_mean, geom)
+    inside = mask_cells_inside(cell_mean, geom)
     return float(np.nanmean(np.where(inside, cell_mean.values, np.nan)))
 
 

@@ -8,6 +8,7 @@ top-level common/ package.
 
 from pathlib import Path
 
+import geopandas as gpd
 import numpy as np
 import yaml
 
@@ -48,6 +49,22 @@ def cos_lat_weights(cutout) -> np.ndarray:
     """
     lats = cutout.grid["y"].to_numpy()
     return np.cos(np.deg2rad(lats))
+
+
+def mask_cells_inside(cell_mean, geom) -> np.ndarray:
+    """Boolean (y, x) grid marking cutout cells whose centre lies within `geom`.
+
+    A point-in-polygon test on cell centres (touch counts as inside). This is the
+    coarse "is the cell in the region" membership test — distinct from the
+    fractional-overlap weighting in geom_area_weights; callers that only need
+    set membership (best-cell, lattice sampling, unweighted comparisons) use this.
+    """
+    xs = cell_mean.coords["x"].values
+    ys = cell_mean.coords["y"].values
+    xx, yy = np.meshgrid(xs, ys)
+    points = gpd.GeoSeries(gpd.points_from_xy(xx.ravel(), yy.ravel()), crs=4326)
+    inside = points.within(geom) | points.touches(geom)
+    return inside.values.reshape(cell_mean.shape)
 
 
 def weighted_percentile(values: np.ndarray, weights: np.ndarray, q: float) -> float:
