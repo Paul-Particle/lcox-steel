@@ -5,6 +5,7 @@ import pandas as pd
 
 import logging
 from common._paths import CUTOUTS, RES_CF, SHAPES_RES
+from scripts.res_cf._helpers import eligibility_matrix
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -28,6 +29,8 @@ _WIND_OFFSHORE_TURBINE = "NREL_ReferenceTurbine_5MW_offshore"
 _PV_PANEL = "CSi"
 _PV_ORIENTATION = "latitude_optimal"
 _WIND_CF = {"smooth": True, "add_cutout_windspeed": True}
+_MIN_LAND_FRACTION = 0.98
+_ELIGIBILITY_SOURCE = "indicatormatrix"
 _TECH = "wind-onshore"
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _TECH = snakemake.wildcards.tech
@@ -41,6 +44,8 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _PV_PANEL = snakemake.params.pv_panel
     _PV_ORIENTATION = snakemake.params.pv_orientation
     _WIND_CF = snakemake.params.wind_cf
+    _MIN_LAND_FRACTION = snakemake.params.min_land_fraction
+    _ELIGIBILITY_SOURCE = snakemake.params.eligibility_source
 _WIND_SMOOTH = _WIND_CF.get("smooth", True)
 _WIND_ADD_CUTOUT_WS = _WIND_CF.get("add_cutout_windspeed", True)
 
@@ -77,7 +82,12 @@ def main():
     offshore_gdf = get_region_gdf(OFFSHORE_REGIONS_PATH)
 
     cutout = atlite.Cutout(str(CUTOUT_PATH))
-    matrix = cutout.indicatormatrix(gdf)
+    # Onshore land weights carry the #41 land-sea eligibility cutoff (drops
+    # sea-contaminated coastal border cells), via the configured source
+    # (indicatormatrix or the finer availabilitymatrix). Offshore is sited on sea
+    # by design, so it keeps the raw indicatormatrix — no cutoff, no source swap.
+    onshore_geom = gdf.geometry.iloc[0]
+    matrix = eligibility_matrix(cutout, onshore_geom, _MIN_LAND_FRACTION, _ELIGIBILITY_SOURCE)
     offshore_matrix = cutout.indicatormatrix(offshore_gdf)
 
     if _TECH == "wind-onshore":

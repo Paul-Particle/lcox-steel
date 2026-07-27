@@ -117,7 +117,7 @@ git config core.hooksPath .githooks
 
 ### 2. External data files
 
-Two geographic datasets must be downloaded manually and dropped in as ZIPs — the
+Geographic datasets must be downloaded manually and dropped in as ZIPs — the
 pipeline reads them directly via geopandas, no extraction step needed.
 
 **World EEZ v12** — https://www.marineregions.org/downloads.php (free registration).
@@ -129,9 +129,19 @@ Choose "World EEZ v12 (2023)" → Shapefile. Save as
 https://www.naturalearthdata.com/downloads/110m-cultural-vectors/. Save as
 `data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip`.
 
+**Natural Earth 1:10m land** *(only for `res_cf.eligibility_source: availabilitymatrix`
+— the finer-coastline land-sea mask; the default `indicatormatrix` does not need it)* —
+https://www.naturalearthdata.com/downloads/10m-physical-vectors/. Save as
+`data/shapes/ne_10m_land/ne_10m_land.zip`, or fetch directly:
+
 ```bash
-mkdir -p data/shapes/offshore_zones data/shapes/ne_110m_admin_0_countries
-# then drop the two ZIPs in with the names above
+curl -sSL -o data/shapes/ne_10m_land/ne_10m_land.zip \
+  https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_land.zip
+```
+
+```bash
+mkdir -p data/shapes/offshore_zones data/shapes/ne_110m_admin_0_countries data/shapes/ne_10m_land
+# then drop the ZIPs in with the names above
 ```
 
 Two cache directories ship with one committed reference file each (everything

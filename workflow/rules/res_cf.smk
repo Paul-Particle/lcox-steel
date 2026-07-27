@@ -103,6 +103,8 @@ rule build_country_average_cf:
         pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
         pv_orientation=lookup(dpath="res_cf/pv_orientation", within=config),
         wind_cf=lookup(dpath="res_cf/wind_cf", within=config),
+        min_land_fraction=lookup(dpath="res_cf/min_land_fraction", within=config),
+        eligibility_source=lookup(dpath="res_cf/eligibility_source", within=config),
     script:
         "../scripts/res_cf/03_build_cf_timeseries.py"
 
