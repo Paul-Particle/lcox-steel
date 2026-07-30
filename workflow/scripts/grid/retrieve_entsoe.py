@@ -40,6 +40,35 @@ def _load_bidding_zones(raw_cache_dir: Path) -> set[str]:
     return set(pd.read_csv(raw_cache_dir / "entsoe_bidding_zones.csv")["area"])
 
 
+# ── Month selection ───────────────────────────────────────────────────────────
+
+def _months_to_process(start_date: str, end_date: str) -> list[str]:
+    """Calendar months ('YYYY-MM') covering the window, padded by one month.
+
+    ENTSO-E raw months are fetched on Brussels-time boundaries and stored
+    UTC-naive. In summer (CEST = UTC+2) a Brussels month's data ends at 22:00 UTC
+    on its last day, so the requested window's final UTC hour(s) live in the *next*
+    Brussels month. Padding by one month makes the window slice complete; without
+    it `assert_window_complete` fails every Mar–Sep-ending window. (Mirrors the pad
+    in retrieve_nem.)
+
+    Unlike retrieve_nem, this does not also switch cache membership to market time.
+    Within a single run that is safe: months are processed chronologically and the
+    pad is last, so its ~1–2 h backward spill only ever lands in an already-processed
+    month. It is NOT fully safe across warm-cache runs in reverse order: processing
+    month M leaves a spill hour in M−1, so a later run requesting M−1 sees that lone
+    hour via the plain UTC-month `area_month_in_cache` check and skips M−1. That case
+    now fails loudly in `assert_window_complete` rather than corrupting silently. A
+    clean fix (matching in Brussels time) is deferred because the zone has DST, so the
+    fixed-offset trick retrieve_nem uses would hit ambiguous/nonexistent hours.
+    """
+    months = [ym for ym, _, _ in iter_months(start_date, end_date)]
+    pad_month = (pd.Timestamp(iso(end_date)) + pd.offsets.MonthBegin(1)).strftime("%Y-%m")
+    if pad_month not in months:
+        months = [*months, pad_month]
+    return months
+
+
 # ── Raw-cache management ──────────────────────────────────────────────────────
 
 def _ensure_raw_months(
@@ -150,7 +179,7 @@ def retrieve(snakemake) -> None:
 
     cached = pd.read_parquet(processed_cache_path) if processed_cache_path.exists() else None
 
-    months = [ym for ym, _, _ in iter_months(start_date, end_date)]
+    months = _months_to_process(start_date, end_date)
 
     _ensure_raw_months(area, months, data_types, raw_cache_dir)
 
