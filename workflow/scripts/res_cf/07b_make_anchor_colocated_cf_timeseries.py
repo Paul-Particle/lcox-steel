@@ -77,6 +77,8 @@ from scripts.res_cf._helpers import (
     eligibility_weights,
     haversine_distance_km,
     load_res_cf_cfg,
+    mask_cells_inside,
+    pick_p95_cell,
 )
 
 configure_logging(snakemake)
@@ -92,8 +94,6 @@ _spec.loader.exec_module(_bestsite)
 
 build_cf_year     = _bestsite.build_cf_year
 geometry_for_tech = _bestsite.geometry_for_tech
-mask_cells_inside = _bestsite.mask_cells_inside
-find_p95_cell      = _bestsite.find_p95_cell
 get_cell_coords    = _bestsite.get_cell_coords
 extract_cell_timeseries = _bestsite.extract_cell_timeseries
 
@@ -246,7 +246,7 @@ def build_anchor_scenario(cutout_path: Path, country_upper: str, anchor_tech: st
     anchor_min_lf = min_land_fraction if anchor_tech != "wind_offshore" else 0.0
     anchor_weights = eligibility_weights(co, anchor_geom, anchor_min_lf, eligibility_source)
 
-    anchor_y_idx, anchor_x_idx = find_p95_cell(anchor_cf_year, anchor_weights)
+    anchor_y_idx, anchor_x_idx = pick_p95_cell(anchor_cf_year.mean("time"), anchor_weights)
     anchor_series = extract_cell_timeseries(anchor_cf_year, anchor_y_idx, anchor_x_idx)
     anchor_x, anchor_y = get_cell_coords(anchor_cf_year, anchor_y_idx, anchor_x_idx)
 

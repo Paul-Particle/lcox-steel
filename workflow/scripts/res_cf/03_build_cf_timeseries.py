@@ -2,10 +2,11 @@ from pathlib import Path
 import atlite
 import geopandas as gpd
 import pandas as pd
+from scipy.sparse import diags
 
 import logging
 from common._paths import CUTOUTS, RES_CF, SHAPES_RES
-from scripts.res_cf._helpers import eligibility_matrix
+from scripts.res_cf._helpers import cos_lat_weights, eligibility_matrix
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -83,12 +84,13 @@ def main():
 
     cutout = atlite.Cutout(str(CUTOUT_PATH))
     # Onshore land weights carry the #41 land-sea eligibility cutoff (drops
-    # sea-contaminated coastal border cells), via the configured source
-    # (indicatormatrix or the finer availabilitymatrix). Offshore is sited on sea
-    # by design, so it keeps the raw indicatormatrix — no cutoff, no source swap.
+    # sea-contaminated coastal border cells) via the configured source, and are
+    # cos(lat) physical-area weighted (#37) — both folded into eligibility_matrix.
+    # Offshore is sited on sea by design, so it keeps the raw indicatormatrix (no
+    # cutoff, no source swap) but is still area-weighted by cos(lat) for #37.
     onshore_geom = gdf.geometry.iloc[0]
     matrix = eligibility_matrix(cutout, onshore_geom, _MIN_LAND_FRACTION, _ELIGIBILITY_SOURCE)
-    offshore_matrix = cutout.indicatormatrix(offshore_gdf)
+    offshore_matrix = cutout.indicatormatrix(offshore_gdf).tocsr() @ diags(cos_lat_weights(cutout))
 
     if _TECH == "wind-onshore":
         wind_cf = cutout.wind(
