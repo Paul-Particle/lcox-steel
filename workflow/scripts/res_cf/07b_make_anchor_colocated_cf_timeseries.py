@@ -73,7 +73,8 @@ if "snakemake" not in globals():
 from common._logging import configure_logging
 from common._paths import CUTOUTS, RES_CF, SHAPES_RES
 from scripts.res_cf._helpers import (
-    geom_area_weights,
+    eligibility_mask_2d,
+    eligibility_weights,
     haversine_distance_km,
     load_res_cf_cfg,
     mask_cells_inside,
@@ -105,6 +106,8 @@ _CUTOUT_PATH = CUTOUTS / "de_20230101_20231231.nc"
 _REGIONS_PATH = SHAPES_RES / "de_geo.parquet"
 _OFFSHORE_REGIONS_PATH = SHAPES_RES / "de_offshore_geo.parquet"
 _ANCHOR_CFG = load_res_cf_cfg().get("anchor_colocation", {})
+_MIN_LAND_FRACTION = float(load_res_cf_cfg().get("min_land_fraction", 0.0))
+_ELIGIBILITY_SOURCE = load_res_cf_cfg().get("eligibility_source", "indicatormatrix")
 _N_CANDIDATES = int(_ANCHOR_CFG.get("n_candidates", 3))
 _OUT = RES_CF / f"{_CF_AREA}_{_ANCHOR_TECH}_anchor-colo-n{_N_CANDIDATES}_{_START_DATE}_{_END_DATE}.parquet"
 
@@ -117,6 +120,8 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _REGIONS_PATH = Path(snakemake.input.regions)
     _OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
     _ANCHOR_CFG = snakemake.params.anchor_colocation
+    _MIN_LAND_FRACTION = float(snakemake.config["res_cf"].get("min_land_fraction", 0.0))
+    _ELIGIBILITY_SOURCE = snakemake.config["res_cf"].get("eligibility_source", "indicatormatrix")
     # The variant wildcard (anchor-colo-n{N}) pins n_candidates per scenario;
     # it overrides the config default so the filename always tells the truth.
     _N_CANDIDATES = int(snakemake.wildcards.variant.rsplit("-n", 1)[1])
@@ -157,15 +162,21 @@ def score_candidate(ts_anchor: np.ndarray, ts_candidate: np.ndarray,
 def find_top_candidates(anchor_x: float, anchor_y: float, cf_year: xr.DataArray,
                          geom, max_radius_km: float, n_candidates: int,
                          ts_anchor: np.ndarray, threshold: float,
-                         w_coincidence: float, w_correlation: float) -> list[dict]:
+                         w_coincidence: float, w_correlation: float,
+                         eligible: np.ndarray | None = None) -> list[dict]:
     """Find up to `n_candidates` cells within max_radius_km, ranked by score.
 
     Order of operations (radius first, since it's cheap and shrinks the grid
     before the more expensive geometry/validity check runs):
     1. Compute distance from anchor to every grid cell
     2. Keep only cells within max_radius_km
-    3. Of those, keep valid cells (inside geometry, real CF data, mean CF > 0)
+    3. Of those, keep valid cells (inside geometry, real CF data, mean CF > 0,
+       and — for onshore techs — land-sea eligible per `eligible`)
     4. Score survivors against the anchor, sort, keep top n_candidates
+
+    `eligible` is an optional (y, x) boolean land-sea mask (#41). When given,
+    sea-contaminated coastal border cells are dropped from candidate selection;
+    pass None (or an all-True mask) for offshore, which is sited on sea.
 
     Returns a list of dicts (one per candidate), each with:
     y_idx, x_idx, x, y, dist_km, score, coincidence, correlation.
@@ -185,6 +196,8 @@ def find_top_candidates(anchor_x: float, anchor_y: float, cf_year: xr.DataArray,
     inside = mask_cells_inside(cell_mean, geom)
     mean_vals = cell_mean.values
     valid = within_radius & inside & np.isfinite(mean_vals) & (mean_vals > 0)
+    if eligible is not None:
+        valid = valid & eligible
 
     ys, xs = np.where(valid)
 
@@ -212,19 +225,26 @@ def find_top_candidates(anchor_x: float, anchor_y: float, cf_year: xr.DataArray,
 def build_anchor_scenario(cutout_path: Path, country_upper: str, anchor_tech: str,
                            max_radius_km: float, n_candidates: int,
                            threshold: float, w_coincidence: float,
-                           w_correlation: float) -> tuple[pd.Series, tuple[float, float], dict[str, list[dict]], dict[str, list[pd.Series]]]:
+                           w_correlation: float,
+                           min_land_fraction: float = 0.0,
+                           eligibility_source: str = "indicatormatrix") -> tuple[pd.Series, tuple[float, float], dict[str, list[dict]], dict[str, list[pd.Series]]]:
     """Build one anchor's full co-located scenario: anchor series + anchor
     (x, y) + candidate lists + candidate series for the other two techs.
 
     A tech with no valid cell within radius (typically offshore for inland
     anchors) gets an empty list — no placeholder series. The output assembly
     simply omits that tech and records the zero count in the file metadata.
+
+    `min_land_fraction` is the #41 land-sea eligibility cutoff, applied to the
+    onshore anchor P95 selection and to onshore candidate cells; offshore is
+    never thresholded (sited on sea by design).
     """
     anchor_geom = geometry_for_tech(country_upper, anchor_tech)
     anchor_cf_year = build_cf_year(cutout_path, anchor_tech)
 
     co = atlite.Cutout(path=str(cutout_path))
-    anchor_weights = geom_area_weights(co, anchor_geom)
+    anchor_min_lf = min_land_fraction if anchor_tech != "wind_offshore" else 0.0
+    anchor_weights = eligibility_weights(co, anchor_geom, anchor_min_lf, eligibility_source)
 
     anchor_y_idx, anchor_x_idx = pick_p95_cell(anchor_cf_year.mean("time"), anchor_weights)
     anchor_series = extract_cell_timeseries(anchor_cf_year, anchor_y_idx, anchor_x_idx)
@@ -239,10 +259,14 @@ def build_anchor_scenario(cutout_path: Path, country_upper: str, anchor_tech: st
         tech_cf_year = build_cf_year(cutout_path, tech)
         tech_geom = geometry_for_tech(country_upper, tech)
 
+        tech_min_lf = min_land_fraction if tech != "wind_offshore" else 0.0
+        eligible = eligibility_mask_2d(co, tech_geom, tech_min_lf, eligibility_source)
+
         found = find_top_candidates(
             anchor_x, anchor_y, tech_cf_year, tech_geom,
             max_radius_km, n_candidates,
             anchor_series.values, threshold, w_coincidence, w_correlation,
+            eligible=eligible,
         )
 
         if not found:
@@ -353,6 +377,7 @@ def main() -> None:
         _CUTOUT_PATH, country_upper, anchor_tech,
         MAX_RADIUS_KM, _N_CANDIDATES,
         COINCIDENCE_THRESHOLD, W_COINCIDENCE, W_CORRELATION,
+        _MIN_LAND_FRACTION, _ELIGIBILITY_SOURCE,
     )
 
     df, site_coords, anchor_meta = assemble_output(

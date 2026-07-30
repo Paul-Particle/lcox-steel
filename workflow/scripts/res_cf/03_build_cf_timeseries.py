@@ -6,7 +6,7 @@ from scipy.sparse import diags
 
 import logging
 from common._paths import CUTOUTS, RES_CF, SHAPES_RES
-from scripts.res_cf._helpers import cos_lat_weights
+from scripts.res_cf._helpers import cos_lat_weights, eligibility_matrix
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -30,6 +30,8 @@ _WIND_OFFSHORE_TURBINE = "NREL_ReferenceTurbine_5MW_offshore"
 _PV_PANEL = "CSi"
 _PV_ORIENTATION = "latitude_optimal"
 _WIND_CF = {"smooth": True, "add_cutout_windspeed": True}
+_MIN_LAND_FRACTION = 0.98
+_ELIGIBILITY_SOURCE = "indicatormatrix"
 _TECH = "wind-onshore"
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _TECH = snakemake.wildcards.tech
@@ -43,6 +45,8 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _PV_PANEL = snakemake.params.pv_panel
     _PV_ORIENTATION = snakemake.params.pv_orientation
     _WIND_CF = snakemake.params.wind_cf
+    _MIN_LAND_FRACTION = snakemake.params.min_land_fraction
+    _ELIGIBILITY_SOURCE = snakemake.params.eligibility_source
 _WIND_SMOOTH = _WIND_CF.get("smooth", True)
 _WIND_ADD_CUTOUT_WS = _WIND_CF.get("add_cutout_windspeed", True)
 
@@ -79,13 +83,14 @@ def main():
     offshore_gdf = get_region_gdf(OFFSHORE_REGIONS_PATH)
 
     cutout = atlite.Cutout(str(CUTOUT_PATH))
-    # Scale each grid cell's overlap fraction by its physical area (cos(lat)),
-    # so the per_unit national average is an area-weighted mean rather than a
-    # degree-area one (issue #37). indicatormatrix columns are in cutout.grid
-    # order, matching cos_lat_weights.
-    cell_weights = diags(cos_lat_weights(cutout))
-    matrix = cutout.indicatormatrix(gdf).tocsr() @ cell_weights
-    offshore_matrix = cutout.indicatormatrix(offshore_gdf).tocsr() @ cell_weights
+    # Onshore land weights carry the #41 land-sea eligibility cutoff (drops
+    # sea-contaminated coastal border cells) via the configured source, and are
+    # cos(lat) physical-area weighted (#37) — both folded into eligibility_matrix.
+    # Offshore is sited on sea by design, so it keeps the raw indicatormatrix (no
+    # cutoff, no source swap) but is still area-weighted by cos(lat) for #37.
+    onshore_geom = gdf.geometry.iloc[0]
+    matrix = eligibility_matrix(cutout, onshore_geom, _MIN_LAND_FRACTION, _ELIGIBILITY_SOURCE)
+    offshore_matrix = cutout.indicatormatrix(offshore_gdf).tocsr() @ diags(cos_lat_weights(cutout))
 
     if _TECH == "wind-onshore":
         wind_cf = cutout.wind(

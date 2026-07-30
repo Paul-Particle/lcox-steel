@@ -61,6 +61,7 @@ cutouts/
 # Raw/large geodata (download manually — see README)
 data/shapes/offshore_zones/
 data/shapes/ne_110m_admin_0_countries/
+data/shapes/ne_10m_land/
 data/shapes/*.zip
 
 # Local virtualenv (Atlite)

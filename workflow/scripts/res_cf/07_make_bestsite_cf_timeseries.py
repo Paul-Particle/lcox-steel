@@ -72,7 +72,7 @@ from common._logging import configure_logging
 from common._paths import RES_CF, SHAPES_RES
 from scripts.res_cf._helpers import (
     annual_cutout_path,
-    geom_area_weights,
+    eligibility_weights,
     load_res_cf_cfg,
     pick_p95_cell,
     weighted_percentile,
@@ -111,6 +111,9 @@ WIND_ONSHORE_TURBINE  = WIND_TURBINE
 WIND_CF_CFG           = RES_CF_CFG.get("wind_cf", {})
 WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
 WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
+# Land-sea eligibility cutoff (#41). Onshore only — offshore passes 0 below.
+MIN_LAND_FRACTION     = float(RES_CF_CFG.get("min_land_fraction", 0.0))
+ELIGIBILITY_SOURCE    = RES_CF_CFG.get("eligibility_source", "indicatormatrix")
 
 
 def extract_cell_timeseries(
@@ -231,7 +234,11 @@ def main() -> None:
             geom = geometry_for_tech(country_upper, tech)
 
             co = atlite.Cutout(path=str(cutout))
-            weights = geom_area_weights(co, geom)
+            # Land-sea eligibility (#41): onshore drops sea-contaminated coastal
+            # border cells; offshore keeps all sea cells (min_lf = 0). Weights are
+            # also cos(lat) physical-area weighted (#37), folded into eligibility_weights.
+            min_lf = MIN_LAND_FRACTION if tech != "wind_offshore" else 0.0
+            weights = eligibility_weights(co, geom, min_lf, ELIGIBILITY_SOURCE)
 
             cell_mean = cf_year.mean("time").values
             w_flat = weights.ravel()
