@@ -30,9 +30,10 @@ from common._paths import CUTOUTS, REPO_ROOT
 #   - "indicatormatrix" (default): coarse land/sea outline, no extra data. This
 #     is what the notebook validated and what ships enabled today.
 #   - "availabilitymatrix": a finer land-sea fraction from atlite's
-#     `availabilitymatrix(shapes, ExclusionContainer)` over a land-cover/coastline
-#     raster. Sharper coastline than NE-110m. STUBBED — see
-#     `cell_availability_fraction`. Consumers stay unchanged when it is wired.
+#     `availabilitymatrix(shapes, ExclusionContainer)` over a high-res land polygon.
+#     Sharper coastline than NE-110m. Wired (see `cell_availability_fraction`) and
+#     cross-checked against indicatormatrix — agrees in 5/6 areas. Needs the
+#     ne_10m_land download; consumers are identical either way.
 # See docs/land_eligibility_design.md.
 #
 # ONSHORE ONLY: callers pass min_land_fraction=0 for offshore wind (which is
@@ -114,7 +115,7 @@ def cell_eligible_fraction(cutout, geom, source: str = "indicatormatrix") -> np.
     """Flat (n_cells,) eligible fraction from the configured `source`.
 
     Dispatches to `cell_land_fraction` (indicatormatrix, default) or
-    `cell_availability_fraction` (availabilitymatrix, stubbed). The one place the
+    `cell_availability_fraction` (availabilitymatrix). The one place the
     eligibility ingredient is chosen; the threshold and consumers are unaffected.
     """
     if source == "indicatormatrix":

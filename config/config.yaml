@@ -89,9 +89,11 @@ res_cf:
   # eligibility_source picks where the per-cell land fraction comes from:
   #   indicatormatrix   coarse NE-110m land/sea outline, no extra data (default).
   #   availabilitymatrix finer coastline via atlite availabilitymatrix +
-  #                      ExclusionContainer over a land-cover raster. NOT WIRED
-  #                      yet (raises) — see cell_availability_fraction() in
-  #                      res_cf/_helpers.py. docs/land_eligibility_design.md.
+  #                      ExclusionContainer over a high-res land polygon. Wired and
+  #                      cross-checked against indicatormatrix (agrees in 5/6 areas);
+  #                      needs the ne_10m_land download (see README + the availability
+  #                      block below). See cell_availability_fraction() in
+  #                      res_cf/_helpers.py and docs/land_eligibility_design.md.
   eligibility_source: indicatormatrix
   min_land_fraction: 0.98
 
