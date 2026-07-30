@@ -72,7 +72,13 @@ if "snakemake" not in globals():
 
 from common._logging import configure_logging
 from common._paths import CUTOUTS, RES_CF, SHAPES_RES
-from scripts.res_cf._helpers import haversine_distance_km, load_res_cf_cfg
+from scripts.res_cf._helpers import (
+    geom_area_weights,
+    haversine_distance_km,
+    load_res_cf_cfg,
+    mask_cells_inside,
+    pick_p95_cell,
+)
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
@@ -87,9 +93,6 @@ _spec.loader.exec_module(_bestsite)
 
 build_cf_year     = _bestsite.build_cf_year
 geometry_for_tech = _bestsite.geometry_for_tech
-mask_cells_inside = _bestsite.mask_cells_inside
-find_p95_cell      = _bestsite.find_p95_cell
-geom_weights = _bestsite.geom_weights
 get_cell_coords    = _bestsite.get_cell_coords
 extract_cell_timeseries = _bestsite.extract_cell_timeseries
 
@@ -221,9 +224,9 @@ def build_anchor_scenario(cutout_path: Path, country_upper: str, anchor_tech: st
     anchor_cf_year = build_cf_year(cutout_path, anchor_tech)
 
     co = atlite.Cutout(path=str(cutout_path))
-    anchor_weights = geom_weights(co, anchor_geom)
+    anchor_weights = geom_area_weights(co, anchor_geom)
 
-    anchor_y_idx, anchor_x_idx = find_p95_cell(anchor_cf_year, anchor_weights)
+    anchor_y_idx, anchor_x_idx = pick_p95_cell(anchor_cf_year.mean("time"), anchor_weights)
     anchor_series = extract_cell_timeseries(anchor_cf_year, anchor_y_idx, anchor_x_idx)
     anchor_x, anchor_y = get_cell_coords(anchor_cf_year, anchor_y_idx, anchor_x_idx)
 

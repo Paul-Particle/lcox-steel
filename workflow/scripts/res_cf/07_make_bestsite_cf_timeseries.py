@@ -72,7 +72,10 @@ from common._logging import configure_logging
 from common._paths import RES_CF, SHAPES_RES
 from scripts.res_cf._helpers import (
     annual_cutout_path,
+    geom_area_weights,
     load_res_cf_cfg,
+    pick_p95_cell,
+    weighted_percentile,
 )
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
@@ -173,69 +176,6 @@ def load_offshore_geometry(iso2: str):
 def geometry_for_tech(iso2: str, tech: str):
     return load_offshore_geometry(iso2) if tech == "wind_offshore" else load_land_geometry(iso2)
 
-
-def mask_cells_inside(cell_mean: xr.DataArray, geom) -> np.ndarray:
-    xs = cell_mean.coords["x"].values
-    ys = cell_mean.coords["y"].values
-    xx, yy = np.meshgrid(xs, ys)
-    points = gpd.GeoSeries(gpd.points_from_xy(xx.ravel(), yy.ravel()), crs=4326)
-    inside = points.within(geom) | points.touches(geom)
-    return inside.values.reshape(cell_mean.shape)
-
-def weighted_percentile(values: np.ndarray, weights: np.ndarray, q: float) -> float:
-    """Area-weighted percentile of `values` (nonnegative `weights`), q in [0, 1]."""
-    if not (0.0 <= q <= 1.0):
-        raise ValueError("q must be in [0, 1].")
-
-    m = np.isfinite(values) & np.isfinite(weights) & (weights > 0)
-    v = values[m]
-    w = weights[m]
-
-    if v.size == 0:
-        return np.nan
-
-    order = np.argsort(v)
-    v = v[order]
-    w = w[order]
-
-    cw = np.cumsum(w)
-    cw /= cw[-1]
-
-    idx = np.searchsorted(cw, q, side="left")
-    idx = min(idx, v.size - 1)
-    return float(v[idx])
-
-def find_p95_cell(cf_year: xr.DataArray, weights: np.ndarray) -> tuple[int, int]:
-    """Return the (y, x) index of the cell closest to the area-weighted P95
-    annual-mean CF.
-
-    `weights` is a (y, x) array of area-based weights (e.g. from
-    cutout.indicatormatrix). Cells outside the region already have weight 0,
-    so they're naturally excluded — no separate geometry check needed here.
-    """
-    cell_mean = cf_year.mean("time").values
-
-    p95 = weighted_percentile(cell_mean.ravel(), weights.ravel(), 0.95)
-
-    valid = weights.ravel() > 0
-    vals = np.where(valid, cell_mean.ravel(), np.nan)
-    dist = np.abs(vals - p95)
-    idx_flat = np.nanargmin(dist)
-    y_idx, x_idx = np.unravel_index(idx_flat, cell_mean.shape)
-
-    return int(y_idx), int(x_idx)
-
-def geom_weights(cutout: atlite.Cutout, geom) -> np.ndarray:
-    """Area-based weights for `geom` as a flat (y, x)-shaped array, built from
-    atlite's indicatormatrix (area-fraction overlap) — same method used in
-    scripts 03 and 06.
-    """
-    indicator = cutout.indicatormatrix([geom]).tocsr()
-    indicator_1d = np.asarray(indicator[0, :].todense()).ravel()
-    n_y = cutout.data.sizes["y"]
-    n_x = cutout.data.sizes["x"]
-    return indicator_1d.reshape(n_y, n_x)
-
 def get_cell_coords(cf_year: xr.DataArray, y_idx: int, x_idx: int) -> tuple[float, float]:
     x = float(cf_year.x.values[x_idx])
     y = float(cf_year.y.values[y_idx])
@@ -291,7 +231,7 @@ def main() -> None:
             geom = geometry_for_tech(country_upper, tech)
 
             co = atlite.Cutout(path=str(cutout))
-            weights = geom_weights(co, geom)
+            weights = geom_area_weights(co, geom)
 
             cell_mean = cf_year.mean("time").values
             w_flat = weights.ravel()
@@ -304,7 +244,7 @@ def main() -> None:
             valid_mask = w_flat > 0
             cell_max = float(np.nanmax(np.where(valid_mask, v_flat, np.nan))) if np.any(valid_mask) else np.nan
 
-            y_idx, x_idx = find_p95_cell(cf_year, weights)
+            y_idx, x_idx = pick_p95_cell(cell_mean, weights)
             x, y = get_cell_coords(cf_year, y_idx, x_idx)
             selected_cells[tech] = {"x": x, "y": y, "x_idx": int(x_idx), "y_idx": int(y_idx)}
             ts = extract_cell_timeseries(cf_year, y_idx, x_idx)
