@@ -219,13 +219,11 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
         carbon = gas_cfg.get("co2_price_eur_per_t", 0.0) * gas_cfg["co2_t_per_mwh"]
         # Both ride on the same marginal cost, so their config ratio splits the bill.
         parts = _split_by_shares(gas_total, {"gas_fuel": price, "gas_carbon": carbon})
+        # The price and emission factor are config quotes and travel with the spec,
+        # which is built per scenario — the gas price is overlaid per geography.
         energy_line = ("gas burnt", f"{gas_mwh / max(steel_t, 1):,.2f} MWh LHV / t steel")
-        add("gas_fuel", parts.get("gas_fuel", 0.0),
-            [energy_line, ("gas price", f"{price:,.1f} €/MWh LHV")])
-        add("gas_carbon", parts.get("gas_carbon", 0.0),
-            [energy_line,
-             ("CO₂ price", f"{gas_cfg.get('co2_price_eur_per_t', 0.0):,.0f} €/t"),
-             ("emission factor", f"{gas_cfg['co2_t_per_mwh']:.2f} t CO₂ / MWh LHV")])
+        add("gas_fuel", parts.get("gas_fuel", 0.0), [energy_line])
+        add("gas_carbon", parts.get("gas_carbon", 0.0), [energy_line])
 
     # -- hydrogen: electrolyser capital, its fixed O&M, its water, and the buffer
     electrolyser_total = _group_eur_per_t(row, "electrolyser", steel_t)
@@ -323,10 +321,12 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
         fee = _value(row, "grid_fee_eur_per_mwh") or 0.0
         energy_parts = _split_by_shares(parts.get("energy", 0.0),
                                         {"market": price, "fee": fee})
+        # The market price is genuinely per scenario (it is an average over the hours
+        # this plant chose to import); the volumetric fee is a flat config quote and
+        # travels with the spec instead of being repeated here.
         add("grid_market", energy_parts.get("market", 0.0),
-            [("average market price", f"{price:,.1f} €/MWh imported")])
-        add("grid_fee", energy_parts.get("fee", 0.0),
-            [("volumetric fee", f"{fee:,.1f} €/MWh imported")])
+            [("average price paid", f"{price:,.1f} €/MWh imported")])
+        add("grid_fee", energy_parts.get("fee", 0.0))
 
     transmission = _value(row, "lcoe_transmission_eur_per_mwh")
     add("transmission", _group_eur_per_t(row, "transmission", steel_t),
@@ -513,9 +513,11 @@ def spec(assumptions: dict) -> list:
         [("fixed opex", f"{el_cfg['opex_per_mw_per_year_eur'] / 1e3:,.0f} k€/MW·yr")])
     add("electrolyser_water", "Electrolyser — water & variable opex", "hydrogen", "#B4D4B8",
         [("variable opex", f"{el_cfg['varopex_eur_per_mwh_el']:,.2f} €/MWh electricity")])
+    # Quoted in €/MWh rather than k€/MWh: the salt-cavern sensitivity drops this from
+    # 10,000 to 350, which rounds away entirely on the larger unit.
     buffer = assumptions["h2_buffer"]
     add("h2_buffer", "H₂ buffer store", "hydrogen", "#70D2F0",
-        [("capex quote", f"{buffer['capex_per_mwh_eur'] / 1e3:,.0f} k€/MWh LHV"),
+        [("capex quote", f"{buffer['capex_per_mwh_eur']:,.0f} €/MWh LHV"),
          ("lifetime", f"{buffer['lifetime_years']:.0f} y"), wacc_line])
 
     res_colours = {"solar": ("#0A5680", "#3E7CA3"), "wind_onshore": ("#0E6FA4", "#4B93BF"),

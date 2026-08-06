@@ -21,6 +21,7 @@ into the payload and fills the template.
 
 Run it directly — it is not a pipeline rule.
 """
+import json
 import sys
 from pathlib import Path
 
@@ -118,8 +119,6 @@ def attach(payload: dict, cases: dict) -> None:
     and matches each row onto its record with the same scenario parser, so a record
     can never be given another scenario's split.
     """
-    base_assumptions = _assumptions("DE-2023-grid", "h2-dri-eaf-avg")
-    payload["leaf_spec"] = cost_taxonomy.spec(base_assumptions)
     payload["leaf_groups"] = [list(group) for group in cost_taxonomy.GROUPS]
     payload["alt_lcos_bands"] = ALT_LCOS_BANDS
     payload["alt_lcoe_bands"] = ALT_LCOE_BANDS
@@ -127,6 +126,23 @@ def attach(payload: dict, cases: dict) -> None:
     payload["alt_lcoh_bands"] = ALT_LCOH_BANDS
     payload["dash_lcoh_bands"] = DASH_LCOH_BANDS
     payload["h2_lhv_kwh_per_kg"] = H2_LHV_KWH_PER_KG
+
+    # The config quotes a hover shows are per scenario, not global: the generated
+    # overlays move the gas price for 120 scenarios and the H2-buffer capex for 109
+    # (that is the salt-cavern sensitivity), among others. Publishing one spec built
+    # from a single scenario would print the base quote next to salt-cavern numbers.
+    # So each scenario gets its own spec, deduplicated — there are only a handful of
+    # distinct ones, and a record just points at the one it uses.
+    specs: dict[str, int] = {}
+    payload["leaf_specs"] = []
+
+    def spec_index(assumptions: dict) -> int:
+        entry = cost_taxonomy.spec(assumptions)
+        fingerprint = json.dumps(entry, sort_keys=True)
+        if fingerprint not in specs:
+            specs[fingerprint] = len(payload["leaf_specs"])
+            payload["leaf_specs"].append(entry)
+        return specs[fingerprint]
 
     attached = missing = 0
     for project in sorted(cases):
@@ -148,6 +164,7 @@ def attach(payload: dict, cases: dict) -> None:
                 row, assumptions, H2_LHV_KWH_PER_KG)
             leaves, leaf_inputs = cost_taxonomy.leaf_costs(row, assumptions)
 
+            record["spec"] = spec_index(assumptions)
             record["alt"] = _round_map(bands, 2)
             record["alt_lcoe"] = _round_map(carriers["lcoe"], 2)
             record["alt_lcoh"] = _round_map(carriers["lcoh"], 2)
@@ -158,7 +175,8 @@ def attach(payload: dict, cases: dict) -> None:
             attached += 1
 
     print(f"  attached the taxonomy split to {attached} records"
-          + (f" ({missing} had no steel load)" if missing else ""))
+          + (f" ({missing} had no steel load)" if missing else "")
+          + f", over {len(payload['leaf_specs'])} distinct assumption sets")
 
 
 def main() -> None:

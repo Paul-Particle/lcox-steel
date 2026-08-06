@@ -101,10 +101,11 @@
   <header class="ct-head">
     <div>
       <div class="ct-brand"><span class="ct-dot"></span><span>Cost breakdown · two taxonomies</span></div>
-      <h1 class="ct-title">Two ways to cut the same number</h1>
-      <p class="ct-sub">The circulated chart mockup's category split next to the split the pipeline
-        already reports — both drawn from the same results, and both closing exactly on the total.
-        All that differs is where the cuts fall. Hover any segment for the inputs behind it.</p>
+      <h1 class="ct-title">Plotting alternatives</h1>
+      <p class="ct-sub">Two ways to cut the same levelised cost, side by side: the alternative
+        taxonomy next to the one the dashboard already uses. Both are drawn from the same results
+        and both close exactly on the total, so all that differs is where the cuts fall. Hover any
+        segment for the inputs behind it.</p>
     </div>
     <div class="ct-meta" id="ct-meta"></div>
   </header>
@@ -114,10 +115,10 @@
 
   <div class="ct-legend">
     <div class="ct-key alt"><span class="chip">Alternative</span>
-      <p>The circulated taxonomy: one hydrogen block, process plant split into capex and O&amp;M,
-        electricity split into an EAF-melt share and the rest.</p></div>
+      <p>One hydrogen block, process plant split into capex and O&amp;M, electricity split into an
+        EAF-melt share and the rest. Reconstructed from the model's cost groups.</p></div>
     <div class="ct-key dash"><span class="chip">Dashboard</span>
-      <p>The pipeline's own cost groups, as the rest of the dashboard shows them.</p></div>
+      <p>The cost groups the pipeline reports, which the rest of the dashboard already plots.</p></div>
   </div>
 
   <section class="ct-panel">
@@ -130,12 +131,12 @@
     <div class="ct-pair">
       <div class="ct-col alt">
         <div class="ct-col-h"><span class="chip">Alternative</span>
-          <span class="nm">circulated split</span><span class="src">reconstructed</span></div>
+          <span class="src">reconstructed</span></div>
         <div class="ct-plot" id="plot-lcos-alt"></div>
       </div>
       <div class="ct-col dash">
         <div class="ct-col-h"><span class="chip">Dashboard</span>
-          <span class="nm">model's own split</span><span class="src">report columns</span></div>
+          <span class="src">report columns</span></div>
         <div class="ct-plot" id="plot-lcos-dash"></div>
       </div>
     </div>
@@ -151,12 +152,12 @@
     <div class="ct-pair">
       <div class="ct-col alt">
         <div class="ct-col-h"><span class="chip">Alternative</span>
-          <span class="nm">capex and O&amp;M apart</span><span class="src">reconstructed</span></div>
+          <span class="src">reconstructed</span></div>
         <div class="ct-plot" id="plot-lcoe-alt"></div>
       </div>
       <div class="ct-col dash">
         <div class="ct-col-h"><span class="chip">Dashboard</span>
-          <span class="nm">reported parts</span><span class="src">report columns</span></div>
+          <span class="src">report columns</span></div>
         <div class="ct-plot" id="plot-lcoe-dash"></div>
       </div>
     </div>
@@ -171,12 +172,12 @@
     <div class="ct-pair">
       <div class="ct-col alt">
         <div class="ct-col-h"><span class="chip">Alternative</span>
-          <span class="nm">capex, O&amp;M and water apart</span><span class="src">reconstructed</span></div>
+          <span class="src">reconstructed</span></div>
         <div class="ct-plot" id="plot-lcoh-alt"></div>
       </div>
       <div class="ct-col dash">
         <div class="ct-col-h"><span class="chip">Dashboard</span>
-          <span class="nm">reported parts</span><span class="src">report columns</span></div>
+          <span class="src">report columns</span></div>
         <div class="ct-plot" id="plot-lcoh-dash"></div>
       </div>
     </div>
@@ -191,7 +192,8 @@
         electrolyser's water apart from its capital, renewables by technology, the battery's power
         apart from its energy, the grid connection apart from the energy it carries. Hover a
         segment for the quotes and quantities that produce it, its share of the group it belongs
-        to, and its share of LCOS.</p>
+        to, and its share of LCOS. Parts too thin to put a pointer on are folded into the largest
+        band of their own group, so nothing here is unreachable.</p>
     </div>
     <div class="ct-single"><div class="ct-plot" id="plot-detail"></div></div>
   </section>
@@ -199,8 +201,9 @@
   <section class="ct-panel">
     <div class="ct-panel-h">
       <h2>Built capacity <span class="hint">· for reference — hover bars for capacity factors</span></h2>
-      <p>What the optimiser actually built for each route in this scenario, on the same axes the
-        scenario-comparison tab uses.</p>
+      <p>What the optimiser actually built for each route in this scenario. Grouped rather than
+        stacked, so the difference in how each route splits its build is what you read off,
+        instead of the total.</p>
     </div>
     <div class="ct-caps" id="ct-caps"></div>
   </section>
@@ -216,7 +219,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const {cases:CASES, gas:GAS, template:FCA, geos:GEOS, years:YEARS, geo_names:GN,
     route_order:ROUTE_ORDER, route_label:RLAB, cost_groups:COST_GROUPS,
     cap_panels:CAP_PANELS, variant_routes:VARIANT_ROUTES, variant_label:VLAB,
-    leaf_spec:LEAF_SPEC, leaf_groups:LEAF_GROUPS, alt_lcos_bands:ALT_LCOS,
+    leaf_specs:LEAF_SPECS, leaf_groups:LEAF_GROUPS, alt_lcos_bands:ALT_LCOS,
     alt_lcoe_bands:ALT_LCOE, dash_lcoe_bands:DASH_LCOE, alt_lcoh_bands:ALT_LCOH,
     dash_lcoh_bands:DASH_LCOH, h2_lhv_kwh_per_kg:H2LHV} = PAYLOAD;
 
@@ -227,7 +230,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
   // The detail chart carries up to ~31 bands, so it is given far more vertical room
   // than the pair charts — the thinnest bands still need to be worth hovering.
-  const PAIR_H = 430, DETAIL_H = 1180, CAP_H = 300;
+  const PAIR_H = 430, DETAIL_H = 1180, CAP_H = 340;
+  // Below this many pixels a stacked band is not a usable pointer target, so its
+  // hover detail is folded into a neighbour instead (see renderDetail).
+  const THIN_PX = 9;
 
   // ---- scenario state -------------------------------------------------
   // Routes are the bars on every chart, so the matrix moves everything else.
@@ -553,24 +559,77 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     routes.forEach(r=>recs[r]=recFor(S,r));
     const totals = routes.map(r=>recs[r].lcos);
     const groupLabel = {}; LEAF_GROUPS.forEach(([k,lab])=>groupLabel[k]=lab);
+    // Every spec lists the same leaves in the same order — they differ only in the
+    // config quotes, which are per scenario. So take order, labels and colours from
+    // any of them, but each route's constants from the spec that route actually used.
+    const LEAF_SPEC = LEAF_SPECS[0];
+    const constantsFor = (key, r) =>
+      (LEAF_SPECS[recs[r].spec] || LEAF_SPEC).find(e=>e[0]===key)?.[4] || [];
     // Only leaves some route in this scenario actually has — latent ones (offshore
     // wind, a carbon price, HVDC) would otherwise sit in the legend drawing nothing.
     const bands = LEAF_SPEC.filter(([key])=>routes.some(r=>(recs[r].leaves||{})[key]))
                            .map(([key,label,,colour])=>[key,label,colour]);
-    const groupOf = {}, constantsOf = {};
-    LEAF_SPEC.forEach(([key,,group,,constants])=>{ groupOf[key]=group; constantsOf[key]=constants; });
+    const groupOf = {}, labelOf = {};
+    LEAF_SPEC.forEach(([key,label,group])=>{ groupOf[key]=group; labelOf[key]=label; });
+    const valueOf = (key,r) => (recs[r].leaves||{})[key] || 0;
+    const groupTotal = (group,r) => LEAF_SPEC.reduce(
+      (s,[k,,g])=> g===group ? s+valueOf(k,r) : s, 0);
+
+    // A band worth a euro or two on a 700 €/t bar is a pixel tall — real, but no
+    // pointer can land on it. Each one's detail is therefore folded into a band that
+    // *is* hoverable: the largest band of its own group, so it keeps its context, and
+    // only failing that the largest band on the bar. Nothing becomes unreachable.
+    const plotPx = DETAIL_H - 26 - 200;                 // minus the top/bottom margins
+    const thinLimit = THIN_PX * Math.max(...totals) * 1.06 / plotPx;
+    const folded = {};
+    routes.forEach(r=>{
+      const present = bands.map(([k])=>k).filter(k=>valueOf(k,r) > 0);
+      const hosts = {};
+      present.filter(k=>valueOf(k,r) >= thinLimit).forEach(k=>{
+        const g = groupOf[k];
+        if(!hosts[g] || valueOf(k,r) > valueOf(hosts[g],r)) hosts[g] = k;
+      });
+      const biggest = present.reduce((best,k)=>
+        (!best || valueOf(k,r) > valueOf(best,r)) ? k : best, null);
+      const map = {};
+      present.filter(k=>valueOf(k,r) < thinLimit).forEach(k=>{
+        const host = hosts[groupOf[k]] || biggest;
+        if(host && host !== k) (map[host] = map[host] || []).push(k);
+      });
+      folded[r] = map;
+    });
+
+    // One band's own detail: its share of its group, then the inputs behind it —
+    // the scenario's own quantities first, then the config quotes they multiply.
+    function ownLines(key, r, prefix){
+      const group = groupOf[key];
+      const out = [[`${prefix}of ${groupLabel[group]||group}`,
+                    `${pct(valueOf(key,r), groupTotal(group,r))} `
+                    + `(${amount(groupTotal(group,r),"€/t")} in total)`]];
+      ((recs[r].leaf_inputs||{})[key]||[]).forEach(([lab,v])=>out.push([prefix+lab, v]));
+      constantsFor(key, r).forEach(([lab,v])=>out.push([prefix+lab, v]));
+      return out;
+    }
 
     const lines = (key, r) => {
-      const rec = recs[r], leaves = rec.leaves||{}, value = leaves[key];
-      if(value==null) return [];
-      const group = groupOf[key];
-      // Its share of the group it belongs to, then the inputs behind it: the
-      // scenario's own quantities first, then the config quotes they multiply.
-      const groupTotal = LEAF_SPEC.reduce((s,[k,,g])=> g===group ? s+(leaves[k]||0) : s, 0);
-      const out = [[`· of ${groupLabel[group]||group}`,
-                    `${pct(value, groupTotal)} (${amount(groupTotal,"€/t")} in total)`]];
-      ((rec.leaf_inputs||{})[key]||[]).forEach(([lab,v])=>out.push(["· "+lab, v]));
-      (constantsOf[key]||[]).forEach(([lab,v])=>out.push(["· "+lab, v]));
+      const rec = recs[r];
+      if((rec.leaves||{})[key]==null) return [];
+      const out = ownLines(key, r, "· ");
+      const guests = folded[r][key] || [];
+      if(!guests.length) return out;
+      // Their own inputs go in too, unless that would run the tooltip past a
+      // readable length — then the value and both shares still come through.
+      const withInputs = guests.reduce((n,k)=>
+        n + 1 + ownLines(k, r, "").length, 0) <= 16;
+      out.push([`— folded in, too thin to hover:`,
+                `${guests.length} part${guests.length===1?"":"s"}`]);
+      guests.forEach(k=>{
+        out.push([`· ${labelOf[k]}`,
+                  `${amount(valueOf(k,r),"€/t",2)} `
+                  + `(${pct(valueOf(k,r), groupTotal(groupOf[k],r))} of `
+                  + `${groupLabel[groupOf[k]]||groupOf[k]}, ${pct(valueOf(k,r), rec.lcos)} of LCOS)`]);
+        if(withInputs) ownLines(k, r, "· · ").slice(1).forEach(l=>out.push(l));
+      });
       return out;
     };
     stacked(el, routes, bands, (k,r)=>(recs[r].leaves||{})[k], lines, totals,
@@ -604,10 +663,11 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       });
       const el = document.getElementById(`plot-cap-${idx}`);
       if(!traces.length){ el.innerHTML = `<div class="ct-empty">Nothing built.</div>`; return; }
-      // Power capacities genuinely add to a system size, so stack them; process steps
-      // and storage hours do not, so group those instead of implying a sum.
+      // All three panels group rather than stack: the point of having them here is to
+      // compare how each route splits its build, and a stack hides that behind the
+      // total. Storage hours and process steps would not be additive anyway.
       Plotly.react(el, traces, base({
-        barmode: idx===0 ? "stack" : "group", height:CAP_H, bargap:0.35, bargroupgap:0.12,
+        barmode:"group", height:CAP_H, bargap:0.28, bargroupgap:0.08,
         margin:{l:58, r:14, t:20, b:118},
         legend:{orientation:"h", x:0, y:-0.2, xanchor:"left", yanchor:"top",
           bgcolor:"rgba(0,0,0,0)", font:{size:10.5, color:PRINT.muted}},
@@ -669,7 +729,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       + "the EAF stage. Every split is exact — a plant's annual cost is "
       + "<code>annuity × capex + fixed opex</code>, so capital and O&amp;M separate by a config ratio; "
       + "the same holds for renewables, the electrolyser, the battery's power and energy, and the grid "
-      + "connection's capex and capacity charge. Two rows of the circulated mockup stay empty because "
+      + "connection's capex and capacity charge. Two rows of the alternative stay empty because "
       + "the model does not carry them — ore/iron freight and scrap or HBI purchase. Regenerate with "
       + "<code>python workflow/scripts/viz/build_cost_taxonomies.py</code>.";
   }
