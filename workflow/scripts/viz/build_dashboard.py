@@ -324,8 +324,11 @@ def build_payload(projects):
     return cases, synth, gas, sorted(geos), sorted(years)
 
 
-def _font_css():
-    """Inline the bundled Titillium Web woff2 subsets as @font-face data-URIs."""
+def font_css():
+    """Inline the bundled Titillium Web woff2 subsets as @font-face data-URIs.
+
+    Also used by build_cost_breakdown_mockups, which builds its own hub fragment
+    rather than filling a template placeholder."""
     assets = REPO / "workflow" / "scripts" / "viz" / "assets"
     faces = []
     for weight, name in ((400, "TitilliumWeb-Regular.woff2"), (600, "TitilliumWeb-SemiBold.woff2")):
@@ -371,7 +374,7 @@ def build_html(template_path: Path):
     }
 
     html = (template_path.read_text()
-            .replace("/*FONT_CSS*/", _font_css())
+            .replace("/*FONT_CSS*/", font_css())
             .replace("/*PLOTLY_JS*/", plotly_js)
             .replace("/*PAYLOAD_JSON*/", json.dumps(payload, cls=PlotlyJSONEncoder)))
     return html, cases, geos
