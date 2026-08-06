@@ -340,13 +340,17 @@ def font_css():
     return "".join(faces)
 
 
-def build_html(template_path: Path):
+def build_html(template_path: Path, augment=None):
     """Assemble a self-contained dashboard HTML from a template, returning (html, cases, geos).
 
     The payload (cases/synth/gas + FCA template + label/colour maps) is identical
     for every template — v1 and the scenario-comparison v2 differ only in markup
     and client JS. Templates carry the /*FONT_CSS*/, /*PLOTLY_JS*/ and
     /*PAYLOAD_JSON*/ placeholders.
+
+    `augment(payload, cases)` lets a template that needs more than the shared
+    payload add to it before serialisation — the cost-taxonomy page attaches its
+    leaf-level split that way, rather than growing every page's payload.
     """
     projects = sorted(
         p for p in {r["project"] for r in _read_projects()}
@@ -372,6 +376,8 @@ def build_html(template_path: Path):
         "cost_groups": COST_GROUPS, "cap_panels": CAP_PANELS,
         "variant_routes": VARIANT_ROUTES, "variant_label": VARIANT_LABEL,
     }
+    if augment is not None:
+        augment(payload, cases)
 
     html = (template_path.read_text()
             .replace("/*FONT_CSS*/", font_css())

@@ -5,7 +5,7 @@ artifact: a work-in-progress banner and a tab bar over isolated iframes.
 
 Inputs:
   * results/dashboard_v2.html              — built by build_dashboard_v2.py
-  * results/cost_breakdown_mockups.html    — built by build_cost_breakdown_mockups.py
+  * results/cost_taxonomies.html           — built by build_cost_taxonomies.py
   * hub_pages/network_schematic.html       — static source page (no generator)
   * hub_pages/workflow_dag.html            — static source page (no generator)
 
@@ -43,15 +43,15 @@ FAVICON = ("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22"
            "%20viewBox=%220%200%20100%20100%22%3E%3Ctext%20y=%22.9em%22"
            "%20font-size=%2290%22%3E🏭%3C/text%3E%3C/svg%3E")
 
-# (key, path, tab label). "compare" and "mockups" are dashboard build artifacts;
+# (key, path, tab label). "compare" and "taxonomies" are dashboard build artifacts;
 # the other two are static source pages tracked under hub_pages/.
 FRAGMENTS = {
-    "compare":   (RESULTS / "dashboard_v2.html",              "Scenario comparison"),
-    "mockups":   (RESULTS / "cost_breakdown_mockups.html",    "Cost breakdown options"),
-    "schematic": (HUB_PAGES / "network_schematic.html",       "Network schematic"),
-    "dag":       (HUB_PAGES / "workflow_dag.html",             "Workflow DAG"),
+    "compare":    (RESULTS / "dashboard_v2.html",       "Scenario comparison"),
+    "taxonomies": (RESULTS / "cost_taxonomies.html",    "Cost breakdown options"),
+    "schematic":  (HUB_PAGES / "network_schematic.html", "Network schematic"),
+    "dag":        (HUB_PAGES / "workflow_dag.html",      "Workflow DAG"),
 }
-TAB_ORDER = ["schematic", "compare", "mockups", "dag"]
+TAB_ORDER = ["schematic", "compare", "taxonomies", "dag"]
 DEFAULT = "schematic"
 
 

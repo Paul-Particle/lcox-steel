@@ -175,10 +175,18 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
                 inputs[key] = [line for line in lines if line is not None]
 
     # -- feedstock: ore on the reduction/electrolysis links, consumables on the EAF
-    ore = _value(row, "ore_eur_per_t_steel")
-    consumables = _value(row, "consumables_eur_per_t_steel")
-    add("ore", ore or 0.0)
-    add("consumables", consumables or 0.0)
+    # The ore quote that applies is the one on whichever reduction step was built,
+    # and a route melting DRI in an EAF also pays for the yield loss in melting.
+    ore_quotes = [
+        (f"ore quote, {label.lower()}", f"{assumptions[block]['ore_eur_per_t']:,.0f} €/t output")
+        for key, block, _, label in PROCESS_PLANTS
+        if "ore_eur_per_t" in assumptions.get(block, {}) and _value(row, f"plant_{key}_eur_per_t")
+    ]
+    if _value(row, "plant_eaf_eur_per_t"):
+        ore_quotes.append(("iron per t steel",
+                           f"{assumptions['eaf']['iron_t_per_t_steel']:.2f} t (melting yield)"))
+    add("ore", _value(row, "ore_eur_per_t_steel") or 0.0, ore_quotes)
+    add("consumables", _value(row, "consumables_eur_per_t_steel") or 0.0)
 
     # -- process plants, each cut into annualised capital and fixed O&M
     om_fractions = process_om_fractions(assumptions)
@@ -240,9 +248,9 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
         lines = [line for line in lines if line[1] is not None]
         add("electrolyser_capex", capital * (1.0 - fraction), lines)
         add("electrolyser_fom", capital * fraction, lines[:2])
+        # The variable-opex quote itself is a config constant, so it travels in spec().
         add("electrolyser_water", water,
-            [lines[-1], ("electricity drawn", f"{el_mwh / max(steel_t, 1):,.2f} MWh / t steel"),
-             ("variable opex", f"{el_cfg['varopex_eur_per_mwh_el']:,.2f} €/MWh el")])
+            [lines[-1], ("electricity drawn", f"{el_mwh / max(steel_t, 1):,.2f} MWh / t steel")])
 
     buffer_hours = _value(row, "h2_buffer_hours_dri")
     buffer_gwh = _value(row, "h2_buffer_gwh")
@@ -465,8 +473,10 @@ def spec(assumptions: dict) -> list:
         entries.append([key, label, group, colour,
                         [list(pair) for pair in constants if pair is not None]])
 
-    add("ore", "Iron ore", "feedstock", "#E2B681",
-        [("priced per t of iron/steel output on the reduction link", "")])
+    # Ore is priced per tonne of the reduction step's own output, and the ore grade
+    # each route tolerates differs — so the quote that applies is per scenario, and
+    # travels with the record rather than here.
+    add("ore", "Iron ore", "feedstock", "#E2B681")
     add("consumables", "EAF consumables", "feedstock", "#C99A5E",
         [("electrodes, fluxes, alloys, carbon",
           f"{assumptions['eaf']['consumables_eur_per_t']:,.0f} €/t steel")])
@@ -538,8 +548,7 @@ def spec(assumptions: dict) -> list:
     add("grid_capacity_fee", "Grid connection — capacity charge", "electricity", "#98A5AE",
         [("capacity charge (Leistungspreis)",
           f"{grid['fee_eur_per_mw_per_year'] / 1e3:,.0f} k€/MW·yr")])
-    add("grid_market", "Grid energy — market price", "electricity", "#B7C1C8",
-        [("day-ahead price, averaged over the hours actually imported", "")])
+    add("grid_market", "Grid energy — market price", "electricity", "#B7C1C8")
     add("grid_fee", "Grid energy — volumetric fee", "electricity", "#D3DAE0",
         [("volumetric charge (Arbeitspreis)", f"{grid['fee_eur_per_mwh']:,.1f} €/MWh imported")])
     add("transmission", "Transmission (HVDC)", "electricity", "#83D1DD")
