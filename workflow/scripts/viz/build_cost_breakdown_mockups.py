@@ -6,8 +6,9 @@ self-contained Plotly page that puts the circulated chart mockup's *category
 split* next to the split the pipeline already reports, with **both** populated
 from the same DE 2023 results the scenario-comparison tab reads.
 
-  * Draft A — the circulated taxonomy: one "Hydrogen (all-in)" block, and
-    electricity divided into an EAF-melt share and everything else.
+  * Draft A — the circulated taxonomy: one "Hydrogen (all-in)" block, process
+    plant cut into annualised capex and fixed O&M, and electricity divided into
+    an EAF-melt share and everything else.
   * Draft B — the pipeline's own cost groups, unchanged.
 
 Both stacks close exactly on LCOS, so the drafts differ only in how the same
@@ -15,17 +16,27 @@ total is cut. That is the point: Draft A's hydrogen block turns out to swallow
 most of the H2 route's electricity, which is visible only once real numbers are
 in it.
 
-Reconstructing Draft A needs the electricity-system cost partitioned three ways.
-Two parts are attributed and the third is a residual, so the stack cannot drift
-from LCOS:
+Reconstructing Draft A needs two things the report does not name directly.
 
-  * H2 share      = LCOH's electricity component x the H2 actually produced
+Electricity is partitioned three ways — two parts attributed and the third a
+residual, so the stack cannot drift from LCOS:
+
+  * H2 share       = LCOH's electricity component x the H2 actually produced
   * EAF melt share = the EAF's own MWh/t at that scenario's LCOE
   * rest of plant  = electricity system total - the two above
 
+Process plant is cut into annualised capex and fixed O&M from the per-plant
+`plant_*_eur_per_t` columns: a plant's PyPSA capital_cost is
+`annuity x capex_per_t_per_year + opex_per_t_per_year`, so the ratio is a config
+constant and the split is exact (see `_fixed_om_shares`).
+
+Segment hovers carry the same information as the scenario-comparison tab's cost
+chart — a headline with the segment's share of the levelised total, then the
+per-plant, per-technology and per-carrier detail lines for that bar.
+
 LCOE and LCOH get a single chart each: there the two taxonomies coincide apart
-from sub-splits (renewables capex vs O&M, electrolyser capex vs O&M vs water)
-that the reports do not separate, so a second identical panel would say nothing.
+from sub-splits the reports fold into their parent line, so a second identical
+panel would say nothing.
 
 Output is a hub fragment: body-only, its own <style>/<script>, plotly.js and the
 brand font inlined. `build_dashboard_hub.py` embeds it as the "Cost breakdown
@@ -42,11 +53,12 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[3]        # workflow/scripts/viz/ -> repo root
 sys.path.insert(0, str(Path(__file__).parent))    # sibling build_dashboard
-sys.path.insert(0, str(REPO / "workflow"))        # common.*, scripts.viz.*
+sys.path.insert(0, str(REPO / "workflow"))        # common.*, scripts.*
 
 from build_dashboard import COST_GROUPS, RESULTS, ROUTE_LABEL, font_css  # noqa: E402
 from common._constants import H2_LHV_KWH_PER_KG                          # noqa: E402
-from scripts.viz.style import PLOTLY_CONFIG, fca_template, lighten       # noqa: E402
+from scripts.h2_dri._helpers import annuity_factor                       # noqa: E402
+from scripts.viz.style import PLOTLY_CONFIG, fca_template                # noqa: E402
 
 OUT_PATH = RESULTS / "cost_breakdown_mockups.html"
 CONFIG_DIR = REPO / "config"
@@ -78,24 +90,43 @@ responsive_template.layout.height = None
 # same palette so equivalent roles read alike across the A|B pair.
 C_ORE = "#E2B681"        # sand yellow    — ore & consumables
 C_CAPEX = "#33434D"      # blue black     — plant capex
+C_OM = "#BDCCD9"         # light blue gray — plant fixed O&M: the same family as the
+#                          capex band above it, and the one blue-gray Draft B does not
+#                          use, so the paired legends never show one swatch twice.
 C_HYDROGEN = "#91C096"   # green          — hydrogen / electrolyser
 C_H2_STORE = "#70D2F0"   # light blue     — H2 buffer
 C_ELEC = "#0A5680"       # fca blue       — electricity / renewables
-# The EAF melt share is a *slice of* the electricity bundle, so it reads as a tint
-# of the same hue rather than a different colour. Plain highlight-blue (#0293D2)
-# sits too close to fca-blue to separate the two bands in a stacked bar.
-C_ELEC_EAF = lighten(C_ELEC, 0.55)
+C_ELEC_EAF = "#0293D2"   # highlight blue — the EAF-melt slice of the electricity
 C_GAS = "#525F6A"        # very dark gray — natural gas + CO2
 C_STORE = "#D75674"      # magenta red    — storage (iron/steel, battery)
 C_GRID_CONN = "#71828F"  # dark gray      — grid connection
 C_GRID_NRG = "#B7C1C8"   # gray           — grid energy
 C_TRANSM = "#83D1DD"     # turquois       — HVDC transmission
 
+# Report plant key -> (assumptions block, block whose lifetime annuitises it,
+# label). Ladle metallurgy is folded into the MOE link by `_add_moe_link` and
+# annuitised over the MOE lifetime, so it borrows MOE's lifetime here too.
+PROCESS_PLANTS = [
+    ("dri",            "dri",            "dri",            "H2-DRI shaft"),
+    ("dri_ng",         "dri_ng",         "dri_ng",         "NG-DRI shaft"),
+    ("moe",            "moe",            "moe",            "MOE"),
+    ("ladle",          "ladle",          "moe",            "Ladle metallurgy"),
+    ("electrowinning", "electrowinning", "electrowinning", "Electrowinning"),
+    ("eaf",            "eaf",            "eaf",            "EAF"),
+]
+
 
 # ---- Reading the pipeline reports ----------------------------------------
 
 def _report(project: str) -> pd.DataFrame:
     return pd.read_csv(RESULTS / f"report_{project}.csv").set_index("scenario")
+
+
+def _value(row: pd.Series, column: str):
+    """A report column as a float, or None when this scenario does not have it."""
+    if column not in row.index or pd.isna(row[column]):
+        return None
+    return float(row[column])
 
 
 def _assumptions(project: str, scenario: str) -> dict:
@@ -124,6 +155,56 @@ def _eur_per_t(row: pd.Series, group: str, steel_t: float) -> float:
     return float(row[col]) * 1e6 / steel_t
 
 
+# ---- Splitting what the report bundles -----------------------------------
+
+def _fixed_om_shares(assumptions: dict) -> dict:
+    """Fixed O&M's share of each process plant's annual cost.
+
+    `build_network._process_capital_cost` sets a plant's PyPSA capital_cost to
+    `annuity x capex_per_t_per_year + opex_per_t_per_year`, so the reported
+    `plant_*_eur_per_t` figures bundle annualised capital with fixed O&M in a ratio
+    fixed entirely by the config. The split is therefore exact and needs no new
+    reported quantity — at ~3 % of capex per year it comes out near a quarter of
+    each plant's annual cost.
+    """
+    wacc = assumptions["finance"]["default_wacc"]
+    shares = {}
+    for key, block, lifetime_block, _ in PROCESS_PLANTS:
+        plant = assumptions[block]
+        annual_capex = (annuity_factor(wacc, assumptions[lifetime_block]["lifetime_years"])
+                        * plant["capex_per_t_per_year_eur"])
+        fixed_om = plant["opex_per_t_per_year_eur"]
+        shares[key] = fixed_om / (annual_capex + fixed_om)
+    return shares
+
+
+def _split_process(row: pd.Series, scenario: str, steel_t: float) -> dict:
+    """Process-plant cost (€/t steel) cut into annualised capex and fixed O&M.
+
+    Per-plant figures come from the report's `plant_*_eur_per_t` columns, which sum
+    to the `process` cost group; each is cut by that plant's config O&M share.
+    """
+    shares = _fixed_om_shares(_assumptions(PROJECT, scenario))
+    plants = {}
+    for key, _, _, label in PROCESS_PLANTS:
+        plant_cost = _value(row, f"plant_{key}_eur_per_t")
+        if plant_cost:
+            plants[key] = dict(label=label, total=plant_cost,
+                               fixed_om=plant_cost * shares[key],
+                               capex=plant_cost * (1.0 - shares[key]))
+
+    total = _eur_per_t(row, "process", steel_t)
+    drift = sum(plant["total"] for plant in plants.values()) - total
+    if abs(drift) > 0.01:
+        raise ValueError(
+            f"{scenario}: the per-plant costs miss the reported process group by "
+            f"{drift:+.3f} €/t, so the capex/O&M split cannot be trusted."
+        )
+    return dict(total=total, plants=plants,
+                capex=sum(plant["capex"] for plant in plants.values()),
+                fixed_om=sum(plant["fixed_om"] for plant in plants.values()))
+
+
 def _split_electricity(row: pd.Series, scenario: str, steel_t: float) -> dict:
     """Partition the electricity-system cost (€/t steel) the way Draft A wants it.
 
@@ -131,20 +212,20 @@ def _split_electricity(row: pd.Series, scenario: str, steel_t: float) -> dict:
     a residual, so the three always sum back to the electricity-system total and
     Draft A's stack closes on LCOS.
     """
-    total = sum(_eur_per_t(row, g, steel_t)
-                for g in ("res", "grid", "battery", "transmission"))
-    lcoe = float(row["lcoe_eur_per_mwh"]) if pd.notna(row.get("lcoe_eur_per_mwh")) else 0.0
+    total = sum(_eur_per_t(row, group, steel_t)
+                for group in ("res", "grid", "battery", "transmission"))
+    lcoe = _value(row, "lcoe_eur_per_mwh") or 0.0
 
-    h2_kt = float(row["h2_produced_kt"]) if pd.notna(row.get("h2_produced_kt")) else 0.0
-    lcoh_electricity = (float(row["lcoh_electricity_eur_per_mwh_lhv"])
-                        if pd.notna(row.get("lcoh_electricity_eur_per_mwh_lhv")) else 0.0)
+    h2_kt = _value(row, "h2_produced_kt") or 0.0
+    lcoh_electricity = _value(row, "lcoh_electricity_eur_per_mwh_lhv") or 0.0
     h2_mwh_lhv = h2_kt * 1e6 * H2_LHV_KWH_PER_KG / 1000.0
     hydrogen = lcoh_electricity * h2_mwh_lhv / steel_t
 
     # The EAF melts only on routes that build one; MOE pours liquid steel directly
     # and its assumptions file carries no `eaf` block at all.
-    eaf_built = pd.notna(row.get("eaf_t_per_h_opt")) and float(row.get("eaf_t_per_h_opt", 0)) > 0
-    eaf = (_assumptions(PROJECT, scenario)["eaf"]["el_mwh_per_t"] * lcoe) if eaf_built else 0.0
+    eaf_built = (_value(row, "eaf_t_per_h_opt") or 0.0) > 0
+    eaf_mwh_per_t = _assumptions(PROJECT, scenario)["eaf"]["el_mwh_per_t"] if eaf_built else 0.0
+    eaf = eaf_mwh_per_t * lcoe
 
     rest = total - hydrogen - eaf
     if rest < -0.01:
@@ -154,61 +235,284 @@ def _split_electricity(row: pd.Series, scenario: str, steel_t: float) -> dict:
             "reconstructed from el_mwh_per_t x LCOE, so it is an estimate — revisit it before "
             "trusting this split."
         )
-    return dict(hydrogen=hydrogen, eaf=eaf, rest=max(rest, 0.0), total=total, lcoe=lcoe)
+    return dict(hydrogen=hydrogen, eaf=eaf, rest=max(rest, 0.0), total=total,
+                lcoe=lcoe, eaf_mwh_per_t=eaf_mwh_per_t)
 
+
+# ---- Hover text ----------------------------------------------------------
+# The same shape the scenario-comparison tab uses: a headline naming the segment,
+# its value and its share of the levelised total, then indented detail lines built
+# from that bar's own components — a bar missing a component omits the line rather
+# than printing "n/a".
+
+def _amount(value, unit: str, decimals: int = 0) -> str:
+    """"41 €/t" — or "n/a" where a scenario has no such component."""
+    return "n/a" if value is None else f"{value:,.{decimals}f} {unit}"
+
+
+def _amount_of(value, total, basis: str, unit: str, decimals: int = 0, shown=None) -> str:
+    """"41 €/t (6% of LCOS)".
+
+    `shown` overrides the figure printed while `value` still drives the share, so a
+    technology's own unit cost can carry its contribution's share of the system
+    total — the convention the scenario tab uses for renewables.
+    """
+    text = _amount(shown if shown is not None else value, unit, decimals)
+    if total and value is not None:
+        text += f" ({round(value / total * 100)}% of {basis})"
+    return text
+
+
+def _lcoe_tech_lines(row: pd.Series, *, headline: bool) -> list:
+    """Renewables detail: each technology's own LCOE, with its share of system LCOE."""
+    lcoe = _value(row, "lcoe_eur_per_mwh")
+    lines = []
+    for own_col, part_col, label in (
+        ("lcoe_renewables_own_eur_per_mwh", "lcoe_renewables_eur_per_mwh", "renewables:"),
+        ("lcoe_solar_own_eur_per_mwh", "lcoe_solar_eur_per_mwh", "· solar"),
+        ("lcoe_wind_onshore_own_eur_per_mwh", "lcoe_wind_onshore_eur_per_mwh", "· wind onshore"),
+        ("lcoe_wind_offshore_own_eur_per_mwh", "lcoe_wind_offshore_eur_per_mwh",
+         "· wind offshore"),
+    ):
+        if label == "renewables:" and not headline:
+            continue
+        part = _value(row, part_col)
+        if part is None:
+            continue
+        lines.append((label, _amount_of(part, lcoe, "LCOE", "€/MWh", 1,
+                                        shown=_value(row, own_col))))
+    return lines
+
+
+def _grid_lines(row: pd.Series) -> list:
+    """Delivered grid price split into market price, volumetric fee and connection."""
+    lcoe = _value(row, "lcoe_eur_per_mwh")
+    price = _value(row, "grid_price_eur_per_mwh")
+    fee = _value(row, "grid_fee_eur_per_mwh")
+    connection = _value(row, "grid_connection_eur_per_mwh_imported")
+    if all(part is None for part in (price, fee, connection)):
+        return []
+    delivered = sum(part for part in (price, fee, connection) if part is not None)
+    contribution = sum(_value(row, col) or 0.0 for col in
+                       ("lcoe_grid_connection_eur_per_mwh", "lcoe_grid_energy_eur_per_mwh"))
+    lines = [("grid electricity:", _amount_of(contribution or None, lcoe, "LCOE",
+                                              "€/MWh", 1, shown=delivered))]
+    for part, label in ((price, "· market price"), (fee, "· volumetric fee"),
+                        (connection, "· connection")):
+        if part is not None:
+            lines.append((label, _amount(part, "€/MWh", 1)))
+    return lines
+
+
+def _lcoh_lines(row: pd.Series, *, headline: bool) -> list:
+    """Hydrogen detail: LCOH and the parts that sum to it, all €/MWh LHV."""
+    lcoh = _value(row, "lcoh_eur_per_mwh_lhv")
+    lines = []
+    if headline and lcoh is not None:
+        lines.append(("hydrogen LCOH:", _amount(lcoh, "€/MWh LHV", 1)))
+    for col, label in (("lcoh_electrolyser_eur_per_mwh_lhv", "· electrolyser"),
+                       ("lcoh_electricity_eur_per_mwh_lhv", "· electricity"),
+                       ("lcoh_h2_storage_eur_per_mwh_lhv", "· H₂ storage")):
+        part = _value(row, col)
+        if part is not None:
+            lines.append((label, _amount_of(part, lcoh, "LCOH", "€/MWh LHV", 1)))
+    return lines
+
+
+def _ore_lines(row: pd.Series, lcos: float) -> list:
+    lines = []
+    for col, label in (("ore_eur_per_t_steel", "· iron ore"),
+                       ("consumables_eur_per_t_steel",
+                        "· EAF consumables (electrodes, fluxes, alloys)")):
+        part = _value(row, col)
+        if part is not None:
+            lines.append((label, _amount_of(part, lcos, "LCOS", "€/t")))
+    return lines
+
+
+def _plant_lines(process: dict, key: str, lcos: float) -> list:
+    """Per-plant contribution to one of the process bands (`capex` or `fixed_om`)."""
+    return [(f"· {plant['label']}", _amount_of(plant[key], lcos, "LCOS", "€/t"))
+            for plant in process["plants"].values() if plant[key] > 0]
+
+
+def _gas_lines(row: pd.Series, scenario: str) -> list:
+    if not (_value(row, "ng_gwh_lhv") or 0.0) > 0:
+        return []
+    gas = _assumptions(PROJECT, scenario)["natural_gas"]
+    return [("gas price:", _amount(gas["price_eur_per_mwh"], "€/MWh LHV"))]
+
+
+STORES = [("iron_store", "iron_store_hours_steel", "· iron stockpile"),
+          ("steel_store", "steel_store_hours_steel", "· steel inventory")]
+
+
+def _store_lines(row: pd.Series, steel_t: float, groups=("iron_store", "steel_store")) -> list:
+    """The solid stores, with their size — they cost too little to round to a €/t band."""
+    lines = []
+    for group, hours_col, label in STORES:
+        if group not in groups:
+            continue
+        cost = _eur_per_t(row, group, steel_t)
+        if cost <= 0:
+            continue
+        hours = _value(row, hours_col)
+        text = _amount(cost, "€/t", 2)
+        if hours is not None:
+            text += f" for {hours:,.0f} h of demand"
+        lines.append((label, text))
+    return lines
+
+
+def _levelised_totals_lines(row: pd.Series) -> list:
+    """The cross-links every bar carries: its LCOE and LCOH, as on the scenario tab."""
+    return [("electricity (LCOE):", _amount(_value(row, "lcoe_eur_per_mwh"), "€/MWh", 1)),
+            ("hydrogen (LCOH):", _amount(_value(row, "lcoh_eur_per_mwh_lhv"),
+                                         "€/MWh LHV", 1))]
+
+
+# ---- The two LCOS drafts -------------------------------------------------
 
 def draft_a_lcos():
     """The circulated taxonomy, reconstructed from the model's own cost groups."""
-    df = _report(PROJECT)
-    rows = df.loc[LCOS_SCENARIOS]
-    bars = [ROUTE_LABEL[s.removesuffix("-avg")] for s in LCOS_SCENARIOS]
+    dataframe = _report(PROJECT)
+    rows = dataframe.loc[LCOS_SCENARIOS]
+    bars = [ROUTE_LABEL[scenario.removesuffix("-avg")] for scenario in LCOS_SCENARIOS]
 
-    columns = {k: [] for k in ("ore", "capex", "hydrogen", "eaf", "rest", "gas", "store")}
+    keys = ("ore", "capex", "fixed_om", "hydrogen", "eaf", "rest", "gas", "store")
+    values = {key: [] for key in keys}
+    lines = {key: [] for key in keys}
+    totals_lines = []
+
     for scenario in LCOS_SCENARIOS:
-        row = df.loc[scenario]
+        row = dataframe.loc[scenario]
         steel_t = float(row["steel_produced_mt"]) * 1e6
+        lcos = float(row["lcos_eur_per_t"])
         electricity = _split_electricity(row, scenario, steel_t)
-        columns["ore"].append(_eur_per_t(row, "ore_consumables", steel_t))
-        columns["capex"].append(_eur_per_t(row, "process", steel_t))
-        columns["hydrogen"].append(
-            _eur_per_t(row, "electrolyser", steel_t)
-            + _eur_per_t(row, "h2_buffer", steel_t)
-            + electricity["hydrogen"])
-        columns["eaf"].append(electricity["eaf"])
-        columns["rest"].append(electricity["rest"])
-        columns["gas"].append(_eur_per_t(row, "gas", steel_t))
-        columns["store"].append(_eur_per_t(row, "iron_store", steel_t)
-                                + _eur_per_t(row, "steel_store", steel_t))
+        process = _split_process(row, scenario, steel_t)
+        electrolyser = _eur_per_t(row, "electrolyser", steel_t)
+        h2_buffer = _eur_per_t(row, "h2_buffer", steel_t)
+
+        values["ore"].append(_eur_per_t(row, "ore_consumables", steel_t))
+        lines["ore"].append(_ore_lines(row, lcos))
+
+        values["capex"].append(process["capex"])
+        lines["capex"].append(_plant_lines(process, "capex", lcos))
+        values["fixed_om"].append(process["fixed_om"])
+        lines["fixed_om"].append(_plant_lines(process, "fixed_om", lcos))
+
+        values["hydrogen"].append(electrolyser + h2_buffer + electricity["hydrogen"])
+        hydrogen_detail = _lcoh_lines(row, headline=True)[:1]
+        for part, label in ((electrolyser, "· electrolyser plant"),
+                            (h2_buffer, "· H₂ buffer"),
+                            (electricity["hydrogen"], "· electricity to make the H₂")):
+            if part > 0:
+                hydrogen_detail.append((label, _amount_of(part, lcos, "LCOS", "€/t")))
+        lines["hydrogen"].append(hydrogen_detail)
+
+        values["eaf"].append(electricity["eaf"])
+        lines["eaf"].append(
+            [("electricity LCOE:", _amount(electricity["lcoe"], "€/MWh", 1)),
+             ("· furnace demand", f"{electricity['eaf_mwh_per_t']:.2f} MWh/t steel")]
+            if electricity["eaf"] > 0 else [])
+
+        values["rest"].append(electricity["rest"])
+        lines["rest"].append([
+            ("electricity LCOE:", _amount(electricity["lcoe"], "€/MWh", 1)),
+            ("· electricity system, all in",
+             _amount_of(electricity["total"], lcos, "LCOS", "€/t")),
+            ("· less the H₂ and EAF melt shares",
+             _amount(electricity["hydrogen"] + electricity["eaf"], "€/t")),
+        ])
+
+        values["gas"].append(_eur_per_t(row, "gas", steel_t))
+        lines["gas"].append(_gas_lines(row, scenario))
+
+        values["store"].append(_eur_per_t(row, "iron_store", steel_t)
+                               + _eur_per_t(row, "steel_store", steel_t))
+        lines["store"].append(_store_lines(row, steel_t))
+
+        totals_lines.append(_levelised_totals_lines(row))
 
     series = [
-        ("Ore & consumables",           C_ORE,      columns["ore"]),
-        ("CAPEX (process plant)",       C_CAPEX,    columns["capex"]),
-        ("Hydrogen (all-in)",           C_HYDROGEN, columns["hydrogen"]),
-        ("Electricity — EAF melt",      C_ELEC_EAF, columns["eaf"]),
-        ("Electricity — rest of plant", C_ELEC,     columns["rest"]),
-        ("Gas + CO₂ (fossil routes)",   C_GAS,      columns["gas"]),
-        ("Storage (iron/steel)",        C_STORE,    columns["store"]),
+        ("Ore & consumables",           C_ORE,      "ore"),
+        ("CAPEX (process plant)",       C_CAPEX,    "capex"),
+        ("O&M (process plant)",         C_OM,       "fixed_om"),
+        ("Hydrogen (all-in)",           C_HYDROGEN, "hydrogen"),
+        ("Electricity — EAF melt",      C_ELEC_EAF, "eaf"),
+        ("Electricity — rest of plant", C_ELEC,     "rest"),
+        ("Gas + CO₂ (fossil routes)",   C_GAS,      "gas"),
+        ("Storage (iron/steel)",        C_STORE,    "store"),
     ]
-    return bars, series, rows["lcos_eur_per_t"].tolist()
+    return (bars,
+            [(label, colour, values[key], lines[key]) for label, colour, key in series],
+            rows["lcos_eur_per_t"].tolist(), totals_lines)
 
 
 def draft_b_lcos():
     """The pipeline's own LCOS cost groups, unchanged, for the same scenarios."""
-    df = _report(PROJECT)
-    rows = df.loc[LCOS_SCENARIOS]
+    dataframe = _report(PROJECT)
+    rows = dataframe.loc[LCOS_SCENARIOS]
+    bars = [ROUTE_LABEL[scenario.removesuffix("-avg")] for scenario in LCOS_SCENARIOS]
+
+    detail = {group: [] for group, _, _ in COST_GROUPS}
+    totals_lines = []
+    for scenario in LCOS_SCENARIOS:
+        row = dataframe.loc[scenario]
+        steel_t = float(row["steel_produced_mt"]) * 1e6
+        lcos = float(row["lcos_eur_per_t"])
+        process = _split_process(row, scenario, steel_t)
+        # The process group bundles annualised capital with fixed O&M; Draft B keeps
+        # the band whole, so the split rides in the hover instead.
+        process_lines = [
+            ("· annualised capex", _amount_of(process["capex"], lcos, "LCOS", "€/t")),
+            ("· fixed O&M", _amount_of(process["fixed_om"], lcos, "LCOS", "€/t")),
+        ] + [(f"· {plant['label']}", _amount_of(plant["total"], lcos, "LCOS", "€/t"))
+             for plant in process["plants"].values()]
+
+        for group in detail:
+            if group == "process":
+                detail[group].append(process_lines)
+            elif group == "ore_consumables":
+                detail[group].append(_ore_lines(row, lcos))
+            elif group == "gas":
+                detail[group].append(_gas_lines(row, scenario))
+            elif group in ("electrolyser", "h2_buffer"):
+                detail[group].append(_lcoh_lines(row, headline=True))
+            elif group == "res":
+                detail[group].append(_lcoe_tech_lines(row, headline=True))
+            elif group == "battery":
+                detail[group].append(
+                    [("storage:", _amount_of(_value(row, "lcoe_storage_eur_per_mwh"),
+                                             _value(row, "lcoe_eur_per_mwh"),
+                                             "LCOE", "€/MWh", 1))])
+            elif group == "transmission":
+                detail[group].append(
+                    [("transmission:", _amount_of(_value(row, "lcoe_transmission_eur_per_mwh"),
+                                                  _value(row, "lcoe_eur_per_mwh"),
+                                                  "LCOE", "€/MWh", 1))])
+            elif group == "grid":
+                detail[group].append(_grid_lines(row))
+            elif group in ("iron_store", "steel_store"):
+                detail[group].append(_store_lines(row, steel_t, (group,)))
+            else:
+                detail[group].append([])
+        totals_lines.append(_levelised_totals_lines(row))
+
     steel_t = rows["steel_produced_mt"] * 1e6
-    bars = [ROUTE_LABEL[s.removesuffix("-avg")] for s in LCOS_SCENARIOS]
     series = []
     for group, label, colour in COST_GROUPS:
-        col = f"cost_{group}_meur"
-        if col not in rows.columns:
+        column = f"cost_{group}_meur"
+        if column not in rows.columns:
             continue
-        values = (rows[col].fillna(0.0) * 1e6 / steel_t).tolist()
-        if all(v <= 0.005 for v in values):
+        values = (rows[column].fillna(0.0) * 1e6 / steel_t).tolist()
+        if all(value <= 0.005 for value in values):
             continue
-        series.append((label, colour, values))
-    return bars, series, rows["lcos_eur_per_t"].tolist()
+        series.append((label, colour, values, detail[group]))
+    return bars, series, rows["lcos_eur_per_t"].tolist(), totals_lines
 
+
+# ---- The carriers underneath ---------------------------------------------
 
 # The three supply cases the LCOE and LCOH charts compare, all DE 2023,
 # H2-DRI-EAF. `bestsite-p95` is the 95th-percentile area-weighted capacity-factor
@@ -232,51 +536,99 @@ LCOH_PARTS = [
 ]
 
 
-def levelised_parts(parts, scale: float = 1.0):
+def _lcoe_part_lines(column: str, row: pd.Series) -> list:
+    """Detail under one LCOE band — the bands are the parts, so this goes one level down."""
+    if column == "lcoe_renewables_eur_per_mwh":
+        own = _value(row, "lcoe_renewables_own_eur_per_mwh")
+        lines = [("· own LCOE, over its own generation", _amount(own, "€/MWh", 1))] if own else []
+        return lines + _lcoe_tech_lines(row, headline=False)
+    # Connection and energy are their own bands here, so each takes only the part of
+    # the delivered grid price it is actually paying for.
+    if column == "lcoe_grid_energy_eur_per_mwh":
+        return [line for line in _grid_lines(row)
+                if line[0] in ("· market price", "· volumetric fee")]
+    if column == "lcoe_grid_connection_eur_per_mwh":
+        return [line for line in _grid_lines(row) if line[0] == "· connection"]
+    return []
+
+
+def _lcoh_part_lines(column: str, row: pd.Series) -> list:
+    """Detail under one LCOH band, whose values are €/kg — restate them per MWh LHV."""
+    lines = [("· on an LHV basis", _amount(_value(row, column), "€/MWh LHV", 1))]
+    if column == "lcoh_electricity_eur_per_mwh_lhv":
+        lines.append(("· priced at LCOE", _amount(_value(row, "lcoe_eur_per_mwh"), "€/MWh", 1)))
+    return lines
+
+
+def levelised_parts(parts, lines_for, scale: float = 1.0):
     """Stack one levelised metric across SUPPLY_CASES.
 
     `parts` is [(report column, legend label, colour)] bottom→top; absent columns
     and all-zero rows drop out, matching how the reports omit parts a scenario
-    does not have.
+    does not have. `lines_for(column, row)` supplies each band's hover detail.
     """
     frames = {project: _report(project) for project, _, _ in SUPPLY_CASES}
+    case_rows = [frames[project].loc[scenario] for project, scenario, _ in SUPPLY_CASES]
     bars = [label for _, _, label in SUPPLY_CASES]
     series = []
-    for col, label, colour in parts:
-        values = []
-        for project, scenario, _ in SUPPLY_CASES:
-            row = frames[project].loc[scenario]
-            values.append(float(row[col]) * scale
-                          if col in row.index and pd.notna(row.get(col)) else 0.0)
-        if all(v <= 0 for v in values):
+    for column, label, colour in parts:
+        values = [(_value(row, column) or 0.0) * scale for row in case_rows]
+        if all(value <= 0 for value in values):
             continue
-        series.append((label, colour, values))
-    return bars, series
+        series.append((label, colour, values, [lines_for(column, row) for row in case_rows]))
+    return bars, series, case_rows
 
 
 # ---- Figure assembly -----------------------------------------------------
 
-def stacked_figure(bars, series, *, unit: str, value_fmt: str, total_fmt: str) -> go.Figure:
-    """A stacked FCA bar chart; `series` is [(label, colour, values)] bottom→top.
+def stacked_figure(bars, series, *, unit: str, value_fmt: str, total_fmt: str,
+                   basis: str, bar_totals, total_label: str, totals_lines) -> go.Figure:
+    """A stacked FCA bar chart; `series` is [(label, colour, values, lines)] bottom→top.
 
-    Totals ride above each bar as a text-only trace (the house pattern from
-    plot_lcos_bars). The legend is horizontal below the plot so the figure keeps
-    its width in a half-page panel.
+    `lines` holds one list of (leading text, formatted value) per bar — the hover
+    detail. `bar_totals` are the reported levelised totals, which give each segment
+    its "% of BASIS" share. Totals ride above each bar as a text-only trace (the
+    house pattern from plot_lcos_bars). The legend is horizontal below the plot so
+    the figure keeps its width in a half-page panel.
     """
     fig = go.Figure()
-    for label, colour, values in series:
+    for label, colour, values, lines in series:
+        templates, customdata = [], []
+        for index, value in enumerate(values):
+            detail = lines[index]
+            share = round(value / bar_totals[index] * 100) if bar_totals[index] else 0
+            template = f"{label}: %{{y:{value_fmt}}} {unit} (%{{customdata[0]}}% of {basis})"
+            for position, (text, _) in enumerate(detail):
+                template += f"<br>{text} %{{customdata[{position + 1}]}}"
+            templates.append(template + "<extra></extra>")
+            customdata.append([share] + [shown for _, shown in detail])
+        # Bars differ in how many detail lines they have; pad to a rectangle so
+        # customdata stays a plain 2-D array, and each bar's own template only ever
+        # reaches the indices it filled.
+        width = max(len(row) for row in customdata)
         fig.add_trace(go.Bar(
             x=bars, y=values, name=label, marker_color=colour,
-            hovertemplate=f"{label}: %{{y:{value_fmt}}} {unit}<extra></extra>",
+            customdata=[row + [""] * (width - len(row)) for row in customdata],
+            hovertemplate=templates,
         ))
 
-    totals = [sum(values[i] for _, _, values in series) for i in range(len(bars))]
+    totals = [sum(values[i] for _, _, values, _ in series) for i in range(len(bars))]
+    templates, customdata = [], []
+    for index in range(len(bars)):
+        detail = totals_lines[index]
+        template = f"{total_label}: %{{y:{total_fmt}}} {unit}"
+        for position, (text, _) in enumerate(detail):
+            template += f"<br>{text} %{{customdata[{position}]}}"
+        templates.append(template + "<extra></extra>")
+        customdata.append([shown for _, shown in detail])
+
     fig.add_trace(go.Scatter(
         x=bars, y=totals, mode="text",
-        text=[format(t, total_fmt) for t in totals],
+        text=[format(total, total_fmt) for total in totals],
         textposition="top center",
         textfont=dict(size=13, color=PRINT["ink"], family="Titillium Web"),
-        showlegend=False, hoverinfo="skip", cliponaxis=False,
+        showlegend=False, cliponaxis=False,
+        customdata=customdata, hovertemplate=templates,
     ))
 
     fig.update_layout(
@@ -284,7 +636,7 @@ def stacked_figure(bars, series, *, unit: str, value_fmt: str, total_fmt: str) -
         autosize=True, height=PLOT_HEIGHT,
         paper_bgcolor=PRINT["paper"], plot_bgcolor=PRINT["paper"],
         font=dict(family="Titillium Web", size=12, color=PRINT["ink"]),
-        margin=dict(l=52, r=16, t=28, b=104),
+        margin=dict(l=52, r=16, t=28, b=118),
         legend=dict(orientation="h", x=0, y=-0.16, xanchor="left", yanchor="top",
                     traceorder="reversed", bgcolor="rgba(0,0,0,0)",
                     font=dict(family="Titillium Web", size=11.5, color=PRINT["muted"])),
@@ -303,56 +655,6 @@ def plot_div(fig: go.Figure, div_id: str) -> str:
 
 
 # ---- Page copy -----------------------------------------------------------
-
-DRAFT_DELTAS = [
-    ("Ore is the biggest single line, and bigger than the draft assumed",
-     "The draft put feedstock at 220 €/t for H2-DRI and 205 for NG-DRI; the model reports "
-     "<b>260 €/t</b> of ore &amp; consumables for both. It also had the MOE and electrowinning "
-     "figures crossed — <code>assumptions.yaml</code> has <code>ore_eur_per_t</code> 150 for "
-     "<code>moe</code> and 160 for <code>electrowinning</code>. Real ore &amp; consumables: "
-     "<b>160</b> for MOE, <b>205</b> for electrowinning."),
-    ("Storage is ~70x smaller than the draft showed",
-     "The draft gave storage 6–8 €/t. The model's iron and steel stores come to "
-     "<b>0.01–0.12 €/t</b> — invisible on a 700 €/t bar, which is the finding rather than a "
-     "rendering problem. They are what makes turndown feasible, at essentially no cost."),
-    ("The off-grid p95 and mean-site bars were inverted",
-     "The draft priced p95 above the mean (86 vs 61 €/MWh). <code>bestsite-p95</code> is the "
-     "95th-percentile area-weighted capacity-factor cell — a <em>better</em> site — so it must "
-     "come out cheaper. The model agrees: <b>59.3 €/MWh at p95 vs 69.7 at the mean site</b>."),
-    ("Process capex and O&M cannot be separated",
-     "The draft splits the process plant into CAPEX and O&amp;M rows. The reports give "
-     "<code>cost_process_meur</code> as annualised plant capital only, with the variable side "
-     "living in <code>cost_ore_consumables_meur</code>. The two rows are merged here; splitting "
-     "them would need a new reported quantity."),
-    ("Two rows have no data at all",
-     "Ore/iron transport and scrap/HBI purchase are not in the model, so they are absent rather "
-     "than shown at a placeholder value. Freight interacts with the ore-grade work — lower-grade "
-     "ore moves more tonnes per tonne of iron."),
-]
-
-OPEN_QUESTIONS = [
-    ("The hydrogen block swallows most of the H₂ route's electricity",
-     "This is what the real numbers make undeniable. H2-DRI-EAF's “Hydrogen (all-in)” segment is "
-     "<b>290 €/t, of which 207 €/t is electricity</b>. The two visible electricity segments add to "
-     "just 71 €/t, so Draft A appears to show a route using a quarter of MOE's power — when the "
-     "true electricity totals are <b>278 €/t for H2-DRI against 400 for MOE</b>. Draft B shows the "
-     "same total with renewables, electrolyser and H₂ buffer separate. If Draft A's form factor is "
-     "kept, the hydrogen block needs to be visibly nested or hatched."),
-    ("Pricing the EAF at LCOE makes an identical furnace look route-dependent",
-     "Every route here melts at the same <b>0.65 MWh/t</b>. Valued at each scenario's own LCOE, "
-     "that same furnace reads <b>44.6 €/t on H2-DRI and 70.5 €/t on NG-DRI</b>, purely because "
-     "NG-DRI's small electricity system carries a higher LCOE (108 vs 69 €/MWh). The convention is "
-     "internally consistent, but the EAF segment is not comparable across bars."),
-    ("Average LCOE hides the flexibility the optimiser is actually buying",
-     "Both drafts price electricity at system LCOE. That is the right average-cost basis for a "
-     "levelised total, but it says nothing about <em>which hours</em> a route chooses to run — the "
-     "mechanism behind the turndown work. Worth deciding whether this chart answers “what does it "
-     "cost” or “why does the optimiser prefer this route”; those want different charts."),
-    ("Should the tab follow the scenario picker?",
-     "Both drafts are pinned to DE 2023, grid-connected, mean-CF site — one case out of the "
-     "scenario tab's full matrix. Wiring the same geography/year/CF controls onto this tab is a "
-     "straightforward next step; it was left out so the taxonomy comparison stays the subject."),
-]
 
 CARRIER_COLUMNS = [
     dict(
@@ -379,8 +681,6 @@ CSS = """
     --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7;
     --border:#D6DBDF; --hair:#E4E9ED;
     --accent:#0A5680; --accent-2:#0293D2;
-    --fix:#4E8C6A; --fix-bg:rgba(78,140,106,.09); --fix-line:rgba(78,140,106,.30);
-    --ask:#C08A3A; --ask-bg:rgba(192,138,58,.09); --ask-line:rgba(192,138,58,.30);
     --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);
     --tw:"Titillium Web",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     --mono:"SF Mono",ui-monospace,"Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
@@ -389,21 +689,15 @@ CSS = """
     .cbm-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
       --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
       --accent:#0293D2; --accent-2:#70D2F0;
-      --fix:#91C096; --fix-bg:rgba(145,192,150,.13); --fix-line:rgba(145,192,150,.34);
-      --ask:#E2B681; --ask-bg:rgba(226,182,129,.13); --ask-line:rgba(226,182,129,.34);
       --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
   }
   :root[data-theme="dark"] .cbm-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
     --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
     --accent:#0293D2; --accent-2:#70D2F0;
-    --fix:#91C096; --fix-bg:rgba(145,192,150,.13); --fix-line:rgba(145,192,150,.34);
-    --ask:#E2B681; --ask-bg:rgba(226,182,129,.13); --ask-line:rgba(226,182,129,.34);
     --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
   :root[data-theme="light"] .cbm-root{--paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8;
     --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7; --border:#D6DBDF; --hair:#E4E9ED;
     --accent:#0A5680; --accent-2:#0293D2;
-    --fix:#4E8C6A; --fix-bg:rgba(78,140,106,.09); --fix-line:rgba(78,140,106,.30);
-    --ask:#C08A3A; --ask-bg:rgba(192,138,58,.09); --ask-line:rgba(192,138,58,.30);
     --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);}
 
   .cbm-root{background:var(--paper);color:var(--ink);font-family:var(--tw);
@@ -455,23 +749,6 @@ CSS = """
     margin-left:auto;white-space:nowrap;}
   .cbm-note{font-size:12px;color:var(--muted);margin:8px 2px 0;line-height:1.45;}
 
-  .cbm-call{border:1px solid var(--border);border-radius:12px;margin-top:22px;
-    padding:16px 18px 18px 20px;position:relative;background:var(--panel);
-    box-shadow:var(--shadow);overflow:hidden;}
-  .cbm-call::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;}
-  .cbm-call.fix{background:var(--fix-bg);border-color:var(--fix-line);}
-  .cbm-call.fix::before{background:var(--fix);}
-  .cbm-call.ask{background:var(--ask-bg);border-color:var(--ask-line);}
-  .cbm-call.ask::before{background:var(--ask);}
-  .cbm-call h2{font-size:13px;font-weight:800;letter-spacing:.09em;
-    text-transform:uppercase;margin:0 0 2px;}
-  .cbm-call.fix h2{color:var(--fix);}
-  .cbm-call.ask h2{color:var(--ask);}
-  .cbm-call > p{font-size:12.5px;color:var(--muted);margin:0 0 12px;max-width:94ch;}
-  .cbm-call ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:11px;}
-  .cbm-call li{font-size:13px;line-height:1.5;}
-  .cbm-call li b{font-weight:700;}
-  .cbm-call li span{display:block;color:var(--muted);font-size:12.5px;margin-top:2px;}
   .cbm-root code{font-family:var(--mono);font-size:.88em;background:var(--panel-2);
     border:1px solid var(--hair);border-radius:4px;padding:0 4px;}
   .cbm-foot{margin-top:26px;padding-top:14px;border-top:1px solid var(--border);
@@ -499,38 +776,50 @@ def _metric_column(spec: dict, div: str) -> str:
       </div>"""
 
 
-def _ordered_list(items) -> str:
-    return "\n".join(
-        f"      <li><b>{head}</b><span>{body}</span></li>" for head, body in items
-    )
-
-
 def build_core() -> str:
     """The body-only page content, ready to embed as a hub tab."""
-    a_bars, a_series, a_lcos = draft_a_lcos()
-    b_bars, b_series, b_lcos = draft_b_lcos()
+    a_bars, a_series, a_lcos, a_totals = draft_a_lcos()
+    b_bars, b_series, b_lcos, b_totals = draft_b_lcos()
 
     # Both cuts of the same total must land on the reported LCOS, or the page is
     # quietly lying about one of them.
     for label, series, lcos in (("A", a_series, a_lcos), ("B", b_series, b_lcos)):
-        totals = [sum(v[i] for _, _, v in series) for i in range(len(lcos))]
-        drift = max(abs(t - l) for t, l in zip(totals, lcos))
+        totals = [sum(values[i] for _, _, values, _ in series) for i in range(len(lcos))]
+        drift = max(abs(total - reported) for total, reported in zip(totals, lcos))
         if drift > 0.05:
             raise ValueError(f"Draft {label} stack drifts {drift:.3f} €/t from reported LCOS")
 
-    lcoe_bars, lcoe_series = levelised_parts(LCOE_PARTS)
-    lcoh_bars, lcoh_series = levelised_parts(
-        LCOH_PARTS, scale=H2_LHV_KWH_PER_KG / 1000.0)
+    lcoe_bars, lcoe_series, lcoe_rows = levelised_parts(LCOE_PARTS, _lcoe_part_lines)
+    lcoh_bars, lcoh_series, lcoh_rows = levelised_parts(
+        LCOH_PARTS, _lcoh_part_lines, scale=H2_LHV_KWH_PER_KG / 1000.0)
 
+    lcos_kwargs = dict(unit="€/t", value_fmt=",.0f", total_fmt=",.0f", basis="LCOS",
+                       total_label="levelised cost of steel (LCOS)")
     divs = {
-        "lcos-a": plot_div(stacked_figure(a_bars, a_series, unit="€/t",
-                                          value_fmt=",.1f", total_fmt=",.0f"), "cbm-lcos-a"),
-        "lcos-b": plot_div(stacked_figure(b_bars, b_series, unit="€/t",
-                                          value_fmt=",.1f", total_fmt=",.0f"), "cbm-lcos-b"),
-        "lcoe": plot_div(stacked_figure(lcoe_bars, lcoe_series, unit="€/MWh",
-                                        value_fmt=",.1f", total_fmt=",.1f"), "cbm-lcoe"),
-        "lcoh": plot_div(stacked_figure(lcoh_bars, lcoh_series, unit="€/kg",
-                                        value_fmt=",.2f", total_fmt=",.2f"), "cbm-lcoh"),
+        "lcos-a": plot_div(stacked_figure(a_bars, a_series, bar_totals=a_lcos,
+                                          totals_lines=a_totals, **lcos_kwargs),
+                           "cbm-lcos-a"),
+        "lcos-b": plot_div(stacked_figure(b_bars, b_series, bar_totals=b_lcos,
+                                          totals_lines=b_totals, **lcos_kwargs),
+                           "cbm-lcos-b"),
+        "lcoe": plot_div(stacked_figure(
+            lcoe_bars, lcoe_series, unit="€/MWh", value_fmt=",.1f", total_fmt=",.1f",
+            basis="LCOE", total_label="levelised cost of electricity (LCOE)",
+            bar_totals=[_value(row, "lcoe_eur_per_mwh") for row in lcoe_rows],
+            totals_lines=[[("steel (LCOS):", _amount(_value(row, "lcos_eur_per_t"), "€/t")),
+                           ("hydrogen (LCOH):", _amount(
+                               _value(row, "lcoh_eur_per_mwh_lhv"), "€/MWh LHV", 1))]
+                          for row in lcoe_rows]), "cbm-lcoe"),
+        "lcoh": plot_div(stacked_figure(
+            lcoh_bars, lcoh_series, unit="€/kg", value_fmt=",.2f", total_fmt=",.2f",
+            basis="LCOH", total_label="levelised cost of hydrogen (LCOH)",
+            bar_totals=[(_value(row, "lcoh_eur_per_mwh_lhv") or 0.0)
+                        * H2_LHV_KWH_PER_KG / 1000.0 for row in lcoh_rows],
+            totals_lines=[[("on an LHV basis:", _amount(
+                               _value(row, "lcoh_eur_per_mwh_lhv"), "€/MWh LHV", 1)),
+                           ("electricity (LCOE):", _amount(
+                               _value(row, "lcoe_eur_per_mwh"), "€/MWh", 1))]
+                          for row in lcoh_rows]), "cbm-lcoh"),
     }
 
     carrier_columns = "\n".join(_metric_column(spec, divs[spec["key"]])
@@ -549,7 +838,8 @@ def build_core() -> str:
         <p class="cbm-sub">The circulated chart mockup's category split next to the split the
           pipeline already reports — both drawn from the same DE 2023 results the scenario tab
           reads, and both closing exactly on LCOS. The drafts differ only in where they put the
-          cuts, which is what makes the disagreement legible.</p>
+          cuts, which is what makes the disagreement legible. Hover any segment for the same
+          per-plant and per-carrier detail the scenario-comparison tab shows.</p>
       </div>
       <div class="cbm-meta">built {date.today().strftime('%-d %b %Y')}<br>
         DE 2023 · grid-connected<br>mean-CF site</div>
@@ -557,8 +847,9 @@ def build_core() -> str:
 
     <div class="cbm-legend">
       <div class="cbm-key a"><span class="chip">Draft A</span>
-        <p>The circulated taxonomy: one hydrogen block, electricity split into an EAF-melt share
-          and the rest. Rebuilt from the model's cost groups — no placeholder numbers left.</p></div>
+        <p>The circulated taxonomy: one hydrogen block, process plant split into capex and O&amp;M,
+          electricity split into an EAF-melt share and the rest. Rebuilt from the model's cost
+          groups — no placeholder numbers left.</p></div>
       <div class="cbm-key b"><span class="chip">Draft B</span>
         <p>The pipeline's own cost groups, unchanged. Same bars, same totals, different cuts —
           renewables, electrolyser and H₂ buffer each stand on their own.</p></div>
@@ -575,11 +866,14 @@ def build_core() -> str:
 {_column('a', 'circulated split', 'reconstructed', divs['lcos-a'],
          "Hydrogen (all-in) = electrolyser + H₂ buffer + the electricity that made the H₂. "
          "The EAF melt share is the furnace's own MWh/t valued at that scenario's LCOE; "
-         "&ldquo;rest of plant&rdquo; is the residual, so the stack closes on LCOS.")}
+         "&ldquo;rest of plant&rdquo; is the residual, so the stack closes on LCOS. Capex and "
+         "O&amp;M split each plant's annual cost by its config ratio — fixed O&amp;M runs at "
+         "≈3&nbsp;% of capex per year, so it lands near a quarter of the band.")}
 {_column('b', "model's own split", 'report columns', divs['lcos-b'],
-         "Straight from the <code>cost_*_meur</code> columns, converted to €/t. The iron "
-         "stockpile and steel inventory keep their legend entries but draw no visible band — "
-         "both sit near 0.05 €/t.")}
+         "Straight from the <code>cost_*_meur</code> columns, converted to €/t. Its process band "
+         "keeps capex and O&amp;M together as the pipeline groups them — the split is in the "
+         "hover. The iron stockpile and steel inventory keep their legend entries but draw no "
+         "visible band; both sit near 0.05 €/t.")}
       </div>
     </section>
 
@@ -587,41 +881,26 @@ def build_core() -> str:
       <div class="cbm-panel-h">
         <h2>The carriers underneath <span class="unit">· LCOE and LCOH</span></h2>
         <p>Here the two taxonomies nearly agree, so there is one chart of each rather than a pair.
-          The circulated split adds a renewables capex/O&amp;M row to LCOE, and electrolyser-O&amp;M
-          plus water/variable-opex rows to LCOH; the reports fold those into the parent line, so
-          they cannot be filled without a new reported quantity. Everything else maps one-to-one.
-          Both charts show the same three supply cases, and the LCOH on the right is built on the
-          LCOE on the left.</p>
+          The circulated split adds a renewables capex/O&amp;M row to LCOE and an
+          electrolyser-O&amp;M row to LCOH; both are derivable the same way the process split is,
+          but the reports quote each carrier's parent line and these charts follow the reports.
+          Everything else maps one-to-one. Both charts show the same three supply cases, and the
+          LCOH on the right is built on the LCOE on the left.</p>
       </div>
       <div class="cbm-pair">
 {carrier_columns}
       </div>
     </section>
 
-    <section class="cbm-call fix">
-      <h2>What changed when the draft met real numbers</h2>
-      <p>The circulated version carried illustrative figures. Putting the model's own results into
-        the same categories moved several of them a long way.</p>
-      <ol>
-{_ordered_list(DRAFT_DELTAS)}
-      </ol>
-    </section>
-
-    <section class="cbm-call ask">
-      <h2>Open presentation questions</h2>
-      <p>Deliberately not resolved here — each one changes what the chart argues, not just how it
-        looks.</p>
-      <ol>
-{_ordered_list(OPEN_QUESTIONS)}
-      </ol>
-    </section>
-
     <p class="cbm-foot">Cross-chart logic, unchanged from the draft: the electricity segment in
       LCOS/LCOH is priced at LCOE; the hydrogen segment in LCOS is LCOH × kg&nbsp;H₂/t; LCOI (not
-      shown) is LCOS minus the EAF stage. Sources:
+      shown) is LCOS minus the EAF stage. Two rows of the circulated draft stay empty because the
+      model does not carry them — ore/iron freight and scrap or HBI purchase; freight interacts
+      with the ore-grade work, since lower-grade ore moves more tonnes per tonne of iron. Sources:
       <code>results/report_DE-2023-grid.csv</code>,
-      <code>results/report_DE-2023-nogrid.csv</code> and the per-scenario
-      <code>config/assumptions_DE-2023-grid_*.yaml</code>. Regenerate with
+      <code>results/report_DE-2023-nogrid.csv</code> and
+      <code>config/assumptions.yaml</code> with the per-scenario
+      <code>config/assumptions_DE-2023-grid_*.yaml</code> overlays. Regenerate with
       <code>python workflow/scripts/viz/build_cost_breakdown_mockups.py</code>.</p>
   </div>
 </div>
