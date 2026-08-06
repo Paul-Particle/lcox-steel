@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Combine the v2 scenario-comparison dashboard, the cost-breakdown taxonomy
-drafts, the network schematic and the workflow DAG into ONE body-only artifact: a
-work-in-progress banner and a tab bar over isolated iframes.
+"""Combine the v2 scenario-comparison dashboard, the two cost-breakdown
+taxonomies, the network schematic and the workflow DAG into ONE body-only
+artifact: a work-in-progress banner and a tab bar over isolated iframes.
 
 Inputs:
   * results/dashboard_v2.html              — built by build_dashboard_v2.py
@@ -47,7 +47,7 @@ FAVICON = ("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22"
 # the other two are static source pages tracked under hub_pages/.
 FRAGMENTS = {
     "compare":   (RESULTS / "dashboard_v2.html",              "Scenario comparison"),
-    "mockups":   (RESULTS / "cost_breakdown_mockups.html",    "Cost breakdown drafts"),
+    "mockups":   (RESULTS / "cost_breakdown_mockups.html",    "Cost breakdown options"),
     "schematic": (HUB_PAGES / "network_schematic.html",       "Network schematic"),
     "dag":       (HUB_PAGES / "workflow_dag.html",             "Workflow DAG"),
 }

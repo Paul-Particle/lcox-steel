@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""Cost-breakdown taxonomy drafts, both drawn from the model's own results.
+"""Two cost-breakdown taxonomies, both drawn from the model's own results.
 
 Builds `results/cost_breakdown_mockups.html` — a body-only, theme-aware,
 self-contained Plotly page that puts the circulated chart mockup's *category
 split* next to the split the pipeline already reports, with **both** populated
 from the same DE 2023 results the scenario-comparison tab reads.
 
-  * Draft A — the circulated taxonomy: one "Hydrogen (all-in)" block, process
+  * ALTERNATIVE — the circulated taxonomy: one "Hydrogen (all-in)" block, process
     plant cut into annualised capex and fixed O&M, and electricity divided into
     an EAF-melt share and everything else.
-  * Draft B — the pipeline's own cost groups, unchanged.
+  * DASHBOARD — the pipeline's own cost groups, unchanged; what the rest of the
+    dashboard already shows.
 
-Both stacks close exactly on LCOS, so the drafts differ only in how the same
-total is cut. That is the point: Draft A's hydrogen block turns out to swallow
+Both stacks close exactly on LCOS, so the two differ only in how the same total
+is cut. That is the point: the alternative's hydrogen block turns out to swallow
 most of the H2 route's electricity, which is visible only once real numbers are
 in it.
 
-Reconstructing Draft A needs two things the report does not name directly.
+Reconstructing the alternative needs two things the report does not name directly.
 
 Electricity is partitioned three ways — two parts attributed and the third a
 residual, so the stack cannot drift from LCOS:
@@ -40,7 +41,7 @@ panel would say nothing.
 
 Output is a hub fragment: body-only, its own <style>/<script>, plotly.js and the
 brand font inlined. `build_dashboard_hub.py` embeds it as the "Cost breakdown
-drafts" tab. Nothing here is a pipeline rule — run it directly.
+options" tab. Nothing here is a pipeline rule — run it directly.
 """
 import copy
 import sys
@@ -63,7 +64,7 @@ from scripts.viz.style import PLOTLY_CONFIG, fca_template                # noqa:
 OUT_PATH = RESULTS / "cost_breakdown_mockups.html"
 CONFIG_DIR = REPO / "config"
 
-# The case both drafts are drawn from — the same reports the scenario tab reads.
+# The case both taxonomies are drawn from — the same reports the scenario tab reads.
 PROJECT = "DE-2023-grid"
 PROJECT_OFFGRID = "DE-2023-nogrid"
 LCOS_SCENARIOS = ["h2-dri-eaf-avg", "moe-avg", "ew-avg", "ng-dri-eaf", "mix-dri-eaf-avg"]
@@ -85,14 +86,15 @@ responsive_template.layout.autosize = True
 responsive_template.layout.width = None
 responsive_template.layout.height = None
 
-# ---- One colour per cost role, shared by both drafts ----------------------
-# Draft B's LCOS colours come from build_dashboard.COST_GROUPS; these mirror the
-# same palette so equivalent roles read alike across the A|B pair.
+# ---- One colour per cost role, shared by both taxonomies ------------------
+# The dashboard taxonomy's LCOS colours come from build_dashboard.COST_GROUPS;
+# these mirror the same palette so equivalent roles read alike across the pair.
 C_ORE = "#E2B681"        # sand yellow    — ore & consumables
 C_CAPEX = "#33434D"      # blue black     — plant capex
 C_OM = "#BDCCD9"         # light blue gray — plant fixed O&M: the same family as the
-#                          capex band above it, and the one blue-gray Draft B does not
-#                          use, so the paired legends never show one swatch twice.
+#                          capex band above it, and the one blue-gray the dashboard
+#                          taxonomy does not use, so the paired legends never show
+#                          one swatch twice.
 C_HYDROGEN = "#91C096"   # green          — hydrogen / electrolyser
 C_H2_STORE = "#70D2F0"   # light blue     — H2 buffer
 C_ELEC = "#0A5680"       # fca blue       — electricity / renewables
@@ -206,11 +208,11 @@ def _split_process(row: pd.Series, scenario: str, steel_t: float) -> dict:
 
 
 def _split_electricity(row: pd.Series, scenario: str, steel_t: float) -> dict:
-    """Partition the electricity-system cost (€/t steel) the way Draft A wants it.
+    """Partition the electricity-system cost (€/t steel) the way the alternative wants it.
 
     Returns the H2 share, the EAF melt share and the remainder. The remainder is
     a residual, so the three always sum back to the electricity-system total and
-    Draft A's stack closes on LCOS.
+    the alternative's stack closes on LCOS.
     """
     total = sum(_eur_per_t(row, group, steel_t)
                 for group in ("res", "grid", "battery", "transmission"))
@@ -371,9 +373,9 @@ def _levelised_totals_lines(row: pd.Series) -> list:
                                          "€/MWh LHV", 1))]
 
 
-# ---- The two LCOS drafts -------------------------------------------------
+# ---- The two LCOS taxonomies ---------------------------------------------
 
-def draft_a_lcos():
+def alternative_lcos():
     """The circulated taxonomy, reconstructed from the model's own cost groups."""
     dataframe = _report(PROJECT)
     rows = dataframe.loc[LCOS_SCENARIOS]
@@ -449,7 +451,7 @@ def draft_a_lcos():
             rows["lcos_eur_per_t"].tolist(), totals_lines)
 
 
-def draft_b_lcos():
+def dashboard_lcos():
     """The pipeline's own LCOS cost groups, unchanged, for the same scenarios."""
     dataframe = _report(PROJECT)
     rows = dataframe.loc[LCOS_SCENARIOS]
@@ -462,8 +464,8 @@ def draft_b_lcos():
         steel_t = float(row["steel_produced_mt"]) * 1e6
         lcos = float(row["lcos_eur_per_t"])
         process = _split_process(row, scenario, steel_t)
-        # The process group bundles annualised capital with fixed O&M; Draft B keeps
-        # the band whole, so the split rides in the hover instead.
+        # The process group bundles annualised capital with fixed O&M; this taxonomy
+        # keeps the band whole, so the split rides in the hover instead.
         process_lines = [
             ("· annualised capex", _amount_of(process["capex"], lcos, "LCOS", "€/t")),
             ("· fixed O&M", _amount_of(process["fixed_om"], lcos, "LCOS", "€/t")),
@@ -671,7 +673,7 @@ CARRIER_COLUMNS = [
         unit="€ / kg H₂",
         src="report columns",
         note=f"Converted at {H2_LHV_KWH_PER_KG} kWh/kg LHV. Electricity is ~72% of the total — "
-             "the same fact that Draft A's hydrogen block hides above.",
+             "the same fact the alternative's hydrogen block folds away above.",
     ),
 ]
 
@@ -722,8 +724,8 @@ CSS = """
   .cbm-key .chip{font-family:var(--mono);font-size:9.5px;font-weight:700;
     letter-spacing:.12em;text-transform:uppercase;border-radius:5px;
     padding:3px 8px;flex:none;line-height:1.6;}
-  .cbm-key.a .chip{background:var(--accent);color:#fff;}
-  .cbm-key.b .chip{background:var(--accent-2);color:#062430;}
+  .cbm-key.alt .chip{background:var(--accent);color:#fff;}
+  .cbm-key.dash .chip{background:var(--accent-2);color:#062430;}
   .cbm-key p{margin:0;font-size:12.5px;color:var(--muted);}
 
   .cbm-panel{background:var(--panel);border:1px solid var(--border);
@@ -741,8 +743,8 @@ CSS = """
   .cbm-col-h .chip{font-family:var(--mono);font-size:9.5px;font-weight:700;
     letter-spacing:.12em;text-transform:uppercase;border-radius:5px;
     padding:3px 8px;flex:none;line-height:1.6;}
-  .cbm-col.a .chip{background:var(--accent);color:#fff;}
-  .cbm-col.b .chip{background:var(--accent-2);color:#062430;}
+  .cbm-col.alt .chip{background:var(--accent);color:#fff;}
+  .cbm-col.dash .chip{background:var(--accent-2);color:#062430;}
   .cbm-col-h .nm{font-size:13px;font-weight:700;letter-spacing:-.01em;}
   .cbm-col-h .unit{font-size:11.5px;font-weight:400;color:var(--muted);letter-spacing:0;}
   .cbm-col-h .src{font-family:var(--mono);font-size:10px;color:var(--faint);
@@ -756,10 +758,10 @@ CSS = """
 """
 
 
-def _column(side: str, name: str, src: str, div: str, note: str) -> str:
-    """One half of the Draft A | Draft B pair."""
+def _column(side: str, chip: str, name: str, src: str, div: str, note: str) -> str:
+    """One half of the alternative | dashboard pair."""
     return f"""      <div class="cbm-col {side}">
-        <div class="cbm-col-h"><span class="chip">Draft {side.upper()}</span>
+        <div class="cbm-col-h"><span class="chip">{chip}</span>
           <span class="nm">{name}</span><span class="src">{src}</span></div>
         {div}
         <p class="cbm-note">{note}</p>
@@ -767,7 +769,7 @@ def _column(side: str, name: str, src: str, div: str, note: str) -> str:
 
 
 def _metric_column(spec: dict, div: str) -> str:
-    """One half of the LCOE | LCOH pair — a metric, not a draft, so no chip."""
+    """One half of the LCOE | LCOH pair — a metric, not a taxonomy, so no chip."""
     return f"""      <div class="cbm-col">
         <div class="cbm-col-h"><span class="nm">{spec['title']}</span>
           <span class="unit">· {spec['unit']}</span><span class="src">{spec['src']}</span></div>
@@ -778,16 +780,18 @@ def _metric_column(spec: dict, div: str) -> str:
 
 def build_core() -> str:
     """The body-only page content, ready to embed as a hub tab."""
-    a_bars, a_series, a_lcos, a_totals = draft_a_lcos()
-    b_bars, b_series, b_lcos, b_totals = draft_b_lcos()
+    alt_bars, alt_series, alt_lcos, alt_totals = alternative_lcos()
+    dash_bars, dash_series, dash_lcos, dash_totals = dashboard_lcos()
 
     # Both cuts of the same total must land on the reported LCOS, or the page is
     # quietly lying about one of them.
-    for label, series, lcos in (("A", a_series, a_lcos), ("B", b_series, b_lcos)):
+    for name, series, lcos in (("alternative", alt_series, alt_lcos),
+                               ("dashboard", dash_series, dash_lcos)):
         totals = [sum(values[i] for _, _, values, _ in series) for i in range(len(lcos))]
         drift = max(abs(total - reported) for total, reported in zip(totals, lcos))
         if drift > 0.05:
-            raise ValueError(f"Draft {label} stack drifts {drift:.3f} €/t from reported LCOS")
+            raise ValueError(
+                f"the {name} stack drifts {drift:.3f} €/t from the reported LCOS")
 
     lcoe_bars, lcoe_series, lcoe_rows = levelised_parts(LCOE_PARTS, _lcoe_part_lines)
     lcoh_bars, lcoh_series, lcoh_rows = levelised_parts(
@@ -796,12 +800,12 @@ def build_core() -> str:
     lcos_kwargs = dict(unit="€/t", value_fmt=",.0f", total_fmt=",.0f", basis="LCOS",
                        total_label="levelised cost of steel (LCOS)")
     divs = {
-        "lcos-a": plot_div(stacked_figure(a_bars, a_series, bar_totals=a_lcos,
-                                          totals_lines=a_totals, **lcos_kwargs),
-                           "cbm-lcos-a"),
-        "lcos-b": plot_div(stacked_figure(b_bars, b_series, bar_totals=b_lcos,
-                                          totals_lines=b_totals, **lcos_kwargs),
-                           "cbm-lcos-b"),
+        "lcos-alt": plot_div(stacked_figure(alt_bars, alt_series, bar_totals=alt_lcos,
+                                           totals_lines=alt_totals, **lcos_kwargs),
+                             "cbm-lcos-alt"),
+        "lcos-dash": plot_div(stacked_figure(dash_bars, dash_series, bar_totals=dash_lcos,
+                                            totals_lines=dash_totals, **lcos_kwargs),
+                              "cbm-lcos-dash"),
         "lcoe": plot_div(stacked_figure(
             lcoe_bars, lcoe_series, unit="€/MWh", value_fmt=",.1f", total_fmt=",.1f",
             basis="LCOE", total_label="levelised cost of electricity (LCOE)",
@@ -833,43 +837,45 @@ def build_core() -> str:
   <div class="cbm-wrap">
     <header class="cbm-head">
       <div>
-        <div class="cbm-brand"><span class="cbm-dot"></span><span>Cost breakdown · taxonomy drafts</span></div>
+        <div class="cbm-brand"><span class="cbm-dot"></span><span>Cost breakdown · two taxonomies</span></div>
         <h1 class="cbm-title">Two ways to cut the same number</h1>
         <p class="cbm-sub">The circulated chart mockup's category split next to the split the
           pipeline already reports — both drawn from the same DE 2023 results the scenario tab
-          reads, and both closing exactly on LCOS. The drafts differ only in where they put the
-          cuts, which is what makes the disagreement legible. Hover any segment for the same
-          per-plant and per-carrier detail the scenario-comparison tab shows.</p>
+          reads, and both closing exactly on LCOS. All that differs is where the cuts fall, which
+          is what makes the choice between them legible. Hover any segment for the same per-plant
+          and per-carrier detail the scenario-comparison tab shows.</p>
       </div>
       <div class="cbm-meta">built {date.today().strftime('%-d %b %Y')}<br>
         DE 2023 · grid-connected<br>mean-CF site</div>
     </header>
 
     <div class="cbm-legend">
-      <div class="cbm-key a"><span class="chip">Draft A</span>
+      <div class="cbm-key alt"><span class="chip">Alternative</span>
         <p>The circulated taxonomy: one hydrogen block, process plant split into capex and O&amp;M,
           electricity split into an EAF-melt share and the rest. Rebuilt from the model's cost
           groups — no placeholder numbers left.</p></div>
-      <div class="cbm-key b"><span class="chip">Draft B</span>
-        <p>The pipeline's own cost groups, unchanged. Same bars, same totals, different cuts —
-          renewables, electrolyser and H₂ buffer each stand on their own.</p></div>
+      <div class="cbm-key dash"><span class="chip">Dashboard</span>
+        <p>The pipeline's own cost groups, as the rest of the dashboard already shows them. Same
+          bars, same totals, different cuts — renewables, electrolyser and H₂ buffer each stand on
+          their own.</p></div>
     </div>
 
     <section class="cbm-panel">
       <div class="cbm-panel-h">
         <h2>LCOS — levelised cost of steel <span class="unit">· € / t liquid steel</span></h2>
-        <p>Where the two taxonomies genuinely disagree. Both stacks sum to the same LCOS per route;
-          Draft A folds the electrolyser, the H₂ buffer and the electricity that made the hydrogen
-          into a single block, while Draft B keeps them apart.</p>
+        <p>Where the choice between the two actually changes the picture. Both stacks sum to the
+          same LCOS per route; the alternative folds the electrolyser, the H₂ buffer and the
+          electricity that made the hydrogen into a single block, while the dashboard keeps them
+          apart.</p>
       </div>
       <div class="cbm-pair">
-{_column('a', 'circulated split', 'reconstructed', divs['lcos-a'],
+{_column('alt', 'Alternative', 'circulated split', 'reconstructed', divs['lcos-alt'],
          "Hydrogen (all-in) = electrolyser + H₂ buffer + the electricity that made the H₂. "
          "The EAF melt share is the furnace's own MWh/t valued at that scenario's LCOE; "
          "&ldquo;rest of plant&rdquo; is the residual, so the stack closes on LCOS. Capex and "
          "O&amp;M split each plant's annual cost by its config ratio — fixed O&amp;M runs at "
          "≈3&nbsp;% of capex per year, so it lands near a quarter of the band.")}
-{_column('b', "model's own split", 'report columns', divs['lcos-b'],
+{_column('dash', 'Dashboard', "model's own split", 'report columns', divs['lcos-dash'],
          "Straight from the <code>cost_*_meur</code> columns, converted to €/t. Its process band "
          "keeps capex and O&amp;M together as the pipeline groups them — the split is in the "
          "hover. The iron stockpile and steel inventory keep their legend entries but draw no "
@@ -880,8 +886,8 @@ def build_core() -> str:
     <section class="cbm-panel">
       <div class="cbm-panel-h">
         <h2>The carriers underneath <span class="unit">· LCOE and LCOH</span></h2>
-        <p>Here the two taxonomies nearly agree, so there is one chart of each rather than a pair.
-          The circulated split adds a renewables capex/O&amp;M row to LCOE and an
+        <p>Here the two taxonomies very nearly coincide, so there is one chart of each rather than
+          a pair. The alternative adds a renewables capex/O&amp;M row to LCOE and an
           electrolyser-O&amp;M row to LCOH; both are derivable the same way the process split is,
           but the reports quote each carrier's parent line and these charts follow the reports.
           Everything else maps one-to-one. Both charts show the same three supply cases, and the
@@ -892,9 +898,9 @@ def build_core() -> str:
       </div>
     </section>
 
-    <p class="cbm-foot">Cross-chart logic, unchanged from the draft: the electricity segment in
+    <p class="cbm-foot">Cross-chart logic, shared by both: the electricity segment in
       LCOS/LCOH is priced at LCOE; the hydrogen segment in LCOS is LCOH × kg&nbsp;H₂/t; LCOI (not
-      shown) is LCOS minus the EAF stage. Two rows of the circulated draft stay empty because the
+      shown) is LCOS minus the EAF stage. Two rows of the alternative stay empty because the
       model does not carry them — ore/iron freight and scrap or HBI purchase; freight interacts
       with the ore-grade work, since lower-grade ore moves more tonnes per tonne of iron. Sources:
       <code>results/report_DE-2023-grid.csv</code>,
