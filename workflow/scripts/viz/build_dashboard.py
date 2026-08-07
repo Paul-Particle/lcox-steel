@@ -325,10 +325,7 @@ def build_payload(projects):
 
 
 def font_css():
-    """Inline the bundled Titillium Web woff2 subsets as @font-face data-URIs.
-
-    Also used by build_cost_breakdown_mockups, which builds its own hub fragment
-    rather than filling a template placeholder."""
+    """Inline the bundled Titillium Web woff2 subsets as @font-face data-URIs."""
     assets = REPO / "workflow" / "scripts" / "viz" / "assets"
     faces = []
     for weight, name in ((400, "TitilliumWeb-Regular.woff2"), (600, "TitilliumWeb-SemiBold.woff2")):
