@@ -341,7 +341,8 @@
     <p><b>Electricity draw (dashed):</b> the DRI, NG-DRI and EAF steps are PyPSA multi-links — <code>bus2 = electricity</code> with a negative <code>efficiency2</code>, so they pull auxiliary power alongside their main feed.</p>
     <p><b>Stores decouple time:</b> the H2 buffer, iron stockpile and finished-steel inventory are all cyclic and extendable; the steel store is capped at 8 weeks of production so flexibility can't degenerate into whole-year arbitrage.</p>
     <p><b>Multi-site (not drawn):</b> in multi-site mode each candidate site gets its own <code>electricity_{site}</code> bus and an extendable HVDC link to the demand site; capex and losses scale with routed distance, so siting emerges from the LP.</p>
-    <p><b>Planned MOE-EAF variant (dashed, accent):</b> today <code>_add_moe_link</code> folds ladle metallurgy into a single electricity -> steel link. The planned alternative taps <b>hot iron</b> (a molten, non-storable bus — no store) into an EAF/ladle-finishing step, which is why <code>assumptions.yaml</code> keeps the <code>ladle</code> costs as separate numbers. Not implemented in <code>build_network.py</code> yet.</p>
+    <p><b>Planned MOE + EAF sensitivity cases (dashed, accent):</b> today <code>_add_moe_link</code> folds ladle metallurgy into a single electricity -> steel link. Two sensitivity cases are planned: a <b>hot-linked EAF</b> that taps <b>hot iron</b> (a molten, non-storable bus — no store) onto the shared iron bus so the existing EAF finishes it, versus the cheaper heated ladle metallurgy of the base link — which is why <code>assumptions.yaml</code> keeps the <code>ladle</code> costs as separate numbers.</p>
+    <p><b>Planned imported-iron path (dashed, off by default):</b> a second <code>imported_iron</code> bus (no store — buy-as-needed merchant sponge iron / HBI) reaches the shared iron bus via a <code>bulk_shipping_iron</code> freight link, and can also feed the EAF directly. Not implemented in <code>build_network.py</code> yet.</p>
   </div>
 
   <p class="foot">Derived from workflow/scripts/h2_dri/build_network.py + config/assumptions.yaml · schematic for topology review</p>
@@ -406,7 +407,7 @@
 
     { id:"iron",        kind:"bus",  color:"iron",name:"iron",        unit:"t/h", x:852, y:340, routes:IRON,
       body:"Bus · carrier iron\nSponge iron / HBI / electrolytic plates — freely storable." },
-    { id:"iron_store",  kind:"store",color:"iron",name:"iron_store",  x:852, y:436, routes:IRON,
+    { id:"iron_store",  kind:"store",color:"iron",name:"iron_store",  x:913, y:432, routes:IRON,
       body:"Store · extendable, cyclic\n€20/t · 25 yr · cheap-but-nonzero (unique optimum)" },
     { id:"eaf",         kind:"link", color:"steel",name:"eaf",        x:992, y:340, routes:IRON,
       body:"Link  iron -> steel  (+ elec draw, bus2)\neff = 1 / 1.1 t/t · el 0.65 MWh/t\nconsumables €40/t · p_min 0.4 · capex €184/(t·yr)" },
@@ -417,14 +418,18 @@
     { id:"steel_load",  kind:"load", color:"steel",name:"steel_load", x:1132, y:436, routes:STEEL,
       body:"Load · flat steel demand\n1.0 Mt/yr ÷ 8760 h = 114.2 t/h" },
 
-    { id:"moe",         kind:"link", color:"steel",name:"moe", sub:"+EAF heated ladle metallurgy",
-      tipTitle:"moe (+EAF heated ladle metallurgy)", w:198, h:60, x:694, y:612, routes:["moe"],
-      body:"Link  electricity -> steel (EAF-heated ladle folded in)\nel 4.0 + 0.1 MWh/t -> eff = 1/4.1 t/MWh\nore €160/t · p_min 0.95 · capex €(900+50)/(t·yr)\nPlanned variant: split ladle out -> hot iron -> EAF (dashed)" },
+    { id:"moe",         kind:"link", color:"steel",name:"MOE + EAF",
+      sub:["sensitivity cases: hot linked EAF", "vs. cheaper heated ladle metallurgy"],
+      tipTitle:"MOE + EAF", w:173, h:78, x:718, y:624, routes:["moe"],
+      body:"Link  electricity -> steel (EAF-heated ladle folded in)\nel 4.0 + 0.1 MWh/t -> eff = 1/4.1 t/MWh\nore €160/t · p_min 0.95 · capex €(900+50)/(t·yr)\nSensitivity cases (dashed):\n · hot-linked EAF: tap hot iron -> shared iron bus -> EAF\n · cheaper heated ladle metallurgy: the folded-in base link" },
 
-    { id:"hot_iron",    kind:"bus",  color:"iron", name:"hot iron",   unit:"t/h · molten", x:876, y:690, routes:["moe"], planned:true,
-      body:"Bus · carrier iron (molten) — PLANNED\nHot metal tapped from MOE. Non-storable, so no\nstore attaches here — unlike the solid iron bus.\nNot in the model yet." },
-    { id:"eaf_moe",     kind:"link", color:"steel",name:"eaf (MOE)",  x:1016, y:690, routes:["moe"], planned:true,
-      body:"Link  hot iron -> steel — PLANNED\nEAF / ladle finishing that replaces the ladle step\ncurrently folded into the moe link.\nassumptions.yaml keeps ladle costs separate for\nexactly this clean swap." },
+    { id:"hot_iron",    kind:"bus",  color:"iron", name:"hot iron",   unit:"t/h · molten", x:852, y:548, routes:["moe"], planned:true,
+      body:"Bus · carrier iron (molten) — PLANNED\nHot metal tapped from MOE, fed into the shared\niron bus so the existing EAF finishes it.\nNon-storable, so no store attaches here.\nNot in the model yet." },
+
+    { id:"imported_iron",   kind:"bus",  color:"iron", name:"imported iron", unit:"t/h", x:1052, y:150, routes:IRON, planned:true,
+      body:"Bus · carrier iron — PLANNED\nMerchant sponge iron / HBI bought in and shipped\nto site. No store attaches here (buy-as-needed).\nFeeds the shared iron bus and the EAF directly.\nOff by default — not in the model yet." },
+    { id:"bulk_shipping_iron", kind:"link", color:"iron", name:"bulk_shipping_iron", w:150, h:54, x:902, y:250, routes:IRON, planned:true,
+      body:"Link  imported iron -> iron — PLANNED\nBulk ocean/rail freight of merchant iron onto the\nshared iron bus (per-tonne shipping cost).\nOff by default — not in the model yet." },
   ];
 
   const EDGES = [
@@ -452,10 +457,14 @@
     { from:"electricity", to:"moe",          carrier:"ac", kind:"flow", routes:["moe"], sa:"b", ea:"l" },
     { from:"moe",         to:"steel",        carrier:"steel", kind:"flow", routes:["moe"], sa:"r", ea:"b" },
 
-    // planned MOE -> hot iron -> EAF finishing -> steel variant
-    { from:"moe",         to:"hot_iron",     carrier:"iron",  kind:"flow", routes:["moe"], planned:true, sa:"b", ea:"l" },
-    { from:"hot_iron",    to:"eaf_moe",      carrier:"iron",  kind:"flow", routes:["moe"], planned:true, sa:"r", ea:"l" },
-    { from:"eaf_moe",     to:"steel",        carrier:"steel", kind:"flow", routes:["moe"], planned:true, sa:"t", ea:"l" },
+    // planned MOE hot-linked-EAF variant: tap hot iron -> shared iron bus -> existing EAF
+    { from:"moe",         to:"hot_iron",     carrier:"iron",  kind:"flow", routes:["moe"], planned:true, sa:"r", ea:"b" },
+    { from:"hot_iron",    to:"iron",         carrier:"iron",  kind:"flow", routes:["moe"], planned:true, sa:"t", ea:"b" },
+
+    // planned imported-iron path: buy merchant iron -> ship onto shared iron bus + feed EAF directly
+    { from:"imported_iron", to:"bulk_shipping_iron", carrier:"iron", kind:"flow", routes:IRON, planned:true, sa:"l", ea:"t" },
+    { from:"bulk_shipping_iron", to:"iron",           carrier:"iron", kind:"flow", routes:IRON, planned:true, sa:"b", ea:"t" },
+    { from:"imported_iron", to:"eaf",                 carrier:"iron", kind:"flow", routes:IRON, planned:true, sa:"b", ea:"t" },
 
     { from:"steel",       to:"steel_load",   carrier:"steel", kind:"flow", routes:STEEL, sa:"b", ea:"t" },
 
@@ -566,7 +575,7 @@
     let kick = KIND_LABEL[n.kind].toUpperCase();
     if (n.id === "battery") kick = "STORAGEUNIT";
     if (n.opt) kick += " · OPT";
-    if (n.planned) kick = "PLANNED · " + kick;
+    if (n.planned) kick = "TBD · " + kick;
     const kickEl = document.createElementNS(SVG, "text");
     kickEl.setAttribute("class", "kick" + (n.planned ? " planned-kick" : ""));
     kickEl.setAttribute("x", 12);
@@ -589,15 +598,14 @@
       unitEl.textContent = n.unit;
       g.appendChild(unitEl);
     } else if (n.sub) {
+      const subLines = Array.isArray(n.sub) ? n.sub : [n.sub];
       nameEl.setAttribute("x", 12);
-      nameEl.setAttribute("y", h - 27);
+      nameEl.setAttribute("y", h - 15 - 13 * subLines.length);
       nameEl.textContent = n.name;
       g.appendChild(nameEl);
       const subEl = document.createElementNS(SVG, "text");
       subEl.setAttribute("class", "unit");
-      subEl.setAttribute("x", 12);
-      subEl.setAttribute("y", h - 13);
-      subEl.textContent = n.sub;
+      tspanLines(subEl, subLines, 12, h - 13 - 13 * (subLines.length - 1), 13);
       g.appendChild(subEl);
     } else {
       nameEl.setAttribute("x", 12);
@@ -645,10 +653,11 @@
 
   // route filter
   const CAPTIONS = {
-    all: "<b>All routes overlaid.</b> Every solved network contains exactly one route; the RES + battery front-end and (in grid scenarios) grid import are shared by all.",
+    all: "<b>All routes overlaid.</b> Every solved network contains exactly one route; the RES + battery front-end and (in grid scenarios) grid import are shared by all. Planned components are hidden here — select <b>expansions</b> to show them.",
+    expansions: "<b>Everything + planned expansions.</b> All routes overlaid together with the dashed components not yet in the model — the MOE hot-linked-EAF path (hot iron onto the shared iron bus) and the imported-iron path (merchant iron bulk-shipped in, feeding the iron bus and EAF).",
     h2_only: "<b>h2_only</b> — electricity -> electrolyser -> H2 (+ buffer) -> flat H2 load. The LCOH model: no steel chain.",
     h2_dri_eaf: "<b>h2_dri_eaf</b> — electrolyser -> H2 (+ buffer) -> DRI shaft -> sponge iron (+ store) -> EAF -> steel.",
-    moe: "<b>moe</b> — molten oxide electrolysis takes electricity straight to liquid steel (ladle folded into the link). No storable intermediate. Dashed: the planned variant that unfolds the ladle into hot iron -> EAF finishing -> steel.",
+    moe: "<b>MOE + EAF</b> — molten oxide electrolysis takes electricity straight to liquid steel (ladle folded into the link). No storable intermediate. The planned hot-linked-EAF sensitivity (tap hot iron onto the shared iron bus, finished in the existing EAF) shows under <b>expansions</b>.",
     ew: "<b>ew</b> — iron electrowinning: electricity -> iron plates (+ store) -> EAF -> steel.",
     ng_dri_eaf: "<b>ng_dri_eaf</b> — the fossil benchmark: gas supply -> NG-DRI shaft -> sponge iron (+ store) -> EAF -> steel.",
     mix_dri_eaf: "<b>mix_dri_eaf</b> — H2 and NG DRI shafts side by side on one iron bus -> EAF -> steel; the optimiser picks the split.",
@@ -657,11 +666,15 @@
   let active = "all";
   function apply() {
     nodeEls.forEach(({ spec, el }) => {
-      const on = active === "all" || spec.routes.includes(active);
+      const on = spec.planned
+        ? (active === "expansions")
+        : (active === "all" || active === "expansions" || spec.routes.includes(active));
       el.classList.toggle("dimmed", !on);
     });
     edgeEls.forEach(({ spec, el }) => {
-      const on = active === "all" || spec.routes.includes(active);
+      const on = spec.planned
+        ? (active === "expansions")
+        : (active === "all" || active === "expansions" || spec.routes.includes(active));
       el.classList.toggle("dimmed", !on);
     });
     document.getElementById("caption").innerHTML = CAPTIONS[active];
@@ -670,7 +683,7 @@
   }
 
   const chips = document.getElementById("chips");
-  [["all", "All routes"], ...ROUTES.map(r => [r, r])].forEach(([r, label]) => {
+  [["all", "All routes"], ...ROUTES.map(r => [r, r]), ["expansions", "expansions"]].forEach(([r, label]) => {
     const b = document.createElement("button");
     b.className = "chip";
     b.dataset.route = r;
