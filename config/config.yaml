@@ -79,29 +79,46 @@ res_cf:
     smooth: true
     add_cutout_windspeed: true
 
+  # Land-sea eligibility for ONSHORE CF (issue #41). Coarse ERA5 coastal cells
+  # blend sea + land and inflate onshore wind CF. Cells whose land fraction is
+  # below `min_land_fraction` of the region's max are dropped from onshore
+  # weighting/selection: 03's country mean, and 07/07b's P95 / best-site / max.
+  # 0.98 reproduces the validated notebook cutoff; 0 disables the fix. Offshore
+  # wind is never affected (sited on sea by design).
+  #
+  # eligibility_source picks where the per-cell land fraction comes from:
+  #   indicatormatrix   coarse NE-110m land/sea outline, no extra data (default).
+  #   availabilitymatrix finer coastline via atlite availabilitymatrix +
+  #                      ExclusionContainer over a high-res land polygon. Wired and
+  #                      cross-checked against indicatormatrix (agrees in 5/6 areas);
+  #                      needs the ne_10m_land download (see README + the availability
+  #                      block below). See cell_availability_fraction() in
+  #                      res_cf/_helpers.py and docs/land_eligibility_design.md.
+  eligibility_source: indicatormatrix
+  min_land_fraction: 0.98
+
+  # Settings for eligibility_source: availabilitymatrix (finer coastline via
+  # atlite availabilitymatrix + ExclusionContainer over a high-res land polygon).
+  # Ignored when eligibility_source is indicatormatrix.
+  #   land_shapes  high-res land polygon; sea = everything outside it. Natural
+  #                Earth 10m land (manual download — see README). EPSG:4326.
+  #   crs          equal-area CRS (metres) the exclusion raster is built in.
+  #                ExclusionContainer's default 3035 is Europe-only; 6933 is
+  #                global equal-area, so it works for EU + AUS + BRA alike.
+  #   res          raster resolution (metres). 200 m is ample to decide
+  #                mostly-land vs mostly-sea in a ~30 km ERA5 cell and is far
+  #                faster than 100 m.
+  availability:
+    land_shapes: data/shapes/ne_10m_land/ne_10m_land.zip
+    crs: 6933
+    res: 200
+
   # Anchor co-location for best-site RES-mix profiles (07_make_bestsite_cf_timeseries).
   # max_radius_km           search radius (km) for counterpart cells across techs
   # quality_floor_fraction  keep candidates with CF >= this fraction of the best nearby cell
   spatial_matching_res_mix:
     max_radius_km: 100
     quality_floor_fraction: 0.90
-
-  # Complementarity screening (08_complementarity_screen.py).
-  # top_n                    save this many top triplets in the screen output
-  # coincidence_threshold    fraction of combined CF that counts as "generating"
-  # w_coincidence            score weight for coincidence fraction
-  # w_correlation            score weight for pairwise correlations (subtracted)
-  # max_radius_km            max pairwise distance between triplet cells
-  # quality_floor            percentile floor for candidate cells (0–1)
-  # max_triplets_brute_force switch to greedy search above this triplet count
-  complementarity:
-    top_n: 10
-    coincidence_threshold: 0.20
-    w_coincidence: 0.6
-    w_correlation: 0.4
-    max_radius_km: 300.0
-    quality_floor: 0.90
-    max_triplets_brute_force: 500000
 
   #script 07b
   anchor_colocation:

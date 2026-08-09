@@ -31,19 +31,31 @@ log = logging.getLogger(__name__)
 
 
 def _assemble_multisite_cf(
-    cf_paths: list[Path], sites_overlay_path: Path
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Build the (site, tech)-keyed CF frame and the sites table for multi-site mode.
+    cf_paths: list[Path], sites_overlay_path: Path | None
+) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    """Build the (site, tech)-keyed CF frame, sites table and demand-site id.
 
-    Candidate CF parquets (the `grid-n{N}` variant) carry columns named
-    `{tech}@{cell}` and a JSON `site_coords` entry in their Arrow schema metadata
-    mapping each column to {lat, lon}. The demand site's coordinates come from the
-    sites overlay YAML (`demand_site: {lat, lon}`). Returns (cf_timeseries with a
-    (site, tech) MultiIndex on columns, sites DataFrame indexed by site_id with
-    x=lon / y=lat). The demand site is added as site_id "plant".
+    Candidate CF parquets (the `multi-n{N}` and `anchor-colo-n{N}` variants)
+    carry columns named `{tech}@{cell}` and a JSON `site_coords` entry in their
+    Arrow schema metadata mapping each column to {lat, lon}. The demand site
+    comes from one of two places:
+
+    - sites overlay YAML (`demand_site: {lat, lon}`): a standalone plant
+      location, added as site_id "plant" (the multi-n* sweep case);
+    - a `demand_site` Arrow-metadata key naming one of the file's own columns
+      (the anchor-colo case): that column's site doubles as the plant bus, so
+      the anchor generator sits directly on the demand bus (its HVDC link is
+      skipped by build_network).
+
+    The overlay wins if both are present. Returns (cf_timeseries with a
+    (site, tech) MultiIndex on columns, sites DataFrame indexed by site_id
+    with x=lon / y=lat, demand_site id).
     """
-    overlay = yaml.safe_load(Path(sites_overlay_path).read_text()) or {}
-    demand = overlay["demand_site"]
+    demand_site = None
+    if sites_overlay_path is not None:
+        overlay = yaml.safe_load(Path(sites_overlay_path).read_text()) or {}
+        demand = overlay["demand_site"]
+        demand_site = "plant"
 
     cf_parts: dict[tuple[str, str], pd.Series] = {}
     coords: dict[str, tuple[float, float]] = {}  # site_id -> (lon, lat)
@@ -51,6 +63,20 @@ def _assemble_multisite_cf(
         df = pd.read_parquet(p)
         meta = pq.read_schema(p).metadata or {}
         site_coords = json.loads(meta.get(b"site_coords", b"{}"))
+        demand_col = meta.get(b"demand_site", b"").decode() or None
+        if demand_col is not None and demand_site != "plant":
+            if demand_col not in df.columns:
+                raise ValueError(
+                    f"demand_site metadata '{demand_col}' in {p} names no column"
+                )
+            tech, cell = demand_col.split("@", 1)
+            demand_from_file = f"{tech}-{cell}"
+            if demand_site is not None and demand_site != demand_from_file:
+                raise ValueError(
+                    f"conflicting demand sites across CF inputs: "
+                    f"'{demand_site}' vs '{demand_from_file}' (from {p})"
+                )
+            demand_site = demand_from_file
         for col in df.columns:
             if "@" not in col:
                 raise ValueError(
@@ -74,14 +100,20 @@ def _assemble_multisite_cf(
     cf_timeseries = pd.DataFrame(cf_parts)
     cf_timeseries.columns = pd.MultiIndex.from_tuples(cf_timeseries.columns)
 
-    coords["plant"] = (float(demand["lon"]), float(demand["lat"]))
+    if demand_site is None:
+        raise ValueError(
+            "multi-site mode needs a demand site: provide a sites overlay YAML "
+            "or a CF input with 'demand_site' schema metadata"
+        )
+    if demand_site == "plant":
+        coords["plant"] = (float(demand["lon"]), float(demand["lat"]))
     sites = pd.DataFrame(
         {
             "x": {s: c[0] for s, c in coords.items()},
             "y": {s: c[1] for s, c in coords.items()},
         }
     )
-    return cf_timeseries, sites
+    return cf_timeseries, sites, demand_site
 
 
 def main() -> None:
@@ -110,18 +142,26 @@ def main() -> None:
     grid_path = grid_paths[0] if grid_paths else None
     price_series = pd.read_parquet(grid_path).iloc[:, 0] if grid_path is not None else None
 
-    # A config/sites_{project}_{scenario}.yaml overlay (0 or 1 paths via optional())
-    # switches the scenario into multi-site mode: one electricity bus per candidate
-    # site, distance-costed HVDC links to the demand site. Absent ⇒ single-bus.
+    # Multi-site mode (one electricity bus per candidate site, distance-costed
+    # HVDC links to the demand site) is triggered by either:
+    # - a config/sites_{project}_{scenario}.yaml overlay (0 or 1 paths via
+    #   optional()) declaring a standalone plant location, or
+    # - a CF parquet carrying 'demand_site' schema metadata (anchor-colo files,
+    #   where the anchor cell doubles as the plant site).
+    # Neither present ⇒ single-bus.
     site_overlays = list(snakemake.input.sites_overlay)
     sites_overlay_path = Path(site_overlays[0]) if site_overlays else None
-    multisite = sites_overlay_path is not None
+    has_demand_meta = any(
+        b"demand_site" in (pq.read_schema(p).metadata or {}) for p in cf_paths
+    )
+    multisite = sites_overlay_path is not None or has_demand_meta
 
     sites = None
     demand_site = None
     if cf_paths and multisite:
-        cf_timeseries, sites = _assemble_multisite_cf(cf_paths, sites_overlay_path)
-        demand_site = "plant"
+        cf_timeseries, sites, demand_site = _assemble_multisite_cf(
+            cf_paths, sites_overlay_path
+        )
     elif cf_paths:
         cf_parts: dict[str, pd.Series] = {}
         for p in cf_paths:

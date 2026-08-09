@@ -39,6 +39,10 @@ dependencies:
   - nbstripout           # strips notebook outputs from git (see notebooks/README.md)
   - tqdm
 
+  # Testing (grid-pipeline validation vs energy-charts.info)
+  - pytest
+  - requests             # refresh the energy-charts reference (tests/data/)
+
   - pip:
       - nemosis
       - snakemake

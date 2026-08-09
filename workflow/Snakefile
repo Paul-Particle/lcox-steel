@@ -50,8 +50,9 @@ include: "rules/viz.smk"
 # Default target: a small, self-contained demo that runs after a fresh clone
 # with no CDS download, no EEZ/NE zips, and no API keys. It ships a pre-sliced
 # Victoria (AUS) cutout backup + derived geo parquets, and exercises the
-# best-site (07) and complementarity (08) RES-CF science through to an h2_dri
-# solve and a viz report. Run the full set of real projects with `snakemake all`.
+# best-site (07) and anchor-colocation (07b, multi-site PyPSA) RES-CF science
+# through to an h2_dri solve and a viz report. Run the full set of real
+# projects with `snakemake all`.
 rule demo:
     default_target: True
     input:
