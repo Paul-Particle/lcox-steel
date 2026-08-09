@@ -1,12 +1,30 @@
-"""PyPSA network construction for a DRI-hydrogen project scenario.
+"""PyPSA network construction for one steelmaking-route project scenario.
 
 Pure construction — no IO except YAML loading for assumptions, no snakemake,
 no solver call. Importable from a notebook for inspection; the snakemake
 entrypoint lives in `solve_network.py`.
 
-Bus unit convention: MW throughout.
-  electricity bus: MW AC
-  hydrogen bus:    MW H2 LHV  (1 MWh H2 LHV ≈ 30 kg H2 at LHV ≈ 33.33 kWh/kg)
+Each network contains exactly one process route (`assumptions["route"]`):
+  h2_only:    electricity → electrolyser → H2 → flat H2 load (LCOH model)
+  h2_dri_eaf: electricity → electrolyser → H2 → DRI shaft → iron → EAF → steel
+  moe:        electricity → molten oxide electrolysis (incl. ladle) → steel
+  ew:         electricity → iron electrowinning → iron → EAF → steel
+  ng_dri_eaf: fossil benchmark — gas supply → NG-DRI shaft → iron → EAF → steel
+  mix_dri_eaf: H2 and NG DRI shafts side by side on one iron bus; the
+              optimiser picks the production split (each shaft pays its own
+              capex — a greenfield fuel choice, not co-firing in one shaft)
+
+Bus unit convention:
+  electricity buses: MW AC
+  hydrogen bus:      MW H2 LHV  (1 MWh H2 LHV ≈ 30 kg H2 at LHV ≈ 33.33 kWh/kg)
+  gas bus:           MW CH4 LHV (supplied at a flat price incl. optional CO2 cost)
+  iron bus:          t/h  (sponge iron / HBI for the DRI routes, electrolytic
+                     iron plates for ew — both treated as freely storable)
+  steel bus:         t/h  (liquid steel)
+
+Process steps that consume electricity alongside their bus0 feed (DRI shaft,
+EAF) are PyPSA multi-links: bus2 is an electricity bus and efficiency2 is
+negative, so p2 = -efficiency2 * p0 is the electricity withdrawal.
 
 Electrolyser efficiency is:
   efficiency = h2_lhv_kwh_per_kg / efficiency_kwh_per_kg
@@ -23,6 +41,15 @@ import yaml
 from _helpers import annuity_factor, dri_to_el_mw, haversine_km
 
 from common._constants import H2_LHV_KWH_PER_KG
+
+HOURS_PER_YEAR = 8760.0
+
+ROUTES = ("h2_only", "h2_dri_eaf", "moe", "ew", "ng_dri_eaf", "mix_dri_eaf")
+
+# Route groups used when wiring buses/components.
+_H2_ROUTES  = ("h2_only", "h2_dri_eaf", "mix_dri_eaf")   # electrolyser + H2 buffer
+_GAS_ROUTES = ("ng_dri_eaf", "mix_dri_eaf")              # gas bus + NG-DRI shaft
+_IRON_ROUTES = ("h2_dri_eaf", "ew", "ng_dri_eaf", "mix_dri_eaf")  # iron bus + EAF
 
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
@@ -60,30 +87,26 @@ def build_network(
 ) -> pypsa.Network:
     """Build (but do not solve) the PyPSA network for one scenario.
 
-    `assumptions` is the merged base+overlay dict; `price_series` is an optional
-    hourly €/MWh grid price on the same index, which adds a grid-import generator
-    when present.
+    `assumptions` is the merged base+overlay dict; its `route` key selects the
+    process chain (default `h2_only`). `price_series` is an optional hourly
+    €/MWh grid price on the same index, which adds a grid-import generator
+    (with connection charges from `assumptions["grid"]`) when present.
 
     Single-site mode (`sites is None`): `cf_timeseries` has one column per RES tech
     (names matching keys in `assumptions.res`); every generator sits on a single
-    `electricity` bus. This is the original, unchanged behaviour.
+    `electricity` bus.
 
     Multi-site mode (`sites` given): `cf_timeseries.columns` is a MultiIndex
     (site_id, tech); each site gets its own `electricity_{site_id}` bus carrying its
     generators, and an extendable HVDC link connects every site to the demand site
-    (`demand_site`), which hosts the electrolyser, battery, H2 buffer, DRI load and
-    any grid import. `sites` is indexed by site_id with columns `x` (lon), `y` (lat).
+    (`demand_site`), which hosts the process chain, storage and any grid import.
+    `sites` is indexed by site_id with columns `x` (lon), `y` (lat).
     """
+    route = assumptions.get("route", "h2_only")
+    if route not in ROUTES:
+        raise ValueError(f"unknown route '{route}' — expected one of {ROUTES}")
     wacc = assumptions["finance"]["default_wacc"]
-    el_cfg = assumptions["electrolyser"]
     plant = assumptions["plant"]
-    el_mw = dri_to_el_mw(
-        dri_mt_per_year=plant["dri_mt_per_year"],
-        h2_intensity_kg_per_t_dri=plant["h2_intensity_kg_per_t_dri"],
-        efficiency_kwh_per_kg=el_cfg["efficiency_kwh_per_kg"],
-        availability_target=plant["availability_target"],
-    )
-    el_efficiency = H2_LHV_KWH_PER_KG / el_cfg["efficiency_kwh_per_kg"]
 
     multisite = sites is not None
 
@@ -97,54 +120,121 @@ def build_network(
         res_techs = list(cf_timeseries.columns)
         elec_bus = "electricity"
 
-    _add_carriers(n, res_techs=res_techs, multisite=multisite)
+    _add_carriers(n, res_techs=res_techs, route=route, multisite=multisite)
     if multisite:
-        _add_buses_multisite(n, sites, demand_site)
+        _add_buses_multisite(n, sites, demand_site, route)
     else:
-        _add_buses(n)
+        _add_buses(n, route)
     _add_generators(n, cf_timeseries, assumptions["res"], wacc, multisite=multisite)
     _add_battery(n, assumptions["battery"], wacc, bus=elec_bus)
-    _add_electrolyser(n, el_mw, el_efficiency, el_cfg, wacc, bus0=elec_bus)
-    _add_h2_buffer(n, assumptions["h2_buffer"], wacc)
-    _add_dri_load(n, el_mw, el_efficiency, plant["availability_target"])
+
+    if route in _H2_ROUTES:
+        el_cfg = assumptions["electrolyser"]
+        el_efficiency = H2_LHV_KWH_PER_KG / el_cfg["efficiency_kwh_per_kg"]
+        if route == "h2_only":
+            # Floor sized to meet the flat H2 demand at availability_target.
+            # Steel routes leave electrolyser sizing entirely to the optimiser —
+            # the flat steel load forces enough capacity through the chain anyway.
+            el_mw = dri_to_el_mw(
+                dri_mt_per_year=plant["dri_mt_per_year"],
+                h2_intensity_kg_per_t_dri=plant["h2_intensity_kg_per_t_dri"],
+                efficiency_kwh_per_kg=el_cfg["efficiency_kwh_per_kg"],
+                availability_target=plant["availability_target"],
+            )
+        else:
+            el_mw = 0.0
+        _add_electrolyser(n, el_mw, el_efficiency, el_cfg, wacc, bus0=elec_bus)
+        _add_h2_buffer(n, assumptions["h2_buffer"], wacc)
+
+    if route == "h2_only":
+        _add_dri_load(n, el_mw, el_efficiency, plant["availability_target"])
+    else:
+        steel_t_per_h = plant["steel_mt_per_year"] * 1e6 / HOURS_PER_YEAR
+        _add_steel_load(n, steel_t_per_h)
+        _add_steel_store(n, assumptions["steel_store"], wacc, steel_t_per_h)
+        if route in ("h2_dri_eaf", "mix_dri_eaf"):
+            _add_dri_link(n, plant, assumptions["dri"], wacc, elec_bus)
+        if route in _GAS_ROUTES:
+            _add_gas_supply(n, assumptions["natural_gas"])
+            _add_ng_dri_link(n, assumptions["dri_ng"], wacc, elec_bus)
+        if route == "ew":
+            _add_electrowinning_link(n, assumptions["electrowinning"], wacc, elec_bus)
+        if route in _IRON_ROUTES:
+            _add_iron_store(n, assumptions["iron_store"], wacc)
+            _add_eaf_link(n, assumptions["eaf"], wacc, elec_bus)
+        if route == "moe":
+            _add_moe_link(n, assumptions["moe"], assumptions["ladle"], wacc, elec_bus)
 
     if multisite:
         _add_transmission(n, sites, demand_site, assumptions["transmission"], wacc)
 
     if price_series is not None:
-        _add_grid_import(n, price_series, bus=elec_bus)
+        _add_grid_import(n, price_series, assumptions["grid"], wacc, bus=elec_bus)
 
     return n
 
 
-def _add_carriers(n: pypsa.Network, res_techs: list[str], multisite: bool = False) -> None:
+def _add_carriers(
+    n: pypsa.Network, res_techs: list[str], route: str, multisite: bool = False
+) -> None:
     """Register every carrier referenced by a component, before those components are added.
 
     Otherwise PyPSA's consistency check warns ("carriers which are not defined")
     and leaves n.carriers empty, which blocks carrier-aware features (CO2
-    constraints, grouped stats). The HVDC carrier is only added in multi-site mode.
+    constraints, grouped stats). Only the carriers the chosen route actually
+    uses are added; the HVDC carrier is only added in multi-site mode.
     """
-    base = ["AC", "H2", "battery", "electrolyser"]
+    base = ["AC", "battery"]
+    if route in _H2_ROUTES:
+        base += ["H2", "electrolyser"]
+    if route in _GAS_ROUTES:
+        base += ["gas", "dri_ng"]
+    if route in _IRON_ROUTES:
+        base += ["iron", "eaf"]
+    if route != "h2_only":
+        base += ["steel"]
+    if route in ("h2_dri_eaf", "mix_dri_eaf"):
+        base += ["dri"]
+    if route == "ew":
+        base += ["electrowinning"]
+    if route == "moe":
+        base += ["moe"]
     if multisite:
         base.append("HVDC")
     carriers = list(dict.fromkeys([*base, *res_techs]))
     n.add("Carrier", carriers)
 
 
-def _add_buses(n: pypsa.Network) -> None:
-    """Add the electricity (AC) and hydrogen (H2 LHV) buses."""
+def _route_process_buses(route: str) -> list[tuple[str, str]]:
+    """(bus name, carrier) pairs for the process buses the route needs."""
+    buses = []
+    if route in _H2_ROUTES:
+        buses.append(("hydrogen", "H2"))
+    if route in _GAS_ROUTES:
+        buses.append(("gas", "gas"))
+    if route in _IRON_ROUTES:
+        buses.append(("iron", "iron"))
+    if route != "h2_only":
+        buses.append(("steel", "steel"))
+    return buses
+
+
+def _add_buses(n: pypsa.Network, route: str) -> None:
+    """Add the electricity (AC) bus plus the route's process buses."""
     n.add("Bus", "electricity", carrier="AC")
-    n.add("Bus", "hydrogen", carrier="H2")
+    for name, carrier in _route_process_buses(route):
+        n.add("Bus", name, carrier=carrier)
 
 
 def _add_buses_multisite(
-    n: pypsa.Network, sites: pd.DataFrame, demand_site: str
+    n: pypsa.Network, sites: pd.DataFrame, demand_site: str, route: str
 ) -> None:
-    """Add one AC bus per site (with lon/lat coords) plus the demand-site H2 bus."""
+    """Add one AC bus per site (with lon/lat coords) plus the demand-site process buses."""
     for site_id, row in sites.iterrows():
         n.add("Bus", f"electricity_{site_id}", carrier="AC", x=row["x"], y=row["y"])
     dem = sites.loc[demand_site]
-    n.add("Bus", "hydrogen", carrier="H2", x=dem["x"], y=dem["y"])
+    for name, carrier in _route_process_buses(route):
+        n.add("Bus", name, carrier=carrier, x=dem["x"], y=dem["y"])
 
 
 def _add_generators(
@@ -241,13 +331,14 @@ def _add_electrolyser(
         bus1="hydrogen",
         carrier="electrolyser",
         p_nom_extendable=True,
-        # Floor sized by dri_to_el_mw to meet annual demand at availability_target.
-        # Optimiser may grow beyond this when the headroom pays for itself via
-        # buffer-mediated arbitrage of cheap RES hours.
+        # Floor sized by dri_to_el_mw to meet annual demand at availability_target
+        # (h2_only route; steel routes pass 0). Optimiser may grow beyond this when
+        # the headroom pays for itself via buffer-mediated arbitrage of cheap RES.
         p_nom_min=el_mw,
         efficiency=el_efficiency,
         capital_cost=cap_cost,
-        marginal_cost=0.0,
+        # Variable opex (water, consumables) per MWh electricity input (p0 side).
+        marginal_cost=el_cfg.get("varopex_eur_per_mwh_el", 0.0),
     )
 
 
@@ -280,19 +371,246 @@ def _add_dri_load(
     n.add("Load", "dri_load", bus="hydrogen", carrier="H2", p_set=h2_demand_mw_lhv)
 
 
-def _add_grid_import(
-    n: pypsa.Network, price_series: pd.Series, bus: str = "electricity"
+def _add_steel_load(n: pypsa.Network, steel_t_per_h: float) -> None:
+    """Add the flat steel demand (t/h) on the steel bus."""
+    n.add("Load", "steel_load", bus="steel", carrier="steel", p_set=steel_t_per_h)
+
+
+def _process_capital_cost(cfg: dict, wacc: float, output_t_per_p0_unit: float) -> float:
+    """Convert a €/(t/yr of output capacity) capex+opex quote into PyPSA capital_cost.
+
+    Link p_nom is in bus0 units (MW or t/h of input), while process capex is
+    quoted per tonne of annual *output* capacity, so scale by output per unit
+    of p0 and hours per year. Quotes are taken as nameplate (8760 h) annual
+    capacity — at eyeball fidelity the distinction from availability-derated
+    quotes is noise.
+    """
+    per_t_per_year = (
+        annuity_factor(wacc, cfg["lifetime_years"]) * cfg["capex_per_t_per_year_eur"]
+        + cfg["opex_per_t_per_year_eur"]
+    )
+    return per_t_per_year * output_t_per_p0_unit * HOURS_PER_YEAR
+
+
+def _add_dri_link(
+    n: pypsa.Network, plant: dict, dri_cfg: dict, wacc: float, elec_bus: str
 ) -> None:
-    """Add an unconstrained grid-import generator priced at the hourly `price_series`."""
+    """DRI shaft: hydrogen (MW LHV) → sponge iron (t/h), drawing shaft electricity.
+
+    `efficiency` converts MWh H2 into t iron via the plant's H2 intensity;
+    `efficiency2` (negative) withdraws shaft electricity in fixed proportion.
+    Ore cost enters as marginal_cost, converted from €/t iron to per-MWh-H2 (p0).
+    """
+    t_iron_per_mwh_h2 = 1000.0 / (
+        plant["h2_intensity_kg_per_t_dri"] * H2_LHV_KWH_PER_KG
+    )
+    n.add(
+        "Link",
+        "dri",
+        bus0="hydrogen",
+        bus1="iron",
+        bus2=elec_bus,
+        carrier="dri",
+        p_nom_extendable=True,
+        efficiency=t_iron_per_mwh_h2,
+        efficiency2=-dri_cfg["el_mwh_per_t"] * t_iron_per_mwh_h2,
+        p_min_pu=dri_cfg["p_min_pu"],
+        capital_cost=_process_capital_cost(dri_cfg, wacc, t_iron_per_mwh_h2),
+        marginal_cost=dri_cfg["ore_eur_per_t"] * t_iron_per_mwh_h2,
+    )
+
+
+def _add_gas_supply(n: pypsa.Network, ng_cfg: dict) -> None:
+    """Unlimited natural-gas supply (MW CH4 LHV) at a flat price on the gas bus.
+
+    An extendable zero-capex generator, so the optimiser draws freely; the
+    marginal cost is the gas price plus any carbon price on combustion CO2.
+    Kept as a generator (not a link marginal cost) so the gas bill lands in
+    its own cost group in reports.
+    """
+    marginal = ng_cfg["price_eur_per_mwh"] + (
+        ng_cfg["co2_t_per_mwh"] * ng_cfg["co2_price_eur_per_t"]
+    )
+    n.add(
+        "Generator",
+        "gas_supply",
+        bus="gas",
+        carrier="gas",
+        p_nom_extendable=True,
+        capital_cost=0.0,
+        marginal_cost=marginal,
+    )
+
+
+def _add_ng_dri_link(
+    n: pypsa.Network, dri_ng_cfg: dict, wacc: float, elec_bus: str
+) -> None:
+    """NG-DRI shaft: natural gas (MW LHV) → sponge iron (t/h), drawing shaft electricity.
+
+    Mirrors the H2 shaft (`_add_dri_link`) with gas as the reductant/fuel; the
+    gas itself is priced on the gas_supply generator, so only ore enters here
+    as marginal cost.
+    """
+    t_iron_per_mwh_gas = 1.0 / dri_ng_cfg["gas_mwh_per_t"]
+    n.add(
+        "Link",
+        "dri_ng",
+        bus0="gas",
+        bus1="iron",
+        bus2=elec_bus,
+        carrier="dri_ng",
+        p_nom_extendable=True,
+        efficiency=t_iron_per_mwh_gas,
+        efficiency2=-dri_ng_cfg["el_mwh_per_t"] * t_iron_per_mwh_gas,
+        p_min_pu=dri_ng_cfg["p_min_pu"],
+        capital_cost=_process_capital_cost(dri_ng_cfg, wacc, t_iron_per_mwh_gas),
+        marginal_cost=dri_ng_cfg["ore_eur_per_t"] * t_iron_per_mwh_gas,
+    )
+
+
+def _add_eaf_link(n: pypsa.Network, eaf_cfg: dict, wacc: float, elec_bus: str) -> None:
+    """EAF: iron (t/h) → steel (t/h), drawing melting electricity.
+
+    Per-t-steel quotes (electricity, consumables, capex) are scaled by the
+    iron→steel yield onto the link's p0 side (t/h iron).
+    """
+    t_steel_per_t_iron = 1.0 / eaf_cfg["iron_t_per_t_steel"]
+    n.add(
+        "Link",
+        "eaf",
+        bus0="iron",
+        bus1="steel",
+        bus2=elec_bus,
+        carrier="eaf",
+        p_nom_extendable=True,
+        efficiency=t_steel_per_t_iron,
+        efficiency2=-eaf_cfg["el_mwh_per_t"] * t_steel_per_t_iron,
+        p_min_pu=eaf_cfg["p_min_pu"],
+        capital_cost=_process_capital_cost(eaf_cfg, wacc, t_steel_per_t_iron),
+        marginal_cost=eaf_cfg["consumables_eur_per_t"] * t_steel_per_t_iron,
+    )
+
+
+def _add_moe_link(
+    n: pypsa.Network, moe_cfg: dict, ladle_cfg: dict, wacc: float, elec_bus: str
+) -> None:
+    """Molten oxide electrolysis: electricity (MW) → liquid steel (t/h).
+
+    Ladle metallurgy is folded into the same link (its capex/opex/electricity
+    added on, sharing the MOE lifetime): the two steps are rigidly coupled with
+    no storable intermediate, so a separate link would size identically.
+    """
+    el_mwh_per_t = moe_cfg["el_mwh_per_t"] + ladle_cfg["el_mwh_per_t"]
+    t_steel_per_mwh = 1.0 / el_mwh_per_t
+    per_t_per_year = annuity_factor(wacc, moe_cfg["lifetime_years"]) * (
+        moe_cfg["capex_per_t_per_year_eur"] + ladle_cfg["capex_per_t_per_year_eur"]
+    ) + (moe_cfg["opex_per_t_per_year_eur"] + ladle_cfg["opex_per_t_per_year_eur"])
+    n.add(
+        "Link",
+        "moe",
+        bus0=elec_bus,
+        bus1="steel",
+        carrier="moe",
+        p_nom_extendable=True,
+        efficiency=t_steel_per_mwh,
+        p_min_pu=moe_cfg["p_min_pu"],
+        capital_cost=per_t_per_year * t_steel_per_mwh * HOURS_PER_YEAR,
+        marginal_cost=moe_cfg["ore_eur_per_t"] * t_steel_per_mwh,
+    )
+
+
+def _add_electrowinning_link(
+    n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str
+) -> None:
+    """Iron electrowinning: electricity (MW) → electrolytic iron plates (t/h)."""
+    t_iron_per_mwh = 1.0 / ew_cfg["el_mwh_per_t"]
+    n.add(
+        "Link",
+        "electrowinning",
+        bus0=elec_bus,
+        bus1="iron",
+        carrier="electrowinning",
+        p_nom_extendable=True,
+        efficiency=t_iron_per_mwh,
+        p_min_pu=ew_cfg["p_min_pu"],
+        capital_cost=_process_capital_cost(ew_cfg, wacc, t_iron_per_mwh),
+        marginal_cost=ew_cfg["ore_eur_per_t"] * t_iron_per_mwh,
+    )
+
+
+def _add_iron_store(n: pypsa.Network, store_cfg: dict, wacc: float) -> None:
+    """Add the extendable, cyclic iron stockpile (t) on the iron bus.
+
+    Deliberately cheap-but-not-free (see assumptions) so the optimal stockpile
+    size is unique and meaningful in reports.
+    """
+    cap_cost = annuity_factor(wacc, store_cfg["lifetime_years"]) * store_cfg["capex_per_t_eur"]
+    n.add(
+        "Store",
+        "iron_store",
+        bus="iron",
+        carrier="iron",
+        e_nom_extendable=True,
+        e_cyclic=True,
+        capital_cost=cap_cost,
+        marginal_cost=0.0,
+    )
+
+
+def _add_steel_store(
+    n: pypsa.Network, store_cfg: dict, wacc: float, steel_t_per_h: float
+) -> None:
+    """Add the extendable, cyclic finished-steel inventory buffer (t) on the steel bus.
+
+    The supply-side representation of periodic demand: production flexes to fill
+    inventory while the flat steel load draws it down, so the plant decouples
+    hourly production from steady delivery by carrying stock — demand itself
+    stays fixed. `max_weeks` caps the buffer at a realistic inventory horizon so
+    the flexibility can't degenerate into whole-year arbitrage; the annuitised
+    per-tonne capex keeps the built size unique and reportable.
+    """
+    cap_cost = annuity_factor(wacc, store_cfg["lifetime_years"]) * store_cfg["capex_per_t_eur"]
+    e_nom_max = steel_t_per_h * store_cfg["max_weeks"] * 7 * 24
+    n.add(
+        "Store",
+        "steel_store",
+        bus="steel",
+        carrier="steel",
+        e_nom_extendable=True,
+        e_nom_max=e_nom_max,
+        e_cyclic=True,
+        capital_cost=cap_cost,
+        marginal_cost=0.0,
+    )
+
+
+def _add_grid_import(
+    n: pypsa.Network,
+    price_series: pd.Series,
+    grid_cfg: dict,
+    wacc: float,
+    bus: str = "electricity",
+) -> None:
+    """Add an extendable grid-import generator with connection charges.
+
+    The optimiser sizes the connection: capacity pays annuitised connection
+    capex plus the yearly per-MW fee; imported energy pays the hourly day-ahead
+    price plus the volumetric fee. Import-only — selling surplus to the grid is
+    deliberately out of scope for now.
+    """
+    cap_cost = (
+        annuity_factor(wacc, grid_cfg["connection_lifetime_years"])
+        * grid_cfg["connection_capex_eur_per_mw"]
+        + grid_cfg["fee_eur_per_mw_per_year"]
+    )
     n.add(
         "Generator",
         "grid_import",
         bus=bus,
         carrier="AC",
-        p_nom=1e6,           # unconstrained import
-        p_nom_extendable=False,
-        marginal_cost=price_series,
-        capital_cost=0.0,
+        p_nom_extendable=True,
+        capital_cost=cap_cost,
+        marginal_cost=price_series + grid_cfg["fee_eur_per_mwh"],
     )
 
 

@@ -112,8 +112,8 @@ def contrast_shades(n: int, max_lighten: float = 0.75) -> list[float]:
 # ---- Display toggles -------------------------------------------------------
 # Set either to False to hide that element globally. When SHOW_DOT is False
 # the title shifts flush to the left header edge (no indent for the dot gap).
-SHOW_DOT = True    # leading brand dot to the left of the title
-SHOW_LOGO = True   # FCA monogram in the bottom-right corner
+SHOW_DOT = False   # leading brand dot to the left of the title
+SHOW_LOGO = False  # FCA monogram in the bottom-right corner
 
 
 # ---- Layout template -----------------------------------------------------
@@ -611,7 +611,7 @@ def apply_logo(fig, fig_width: int, fig_height: int,
         return
     plot_w_px = fig_width - margin_l - margin_r
     plot_h_px = fig_height - margin_t - margin_b
-    logo_h_px = 22
+    logo_h_px = 40
     fig.add_layout_image(
         source=logo["source"], xref="paper", yref="paper",
         xanchor="right", yanchor="bottom",

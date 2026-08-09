@@ -1,0 +1,781 @@
+<style>
+/*FONT_CSS*/
+  .ct-root{
+    --paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8; --print:#FFFFFF;
+    --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7;
+    --border:#D6DBDF; --hair:#E4E9ED;
+    --accent:#0A5680; --accent-2:#0293D2;
+    --alt:#0A5680; --onAlt:#FFFFFF; --dash:#0293D2; --onDash:#062430;
+    --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);
+    --tw:"Titillium Web",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:"SF Mono",ui-monospace,"Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    .ct-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
+      --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
+      --accent:#0293D2; --accent-2:#70D2F0; --alt:#91C096; --onAlt:#0B1A12;
+      --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
+  }
+  :root[data-theme="dark"] .ct-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
+    --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
+    --accent:#0293D2; --accent-2:#70D2F0; --alt:#91C096; --onAlt:#0B1A12;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
+  :root[data-theme="light"] .ct-root{--paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8;
+    --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7; --border:#D6DBDF; --hair:#E4E9ED;
+    --accent:#0A5680; --accent-2:#0293D2; --alt:#0A5680; --onAlt:#FFFFFF;
+    --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);}
+
+  .ct-root{background:var(--paper);color:var(--ink);font-family:var(--tw);
+    line-height:1.5;min-height:100vh;-webkit-font-smoothing:antialiased;}
+  .ct-root *{box-sizing:border-box;}
+  .ct-wrap{max-width:1480px;margin:0 auto;padding:30px 24px 68px;}
+
+  .ct-head{display:flex;justify-content:space-between;align-items:flex-end;
+    gap:24px;flex-wrap:wrap;padding-bottom:4px;}
+  .ct-brand{display:flex;align-items:center;gap:11px;margin-bottom:10px;}
+  .ct-dot{width:12px;height:12px;border-radius:50%;background:var(--accent);flex:none;}
+  .ct-brand span{font-family:var(--mono);font-size:11px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--accent-2);font-weight:600;}
+  .ct-title{font-size:clamp(24px,3.2vw,34px);font-weight:700;letter-spacing:-.02em;
+    margin:0;text-wrap:balance;line-height:1.06;}
+  .ct-sub{color:var(--muted);font-size:14px;margin:9px 0 0;max-width:74ch;}
+  .ct-meta{font-family:var(--mono);font-size:11px;color:var(--faint);
+    text-align:right;line-height:1.7;}
+
+  /* scenario matrix */
+  .ct-mx{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:12px 18px;background:var(--panel);border:1px solid var(--border);
+    border-radius:12px;box-shadow:var(--shadow);padding:15px 18px;margin-top:20px;}
+  .ct-ax{display:flex;flex-direction:column;gap:6px;min-width:0;}
+  .mxlab{font-family:var(--mono);font-size:10px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);font-weight:600;}
+  .ct-pills{display:flex;gap:3px;background:var(--panel-2);padding:3px;
+    border-radius:9px;border:1px solid var(--border);flex-wrap:wrap;}
+  .ct-pill{border:0;background:transparent;color:var(--muted);font-family:var(--tw);
+    font-size:13px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer;
+    line-height:1.2;}
+  .ct-pill:hover{color:var(--ink);}
+  .ct-pill[aria-pressed="true"]{background:var(--accent);color:#fff;}
+  .ct-pill:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;}
+  .ct-pill:disabled{opacity:.3;cursor:not-allowed;}
+  .ct-note{font-size:12px;color:var(--faint);margin:9px 2px 0;font-family:var(--mono);}
+
+  .ct-legend{display:flex;gap:26px;flex-wrap:wrap;margin:20px 0 0;}
+  .ct-key{display:flex;gap:10px;align-items:flex-start;max-width:52ch;}
+  .chip{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.12em;
+    text-transform:uppercase;border-radius:5px;padding:3px 8px;flex:none;line-height:1.6;}
+  .ct-key.alt .chip,.ct-col.alt .chip{background:var(--alt);color:var(--onAlt);}
+  .ct-key.dash .chip,.ct-col.dash .chip{background:var(--dash);color:var(--onDash);}
+  .ct-key p{margin:0;font-size:12.5px;color:var(--muted);}
+
+  .ct-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    box-shadow:var(--shadow);margin-top:20px;overflow:hidden;}
+  .ct-panel-h{padding:16px 18px 2px;}
+  .ct-panel-h h2{font-size:15px;font-weight:700;margin:0;letter-spacing:-.01em;}
+  .ct-panel-h .unit,.ct-panel-h .hint{font-size:11.5px;font-weight:400;
+    color:var(--muted);letter-spacing:0;}
+  .ct-panel-h p{font-size:12.5px;color:var(--muted);margin:4px 0 0;max-width:104ch;}
+
+  .ct-pair{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;padding:8px 18px 18px;}
+  @media (max-width:1040px){.ct-pair{grid-template-columns:1fr;}}
+  .ct-col{min-width:0;}
+  .ct-col-h{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:8px 0 2px;
+    border-bottom:1px solid var(--hair);margin-bottom:6px;}
+  .ct-col-h .nm{font-size:13px;font-weight:700;letter-spacing:-.01em;}
+  .ct-col-h .src{font-family:var(--mono);font-size:10px;color:var(--faint);
+    margin-left:auto;white-space:nowrap;}
+  .ct-plot{width:100%;}
+  .ct-single{padding:8px 18px 18px;}
+  .ct-caps{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+    gap:4px 20px;padding:8px 18px 18px;}
+  .ct-empty{padding:34px 18px;color:var(--faint);font-size:13px;text-align:center;}
+
+  .ct-root code{font-family:var(--mono);font-size:.88em;background:var(--panel-2);
+    border:1px solid var(--hair);border-radius:4px;padding:0 4px;}
+  .ct-foot{margin-top:26px;padding-top:14px;border-top:1px solid var(--border);
+    font-size:11.5px;color:var(--faint);line-height:1.6;}
+</style>
+
+<div class="ct-root">
+ <div class="ct-wrap">
+  <header class="ct-head">
+    <div>
+      <div class="ct-brand"><span class="ct-dot"></span><span>Cost breakdown · two taxonomies</span></div>
+      <h1 class="ct-title">Plotting alternatives</h1>
+      <p class="ct-sub">Two ways to cut the same levelised cost, side by side: the alternative
+        taxonomy next to the one the dashboard already uses. Both are drawn from the same results
+        and both close exactly on the total, so all that differs is where the cuts fall. Hover any
+        segment for the inputs behind it.</p>
+    </div>
+    <div class="ct-meta" id="ct-meta"></div>
+  </header>
+
+  <div class="ct-mx" id="ct-mx"></div>
+  <p class="ct-note" id="ct-clamp"></p>
+
+  <div class="ct-legend">
+    <div class="ct-key alt"><span class="chip">Alternative</span>
+      <p>One hydrogen block, process plant split into capex and O&amp;M, electricity split into an
+        EAF-melt share and the rest. Reconstructed from the model's cost groups.</p></div>
+    <div class="ct-key dash"><span class="chip">Dashboard</span>
+      <p>The cost groups the pipeline reports, which the rest of the dashboard already plots.</p></div>
+  </div>
+
+  <section class="ct-panel">
+    <div class="ct-panel-h">
+      <h2>LCOS — levelised cost of steel <span class="unit">· € / t liquid steel</span></h2>
+      <p>Where the choice between the two actually changes the picture. Both stacks sum to the same
+        LCOS per route; the alternative folds the electrolyser, the H₂ buffer and the electricity
+        that made the hydrogen into a single block, while the dashboard keeps them apart.</p>
+    </div>
+    <div class="ct-pair">
+      <div class="ct-col alt">
+        <div class="ct-col-h"><span class="chip">Alternative</span>
+          <span class="src">reconstructed</span></div>
+        <div class="ct-plot" id="plot-lcos-alt"></div>
+      </div>
+      <div class="ct-col dash">
+        <div class="ct-col-h"><span class="chip">Dashboard</span>
+          <span class="src">report columns</span></div>
+        <div class="ct-plot" id="plot-lcos-dash"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ct-panel">
+    <div class="ct-panel-h">
+      <h2>LCOE — levelised cost of electricity <span class="unit">· € / MWh delivered</span></h2>
+      <p>Each route sizes its own electricity system, so LCOE is a per-route number. The two
+        taxonomies differ only in that the alternative separates renewables capital from its fixed
+        O&amp;M — shown side by side anyway, so the pair can be read the same way throughout.</p>
+    </div>
+    <div class="ct-pair">
+      <div class="ct-col alt">
+        <div class="ct-col-h"><span class="chip">Alternative</span>
+          <span class="src">reconstructed</span></div>
+        <div class="ct-plot" id="plot-lcoe-alt"></div>
+      </div>
+      <div class="ct-col dash">
+        <div class="ct-col-h"><span class="chip">Dashboard</span>
+          <span class="src">report columns</span></div>
+        <div class="ct-plot" id="plot-lcoe-dash"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ct-panel">
+    <div class="ct-panel-h">
+      <h2>LCOH — levelised cost of hydrogen <span class="unit">· € / kg H₂</span></h2>
+      <p>Only the routes that build an electrolyser have one. The alternative splits the
+        electrolyser three ways — capital, fixed O&amp;M and the water/variable opex it consumes.</p>
+    </div>
+    <div class="ct-pair">
+      <div class="ct-col alt">
+        <div class="ct-col-h"><span class="chip">Alternative</span>
+          <span class="src">reconstructed</span></div>
+        <div class="ct-plot" id="plot-lcoh-alt"></div>
+      </div>
+      <div class="ct-col dash">
+        <div class="ct-col-h"><span class="chip">Dashboard</span>
+          <span class="src">report columns</span></div>
+        <div class="ct-plot" id="plot-lcoh-dash"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ct-panel">
+    <div class="ct-panel-h">
+      <h2>Every part the model actually has
+        <span class="unit">· € / t liquid steel</span></h2>
+      <p>The same LCOS as above, cut as finely as the model allows — each plant's annualised
+        capital apart from its fixed O&amp;M, the gas bill apart from any carbon price, the
+        electrolyser's water apart from its capital, renewables by technology, the battery's power
+        apart from its energy, the grid connection apart from the energy it carries. Hover a
+        segment for the quotes and quantities that produce it, its share of the group it belongs
+        to, and its share of LCOS. Parts too thin to put a pointer on are folded into the largest
+        band of their own group, so nothing here is unreachable.</p>
+    </div>
+    <div class="ct-single"><div class="ct-plot" id="plot-detail"></div></div>
+  </section>
+
+  <section class="ct-panel">
+    <div class="ct-panel-h">
+      <h2>Built capacity <span class="hint">· for reference — hover bars for capacity factors</span></h2>
+      <p>What the optimiser actually built for each route in this scenario. Grouped rather than
+        stacked, so the difference in how each route splits its build is what you read off,
+        instead of the total.</p>
+    </div>
+    <div class="ct-caps" id="ct-caps"></div>
+  </section>
+
+  <p class="ct-foot" id="ct-foot"></p>
+ </div>
+</div>
+
+<script>/*PLOTLY_JS*/</script>
+<script>
+const PAYLOAD = /*PAYLOAD_JSON*/;
+(function(){
+  const {cases:CASES, gas:GAS, template:FCA, geos:GEOS, years:YEARS, geo_names:GN,
+    route_order:ROUTE_ORDER, route_label:RLAB, cost_groups:COST_GROUPS,
+    cap_panels:CAP_PANELS, variant_routes:VARIANT_ROUTES, variant_label:VLAB,
+    leaf_specs:LEAF_SPECS, leaf_groups:LEAF_GROUPS, alt_lcos_bands:ALT_LCOS,
+    alt_lcoe_bands:ALT_LCOE, dash_lcoe_bands:DASH_LCOE, alt_lcoh_bands:ALT_LCOH,
+    dash_lcoh_bands:DASH_LCOH, h2_lhv_kwh_per_kg:H2LHV} = PAYLOAD;
+
+  const CONF = {responsive:true, displaylogo:false,
+    modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
+  // Charts sit on a constant white "print" surface in both themes, the convention the
+  // v2 dashboard uses — a screenshot is publication-ready either way.
+  const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
+  // The detail chart carries up to ~31 bands, so it is given far more vertical room
+  // than the pair charts — the thinnest bands still need to be worth hovering.
+  const PAIR_H = 430, DETAIL_H = 1180, CAP_H = 340;
+  // Below this many pixels a stacked band is not a usable pointer target, so its
+  // hover detail is folded into a neighbour instead (see renderDetail).
+  const THIN_PX = 9;
+
+  // ---- scenario state -------------------------------------------------
+  // Routes are the bars on every chart, so the matrix moves everything else.
+  const AXES = ["geo","year","grid","cf","variant"];
+  const AXLAB = {geo:"Geography", year:"Weather year", grid:"Grid",
+                 cf:"Capacity factor", variant:"Sensitivity"};
+  const OPTS = {
+    geo:  GEOS.map(g=>[g, GN[g]||g]),
+    year: YEARS.map(y=>[String(y), String(y)]),
+    grid: [["grid","Grid"],["nogrid","Islanded"]],
+    cf:   [["avg","Average CF"],["p95","Best-site P95"]],
+    variant: Object.keys(VLAB).map(v=>[v, VLAB[v]]),
+  };
+  const S = {geo:"DE", year:"2023", grid:"grid", cf:"avg", variant:"base"};
+
+  const proj = s => `${s.geo}-${s.year}-${s.grid}`;
+  const projectHas = s => !!CASES[proj(s)];
+  const geoName = g => GN[g]||g;
+  const variantOk = (route,v) => v==="base" || (VARIANT_ROUTES[v]||[]).includes(route);
+  // ng-dri-eaf has no renewables, so it carries no capacity-factor variants.
+  const cfKey = (s,route) => route==="ng-dri-eaf" ? "na" : s.cf;
+  function recFor(s, route){
+    const rc = CASES[proj(s)]?.[route]; if(!rc) return null;
+    const v = rc[variantOk(route,s.variant) ? s.variant : "base"] || rc["base"];
+    return v ? (v[cfKey(s,route)] || null) : null;
+  }
+  // The routes this scenario can actually plot, in the canonical order.
+  const routesAt = s => ROUTE_ORDER.filter(r => recFor(s,r));
+  const gasPrice = s => GAS[s.geo]?.[s.year]?.[s.grid];
+
+  // ---- formatting -----------------------------------------------------
+  const nf = (v,d) => v.toLocaleString(undefined,{minimumFractionDigits:d, maximumFractionDigits:d});
+  const amount = (v,unit,d=0) => v==null ? "n/a" : nf(v,d)+" "+unit;
+  // "41 €/t (6% of LCOS)" — `shown` lets a technology's own unit cost carry the share
+  // of the system total its contribution represents.
+  function amountOf(v,total,basis,unit,d=0,shown){
+    let t = amount(shown!=null?shown:v, unit, d);
+    if(total && v!=null) t += ` (${Math.round(v/total*100)}% of ${basis})`;
+    return t;
+  }
+  const pct = (v,total) => (total && v!=null) ? shareText(v,total)+"%" : "n/a";
+  // A leaf worth a fraction of a percent should not read as "0%" — say "<1" instead,
+  // which on a 31-band chart is most of what the eye cannot resolve anyway.
+  function shareText(v,total){
+    if(!total || v==null) return "0";
+    const p = v/total*100;
+    if(p>0 && p<0.5) return "<1";
+    if(p<0 && p>-0.5) return ">-1";
+    return String(Math.round(p));
+  }
+
+  // ---- plot helpers ---------------------------------------------------
+  const base = extra => Object.assign({template:FCA, autosize:true,
+    paper_bgcolor:PRINT.paper, plot_bgcolor:PRINT.paper, barmode:"stack",
+    font:{family:"'Titillium Web',sans-serif", color:PRINT.ink, size:12}}, extra);
+  const axis = extra => Object.assign({gridcolor:PRINT.grid, linecolor:PRINT.border,
+    tickfont:{color:PRINT.muted, size:11.5}, zeroline:false}, extra);
+
+  /* Build one stacked chart.
+     `bands`  [[key,label,colour], ...] bottom -> top
+     `values` (key, route) -> number
+     `lines`  (key, route) -> [[leading text, formatted value], ...]  (hover detail)
+     `totals` route -> the reported levelised total, for each segment's share
+     Each point gets its own hovertemplate, so a route missing a component omits the
+     line instead of printing "n/a"; customdata is padded to a rectangle and every
+     template only reaches the indices its own point filled. */
+  function stacked(el, routes, bands, values, lines, totals, opt){
+    if(!routes.length){ el.innerHTML = `<div class="ct-empty">${opt.empty||"Nothing solved here."}</div>`; return; }
+    const X = routes.map(r=>RLAB[r]||r), traces=[];
+    bands.forEach(([key,label,colour])=>{
+      const y = routes.map(r=>values(key,r)||0);
+      if(!y.some(v=>v)) return;
+      const templates=[], cd=[];
+      routes.forEach((r,i)=>{
+        const detail = lines(key,r)||[];
+        const share = shareText(y[i], totals[i]);
+        let t = `${label}: %{y:${opt.fmt}} ${opt.unit} (%{customdata[0]}% of ${opt.basis})`;
+        detail.forEach((d,j)=>{ t += `<br>${d[0]} %{customdata[${j+1}]}`; });
+        templates.push(t+"<extra></extra>");
+        cd.push([share, ...detail.map(d=>d[1])]);
+      });
+      const w = Math.max(...cd.map(r=>r.length));
+      traces.push({type:"bar", x:X, y, name:label, marker:{color:colour},
+        customdata:cd.map(r=>r.concat(Array(w-r.length).fill(""))), hovertemplate:templates});
+    });
+    if(!traces.length){ el.innerHTML = `<div class="ct-empty">${opt.empty||"Nothing to plot."}</div>`; return; }
+
+    // Place the annotation on top of the stack, but print the *reported* levelised
+    // total. The bands are rounded for the payload, and the two taxonomies round a
+    // different number of them — summing here would print 108.4 on one side of the
+    // pair and 108.5 on the other for the same scenario.
+    const sums = X.map((_,i)=>traces.reduce((s,t)=>s+(t.y[i]||0),0));
+    const shown = X.map((_,i)=>totals[i]!=null ? totals[i] : sums[i]);
+    const tTpl=[], tCd=[];
+    X.forEach((_,i)=>{
+      const detail = (opt.totalLines?opt.totalLines(routes[i]):[])||[];
+      // customdata[0] carries the reported total for the same reason the printed
+      // label does — %{y} here would be the sum of the rounded bands.
+      let t = `${opt.totalLabel}: %{customdata[0]} ${opt.unit}`;
+      detail.forEach((d,j)=>{ t += `<br>${d[0]} %{customdata[${j+1}]}`; });
+      tTpl.push(t+"<extra></extra>");
+      tCd.push([nf(shown[i], opt.totalDp!=null?opt.totalDp:0), ...detail.map(d=>d[1])]);
+    });
+    const w = Math.max(1, ...tCd.map(r=>r.length));
+    const totalTrace = {type:"scatter", x:X, y:sums, mode:"text",
+      text:shown.map(v=>nf(v, opt.totalDp!=null?opt.totalDp:0)),
+      textposition:"top center", cliponaxis:false, showlegend:false,
+      textfont:{size:13, color:PRINT.ink}};
+    // On a finely split chart most bands are only a pixel or two tall, and the
+    // totals annotation sitting on top of the stack wins the "closest point" race
+    // for them. There the annotation gives up its own hover so every band stays
+    // reachable — the total is printed above the bar regardless.
+    if(opt.totalHover === false){
+      totalTrace.hoverinfo = "skip";
+    }else{
+      totalTrace.customdata = tCd.map(r=>r.concat(Array(w-r.length).fill("")));
+      totalTrace.hovertemplate = tTpl;
+    }
+    traces.push(totalTrace);
+
+    Plotly.react(el, traces, base({
+      height:opt.height, bargap:opt.bargap||0.4,
+      margin:{l:58, r:16, t:26, b:opt.bottom||120},
+      legend:{orientation:"h", x:0, y:opt.legendY||-0.16, xanchor:"left", yanchor:"top",
+        traceorder:"reversed", bgcolor:"rgba(0,0,0,0)",
+        font:{size:opt.legendSize||11.5, color:PRINT.muted}},
+      xaxis:axis({type:"category", automargin:true, tickfont:{size:12, color:PRINT.muted}}),
+      yaxis:axis({rangemode:"tozero", title:{text:opt.yTitle, font:{size:11, color:PRINT.muted}}}),
+    }), CONF);
+  }
+
+  // ---- shared hover detail --------------------------------------------
+  // The same lines the scenario-comparison tab shows under each segment.
+  const lp = (rec,k) => rec?.lcoe_parts?.[k] ?? null;     // €/MWh contribution to LCOE
+  const lo = (rec,k) => rec?.lcoe_own?.[k] ?? null;       // the technology's own LCOE
+  const lh = (rec,k) => rec?.lcoh_parts?.[k] ?? null;     // €/MWh LHV contribution to LCOH
+  const cd = (rec,k) => rec?.cost_detail?.[k] ?? null;    // €/t steel cost detail
+
+  function lcoeTechLines(rec, withHeadline){
+    const out=[];
+    if(withHeadline && (lo(rec,"renewables")!=null || lp(rec,"renewables")!=null))
+      out.push(["renewables:", amountOf(lp(rec,"renewables"), rec.lcoe, "LCOE", "€/MWh", 1, lo(rec,"renewables"))]);
+    [["solar","· solar"],["wind_onshore","· wind onshore"],["wind_offshore","· wind offshore"]]
+      .forEach(([k,lab])=>{ if(lp(rec,k)!=null)
+        out.push([lab, amountOf(lp(rec,k), rec.lcoe, "LCOE", "€/MWh", 1, lo(rec,k))]); });
+    return out;
+  }
+  function gridLines(rec){
+    const price=rec.grid_price, fee=rec.grid_fee, conn=rec.grid_conn_imported;
+    if([price,fee,conn].every(v=>v==null)) return [];
+    const delivered=(price||0)+(fee||0)+(conn||0);
+    const contrib=(lp(rec,"grid_connection")||0)+(lp(rec,"grid_energy")||0);
+    const out=[["grid electricity:", amountOf(contrib||null, rec.lcoe, "LCOE", "€/MWh", 1, delivered)]];
+    if(price!=null) out.push(["· market price", amount(price,"€/MWh",1)]);
+    if(fee!=null)   out.push(["· volumetric fee", amount(fee,"€/MWh",1)]);
+    if(conn!=null)  out.push(["· connection", amount(conn,"€/MWh",1)]);
+    return out;
+  }
+  function lcohLines(rec, withHeadline){
+    const out=[];
+    if(withHeadline && rec.lcoh!=null) out.push(["hydrogen LCOH:", amount(rec.lcoh,"€/MWh LHV",1)]);
+    [["electrolyser","· electrolyser"],["electricity","· electricity"],["storage","· H₂ storage"]]
+      .forEach(([k,lab])=>{ if(lh(rec,k)!=null)
+        out.push([lab, amountOf(lh(rec,k), rec.lcoh, "LCOH", "€/MWh LHV", 1)]); });
+    return out;
+  }
+  function oreLines(rec){
+    const out=[];
+    if(cd(rec,"ore")!=null) out.push(["· iron ore", amountOf(cd(rec,"ore"), rec.lcos, "LCOS", "€/t")]);
+    if(cd(rec,"consumables")!=null)
+      out.push(["· EAF consumables (electrodes, fluxes, alloys)",
+                amountOf(cd(rec,"consumables"), rec.lcos, "LCOS", "€/t")]);
+    return out;
+  }
+  const PLANT_LABELS = [["dri","H2-DRI shaft"],["dri_ng","NG-DRI shaft"],["moe","MOE"],
+    ["ladle","Ladle metallurgy"],["electrowinning","Electrowinning"],["eaf","EAF"]];
+  function plantLines(rec){
+    return PLANT_LABELS.filter(([k])=>cd(rec,k)!=null)
+      .map(([k,lab])=>["· "+lab, amountOf(cd(rec,k), rec.lcos, "LCOS", "€/t")]);
+  }
+  function gasLines(rec, s){
+    return rec.ng_gwh>0 ? [["gas price:", amount(gasPrice(s),"€/MWh LHV",1)]] : [];
+  }
+  const totalsLines = rec => [
+    ["electricity (LCOE):", amount(rec.lcoe,"€/MWh",1)],
+    ["hydrogen (LCOH):", amount(rec.lcoh,"€/MWh LHV",1)],
+  ];
+
+  // ---- LCOS pair ------------------------------------------------------
+  function renderLcos(){
+    const routes = routesAt(S), recs = {};
+    routes.forEach(r=>recs[r]=recFor(S,r));
+    const totals = routes.map(r=>recs[r].lcos);
+
+    // alternative: the circulated bands, with the composite blocks explained
+    const altLines = (key, r) => {
+      const rec = recs[r], a = rec.alt || {}, L = rec.lcos;
+      if(key==="ore") return oreLines(rec);
+      if(key==="capex" || key==="fixed_om"){
+        // The per-plant detail is the same list either way; the band label says which
+        // half of each plant's annual cost is being shown.
+        return plantLines(rec).concat([["· of the plant total, this band is",
+          pct(a[key], (a.capex||0)+(a.fixed_om||0))]]);
+      }
+      if(key==="hydrogen"){
+        const out = rec.lcoh!=null ? [["hydrogen LCOH:", amount(rec.lcoh,"€/MWh LHV",1)]] : [];
+        [["_electrolyser","· electrolyser plant"],["_h2_buffer","· H₂ buffer"],
+         ["_hydrogen_electricity","· electricity to make the H₂"]].forEach(([k,lab])=>{
+          if(a[k]>0) out.push([lab, amountOf(a[k], L, "LCOS", "€/t")]); });
+        return out;
+      }
+      if(key==="eaf") return a.eaf>0 ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
+        ["· furnace demand", amount(a._eaf_mwh_per_t,"MWh/t steel",2)]] : [];
+      if(key==="rest") return [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
+        ["· electricity system, all in", amountOf(a._electricity_total, L, "LCOS", "€/t")],
+        ["· less the H₂ and EAF melt shares",
+         amount((a._hydrogen_electricity||0)+(a.eaf||0), "€/t")]];
+      if(key==="gas") return gasLines(rec, S);
+      if(key==="store") return storeLines(rec);
+      return [];
+    };
+    stacked(document.getElementById("plot-lcos-alt"), routes, ALT_LCOS,
+      (k,r)=>(recs[r].alt||{})[k], altLines, totals,
+      {unit:"€/t", fmt:",.0f", basis:"LCOS", height:PAIR_H, yTitle:"LCOS  (€ / t steel)",
+       totalLabel:"levelised cost of steel (LCOS)", totalLines:r=>totalsLines(recs[r])});
+
+    // dashboard: the reported groups, with the capex/O&M split in the process hover
+    const dashLines = (g, r) => {
+      const rec = recs[r], L = rec.lcos, a = rec.alt || {};
+      if(g==="process") return [
+        ["· annualised capex", amountOf(a.capex, L, "LCOS", "€/t")],
+        ["· fixed O&M", amountOf(a.fixed_om, L, "LCOS", "€/t")],
+      ].concat(plantLines(rec));
+      if(g==="ore_consumables") return oreLines(rec);
+      if(g==="gas") return gasLines(rec, S);
+      if(g==="electrolyser" || g==="h2_buffer") return lcohLines(rec, true);
+      if(g==="res") return lcoeTechLines(rec, true);
+      if(g==="battery") return lp(rec,"storage")!=null
+        ? [["storage:", amountOf(lp(rec,"storage"), rec.lcoe, "LCOE", "€/MWh", 1)]] : [];
+      if(g==="transmission") return lp(rec,"transmission")!=null
+        ? [["transmission:", amountOf(lp(rec,"transmission"), rec.lcoe, "LCOE", "€/MWh", 1)]] : [];
+      if(g==="grid") return gridLines(rec);
+      if(g==="iron_store" || g==="steel_store") return storeLines(rec, g);
+      return [];
+    };
+    stacked(document.getElementById("plot-lcos-dash"), routes,
+      COST_GROUPS.map(([g,lab,col])=>[g,lab,col]),
+      (g,r)=>(recs[r].costs||{})[g], dashLines, totals,
+      {unit:"€/t", fmt:",.0f", basis:"LCOS", height:PAIR_H, yTitle:"LCOS  (€ / t steel)",
+       totalLabel:"levelised cost of steel (LCOS)", totalLines:r=>totalsLines(recs[r])});
+  }
+  // The solid stores cost too little to round to a €/t band, so name their size too.
+  function storeLines(rec, only){
+    const out=[];
+    [["iron_store","· iron stockpile","iron_store_hours"],
+     ["steel_store","· steel inventory","steel_store_hours"]].forEach(([g,lab])=>{
+      if(only && g!==only) return;
+      const v = (rec.leaves||{})[g];
+      if(v==null) return;
+      const hours = (rec.caps||{})[g==="iron_store"?"iron_store_hours_steel":"steel_store_hours_steel"];
+      out.push([lab, amount(v,"€/t",2) + (hours!=null?` for ${nf(hours,0)} h of demand`:"")]);
+    });
+    return out;
+  }
+
+  // ---- LCOE / LCOH pairs ----------------------------------------------
+  function renderCarrier(metric){
+    const isLcoe = metric==="lcoe";
+    const routes = routesAt(S).filter(r=>{
+      const rec = recFor(S,r); return rec && (isLcoe ? rec.lcoe!=null : rec.lcoh!=null); });
+    const recs = {}; routes.forEach(r=>recs[r]=recFor(S,r));
+    // LCOH is charted per kg, which is how the mockup quoted it; the reports are per
+    // MWh LHV, so scale and restate the LHV figure in the hover.
+    const scale = isLcoe ? 1 : H2LHV/1000;
+    const totals = routes.map(r=>(isLcoe?recs[r].lcoe:recs[r].lcoh*scale));
+    const unit = isLcoe ? "€/MWh" : "€/kg";
+    const fmt = isLcoe ? ",.1f" : ",.2f";
+    const basis = isLcoe ? "LCOE" : "LCOH";
+
+    const detail = (key, r, alt) => {
+      const rec = recs[r];
+      if(isLcoe){
+        if(key==="res_capex"||key==="res_fom"||key==="renewables"){
+          const out = lcoeTechLines(rec, false);
+          if(lo(rec,"renewables")!=null)
+            out.unshift(["· own LCOE, over its own generation", amount(lo(rec,"renewables"),"€/MWh",1)]);
+          return out;
+        }
+        if(key==="grid_energy") return gridLines(rec).filter(l=>l[0]==="· market price"||l[0]==="· volumetric fee");
+        if(key==="grid_connection") return gridLines(rec).filter(l=>l[0]==="· connection");
+        return [];
+      }
+      const perMwh = (alt ? rec.alt_lcoh : rec.lcoh_parts)?.[key];
+      const out = perMwh!=null ? [["· on an LHV basis", amount(perMwh,"€/MWh LHV",1)]] : [];
+      if(key==="electricity") out.push(["· priced at LCOE", amount(rec.lcoe,"€/MWh",1)]);
+      return out;
+    };
+    const tLines = r => isLcoe
+      ? [["steel (LCOS):", amount(recs[r].lcos,"€/t")],
+         ["hydrogen (LCOH):", amount(recs[r].lcoh,"€/MWh LHV",1)]]
+      : [["on an LHV basis:", amount(recs[r].lcoh,"€/MWh LHV",1)],
+         ["electricity (LCOE):", amount(recs[r].lcoe,"€/MWh",1)]];
+
+    const common = {unit, fmt, basis, height:PAIR_H, totalDp:isLcoe?1:2,
+      yTitle:isLcoe?"LCOE  (€ / MWh)":"LCOH  (€ / kg H₂)",
+      totalLabel:isLcoe?"levelised cost of electricity (LCOE)":"levelised cost of hydrogen (LCOH)",
+      totalLines:tLines,
+      empty:isLcoe?"No electricity system in these routes.":"No route here builds an electrolyser."};
+    const altBands = isLcoe ? ALT_LCOE : ALT_LCOH;
+    const dashBands = isLcoe ? DASH_LCOE : DASH_LCOH;
+    stacked(document.getElementById(`plot-${metric}-alt`), routes, altBands,
+      (k,r)=>((isLcoe?recs[r].alt_lcoe:recs[r].alt_lcoh)||{})[k]*(isLcoe?1:scale),
+      (k,r)=>detail(k,r,true), totals, common);
+    stacked(document.getElementById(`plot-${metric}-dash`), routes, dashBands,
+      (k,r)=>((isLcoe?recs[r].lcoe_parts:recs[r].lcoh_parts)||{})[k]*(isLcoe?1:scale),
+      (k,r)=>detail(k,r,false), totals, common);
+  }
+
+  // ---- the maximally split chart --------------------------------------
+  function renderDetail(){
+    const el = document.getElementById("plot-detail");
+    const routes = routesAt(S), recs = {};
+    routes.forEach(r=>recs[r]=recFor(S,r));
+    const totals = routes.map(r=>recs[r].lcos);
+    const groupLabel = {}; LEAF_GROUPS.forEach(([k,lab])=>groupLabel[k]=lab);
+    // Every spec lists the same leaves in the same order — they differ only in the
+    // config quotes, which are per scenario. So take order, labels and colours from
+    // any of them, but each route's constants from the spec that route actually used.
+    const LEAF_SPEC = LEAF_SPECS[0];
+    const constantsFor = (key, r) =>
+      (LEAF_SPECS[recs[r].spec] || LEAF_SPEC).find(e=>e[0]===key)?.[4] || [];
+    // Only leaves some route in this scenario actually has — latent ones (offshore
+    // wind, a carbon price, HVDC) would otherwise sit in the legend drawing nothing.
+    const bands = LEAF_SPEC.filter(([key])=>routes.some(r=>(recs[r].leaves||{})[key]))
+                           .map(([key,label,,colour])=>[key,label,colour]);
+    const groupOf = {}, labelOf = {};
+    LEAF_SPEC.forEach(([key,label,group])=>{ groupOf[key]=group; labelOf[key]=label; });
+    const valueOf = (key,r) => (recs[r].leaves||{})[key] || 0;
+    const groupTotal = (group,r) => LEAF_SPEC.reduce(
+      (s,[k,,g])=> g===group ? s+valueOf(k,r) : s, 0);
+
+    // A band worth a euro or two on a 700 €/t bar is a pixel tall — real, but no
+    // pointer can land on it. Each one's detail is therefore folded into a band that
+    // *is* hoverable: the largest band of its own group, so it keeps its context, and
+    // only failing that the largest band on the bar. Nothing becomes unreachable.
+    const plotPx = DETAIL_H - 26 - 200;                 // minus the top/bottom margins
+    const thinLimit = THIN_PX * Math.max(...totals) * 1.06 / plotPx;
+    const folded = {};
+    routes.forEach(r=>{
+      const present = bands.map(([k])=>k).filter(k=>valueOf(k,r) > 0);
+      const hosts = {};
+      present.filter(k=>valueOf(k,r) >= thinLimit).forEach(k=>{
+        const g = groupOf[k];
+        if(!hosts[g] || valueOf(k,r) > valueOf(hosts[g],r)) hosts[g] = k;
+      });
+      const biggest = present.reduce((best,k)=>
+        (!best || valueOf(k,r) > valueOf(best,r)) ? k : best, null);
+      const map = {};
+      present.filter(k=>valueOf(k,r) < thinLimit).forEach(k=>{
+        const host = hosts[groupOf[k]] || biggest;
+        if(host && host !== k) (map[host] = map[host] || []).push(k);
+      });
+      folded[r] = map;
+    });
+
+    // One band's own detail: its share of its group, then the inputs behind it —
+    // the scenario's own quantities first, then the config quotes they multiply.
+    function ownLines(key, r, prefix){
+      const group = groupOf[key];
+      const out = [[`${prefix}of ${groupLabel[group]||group}`,
+                    `${pct(valueOf(key,r), groupTotal(group,r))} `
+                    + `(${amount(groupTotal(group,r),"€/t")} in total)`]];
+      ((recs[r].leaf_inputs||{})[key]||[]).forEach(([lab,v])=>out.push([prefix+lab, v]));
+      constantsFor(key, r).forEach(([lab,v])=>out.push([prefix+lab, v]));
+      return out;
+    }
+
+    const lines = (key, r) => {
+      const rec = recs[r];
+      if((rec.leaves||{})[key]==null) return [];
+      const out = ownLines(key, r, "· ");
+      const guests = folded[r][key] || [];
+      if(!guests.length) return out;
+      // Their own inputs go in too, unless that would run the tooltip past a
+      // readable length — then the value and both shares still come through.
+      const withInputs = guests.reduce((n,k)=>
+        n + 1 + ownLines(k, r, "").length, 0) <= 16;
+      out.push([`— folded in, too thin to hover:`,
+                `${guests.length} part${guests.length===1?"":"s"}`]);
+      guests.forEach(k=>{
+        out.push([`· ${labelOf[k]}`,
+                  `${amount(valueOf(k,r),"€/t",2)} `
+                  + `(${pct(valueOf(k,r), groupTotal(groupOf[k],r))} of `
+                  + `${groupLabel[groupOf[k]]||groupOf[k]}, ${pct(valueOf(k,r), rec.lcos)} of LCOS)`]);
+        if(withInputs) ownLines(k, r, "· · ").slice(1).forEach(l=>out.push(l));
+      });
+      return out;
+    };
+    stacked(el, routes, bands, (k,r)=>(recs[r].leaves||{})[k], lines, totals,
+      {unit:"€/t", fmt:",.1f", basis:"LCOS", height:DETAIL_H, bargap:0.45,
+       yTitle:"LCOS  (€ / t steel)", bottom:200, legendY:-0.075, legendSize:10.5,
+       totalHover:false, totalLabel:"levelised cost of steel (LCOS)"});
+  }
+
+  // ---- capacity, for reference ----------------------------------------
+  function renderCapacity(){
+    const host = document.getElementById("ct-caps");
+    const routes = routesAt(S), recs = {};
+    routes.forEach(r=>recs[r]=recFor(S,r));
+    host.innerHTML = "";
+    if(!routes.length){ host.innerHTML = `<div class="ct-empty">Nothing solved here.</div>`; return; }
+    CAP_PANELS.forEach(([title, unit, comps], idx)=>{
+      const col = document.createElement("div"); col.className = "ct-col";
+      col.innerHTML = `<div class="ct-col-h"><span class="nm">${title}</span></div>
+        <div class="ct-plot" id="plot-cap-${idx}"></div>`;
+      host.appendChild(col);
+      const X = routes.map(r=>RLAB[r]||r), traces=[];
+      comps.forEach(([key,label,colour])=>{
+        const y = routes.map(r=>(recs[r].caps||{})[key]||0);
+        if(!y.some(v=>v)) return;
+        // Capacity factor / utilisation where the payload carries one for this bar.
+        const cdRow = routes.map(r=>{ const f=(recs[r].cf||{})[key];
+          return f!=null ? `  ·  ${f}% utilised` : ""; });
+        traces.push({type:"bar", x:X, y, name:label, marker:{color:colour},
+          customdata:cdRow,
+          hovertemplate:`${label}: %{y:,.1f} ${unit}%{customdata}<extra></extra>`});
+      });
+      const el = document.getElementById(`plot-cap-${idx}`);
+      if(!traces.length){ el.innerHTML = `<div class="ct-empty">Nothing built.</div>`; return; }
+      // All three panels group rather than stack: the point of having them here is to
+      // compare how each route splits its build, and a stack hides that behind the
+      // total. Storage hours and process steps would not be additive anyway.
+      Plotly.react(el, traces, base({
+        barmode:"group", height:CAP_H, bargap:0.28, bargroupgap:0.08,
+        margin:{l:58, r:14, t:20, b:118},
+        legend:{orientation:"h", x:0, y:-0.2, xanchor:"left", yanchor:"top",
+          bgcolor:"rgba(0,0,0,0)", font:{size:10.5, color:PRINT.muted}},
+        xaxis:axis({type:"category", automargin:true, tickfont:{size:11, color:PRINT.muted}}),
+        yaxis:axis({rangemode:"tozero", title:{text:unit, font:{size:11, color:PRINT.muted}}}),
+      }), CONF);
+    });
+  }
+
+  // ---- matrix + chrome ------------------------------------------------
+  function pill(label, pressed, disabled, onclick){
+    const b = document.createElement("button");
+    b.className = "ct-pill"; b.type = "button"; b.textContent = label;
+    b.disabled = !!disabled; b.setAttribute("aria-pressed", String(!!pressed));
+    b.onclick = () => { if(!b.disabled) onclick(); };
+    return b;
+  }
+  // An axis value is offered only when some project/route combination exists for it,
+  // so the matrix never lands the page on an unsolved point.
+  function axisDisabled(axis, value){
+    const probe = {...S, [axis]:value};
+    if(!projectHas(probe)) return true;
+    if(axis==="variant") return !ROUTE_ORDER.some(r=>variantOk(r,value) && recFor(probe,r));
+    return !routesAt(probe).length;
+  }
+  function buildMatrix(){
+    const host = document.getElementById("ct-mx"); host.innerHTML = "";
+    AXES.forEach(axis=>{
+      const box = document.createElement("div"); box.className = "ct-ax";
+      const lab = document.createElement("div"); lab.className = "mxlab";
+      lab.textContent = AXLAB[axis];
+      const pills = document.createElement("div"); pills.className = "ct-pills";
+      OPTS[axis].forEach(([value,label])=>{
+        pills.appendChild(pill(label, S[axis]===value, axisDisabled(axis,value),
+          ()=>{ S[axis]=value; refresh(); }));
+      });
+      box.appendChild(lab); box.appendChild(pills); host.appendChild(box);
+    });
+  }
+  function renderChrome(){
+    const routes = routesAt(S);
+    document.getElementById("ct-meta").innerHTML =
+      `${geoName(S.geo)} · ${S.year} · ${S.grid==="grid"?"grid-connected":"islanded"}<br>`
+      + `${S.cf==="avg"?"mean-CF site":"best-site P95"}`
+      + (S.variant!=="base" ? ` · ${VLAB[S.variant]}` : "")
+      + `<br>${routes.length} route${routes.length===1?"":"s"} solved`;
+    // Say plainly where a selection could not be honoured for every route.
+    const notes = [];
+    if(S.variant!=="base"){
+      const off = routes.filter(r=>!variantOk(r,S.variant)).map(r=>RLAB[r]||r);
+      if(off.length) notes.push(`${VLAB[S.variant]} does not apply to ${off.join(", ")} — shown at baseline.`);
+    }
+    const na = routes.filter(r=>r==="ng-dri-eaf");
+    if(na.length && S.cf!=="avg") notes.push("NG-DRI-EAF has no renewables, so the capacity-factor basis does not apply to it.");
+    document.getElementById("ct-clamp").textContent = notes.join("  ");
+    document.getElementById("ct-foot").innerHTML =
+      "Cross-chart logic, shared by both taxonomies: the electricity segment in LCOS/LCOH is priced "
+      + "at LCOE; the hydrogen segment in LCOS is LCOH × kg&nbsp;H₂/t; LCOI (not shown) is LCOS minus "
+      + "the EAF stage. Every split is exact — a plant's annual cost is "
+      + "<code>annuity × capex + fixed opex</code>, so capital and O&amp;M separate by a config ratio; "
+      + "the same holds for renewables, the electrolyser, the battery's power and energy, and the grid "
+      + "connection's capex and capacity charge. Two rows of the alternative stay empty because "
+      + "the model does not carry them — ore/iron freight and scrap or HBI purchase. Regenerate with "
+      + "<code>python workflow/scripts/viz/build_cost_taxonomies.py</code>.";
+  }
+
+  function refresh(){
+    buildMatrix(); renderChrome();
+    if(!projectHas(S) || !routesAt(S).length){
+      ["plot-lcos-alt","plot-lcos-dash","plot-lcoe-alt","plot-lcoe-dash",
+       "plot-lcoh-alt","plot-lcoh-dash","plot-detail"].forEach(id=>{
+        const el = document.getElementById(id);
+        el.innerHTML = `<div class="ct-empty">No solved results for `
+          + `${geoName(S.geo)} ${S.year}, ${S.grid==="grid"?"grid-connected":"islanded"}.</div>`;
+      });
+      document.getElementById("ct-caps").innerHTML =
+        `<div class="ct-empty">No solved results for this selection.</div>`;
+      return;
+    }
+    renderLcos(); renderCarrier("lcoe"); renderCarrier("lcoh");
+    renderDetail(); renderCapacity();
+    resizeAll();
+  }
+  // The capacity panels are created and plotted in the same pass, so Plotly can
+  // measure a grid cell before the grid has settled on its width and lay the chart
+  // out wider than its column. Sweep once the browser has done layout — two frames,
+  // because the first only guarantees style has been recalculated.
+  function resizeAll(){
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      document.querySelectorAll(".ct-plot").forEach(el=>{ if(el.data) Plotly.Plots.resize(el); });
+    }));
+  }
+
+  // Land on a selection that actually has results, whatever the default said.
+  if(!projectHas(S) || !routesAt(S).length){
+    outer: for(const g of GEOS) for(const y of YEARS) for(const gr of ["grid","nogrid"]){
+      const probe = {...S, geo:g, year:String(y), grid:gr};
+      if(projectHas(probe) && routesAt(probe).length){
+        S.geo=g; S.year=String(y); S.grid=gr; break outer;
+      }
+    }
+  }
+  refresh();
+  // Plotly sizes to the container, so a theme flip needs no re-render; a resize does.
+  let resizeTimer = null;
+  window.addEventListener("resize", ()=>{
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(resizeAll, 150);
+  });
+})();
+</script>

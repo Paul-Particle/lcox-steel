@@ -4,10 +4,12 @@ Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
 """
 
 import logging
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
 import pypsa
+import yaml
 
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
@@ -17,6 +19,48 @@ if "snakemake" not in globals():
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
+
+# repo root: workflow/scripts/viz/compile_report.py -> parents[3]
+_ASSUMPTIONS_PATH = Path(__file__).resolve().parents[3] / "config" / "assumptions.yaml"
+
+
+@lru_cache(maxsize=1)
+def _ladle_capital_fraction() -> float:
+    """Ladle metallurgy's share of the folded MOE link capital.
+
+    `_add_moe_link` folds ladle capex+opex into the single moe link, both
+    annuitised over the MOE lifetime — so the split is a config constant (the
+    dashboard's projects don't overlay moe/ladle/wacc). Returns the ladle
+    fraction of the combined annualised (capex+opex), used to break the reported
+    MOE plant cost into MOE proper vs ladle. Zero if unavailable.
+    """
+    try:
+        cfg = yaml.safe_load(_ASSUMPTIONS_PATH.read_text()) or {}
+        moe, ladle = cfg["moe"], cfg["ladle"]
+        wacc = cfg["finance"]["default_wacc"]
+        life = moe["lifetime_years"]
+        annuity = (wacc * (1.0 + wacc) ** life) / ((1.0 + wacc) ** life - 1.0)
+        moe_per_t = annuity * moe["capex_per_t_per_year_eur"] + moe["opex_per_t_per_year_eur"]
+        ladle_per_t = annuity * ladle["capex_per_t_per_year_eur"] + ladle["opex_per_t_per_year_eur"]
+        total = moe_per_t + ladle_per_t
+        return ladle_per_t / total if total > 0 else 0.0
+    except (OSError, ValueError, TypeError, KeyError, ZeroDivisionError):
+        return 0.0
+
+
+@lru_cache(maxsize=1)
+def _grid_volumetric_fee_eur_per_mwh() -> float:
+    """The volumetric grid fee (€/MWh) added on top of the day-ahead price.
+
+    A global assumption (config/assumptions.yaml), constant across scenarios, so
+    the grid import's average priced energy can be split into the market price
+    and the fee. Zero if unavailable — the split then collapses to price-only.
+    """
+    try:
+        cfg = yaml.safe_load(_ASSUMPTIONS_PATH.read_text()) or {}
+        return float(cfg.get("grid", {}).get("fee_eur_per_mwh", 0.0))
+    except (OSError, ValueError, TypeError):
+        return 0.0
 
 
 def _h2_produced_kg(n: pypsa.Network) -> float:
@@ -34,58 +78,330 @@ def _h2_produced_kg(n: pypsa.Network) -> float:
     return h2_mwh_lhv / (H2_LHV_KWH_PER_KG / 1000.0)
 
 
-def _annual_cost(n: pypsa.Network) -> float:
-    """Annualised capital costs + variable grid-import costs (scaled to 8760 h).
+def _marginal_costs(static: pd.DataFrame, flow_t: pd.DataFrame, mc_t: pd.DataFrame) -> float:
+    """Total variable cost over the simulated period for one component class.
 
-    Capital costs are already per-year (annualised CAPEX × p_nom_opt). Grid-import
-    variable costs are scaled from the simulation period up to 8760 h so LCOH stays
-    meaningful on partial-year runs.
+    `flow_t` is the priced flow (generators: p; links: p0 — PyPSA applies link
+    marginal costs to the input side). Hourly marginal costs (grid import)
+    live in `mc_t`; everything else uses its static value.
+    """
+    total = 0.0
+    for name in static.index:
+        if name in mc_t.columns:
+            mc = mc_t[name]
+        else:
+            mc = static.at[name, "marginal_cost"]
+            if mc == 0.0:
+                continue
+        if name not in flow_t.columns:
+            continue
+        total += float((flow_t[name] * mc).sum())
+    return total
+
+
+PROCESS_LINKS = ("dri", "dri_ng", "eaf", "moe", "electrowinning")
+
+
+def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
+    """Annualised cost per system component group, €/yr; sums to the total.
+
+    Capital costs are already per-year (annualised CAPEX × p_nom_opt); variable
+    costs — grid imports, ore, EAF consumables, electrolyser variable opex —
+    are scaled from the simulation period up to 8760 h so levelised costs stay
+    meaningful on partial-year runs. The reported total annual cost is the sum
+    of these groups, so breakdown and total cannot drift apart.
     """
     t_hours = len(n.snapshots)
     annual_scale = 8760.0 / t_hours
 
-    cost = 0.0
+    def link_capital(names) -> float:
+        idx = [l for l in names if l in n.links.index and n.links.at[l, "p_nom_extendable"]]
+        return float((n.links.loc[idx, "capital_cost"] * n.links.loc[idx, "p_nom_opt"]).sum())
 
-    mask = n.generators.p_nom_extendable
-    cost += (n.generators.loc[mask, "capital_cost"] * n.generators.loc[mask, "p_nom_opt"]).sum()
+    def link_marginal(names) -> float:
+        idx = [l for l in names if l in n.links.index]
+        return _marginal_costs(n.links.loc[idx], n.links_t.p0, n.links_t.marginal_cost) * annual_scale
 
-    mask = n.storage_units.p_nom_extendable
-    cost += (n.storage_units.loc[mask, "capital_cost"] * n.storage_units.loc[mask, "p_nom_opt"]).sum()
+    def store_capital(name: str) -> float:
+        if name not in n.stores.index or not n.stores.at[name, "e_nom_extendable"]:
+            return 0.0
+        return float(n.stores.at[name, "capital_cost"] * n.stores.at[name, "e_nom_opt"])
 
-    # All extendable links: the electrolyser (always) and, in multi-site runs, the
-    # HVDC transmission links. Summing the mask captures both without double count.
-    mask = n.links.p_nom_extendable
-    cost += (n.links.loc[mask, "capital_cost"] * n.links.loc[mask, "p_nom_opt"]).sum()
+    gens = n.generators
+    non_res = ("grid_import", "gas_supply")
+    res_idx = gens.index[gens.p_nom_extendable & ~gens.index.isin(non_res)]
+    grid_capital = 0.0
+    if "grid_import" in gens.index and gens.at["grid_import", "p_nom_extendable"]:
+        grid_capital = float(
+            gens.at["grid_import", "capital_cost"] * gens.at["grid_import", "p_nom_opt"]
+        )
+    hvdc = list(n.links.index[n.links.carrier == "HVDC"])
 
-    mask = n.stores.e_nom_extendable
-    cost += (n.stores.loc[mask, "capital_cost"] * n.stores.loc[mask, "e_nom_opt"]).sum()
-
-    if "grid_import" in n.generators.index:
-        p = n.generators_t.p.get("grid_import", pd.Series(0.0, index=n.snapshots))
-        if "grid_import" in n.generators_t.marginal_cost.columns:
-            mc = n.generators_t.marginal_cost["grid_import"]
-        else:
-            mc = n.generators.at["grid_import", "marginal_cost"]
-        cost += float((p * mc).sum()) * annual_scale
-
-    return float(cost)
-
-
-def _compute_lcoh(n: pypsa.Network) -> float:
-    return _annual_cost(n) / _h2_produced_kg(n)
+    return {
+        "res": float((gens.loc[res_idx, "capital_cost"] * gens.loc[res_idx, "p_nom_opt"]).sum()),
+        "battery": float(
+            (n.storage_units.capital_cost * n.storage_units.p_nom_opt)[
+                n.storage_units.p_nom_extendable
+            ].sum()
+        ),
+        # Generator marginal costs are zero except grid imports (energy price
+        # + volumetric fee) and gas, which gets its own group below — so the
+        # generic sum minus gas lands in the grid bucket.
+        "grid": grid_capital
+        + _marginal_costs(
+            gens.drop(index="gas_supply", errors="ignore"),
+            n.generators_t.p,
+            n.generators_t.marginal_cost,
+        ) * annual_scale,
+        # Gas bill incl. any carbon price (both live on the gas_supply
+        # generator's marginal cost).
+        "gas": (
+            _marginal_costs(
+                gens.loc[["gas_supply"]], n.generators_t.p, n.generators_t.marginal_cost
+            ) * annual_scale
+            if "gas_supply" in gens.index
+            else 0.0
+        ),
+        "electrolyser": link_capital(["electrolyser"]) + link_marginal(["electrolyser"]),
+        "h2_buffer": store_capital("h2_buffer"),
+        "process": link_capital(PROCESS_LINKS),
+        "ore_consumables": link_marginal(PROCESS_LINKS),
+        "iron_store": store_capital("iron_store"),
+        "steel_store": store_capital("steel_store"),
+        "transmission": link_capital(hvdc),
+    }
 
 
 def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> dict:
-    """Key sizing and cost metrics as a flat dict (suitable for a one-row CSV)."""
-    lcoh_eur_per_kg = _compute_lcoh(n)
+    """Key sizing and cost metrics as a flat dict (suitable for a one-row CSV).
+
+    The headline levelised cost depends on the network's route: LCOH for the
+    pure-H2 model (flat H2 load, no steel chain), LCOS for the steel routes
+    (flat steel load). H2 production is reported whenever an electrolyser
+    exists, but LCOH is only well-defined when H2 is the end product — on
+    steel routes the annual cost covers the whole chain.
+    """
+    breakdown = _cost_breakdown(n)
     summary = {
         "project": project_name,
         "scenario": scenario_name,
-        "lcoh_eur_per_kg": lcoh_eur_per_kg,
-        "lcoh_eur_per_mwh_lhv": lcoh_eur_per_kg * 1000.0 / H2_LHV_KWH_PER_KG,
-        "total_annual_cost_meur": _annual_cost(n) / 1e6,
-        "h2_produced_kt": _h2_produced_kg(n) / 1e6,
+        "total_annual_cost_meur": sum(breakdown.values()) / 1e6,
     }
+    # Per-group annual cost columns (zero groups omitted — a scenario without a
+    # component shouldn't grow the CSV). plot_lcos_bars stacks these.
+    for group, value in breakdown.items():
+        if value:
+            summary[f"cost_{group}_meur"] = value / 1e6
+
+    total_annual_cost = sum(breakdown.values())
+
+    if "dri_load" in n.loads.index:
+        lcoh_eur_per_kg = total_annual_cost / _h2_produced_kg(n)
+        summary["lcoh_eur_per_kg"] = lcoh_eur_per_kg
+        summary["lcoh_eur_per_mwh_lhv"] = lcoh_eur_per_kg * 1000.0 / H2_LHV_KWH_PER_KG
+
+    if "steel_load" in n.loads.index:
+        steel_t_per_year = float(n.loads.at["steel_load", "p_set"]) * 8760.0
+        summary["lcos_eur_per_t"] = total_annual_cost / steel_t_per_year
+        summary["steel_produced_mt"] = steel_t_per_year / 1e6
+
+    if "electrolyser" in n.links.index:
+        summary["h2_produced_kt"] = _h2_produced_kg(n) / 1e6
+
+    # Levelised cost of the underlying energy carriers, €/MWh, so LCOS can be read
+    # against the electricity and hydrogen that drive it.
+    #   LCOE = electricity-system cost (renewables + battery + grid + transmission)
+    #          per MWh of electricity generated (renewable dispatch + grid import).
+    #   LCOH = (electrolyser capex/opex + H2 buffer + the electrolyser's electricity
+    #          valued at LCOE) per MWh of H2 produced, LHV.
+    annual_scale = 8760.0 / len(n.snapshots)
+    elec_gens = [g for g in n.generators.index if g != "gas_supply"]
+    elec_mwh = (float(n.generators_t.p[elec_gens].sum().sum()) * annual_scale) if elec_gens else 0.0
+    elec_cost = sum(breakdown.get(k, 0.0) for k in ("res", "battery", "grid", "transmission"))
+    lcoe = elec_cost / elec_mwh if elec_mwh > 0 and elec_cost > 0 else float("nan")
+    if lcoe == lcoe:  # not NaN
+        summary["lcoe_eur_per_mwh"] = lcoe
+
+    # LCOE decomposition, €/MWh over the same electricity denominator so the parts
+    # sum back to LCOE: renewables split by tech, grid split into connection
+    # (capacity capital) vs energy (imports). Plus the average grid import price.
+    if lcoe == lcoe and elec_mwh > 0:
+        res_idx = n.generators.index[
+            n.generators.p_nom_extendable & ~n.generators.index.isin(("grid_import", "gas_supply"))
+        ]
+
+        def _res_cost(prefix: str) -> float:
+            idx = [g for g in res_idx if str(g).startswith(prefix)]
+            return float((n.generators.loc[idx, "capital_cost"] * n.generators.loc[idx, "p_nom_opt"]).sum())
+
+        def _res_mwh(prefix: str) -> float:
+            idx = [g for g in res_idx if str(g).startswith(prefix)]
+            return float(n.generators_t.p[idx].sum().sum()) * annual_scale if idx else 0.0
+
+        grid_conn = grid_energy = grid_mwh = 0.0
+        if "grid_import" in n.generators.index:
+            gi = n.generators.loc[["grid_import"]]
+            if bool(gi.at["grid_import", "p_nom_extendable"]):
+                grid_conn = float(gi.at["grid_import", "capital_cost"] * gi.at["grid_import", "p_nom_opt"])
+            grid_energy = _marginal_costs(gi, n.generators_t.p, n.generators_t.marginal_cost) * annual_scale
+            grid_mwh = float(n.generators_t.p["grid_import"].sum()) * annual_scale
+
+        components = {
+            "lcoe_solar": _res_cost("solar"),
+            "lcoe_wind_onshore": _res_cost("wind-onshore"),
+            "lcoe_wind_offshore": _res_cost("wind-offshore"),
+            "lcoe_storage": breakdown.get("battery", 0.0),
+            "lcoe_grid_connection": grid_conn,
+            "lcoe_grid_energy": grid_energy,
+            "lcoe_transmission": breakdown.get("transmission", 0.0),
+        }
+        res_total = components["lcoe_solar"] + components["lcoe_wind_onshore"] + components["lcoe_wind_offshore"]
+        if res_total > 0:
+            summary["lcoe_renewables_eur_per_mwh"] = res_total / elec_mwh
+        for key, cost in components.items():
+            if cost > 0:
+                summary[f"{key}_eur_per_mwh"] = cost / elec_mwh
+
+        # Per-technology LCOE (€/MWh over that tech's own generation, not the
+        # system total) — a fair unit cost for the renewable itself, distinct from
+        # its lcoe_<tech> contribution to the system LCOE above.
+        for prefix, tech in (("solar", "solar"), ("wind-onshore", "wind_onshore"),
+                             ("wind-offshore", "wind_offshore")):
+            cost, mwh = _res_cost(prefix), _res_mwh(prefix)
+            if cost > 0 and mwh > 0:
+                summary[f"lcoe_{tech}_own_eur_per_mwh"] = cost / mwh
+
+        # Blended renewable own LCOE (over renewable generation only) — the
+        # generation-weighted mean of the per-tech own LCOEs, so it sits between
+        # them. Distinct from lcoe_renewables (contribution over all electricity,
+        # which grid imports drag below the per-tech figures).
+        res_mwh = _res_mwh("solar") + _res_mwh("wind-onshore") + _res_mwh("wind-offshore")
+        if res_total > 0 and res_mwh > 0:
+            summary["lcoe_renewables_own_eur_per_mwh"] = res_total / res_mwh
+
+        # Capacity factors (annual generation / nameplate × 8760) for the renewables
+        # and the grid connection, surfaced next to the built capacities.
+        def _res_cap(prefix: str) -> float:
+            idx = [g for g in res_idx if str(g).startswith(prefix)]
+            return float(n.generators.loc[idx, "p_nom_opt"].sum()) if idx else 0.0
+
+        for prefix, tech in (("solar", "solar"), ("wind-onshore", "wind_onshore"),
+                             ("wind-offshore", "wind_offshore")):
+            cap = _res_cap(prefix)
+            if cap > 0:
+                summary[f"cf_{tech}"] = _res_mwh(prefix) / (cap * 8760.0)
+        if grid_mwh > 0:
+            grid_p_nom = float(n.generators.at["grid_import", "p_nom_opt"])
+            if grid_p_nom > 0:
+                summary["cf_grid_connection"] = grid_mwh / (grid_p_nom * 8760.0)
+
+        # Split the average priced grid energy into the day-ahead market price and
+        # the constant volumetric fee, and levelise the connection capex over the
+        # same imported-MWh denominator — so all three are €/MWh *imported* and add
+        # up to the all-in delivered electricity price (not mixed bases).
+        if grid_mwh > 0:
+            if grid_energy > 0:
+                fee = _grid_volumetric_fee_eur_per_mwh()
+                summary["grid_price_eur_per_mwh"] = max(grid_energy / grid_mwh - fee, 0.0)
+                summary["grid_fee_eur_per_mwh"] = fee
+            if grid_conn > 0:
+                summary["grid_connection_eur_per_mwh_imported"] = grid_conn / grid_mwh
+
+    if "electrolyser" in n.links.index and "steel_load" in n.loads.index:
+        el_mwh = float(n.links_t.p0["electrolyser"].sum()) * annual_scale
+        h2_mwh = _h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
+        if h2_mwh > 0:
+            elec_for_h2 = el_mwh * (lcoe if lcoe == lcoe else 0.0)
+            el_cost = breakdown.get("electrolyser", 0.0)
+            buf_cost = breakdown.get("h2_buffer", 0.0)
+            lcoh = (el_cost + buf_cost + elec_for_h2) / h2_mwh
+            summary["lcoh_eur_per_mwh_lhv"] = lcoh
+            # LCOH decomposition, €/MWh LHV over the same H2 denominator so the
+            # parts sum back to LCOH: the electrolyser plant, its electricity
+            # (valued at LCOE) and — where built — the H2 buffer store.
+            summary["lcoh_electrolyser_eur_per_mwh_lhv"] = el_cost / h2_mwh
+            summary["lcoh_electricity_eur_per_mwh_lhv"] = elec_for_h2 / h2_mwh
+            if buf_cost > 0:
+                summary["lcoh_h2_storage_eur_per_mwh_lhv"] = buf_cost / h2_mwh
+
+    # Cost detail for the hover: per-plant levelised capex and the ore-vs-consumables
+    # split, all €/t steel on the same denominator as the LCOS cost groups — so the
+    # per-plant figures sum to the "process" group and ore+consumables to the
+    # "ore_consumables" group. Ore is the feedstock priced on the reduction/
+    # electrolysis links; consumables is the EAF's marginal cost.
+    if "steel_load" in n.loads.index:
+        steel_t = float(n.loads.at["steel_load", "p_set"]) * 8760.0
+        if steel_t > 0:
+            def _link_capex(link_name: str) -> float:
+                return (float(n.links.at[link_name, "capital_cost"] * n.links.at[link_name, "p_nom_opt"])
+                        if link_name in n.links.index and bool(n.links.at[link_name, "p_nom_extendable"])
+                        else 0.0)
+
+            def _link_marginal(link_name: str) -> float:
+                if link_name not in n.links.index or link_name not in n.links_t.p0.columns:
+                    return 0.0
+                return float((n.links_t.p0[link_name] * n.links.at[link_name, "marginal_cost"]).sum()) * annual_scale
+
+            for link in PROCESS_LINKS:
+                capex = _link_capex(link)
+                if capex <= 0:
+                    continue
+                if link == "moe":
+                    # Split the folded MOE link capital into MOE proper vs ladle
+                    # metallurgy, so both are visible (they sum to the moe link).
+                    frac = _ladle_capital_fraction()
+                    summary["plant_moe_eur_per_t"] = capex * (1.0 - frac) / steel_t
+                    summary["plant_ladle_eur_per_t"] = capex * frac / steel_t
+                else:
+                    summary[f"plant_{link}_eur_per_t"] = capex / steel_t
+            ore = sum(_link_marginal(l) for l in ("dri", "dri_ng", "moe", "electrowinning"))
+            consumables = _link_marginal("eaf")
+            if ore > 0:
+                summary["ore_eur_per_t_steel"] = ore / steel_t
+            if consumables > 0:
+                summary["consumables_eur_per_t_steel"] = consumables / steel_t
+
+    # Steel-route process links: capacity in output units (t/h of iron or
+    # steel — p_nom is input-side, so scale by the link efficiency) plus
+    # utilisation, which shows how far each step actually load-follows.
+    for link in PROCESS_LINKS:
+        if link not in n.links.index:
+            continue
+        p_nom = n.links.at[link, "p_nom_opt"]
+        summary[f"{link}_t_per_h_opt"] = p_nom * n.links.at[link, "efficiency"]
+        summary[f"{link}_utilization"] = (
+            float(n.links_t.p0[link].mean() / p_nom) if p_nom > 0 else float("nan")
+        )
+
+    if "gas_supply" in n.generators.index:
+        gas_mwh = float(n.generators_t.p["gas_supply"].sum()) * (8760.0 / len(n.snapshots))
+        summary["ng_gwh_lhv"] = gas_mwh / 1e3
+    # How much of the iron came from the H2 shaft (production share, not capacity
+    # share). Emitted for any DRI route so a pure H2-DRI reads 1.0 and a pure
+    # NG-DRI 0.0 — not a missing value that downstream would coerce to 0.
+    if "dri" in n.links.index or "dri_ng" in n.links.index:
+        iron_h2 = -float(n.links_t.p1["dri"].sum()) if "dri" in n.links.index else 0.0
+        iron_ng = -float(n.links_t.p1["dri_ng"].sum()) if "dri_ng" in n.links.index else 0.0
+        total = iron_h2 + iron_ng
+        summary["iron_from_h2_share"] = iron_h2 / total if total else float("nan")
+
+    if "iron_store" in n.stores.index:
+        store_t = n.stores.at["iron_store", "e_nom_opt"]
+        summary["iron_store_kt"] = store_t / 1e3
+        if "steel_load" in n.loads.index:
+            steel_t_per_h = float(n.loads.at["steel_load", "p_set"])
+            summary["iron_store_hours_steel"] = (
+                store_t / steel_t_per_h if steel_t_per_h else float("nan")
+            )
+
+    if "steel_store" in n.stores.index:
+        store_t = n.stores.at["steel_store", "e_nom_opt"]
+        summary["steel_store_kt"] = store_t / 1e3
+        if "steel_load" in n.loads.index:
+            steel_t_per_h = float(n.loads.at["steel_load", "p_set"])
+            summary["steel_store_hours_steel"] = (
+                store_t / steel_t_per_h if steel_t_per_h else float("nan")
+            )
 
     for gen in n.generators.index[n.generators.p_nom_extendable]:
         summary[f"{gen}_gw_opt"] = n.generators.at[gen, "p_nom_opt"] / 1e3
@@ -96,13 +412,19 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         summary["battery_mwh_opt"] = p_opt * n.storage_units.at["battery", "max_hours"]
 
     if "h2_buffer" in n.stores.index:
-        # Reported as hours of DRI H₂ demand (buffer MWh LHV / load MW LHV).
         buffer_mwh = n.stores.at["h2_buffer", "e_nom_opt"]
+        summary["h2_buffer_gwh"] = buffer_mwh / 1e3
+        # Additionally as hours of average H₂ demand: the flat dri_load on the
+        # pure-H2 route, or the DRI link's mean H₂ draw on the steel route.
         if "dri_load" in n.loads.index:
-            dri_mw = float(n.loads.at["dri_load", "p_set"])
-            summary["h2_buffer_hours_dri"] = buffer_mwh / dri_mw if dri_mw else float("nan")
+            h2_demand_mw = float(n.loads.at["dri_load", "p_set"])
+        elif "dri" in n.links.index:
+            h2_demand_mw = float(n.links_t.p0["dri"].mean())
         else:
-            summary["h2_buffer_hours_dri"] = float("nan")
+            h2_demand_mw = 0.0
+        summary["h2_buffer_hours_dri"] = (
+            buffer_mwh / h2_demand_mw if h2_demand_mw else float("nan")
+        )
 
     if "electrolyser" in n.links.index:
         el_cap = n.links.at["electrolyser", "p_nom_opt"]
