@@ -43,10 +43,10 @@ if scenarios_df.duplicated(subset=_key).any():
 # One row per network to solve — `all-routes` and `a|b` cells expanded.
 routes_df = build_routes_frame(scenarios_df)
 
+# A scenario name is a free-form label — nothing here reads meaning out of it,
+# so the demo set is listed in config.yaml rather than matched on a prefix.
 SCENARIOS = scenarios_df["scenario"].unique()
-DEMO_SCENARIOS = scenarios_df.loc[
-    scenarios_df["scenario"].str.startswith("DEMO-"), "scenario"
-].unique()
+DEMO_SCENARIOS = config["demo_scenarios"]
 
 
 include: "rules/_optional_shim.smk"

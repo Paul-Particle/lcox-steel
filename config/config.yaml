@@ -8,6 +8,15 @@ logging:
   # "f-strings ok in log calls" convention (that's about call sites).
   format: "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 
+# Scenarios the default `snakemake` target (rule demo) builds. Listed by name
+# rather than matched on one, because a scenario name is a free-form label: the
+# workflow never reads meaning out of it, so any string works as an id.
+demo_scenarios:
+  - DEMO-VIC-2025-bestsite-wind-onshore
+  - DEMO-VIC-2025-bestsite-wind-offshore
+  - DEMO-VIC-2025-bestsite-solar
+  - DEMO-VIC-2025-anchor-colo
+
 entsoe:
   # Per-(area, data_type) downloads are pulled on demand by config/scenarios.csv;
   # the bidding-zone catalog lives in data/entsoe_cache/entsoe_bidding_zones.csv.
