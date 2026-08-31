@@ -1,4 +1,4 @@
-"""Shared helpers for retrieve_entsoe.py and retrieve_nem.py."""
+"""Shared helpers for _entsoe.py and _nem.py."""
 
 import pandas as pd
 

@@ -2,7 +2,7 @@
 
 ENTSO-E raw months are fetched on Brussels-time boundaries and stored UTC-naive. In
 summer (CEST = UTC+2) a Brussels month's data ends at 22:00 UTC on its last day, so a
-window's final UTC hour lives in the *next* Brussels month. retrieve_entsoe pads the
+window's final UTC hour lives in the *next* Brussels month. _entsoe pads the
 download list by one month to cover it; without the pad `assert_window_complete` fails
 every Mar–Sep-ending window (verified on real DE_LU 2023 data).
 
@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import retrieve_entsoe as R  # sys.path set by conftest
+import _entsoe as R  # sys.path set by conftest
 from _helpers import assert_window_complete, iso
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

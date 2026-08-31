@@ -1,63 +1,63 @@
 wildcard_constraints:
-    cf_area=r"[a-z]{2,3}",
+    area=r"[A-Z][A-Z0-9_]{1,5}",
     tech=r"wind-onshore|wind-offshore|solar",
 
 
-rule build_regions:
+rule make_area_geometry:
     input:
         "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
     output:
-        "resources/shapes/{cf_area}_geo.parquet",
+        "resources/shapes/{area}_geo.parquet",
     log:
-        "logs/build_regions/{cf_area}.log",
+        "logs/make_area_geometry/{area}.log",
     params:
-        iso3=lookup(dpath="res_cf/countries/{cf_area}/iso3", within=config),
-        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
+        iso3=lookup(dpath="res_cf/areas/{area}/iso3", within=config),
+        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
         mainland_bbox=lookup(
-            dpath="res_cf/countries/{cf_area}/mainland_bbox",
+            dpath="res_cf/areas/{area}/mainland_bbox",
             within=config,
             default=None,
         ),
     script:
-        "../scripts/res_cf/01_build_regions.py"
+        "../scripts/res_cf/a_make_area_geometry.py"
 
 
-rule build_offshore_regions:
+rule make_offshore_geometry:
     input:
-        regions="resources/shapes/{cf_area}_geo.parquet",
+        regions="resources/shapes/{area}_geo.parquet",
         offshore_zone="data/shapes/offshore_zones/eez_v12.zip",
     output:
-        "resources/shapes/{cf_area}_offshore_geo.parquet",
+        "resources/shapes/{area}_offshore_geo.parquet",
     log:
-        "logs/build_offshore_regions/{cf_area}.log",
+        "logs/make_offshore_geometry/{area}.log",
     params:
-        iso3=lookup(dpath="res_cf/countries/{cf_area}/iso3", within=config),
-        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
+        iso3=lookup(dpath="res_cf/areas/{area}/iso3", within=config),
+        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
         offshore_max_distance_km=lookup(
             dpath="res_cf/offshore_max_distance_km", within=config
         ),
     script:
-        "../scripts/res_cf/01b_build_offshore_regions.py"
+        "../scripts/res_cf/b_make_offshore_geometry.py"
 
 
-rule download_cutout:
+rule retrieve_area_cutout:
     input:
         # Cutout bounds are the bbox of the land ∪ offshore union (see
-        # 02_make_cutouts.py), so the cutout reaches far enough offshore to
-        # cover the offshore-wind zone. Both geometries are read from the
+        # c_retrieve_area_cutout.py), so the cutout reaches far enough offshore
+        # to cover the offshore-wind zone. Both geometries are read from the
         # pre-built parquets — the mainland_bbox filter / EEZ clip already
-        # applied by 01/01b — so no NE/EEZ zips are needed here.
-        regions="resources/shapes/{cf_area}_geo.parquet",
-        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
+        # applied upstream — so no NE/EEZ zips are needed here.
+        regions="resources/shapes/{area}_geo.parquet",
+        offshore_regions="resources/shapes/{area}_offshore_geo.parquet",
     output:
-        # Not protected(): the 02_make_cutouts.py script preserves expensive
-        # downloads via the `_backup.nc` sibling-file convention.
-        "cutouts/{cf_area}_{start_date}_{end_date}.nc",
+        # Not protected(): the script preserves expensive downloads via the
+        # `_backup.nc` sibling-file convention.
+        "cutouts/{area}_{start_date}_{end_date}.nc",
     log:
-        "logs/download_cutout/{cf_area}_{start_date}_{end_date}.log",
+        "logs/retrieve_area_cutout/{area}_{start_date}_{end_date}.log",
     params:
         coarse=lookup(
-            dpath="res_cf/countries/{cf_area}/coarse", within=config, default=False
+            dpath="res_cf/areas/{area}/coarse", within=config, default=False
         ),
         bbox_pad_deg=lookup(dpath="res_cf/cutout/bbox_pad_deg", within=config),
         monthly_requests=lookup(dpath="res_cf/cutout/monthly_requests", within=config),
@@ -65,37 +65,22 @@ rule download_cutout:
         cache_warn_size_gb=lookup(dpath="res_cf/cutout/cache_warn_size_gb", within=config),
         min_free_disk_gb=lookup(dpath="res_cf/cutout/min_free_disk_gb", within=config),
     script:
-        "../scripts/res_cf/02_make_cutouts.py"
+        "../scripts/res_cf/c_retrieve_area_cutout.py"
 
 
-rule build_solar_tilt_mix_p95:
+rule area_average:
     input:
-        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
-        regions="resources/shapes/{cf_area}_geo.parquet",
+        cutout="cutouts/{area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/{area}_geo.parquet",
+        offshore_regions="resources/shapes/{area}_offshore_geo.parquet",
     output:
-        "resources/res_cf/{cf_area}_solar_tilt-mix-n{n_steps}_{start_date}_{end_date}.parquet",
+        "resources/timeseries/{area}_{tech}_{variant}_{start_date}_{end_date}.parquet",
     wildcard_constraints:
-        n_steps=r"\d+",
+        variant=r"area-average",
     log:
-        "logs/build_solar_tilt_mix_p95/{cf_area}_n{n_steps}_{start_date}_{end_date}.log",
+        "logs/area_average/{area}_{tech}_{variant}_{start_date}_{end_date}.log",
     params:
-        pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
-        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
-    script:
-        "../scripts/res_cf/03b_build_solar_tilt_mix_p95.py"
-
-
-rule build_country_average_cf:
-    input:
-        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
-        regions="resources/shapes/{cf_area}_geo.parquet",
-        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
-    output:
-        "resources/res_cf/{cf_area}_{tech}_country-average_{start_date}_{end_date}.parquet",
-    log:
-        "logs/build_country_average_cf/{cf_area}_{tech}_{start_date}_{end_date}.log",
-    params:
-        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
+        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
         wind_offshore_turbine=lookup(
             dpath="res_cf/wind_offshore_turbine", within=config
@@ -106,21 +91,22 @@ rule build_country_average_cf:
         min_land_fraction=lookup(dpath="res_cf/min_land_fraction", within=config),
         eligibility_source=lookup(dpath="res_cf/eligibility_source", within=config),
     script:
-        "../scripts/res_cf/03_build_cf_timeseries.py"
+        "../scripts/res_cf/d1_area_average.py"
 
 
-rule build_bestsite_p95:
+rule bestsite_p95:
     input:
-        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
-        regions="resources/shapes/{cf_area}_geo.parquet",
-        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
+        cutout="cutouts/{area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/{area}_geo.parquet",
+        offshore_regions="resources/shapes/{area}_offshore_geo.parquet",
     output:
-        "resources/res_cf/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.parquet",
+        "resources/timeseries/{area}_{tech}_{variant}_{start_date}_{end_date}.parquet",
     wildcard_constraints:
         variant=r"bestsite-p95",
     log:
-        "logs/build_bestsite_p95/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.log",
+        "logs/bestsite_p95/{area}_{tech}_{variant}_{start_date}_{end_date}.log",
     params:
+        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
         wind_offshore_turbine=lookup(dpath="res_cf/wind_offshore_turbine", within=config),
         pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
@@ -130,39 +116,57 @@ rule build_bestsite_p95:
             dpath="res_cf/spatial_matching_res_mix", within=config
         ),
     script:
-        "../scripts/res_cf/07_make_bestsite_cf_timeseries.py"
+        "../scripts/res_cf/d2_bestsite_p95.py"
 
 
-rule build_anchor_colocated_cfs:
+rule anchor_colo:
     input:
-        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
-        regions="resources/shapes/{cf_area}_geo.parquet",
-        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
+        cutout="cutouts/{area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/{area}_geo.parquet",
+        offshore_regions="resources/shapes/{area}_offshore_geo.parquet",
     output:
-        "resources/res_cf/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.parquet",
+        "resources/timeseries/{area}_{tech}_{variant}_{start_date}_{end_date}.parquet",
     wildcard_constraints:
         variant=r"anchor-colo-n\d+",
     log:
-        "logs/build_anchor_colocated_cfs/{cf_area}_{tech}_{variant}_{start_date}_{end_date}.log",
+        "logs/anchor_colo/{area}_{tech}_{variant}_{start_date}_{end_date}.log",
     params:
+        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
         anchor_colocation=lookup(dpath="res_cf/anchor_colocation", within=config),
     script:
-        "../scripts/res_cf/07b_make_anchor_colocated_cf_timeseries.py"
+        "../scripts/res_cf/d3_anchor_colo.py"
 
 
-rule build_multi_site_cfs:
+rule tilt_mix:
     input:
-        cutout="cutouts/{cf_area}_{start_date}_{end_date}.nc",
-        regions="resources/shapes/{cf_area}_geo.parquet",
-        offshore_regions="resources/shapes/{cf_area}_offshore_geo.parquet",
+        cutout="cutouts/{area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/{area}_geo.parquet",
     output:
-        "resources/res_cf/{cf_area}_{tech}_multi-n{n_cells}_{start_date}_{end_date}.parquet",
+        "resources/timeseries/{area}_solar_tilt-mix-n{n_steps}_{start_date}_{end_date}.parquet",
+    wildcard_constraints:
+        n_steps=r"\d+",
+    log:
+        "logs/tilt_mix/{area}_n{n_steps}_{start_date}_{end_date}.log",
+    params:
+        pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
+        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
+    script:
+        "../scripts/res_cf/d4_tilt_mix.py"
+
+
+rule multi:
+    input:
+        cutout="cutouts/{area}_{start_date}_{end_date}.nc",
+        regions="resources/shapes/{area}_geo.parquet",
+        offshore_regions="resources/shapes/{area}_offshore_geo.parquet",
+    output:
+        "resources/timeseries/{area}_{tech}_multi-n{n_cells}_{start_date}_{end_date}.parquet",
     wildcard_constraints:
         n_cells=r"\d+",
     log:
-        "logs/build_multi_site_cfs/{cf_area}_{tech}_multi-n{n_cells}_{start_date}_{end_date}.log",
+        "logs/multi/{area}_{tech}_multi-n{n_cells}_{start_date}_{end_date}.log",
     params:
-        region=lookup(dpath="res_cf/countries/{cf_area}/region", within=config),
+        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
         wind_offshore_turbine=lookup(
             dpath="res_cf/wind_offshore_turbine", within=config
@@ -171,4 +175,4 @@ rule build_multi_site_cfs:
         pv_orientation=lookup(dpath="res_cf/pv_orientation", within=config),
         wind_cf=lookup(dpath="res_cf/wind_cf", within=config),
     script:
-        "../scripts/res_cf/03c_build_res_cf_candidates.py"
+        "../scripts/res_cf/d5_multi.py"

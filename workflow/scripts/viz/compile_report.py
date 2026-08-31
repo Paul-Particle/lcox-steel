@@ -1,4 +1,4 @@
-"""Compile per-scenario summaries into a single project-level report CSV.
+"""Compile per-route summaries into a single scenario-level report CSV.
 
 Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
 """
@@ -22,30 +22,6 @@ log = logging.getLogger(__name__)
 
 # repo root: workflow/scripts/viz/compile_report.py -> parents[3]
 _ASSUMPTIONS_PATH = Path(__file__).resolve().parents[3] / "config" / "assumptions.yaml"
-
-
-@lru_cache(maxsize=1)
-def _ladle_capital_fraction() -> float:
-    """Ladle metallurgy's share of the folded MOE link capital.
-
-    `_add_moe_link` folds ladle capex+opex into the single moe link, both
-    annuitised over the MOE lifetime — so the split is a config constant (the
-    dashboard's projects don't overlay moe/ladle/wacc). Returns the ladle
-    fraction of the combined annualised (capex+opex), used to break the reported
-    MOE plant cost into MOE proper vs ladle. Zero if unavailable.
-    """
-    try:
-        cfg = yaml.safe_load(_ASSUMPTIONS_PATH.read_text()) or {}
-        moe, ladle = cfg["moe"], cfg["ladle"]
-        wacc = cfg["finance"]["default_wacc"]
-        life = moe["lifetime_years"]
-        annuity = (wacc * (1.0 + wacc) ** life) / ((1.0 + wacc) ** life - 1.0)
-        moe_per_t = annuity * moe["capex_per_t_per_year_eur"] + moe["opex_per_t_per_year_eur"]
-        ladle_per_t = annuity * ladle["capex_per_t_per_year_eur"] + ladle["opex_per_t_per_year_eur"]
-        total = moe_per_t + ladle_per_t
-        return ladle_per_t / total if total > 0 else 0.0
-    except (OSError, ValueError, TypeError, KeyError, ZeroDivisionError):
-        return 0.0
 
 
 @lru_cache(maxsize=1)
@@ -99,7 +75,7 @@ def _marginal_costs(static: pd.DataFrame, flow_t: pd.DataFrame, mc_t: pd.DataFra
     return total
 
 
-PROCESS_LINKS = ("dri", "dri_ng", "eaf", "moe", "electrowinning")
+PROCESS_LINKS = ("dri-h2", "dri-ng", "eaf", "moe", "ew")
 
 
 def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
@@ -172,7 +148,7 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
     }
 
 
-def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> dict:
+def extract_summary(n: pypsa.Network, scenario_name: str, route_name: str) -> dict:
     """Key sizing and cost metrics as a flat dict (suitable for a one-row CSV).
 
     The headline levelised cost depends on the network's route: LCOH for the
@@ -183,11 +159,11 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     """
     breakdown = _cost_breakdown(n)
     summary = {
-        "project": project_name,
         "scenario": scenario_name,
+        "route": route_name,
         "total_annual_cost_meur": sum(breakdown.values()) / 1e6,
     }
-    # Per-group annual cost columns (zero groups omitted — a scenario without a
+    # Per-group annual cost columns (zero groups omitted — a route without a
     # component shouldn't grow the CSV). plot_lcos_bars stacks these.
     for group, value in breakdown.items():
         if value:
@@ -346,15 +322,8 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
                 capex = _link_capex(link)
                 if capex <= 0:
                     continue
-                if link == "moe":
-                    # Split the folded MOE link capital into MOE proper vs ladle
-                    # metallurgy, so both are visible (they sum to the moe link).
-                    frac = _ladle_capital_fraction()
-                    summary["plant_moe_eur_per_t"] = capex * (1.0 - frac) / steel_t
-                    summary["plant_ladle_eur_per_t"] = capex * frac / steel_t
-                else:
-                    summary[f"plant_{link}_eur_per_t"] = capex / steel_t
-            ore = sum(_link_marginal(l) for l in ("dri", "dri_ng", "moe", "electrowinning"))
+                summary[f"plant_{link}_eur_per_t"] = capex / steel_t
+            ore = sum(_link_marginal(l) for l in ("dri-h2", "dri-ng", "moe", "ew"))
             consumables = _link_marginal("eaf")
             if ore > 0:
                 summary["ore_eur_per_t_steel"] = ore / steel_t
@@ -379,9 +348,9 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     # How much of the iron came from the H2 shaft (production share, not capacity
     # share). Emitted for any DRI route so a pure H2-DRI reads 1.0 and a pure
     # NG-DRI 0.0 — not a missing value that downstream would coerce to 0.
-    if "dri" in n.links.index or "dri_ng" in n.links.index:
-        iron_h2 = -float(n.links_t.p1["dri"].sum()) if "dri" in n.links.index else 0.0
-        iron_ng = -float(n.links_t.p1["dri_ng"].sum()) if "dri_ng" in n.links.index else 0.0
+    if "dri-h2" in n.links.index or "dri-ng" in n.links.index:
+        iron_h2 = -float(n.links_t.p1["dri-h2"].sum()) if "dri-h2" in n.links.index else 0.0
+        iron_ng = -float(n.links_t.p1["dri-ng"].sum()) if "dri-ng" in n.links.index else 0.0
         total = iron_h2 + iron_ng
         summary["iron_from_h2_share"] = iron_h2 / total if total else float("nan")
 
@@ -461,25 +430,22 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
 
 
 def main() -> None:
-    """Load each scenario network for the project and write the combined report CSV.
+    """Load each route network for the scenario and write the combined report CSV.
 
-    Dedupes the netCDF inputs (collect fans out per tech row), extracts one summary
-    row per scenario via `extract_summary`, rounds numerics, and writes
-    results/report_<project>.csv.
+    Dedupes the netCDF inputs, extracts one summary row per route via
+    `extract_summary`, rounds numerics, and writes results/report_<scenario>.csv.
     """
-    project_name = snakemake.wildcards.project
+    scenario_name = snakemake.wildcards.scenario
 
     rows = []
-    # networks may contain duplicates (collect fans out per tech row); dedupe
-    # while preserving order so each scenario appears once.
     network_paths = list(dict.fromkeys(snakemake.input.networks))
-    log.info(f"compiling report for project={project_name} ({len(network_paths)} scenarios)")
+    log.info(f"compiling report for scenario={scenario_name} ({len(network_paths)} routes)")
     for nc_path in network_paths:
         nc_path = Path(nc_path)
-        scenario_name = nc_path.stem
+        route_name = nc_path.stem
         n = pypsa.Network()
         n.import_from_netcdf(nc_path)
-        rows.append(extract_summary(n, project_name, scenario_name))
+        rows.append(extract_summary(n, scenario_name, route_name))
 
     out_path = Path(snakemake.output[0])
     out_path.parent.mkdir(parents=True, exist_ok=True)

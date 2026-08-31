@@ -1,22 +1,11 @@
 finance:
   default_wacc: 0.07
 
-# Steelmaking route — one technology chain per optimisation. Scenarios switch
-# routes via their assumptions overlay (route: moe etc.); the levelised cost
-# of steel across routes/assumptions/locations is the core comparison.
-#   h2_only:    flat H2 load on the hydrogen bus, no steel chain (LCOH model)
-#   h2_dri_eaf: electrolyser → H2 → DRI shaft → sponge iron (storable) → EAF → steel
-#   moe:        molten oxide electrolysis, electricity → liquid steel directly
-#               (ladle metallurgy folded into the link; no intermediate storage)
-#   ew:         low-temperature iron electrowinning, electricity → iron plates
-#               (storable) → EAF → steel
-#   ng_dri_eaf: fossil benchmark — natural-gas DRI shaft (gas at a fixed price
-#               from `natural_gas`) → sponge iron (storable) → EAF → steel
-#   mix_dri_eaf: H2 and NG DRI shafts side by side feeding one iron bus; the
-#               optimiser picks the production split (and the H2 share may be
-#               zero). Each shaft pays its own capex — this models a greenfield
-#               fuel choice, not co-firing in one retrofit shaft.
-route: h2_only
+# Steelmaking routes are selected by the `route` column in config/scenarios.csv,
+# never from this file: one solve builds exactly one route, named by the
+# `{route}` wildcard. This file only overrides the defaults below, and a
+# per-scenario `config/assumptions_{scenario}.yaml` overlay overrides these in
+# turn. The implemented route ids live in workflow/common/_routes.py.
 
 plant:
   dri_mt_per_year: 0.526  # 100 MW H2 LHV input × 8760 h / 33.33 kWh/kg / 50 kg/t
@@ -75,7 +64,7 @@ h2_buffer:
 # reviewed — sources noted per section.
 # ---------------------------------------------------------------------------
 
-dri:
+dri-h2:
   # H2 DRI shaft furnace. Capex from Vogl, Åhman & Nilsson (2018), 230 €/(t/yr).
   capex_per_t_per_year_eur: 230
   opex_per_t_per_year_eur: 7          # ≈3 % of capex
@@ -86,8 +75,12 @@ dri:
   p_min_pu: 0.5
 
 eaf:
-  # Shared by h2_dri_eaf and ew (melting HBI vs. electrolytic iron plates —
-  # close enough at this fidelity; override per scenario if needed).
+  # Shared by every route that melts iron: h2-dri-eaf and ng-dri-eaf (HBI),
+  # ew-eaf (electrolytic iron plates) and moe-eaf (hot metal). Ladle
+  # metallurgy for moe-eaf is this same link made cheap by a scenario
+  # overlay rather than a component of its own, e.g.
+  #   eaf: {capex_per_t_per_year_eur: 50, opex_per_t_per_year_eur: 1.5,
+  #         el_mwh_per_t: 0.1}
   # Capex from Vogl et al. (2018), 184 €/(t/yr).
   capex_per_t_per_year_eur: 184
   opex_per_t_per_year_eur: 6          # ≈3 % of capex
@@ -98,27 +91,22 @@ eaf:
   p_min_pu: 0.4
 
 moe:
-  # Molten oxide electrolysis (Boston Metal type), electricity → liquid steel.
-  # ~4 MWh/t steel and ~$1000/(t/yr) per Boston Metal's public estimates;
-  # capex highly uncertain (pre-commercial). Ladle metallurgy folded into the
-  # same link (see `ladle` below) — no intermediate bus or storage, and the
-  # cell can barely turn down (freeze risk), hence p_min_pu near 1.
+  # Molten oxide electrolysis (Boston Metal type), electricity → liquid iron.
+  # ~4 MWh/t and ~$1000/(t/yr) per Boston Metal's public estimates; capex
+  # highly uncertain (pre-commercial). The cell can barely turn down (freeze
+  # risk), hence p_min_pu near 1. Output goes to the iron bus and on through
+  # the EAF — note the iron store then buffers hot metal, which is not
+  # physical and is the reason this route wants its own no-store topology
+  # (tracked separately from this naming pass).
   capex_per_t_per_year_eur: 900
   opex_per_t_per_year_eur: 27         # ≈3 % of capex
   lifetime_years: 20
-  el_mwh_per_t: 4.0                   # per t steel, excl. ladle
-  # Non-DR-grade fines/concentrate: ~1.6 t per t steel at ~100 €/t.
+  el_mwh_per_t: 4.0                   # per t liquid iron
+  # Non-DR-grade fines/concentrate: ~1.6 t per t iron at ~100 €/t.
   ore_eur_per_t: 160
   p_min_pu: 0.95
 
-ladle:
-  # Ladle metallurgy finishing for the MOE route, folded into the moe link
-  # (kept as separate numbers so a later EAF-finishing variant is a clean swap).
-  capex_per_t_per_year_eur: 50
-  opex_per_t_per_year_eur: 1.5
-  el_mwh_per_t: 0.1
-
-electrowinning:
+ew:
   # Low-temperature aqueous iron electrowinning (Electra type), electricity →
   # solid iron plates. ~2–3 MWh/t iron claimed; capex very uncertain
   # (500–3000 €/(t/yr) span in public estimates — sweep this).
@@ -140,7 +128,7 @@ natural_gas:
   # Default 0 = pure fixed-gas-price benchmark; EU ETS 2023 avg ≈ 85 €/t.
   co2_price_eur_per_t: 0
 
-dri_ng:
+dri-ng:
   # Natural-gas DRI shaft (Midrex/HYL type) — the mature fossil benchmark.
   # Same shaft capex level as the H2 shaft (Vogl et al. 2018); gas use
   # ~10 GJ/t DRI. Electricity is lower than the H2 shaft (no H2 preheat).

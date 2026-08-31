@@ -9,23 +9,27 @@ logging:
   format: "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 
 entsoe:
-  # Per-(area, data_type) downloads are pulled on demand by config/projects.csv;
+  # Per-(area, data_type) downloads are pulled on demand by config/scenarios.csv;
   # the bidding-zone catalog lives in data/entsoe_cache/entsoe_bidding_zones.csv.
   data_types: [prices, load_forecast, load_actual, res, generation, crossborder]
 
 nem:
   # FX rate for converting AUD-denominated NEM prices to EUR (used by
-  # grid.smk → retrieve_nem). Infra-level constant; per-scenario cost
+  # grid.smk → retrieve_grid_data). Infra-level constant; per-scenario cost
   # assumptions live in config/assumptions*.yaml.
   eur_per_aud: 0.61
 
 res_cf:
-  # Per-country metadata for the atlite + capacity factor pipeline.
-  # Lowercase key = ISO-2 (used in cutout filenames and CF output filenames).
+  # Per-area metadata for the atlite + capacity factor pipeline.
+  # Keys are area codes, the same namespace config/scenarios.csv uses:
+  # three uppercase letters = an ISO 3166-1 alpha-3 national area, anything
+  # else = a market zone (ENTSO-E bidding zone, AEMO NEM region). RES rows may
+  # use either; grid rows need a market zone (retrieve_grid_data.py rejects
+  # national codes). Each key here names one cutout.
   #   iso3:           3-letter code for Natural Earth ADM0_A3 lookup
-  #   region:         tag stored in regions.geojson (mostly ISO-2, but AUS/BRA
+  #   region:         tag stored in the geo parquet (mostly ISO-2, but AUS/BRA
   #                   stayed ISO-3 historically — kept that way to avoid
-  #                   regenerating the geojson and chasing downstream)
+  #                   regenerating the geometry and chasing downstream)
   #   coarse:         use a coarser cutout resolution to avoid CDS instability
   #                   / memory limits for large countries
   #   mainland_bbox:  optional [lon_min, lon_max, lat_min, lat_max] — keeps only
@@ -34,16 +38,16 @@ res_cf:
   #   vic_bbox:       AUS-only; approximates NEM zone VIC1 for sub-national tests
   #                   (Natural Earth 1:110m has no state boundaries, so we use a
   #                   bbox).
-  countries:
-    de:  { iso3: DEU, region: DE,  coarse: false }
-    fr:  { iso3: FRA, region: FR,  coarse: false, mainland_bbox: [-10, 15, 41, 52] }
-    es:  { iso3: ESP, region: ES,  coarse: false }
-    aus: { iso3: AUS, region: AUS, coarse: false,  vic_bbox: [140.96, 149.97, -39.16, -34.00] }
-    bra: { iso3: BRA, region: BRA, coarse: false  }
+  areas:
+    DE_LU: { iso3: DEU, region: DE,  coarse: false }
+    FR:    { iso3: FRA, region: FR,  coarse: false, mainland_bbox: [-10, 15, 41, 52] }
+    ES:    { iso3: ESP, region: ES,  coarse: false }
+    AUS:   { iso3: AUS, region: AUS, coarse: false, vic_bbox: [140.96, 149.97, -39.16, -34.00] }
+    BRA:   { iso3: BRA, region: BRA, coarse: false }
     # Demo area: a Victoria (Australia) subset shipped with a pre-sliced backup
     # cutout + derived geo parquets, so the default `snakemake` run needs no CDS
-    # download or EEZ/NE zips. region=VIC matches the committed vic_*_geo.parquet.
-    vic: { iso3: AUS, region: VIC, coarse: false }
+    # download or EEZ/NE zips. region=VIC matches the committed VIC1_*_geo.parquet.
+    VIC1:  { iso3: AUS, region: VIC, coarse: false }
 
   offshore_max_distance_km: 200
 
@@ -72,7 +76,7 @@ res_cf:
   pv_orientation:        latitude_optimal
 
   # Wind CF computation flags — passed to atlite.Cutout.wind() in
-  # 03_build_cf_timeseries, 07_make_bestsite_cf_timeseries, 06_resource_spread.
+  # d1_area_average, d2_bestsite_p95, d5_multi.
   # smooth=True             smooths the turbine power curve
   # add_cutout_windspeed    preserves atlite's built-in 25 m/s cutoff during smoothing
   wind_cf:
@@ -82,7 +86,7 @@ res_cf:
   # Land-sea eligibility for ONSHORE CF (issue #41). Coarse ERA5 coastal cells
   # blend sea + land and inflate onshore wind CF. Cells whose land fraction is
   # below `min_land_fraction` of the region's max are dropped from onshore
-  # weighting/selection: 03's country mean, and 07/07b's P95 / best-site / max.
+  # weighting/selection: d1's area mean, and d2/d3's P95 / best-site / max.
   # 0.98 reproduces the validated notebook cutoff; 0 disables the fix. Offshore
   # wind is never affected (sited on sea by design).
   #
@@ -113,7 +117,7 @@ res_cf:
     crs: 6933
     res: 200
 
-  # Anchor co-location for best-site RES-mix profiles (07_make_bestsite_cf_timeseries).
+  # Anchor co-location for best-site RES-mix profiles (d2_bestsite_p95).
   # max_radius_km           search radius (km) for counterpart cells across techs
   # quality_floor_fraction  keep candidates with CF >= this fraction of the best nearby cell
   spatial_matching_res_mix:

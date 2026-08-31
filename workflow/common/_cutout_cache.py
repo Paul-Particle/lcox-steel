@@ -3,14 +3,14 @@
 Each ERA5 download is expensive (hours of CDS queue, up to GBs), so a cutout
 should be re-fetched only when the request itself changes. The cache keys on the
 *actual* request parameters — module, bounding box, resolution, time range — not
-on the ``(cf_area, start, end)`` filename triple. That closes the stale-bounds
+on the ``(area, start, end)`` filename triple. That closes the stale-bounds
 hole of the old ``_backup.nc`` stopgap, where a ``mainland_bbox`` or
 ``offshore_max_distance_km`` edit changed the real bbox but reused a cutout
 cached under the same filename.
 
 Layout (under a gitignored ``cutouts/cache/``):
-    <cf_area>_<start>_<end>_<key>.nc     the cached cutout
-    <cf_area>_<start>_<end>_<key>.json   its request parameters (for inspection)
+    <area>_<start>_<end>_<key>.nc     the cached cutout
+    <area>_<start>_<end>_<key>.json   its request parameters (for inspection)
 
 Entries are shared with the rule output via hardlink (copy fallback), so the
 cache costs no extra disk and survives Snakemake deleting a rule output.
@@ -72,10 +72,10 @@ def cache_key(params: dict) -> str:
     return hashlib.sha256(blob).hexdigest()[:12]
 
 
-def cache_paths(cf_area: str, params: dict) -> tuple[Path, Path]:
+def cache_paths(area: str, params: dict) -> tuple[Path, Path]:
     """Return (cutout_path, params_json_path) for the given request."""
     key = cache_key(params)
-    stem = f"{cf_area}_{params['start_date']}_{params['end_date']}_{key}"
+    stem = f"{area}_{params['start_date']}_{params['end_date']}_{key}"
     return CACHE_DIR / f"{stem}.nc", CACHE_DIR / f"{stem}.json"
 
 
@@ -131,9 +131,9 @@ def warn_if_low_disk(min_free_gb: float, where: Path = CACHE_DIR) -> None:
             )
 
 
-def store_in_cache(source: Path, cf_area: str, params: dict, warn_size_gb: float = 0.0) -> Path:
+def store_in_cache(source: Path, area: str, params: dict, warn_size_gb: float = 0.0) -> Path:
     """Add a freshly downloaded cutout to the cache; return the cache path."""
-    cutout_path, params_path = cache_paths(cf_area, params)
+    cutout_path, params_path = cache_paths(area, params)
     link_or_copy(source, cutout_path)
     params_path.write_text(json.dumps(params, indent=2, sort_keys=True))
     log.info(f"stored cutout in cache: {cutout_path.name}")

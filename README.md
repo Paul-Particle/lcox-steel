@@ -8,36 +8,41 @@ optimisation model into one Snakemake workflow:
 
 - **`res_cf`** — hourly renewable capacity factors from ERA5 reanalysis (via atlite).
 - **`grid`** — hourly electricity market data from ENTSO-E (Europe) and NEM (Australia).
-- **`h2_dri`** — a PyPSA investment model that sizes generation, storage, and one
-  steelmaking process route to meet a constant demand at least cost. Routes
-  (selected per scenario via `route:` in an assumptions overlay):
-  - `h2_only` — electrolyser meets a flat H2 demand (the original LCOH model)
-  - `h2_dri_eaf` — electrolyser → H2 → DRI shaft → sponge iron (storable) → EAF → steel
-  - `moe` — molten oxide electrolysis, electricity → liquid steel (ladle folded in)
-  - `ew` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
-  - `ng_dri_eaf` — fossil benchmark: natural-gas DRI (flat gas price, optional CO2 price) → EAF → steel
-  - `mix_dri_eaf` — H2 and NG DRI shafts side by side; the optimiser picks the split
-- **`viz`** — a per-project LCOH/LCOS report plus Plotly figures.
+- **`solve`** — a PyPSA investment model that sizes generation, storage, and one
+  steelmaking process route to meet a constant demand at least cost. One solve
+  is one route, named by the `route` column of `config/scenarios.csv`:
+  - `h2-only` — electrolyser meets a flat H2 demand (the original LCOH model)
+  - `h2-dri-eaf` — electrolyser → H2 → DRI shaft → sponge iron (storable) → EAF → steel
+  - `ng-dri-eaf` — fossil benchmark: natural-gas DRI (flat gas price, optional CO2 price) → EAF → steel
+  - `mix-dri-eaf` — H2 and NG DRI shafts side by side; the optimiser picks the split
+  - `moe-eaf` — molten oxide electrolysis → liquid iron → EAF → steel
+  - `ew-eaf` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
+
+  `all-routes` in that column means every route above. The registry lives in
+  `workflow/common/_routes.py`; `*-export` ids are reserved for the trade
+  scenarios and are not implemented.
+- **`viz`** — a per-scenario LCOH/LCOS report plus Plotly figures.
 
 ## Architecture at a glance
 
-Everything is a Snakemake workflow keyed off one table, `config/projects.csv`.
-Each row is one `(project, scenario, tech)` input; `rule all` expands over every
-row, so **adding a project or scenario is a CSV edit, not a Snakefile edit**.
+Everything is a Snakemake workflow keyed off one table, `config/scenarios.csv`.
+Each row is one `(scenario, tech)` input; `rule all` expands over every row, so
+**adding a scenario is a CSV edit, not a Snakefile edit**.
 
 ```
-config/projects.csv ─┬─► res_cf  ──►  resources/res_cf/*.parquet   (hourly CF)   ─┐
-                     └─► grid    ──►  resources/{entsoe,nem}/*.parquet (€/MWh)   ─┤
+config/scenarios.csv ──► res_cf ─┬─► resources/timeseries/*.parquet  (hourly CF) ─┐
+                     └─► grid   ─┘                        (and grid €/MWh)        │
                                                                                   ▼
-                                                        h2_dri (PyPSA optimise) ──► results/{project}/{scenario}.nc
+                                                       solve (PyPSA optimise) ──► results/{scenario}/{route}.nc
                                                                                   │
                                                           viz ◄───────────────────┘
-                                              results/report_{project}.csv + plots/*.png|html
+                                              results/report_{scenario}.csv + plots/*.png|html
 ```
 
-A scenario draws one or more capacity-factor series (one per RES tech) and/or a
-single grid price series; `h2_dri` builds and solves the network; `viz` compiles
-the LCOH report and charts.
+A scenario is a name plus its optional `config/assumptions_{scenario}.yaml`
+overlay. It draws one or more capacity-factor series (one per RES tech) and/or a
+single grid price series, and is solved once per route in its `route` column;
+`viz` compiles the report and charts, one row per route.
 
 ## Project structure
 
@@ -49,7 +54,7 @@ lcox-steel/
 │   │   ├── _optional_shim.smk      # local stand-in for Snakemake's optional() (not shipped yet)
 │   │   ├── grid.smk                # ENTSO-E + NEM retrieval rules
 │   │   ├── res_cf.smk              # atlite CF pipeline (shapes → cutout → CF series)
-│   │   ├── h2_dri.smk              # PyPSA optimisation rule
+│   │   ├── solve.smk               # PyPSA optimisation rule
 │   │   └── viz.smk                 # compile_report + plot rules
 │   ├── scripts/
 │   │   ├── grid/                   # ENTSO-E + NEM download/process
@@ -60,19 +65,20 @@ lcox-steel/
 │   │   │   ├── _nemosis_patches.py # AEMO User-Agent / URL-encoding workarounds
 │   │   │   └── _helpers.py         # month iteration, UTC-naive coercion, cache checks
 │   │   ├── res_cf/                 # atlite capacity-factor pipeline (numbered by stage)
-│   │   │   ├── 01_build_regions.py            # onshore country geometry (GeoParquet)
-│   │   │   ├── 01b_build_offshore_regions.py  # EEZ-clipped offshore geometry
-│   │   │   ├── 02_make_cutouts.py             # ERA5 cutout (honours `_backup.nc`; see below)
-│   │   │   ├── 03_build_cf_timeseries.py      # country-average hourly CF per tech
-│   │   │   ├── 03b_build_solar_tilt_mix_p95.py # orientation-resolved solar CF sweep
-│   │   │   ├── 03c_build_res_cf_candidates.py # per-cell candidate grid (multi-site siting)
-│   │   │   ├── 07_make_bestsite_cf_timeseries.py # best-site P95 + anchored RES-mix CF
+│   │   │   ├── a_make_area_geometry.py        # onshore area geometry (GeoParquet)
+│   │   │   ├── b_make_offshore_geometry.py    # EEZ-clipped offshore geometry
+│   │   │   ├── c_retrieve_area_cutout.py      # ERA5 cutout (honours `_backup.nc`; see below)
+│   │   │   ├── d1_area_average.py             # area-average hourly CF per tech
+│   │   │   ├── d2_bestsite_p95.py             # best-site P95 + anchored RES-mix CF
+│   │   │   ├── d3_anchor_colo.py              # anchor co-located CF
+│   │   │   ├── d4_tilt_mix.py                 # orientation-resolved solar CF sweep
+│   │   │   ├── d5_multi.py                    # per-cell candidate grid (multi-site siting)
 │   │   │   ├── 08_complementarity_screen.py   # complementarity triplet screen
 │   │   │   ├── 06_resource_spread.py, 100_*, 101_*  # WIP diagnostics & plots (NOT in active DAG)
 │   │   │   ├── _helpers.py                    # shared helpers for the WIP scripts
 │   │   │   ├── reference/                     # Hannah's original scripts, verbatim (for side-by-side diffs)
 │   │   │   └── README.md                      # author's notes on the CF methodology (WIP)
-│   │   ├── h2_dri/                 # PyPSA investment model
+│   │   ├── solve/                  # PyPSA investment model
 │   │   │   ├── build_network.py    # network construction (pure, importable)
 │   │   │   ├── solve_network.py    # rule entrypoint: load → build → solve → write
 │   │   │   └── _helpers.py         # annuity factor + electrolyser sizing
@@ -89,8 +95,8 @@ lcox-steel/
 ├── config/
 │   ├── config.yaml                 # pipeline knobs (logging, entsoe, nem, res_cf)
 │   ├── assumptions.yaml            # base techno-economics (CAPEX, OPEX, WACC, lifetimes)
-│   ├── assumptions_{project}_{scenario}.yaml   # optional per-scenario overlay (presence = on)
-│   └── projects.csv                # one row per (project, scenario, tech)
+│   ├── assumptions_{scenario}.yaml  # optional per-scenario overlay (presence = on)
+│   └── scenarios.csv               # one row per (scenario, tech) input
 ├── profiles/
 │   ├── default/config.yaml         # local-run defaults (keep-going, quiet, per-rule logs)
 │   └── slurm/config.yaml.template  # HPC executor placeholder — copy & fill in
@@ -193,7 +199,7 @@ The default target is a small, self-contained **demo** that runs after a fresh
 clone with **no CDS download, no EEZ/Natural-Earth zips, and no API keys**. It
 ships a pre-sliced Victoria (Australia) cutout backup plus the derived geometry
 parquets, and exercises the best-site (`07`) and complementarity (`08`)
-capacity-factor science through an `h2_dri` solve to a `viz` report:
+capacity-factor science through a `solve` to a `viz` report:
 
 ```bash
 snakemake --profile profiles/default --cores 4        # builds the DEMO-VIC-2025 demo
@@ -204,7 +210,7 @@ Outputs land at `results/report_DEMO-VIC-2025.csv` and
 
 ### The real projects
 
-`config/projects.csv` drives the full DAG. Building every real project needs the
+`config/scenarios.csv` drives the full DAG. Building every real scenario needs the
 external data and credentials described under [Setup](#setup) — ERA5 cutouts via
 CDS, the EEZ/NE zips, and (for grid-connected scenarios) ENTSO-E or NEM access.
 Target them explicitly with `snakemake all`:
@@ -227,9 +233,9 @@ snakemake resources/entsoe/DE_LU_grid_dayahead_20230101_20231231.parquet --cores
 snakemake resources/nem/VIC1_grid_dayahead_20250101_20251231.parquet --cores 4
 
 # res_cf — wind-onshore CF for Germany, 2023:
-snakemake resources/res_cf/de_wind-onshore_country-average_20230101_20231231.parquet --cores 4
+snakemake resources/timeseries/DE_LU_wind-onshore_area-average_20230101_20231231.parquet --cores 4
 
-# h2_dri — one solved network:
+# solve — one network (one route):
 snakemake results/DE-2023-baseline/dedicated-res.nc --cores 4
 ```
 
@@ -250,7 +256,7 @@ The `res_cf` chain is `build_regions` → `build_offshore_regions` →
 
 > [!NOTE]
 > **Cutout bounds = land ∪ offshore.** `download_cutout` reads the pre-built
-> `{cf_area}_geo.parquet` and `{cf_area}_offshore_geo.parquet`, unions them, and
+> `{area}_geo.parquet` and `{area}_offshore_geo.parquet`, unions them, and
 > takes the bounding box padded by `res_cf.cutout.bbox_pad_deg`. Unioning the
 > offshore zone in matters: it can reach `res_cf.offshore_max_distance_km`
 > (~200 km) from the coast — well beyond a land-only bbox + 1° pad — so without
@@ -260,22 +266,33 @@ The `res_cf` chain is `build_regions` → `build_offshore_regions` →
 
 ### Naming convention
 
-Name projects and scenarios with **dashes** between words (`VIC-2025-solar-ew`,
-`high-el-cost`), not underscores. The underscore is the field separator in the
-filenames these names compose into (`assumptions_<project>_<scenario>.yaml`,
-`logs/<project>_<scenario>.log`), so reserving it keeps the boundaries legible at
-a glance. Tech and variant follow the same rule (`wind-onshore`,
-`country-average`, `tilt-mix-n7`). The **`area`** column is the exception — it
-keeps underscores, because official bidding-zone codes use them (`DE_LU`).
+Five identifiers — **route, tech, variant, area, dates** — have one spelling
+each, set in `config/scenarios.csv`, and every layer below spells them the same:
+the assumptions blocks, the Snakemake wildcards and rule names, the script
+filenames, and the PyPSA component names.
+
+Name scenarios with **dashes** between words (`VIC-2025-solar-ew`,
+`DE-2023-grid-p95`), not underscores. The underscore is the field separator in
+the filenames these names compose into (`assumptions_<scenario>.yaml`,
+`logs/<scenario>_<route>.log`), so reserving it keeps the boundaries legible at a
+glance. Route, tech and variant follow the same rule (`moe-eaf`, `wind-onshore`,
+`area-average`, `tilt-mix-n7`).
+
+The **`area`** column is the exception — it keeps underscores, because official
+market-zone codes use them. Its two namespaces: **three uppercase letters** is an
+ISO 3166-1 alpha-3 national area (`AUS`, `BRA`), anything else is a market zone
+(ENTSO-E bidding zone `DE_LU`, `FR`, `ES`; AEMO NEM region `VIC1`). RES rows may
+use either; a `tech=grid` row needs a market zone, since a country has no single
+wholesale price — `retrieve_grid_data.py` rejects a national code there.
 
 ## Configuration
 
 | File | Holds |
 |------|-------|
-| `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (per-country metadata, turbines, CF flags, cutout settings). |
-| `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri`, `dri_ng`, `eaf`, `moe`, `ladle`, `electrowinning`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and the default `route`. Loaded by `h2_dri_optimize` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
-| `config/assumptions_{project}_{scenario}.yaml` | *Optional* per-scenario overlay. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. Also how a scenario picks its steel route (`route: moe` etc.). |
-| `config/projects.csv` | Flat table, one row per `(project, scenario, tech)` input. Columns: `project, scenario, tech, variant, pipeline, area, start_date, end_date`. |
+| `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (per-area metadata, turbines, CF flags, cutout settings). |
+| `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `iron_store`), natural-gas price/CO2 (`natural_gas`) and grid connection charges. Numbers only — the route is chosen by the CSV, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
+| `config/assumptions_{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. |
+| `config/scenarios.csv` | Flat table, one row per `(scenario, tech)` input. Columns: `scenario, route, tech, variant, area, start_date, end_date`. `route` holds one route id, several separated by `|`, or `all-routes`; a scenario's route set is the union over its rows. `#` rows are planned scenarios and are not built. |
 
 ## Data formats
 
@@ -284,11 +301,11 @@ UTC hourly `DatetimeIndex`, single `price` column (EUR/MWh). The `_full` variant
 has MultiIndex `(area, metric)` columns covering all data types at native
 resolution.
 
-**Capacity factors** (`resources/res_cf/{area}_{tech}_country-average_{start}_{end}.parquet`):
+**Capacity factors** (`resources/timeseries/{area}_{tech}_area-average_{start}_{end}.parquet`):
 hourly parquet, `DatetimeIndex` named `time`, one column whose name *is* the tech
 key (`solar`, `wind-onshore`, …) with values in [0, 1].
 
-**Solar tilt-mix** (`resources/res_cf/{area}_solar_tilt-mix-n{N}_{start}_{end}.parquet`):
+**Solar tilt-mix** (`resources/timeseries/{area}_solar_tilt-mix-n{N}_{start}_{end}.parquet`):
 same index, **multiple columns** — one per orientation in the sweep (`solar_az0`,
 `solar_az30`, …). `solve_network` concatenates columns from all CF inputs into one
 multi-tech frame.
@@ -328,14 +345,13 @@ start/finish line otherwise.
 
 ```
 logs/
-├── retrieve_entsoe/{area}_{variant}_{start}_{end}.log
-├── retrieve_nem/{area}_{variant}_{start}_{end}.log
-├── build_regions/{cf_area}.log
-├── build_offshore_regions/{cf_area}.log
-├── download_cutout/{cf_area}_{start}_{end}.log
-├── build_country_average_cf/{cf_area}_{tech}_{start}_{end}.log
-├── h2_dri_optimize/{project}_{scenario}.log
-└── compile_report/{project}.log
+├── retrieve_grid_data/{area}_{variant}_{start}_{end}.log
+├── make_area_geometry/{area}.log
+├── make_offshore_geometry/{area}.log
+├── retrieve_area_cutout/{area}_{start}_{end}.log
+├── area_average/{area}_{tech}_{variant}_{start}_{end}.log
+├── solve_network/{scenario}_{route}.log
+└── compile_report/{scenario}.log
 ```
 
 Default level is `INFO`. Crank it up two ways:
@@ -365,7 +381,7 @@ variable group), and a single request commonly spends 20-25 min actually running
 plus queue time. So a full country-year cutout is ~2-2.5 h. This is normal.
 
 `workflow/common/_cds_monitor.py` logs progress into
-`logs/download_cutout/{cf_area}_{start}_{end}.log`. To avoid drowning the log (and
+`logs/retrieve_area_cutout/{area}_{start}_{end}.log`. To avoid drowning the log (and
 misleading anyone tailing it), it prints **only on a status change**, plus a
 periodic "still working" heartbeat:
 

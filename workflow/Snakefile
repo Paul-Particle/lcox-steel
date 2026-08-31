@@ -25,44 +25,52 @@ onstart:
 
 import pandas as pd
 
-projects_df = pd.read_csv(
-    "config/projects.csv", dtype={"start_date": str, "end_date": str}
+from common._routes import ROUTE_PATTERN, build_routes_frame
+
+# One row per input timeseries a scenario needs. `#` rows are planned scenarios
+# parked next to their live siblings (see the export routes) and are not built.
+scenarios_df = pd.read_csv(
+    "config/scenarios.csv", comment="#", dtype={"start_date": str, "end_date": str}
 )
 
-# (project, scenario, tech) is the natural row key in projects.csv; two rows
-# with the same triple would silently merge in the DAG and confuse downstream
-# lookup() calls, so reject the file at load time.
-_key = ["project", "scenario", "tech"]
-if projects_df.duplicated(subset=_key).any():
-    dups = projects_df[projects_df.duplicated(subset=_key, keep=False)][_key]
-    raise ValueError(f"projects.csv has duplicate (project, scenario, tech) rows:\n{dups}")
+# (scenario, tech) is the natural row key: two rows with the same pair would
+# hand the solve two timeseries for one tech, so reject the file at load time.
+_key = ["scenario", "tech"]
+if scenarios_df.duplicated(subset=_key).any():
+    dups = scenarios_df[scenarios_df.duplicated(subset=_key, keep=False)][_key]
+    raise ValueError(f"scenarios.csv has duplicate (scenario, tech) rows:\n{dups}")
 
-PROJECTS = projects_df["project"].unique()
+# One row per network to solve — `all-routes` and `a|b` cells expanded.
+routes_df = build_routes_frame(scenarios_df)
+
+SCENARIOS = scenarios_df["scenario"].unique()
+DEMO_SCENARIOS = scenarios_df.loc[
+    scenarios_df["scenario"].str.startswith("DEMO-"), "scenario"
+].unique()
 
 
 include: "rules/_optional_shim.smk"
 include: "rules/grid.smk"
 include: "rules/res_cf.smk"
-include: "rules/h2_dri.smk"
+include: "rules/solve.smk"
 include: "rules/viz.smk"
 
 
 # Default target: a small, self-contained demo that runs after a fresh clone
 # with no CDS download, no EEZ/NE zips, and no API keys. It ships a pre-sliced
 # Victoria (AUS) cutout backup + derived geo parquets, and exercises the
-# best-site (07) and anchor-colocation (07b, multi-site PyPSA) RES-CF science
-# through to an h2_dri solve and a viz report. Run the full set of real
-# projects with `snakemake all`.
+# best-site and anchor-colocation (multi-site PyPSA) RES-CF science through to
+# a solve and a viz report. Run the full set with `snakemake all`.
 rule demo:
     default_target: True
     input:
-        "results/report_DEMO-VIC-2025.csv",
-        "results/plots/capacity_bars/DEMO-VIC-2025.png",
+        collect("results/report_{scenario}.csv", scenario=DEMO_SCENARIOS),
+        collect("results/plots/capacity_bars/{scenario}.png", scenario=DEMO_SCENARIOS),
 
 
 rule all:
     input:
-        # One report per project.
-        expand("results/report_{project}.csv", project=PROJECTS),
-        # One scenario-comparison bar chart per project.
-        expand("results/plots/capacity_bars/{project}.png", project=PROJECTS),
+        # One report per scenario — its rows are that scenario's routes.
+        collect("results/report_{scenario}.csv", scenario=SCENARIOS),
+        # One route-comparison bar chart per scenario.
+        collect("results/plots/capacity_bars/{scenario}.png", scenario=SCENARIOS),

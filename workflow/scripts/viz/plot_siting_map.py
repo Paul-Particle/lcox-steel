@@ -1,7 +1,7 @@
 """Geographic siting map for one multi-site h2_dri scenario.
 
 The multi-site analogue of plot_cf_map: instead of a CF heatmap it reads a solved
-network (results/{project}/{scenario}.nc) and shows, on a real map, where the LP
+network (results/{scenario}/{route}.nc) and shows, on a real map, where the LP
 chose to build. Candidate sites are markers sized by built capacity and coloured
 by tech; the demand/electrolyser site is starred; HVDC links are drawn from each
 built site to the demand site with width proportional to optimal link capacity
@@ -94,7 +94,7 @@ def _marker_sizes(mw: pd.Series, mw_max: float) -> list[float]:
     return out
 
 
-def plot(n: pypsa.Network, sites: pd.DataFrame, out: Path, project: str, scenario: str) -> None:
+def plot(n: pypsa.Network, sites: pd.DataFrame, out: Path, scenario: str, route: str) -> None:
     """Render the siting map (markers + HVDC links + demand site) to PNG + HTML."""
     demand = demand_site_bus(n)
     dx, dy = n.buses.at[demand, "x"], n.buses.at[demand, "y"]
@@ -168,7 +168,7 @@ def plot(n: pypsa.Network, sites: pd.DataFrame, out: Path, project: str, scenari
 
     apply_header(
         fig,
-        title=f"{project} / {scenario} — chosen siting",
+        title=f"{scenario} / {route} — chosen siting",
         subtitle=(f"{len(built)} of {len(sites)} candidate sites built · "
                   "marker size ∝ capacity · line width ∝ HVDC capacity"),
         fig_width=900, fig_height=760,
@@ -180,17 +180,17 @@ def plot(n: pypsa.Network, sites: pd.DataFrame, out: Path, project: str, scenari
 
 def main() -> None:
     """Load the solved network and render its siting map."""
-    project = snakemake.wildcards.project
+    route = snakemake.wildcards.route
     scenario = snakemake.wildcards.scenario
     n = pypsa.Network()
     n.import_from_netcdf(snakemake.input.network)
     if int((n.buses.carrier == "AC").sum()) <= 1:
         raise ValueError(
-            f"{project}/{scenario} is a single-site network — plot_siting_map is "
+            f"{scenario}/{route} is a single-site network — plot_siting_map is "
             "only meaningful for multi-site scenarios (those with a sites overlay)."
         )
     sites = build_site_table(n)
-    plot(n, sites, Path(snakemake.output.png), project, scenario)
+    plot(n, sites, Path(snakemake.output.png), scenario, route)
 
 
 if __name__ == "__main__":
