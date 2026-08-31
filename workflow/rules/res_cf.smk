@@ -11,10 +11,10 @@ rule make_area_geometry:
     log:
         "logs/make_area_geometry/{area}.log",
     params:
-        iso3=lookup(dpath="res_cf/areas/{area}/iso3", within=config),
-        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
+        iso3=lookup(dpath="areas/{area}/iso3", within=config),
+        region=lookup(dpath="areas/{area}/region", within=config),
         mainland_bbox=lookup(
-            dpath="res_cf/areas/{area}/mainland_bbox",
+            dpath="areas/{area}/mainland_bbox",
             within=config,
             default=None,
         ),
@@ -31,8 +31,8 @@ rule make_offshore_geometry:
     log:
         "logs/make_offshore_geometry/{area}.log",
     params:
-        iso3=lookup(dpath="res_cf/areas/{area}/iso3", within=config),
-        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
+        iso3=lookup(dpath="areas/{area}/iso3", within=config),
+        region=lookup(dpath="areas/{area}/region", within=config),
         offshore_max_distance_km=lookup(
             dpath="res_cf/offshore_max_distance_km", within=config
         ),
@@ -57,7 +57,7 @@ rule retrieve_area_cutout:
         "logs/retrieve_area_cutout/{area}_{start_date}_{end_date}.log",
     params:
         coarse=lookup(
-            dpath="res_cf/areas/{area}/coarse", within=config, default=False
+            dpath="areas/{area}/coarse", within=config, default=False
         ),
         bbox_pad_deg=lookup(dpath="res_cf/cutout/bbox_pad_deg", within=config),
         monthly_requests=lookup(dpath="res_cf/cutout/monthly_requests", within=config),
@@ -80,7 +80,7 @@ rule area_average:
     log:
         "logs/area_average/{area}_{tech}_{variant}_{start_date}_{end_date}.log",
     params:
-        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
+        region=lookup(dpath="areas/{area}/region", within=config),
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
         wind_offshore_turbine=lookup(
             dpath="res_cf/wind_offshore_turbine", within=config
@@ -106,7 +106,7 @@ rule bestsite_p95:
     log:
         "logs/bestsite_p95/{area}_{tech}_{variant}_{start_date}_{end_date}.log",
     params:
-        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
+        region=lookup(dpath="areas/{area}/region", within=config),
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
         wind_offshore_turbine=lookup(dpath="res_cf/wind_offshore_turbine", within=config),
         pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
@@ -131,7 +131,7 @@ rule anchor_colo:
     log:
         "logs/anchor_colo/{area}_{tech}_{variant}_{start_date}_{end_date}.log",
     params:
-        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
+        region=lookup(dpath="areas/{area}/region", within=config),
         anchor_colocation=lookup(dpath="res_cf/anchor_colocation", within=config),
     script:
         "../scripts/res_cf/d3_anchor_colo.py"
@@ -149,7 +149,7 @@ rule tilt_mix:
         "logs/tilt_mix/{area}_n{n_steps}_{start_date}_{end_date}.log",
     params:
         pv_panel=lookup(dpath="res_cf/pv_panel", within=config),
-        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
+        region=lookup(dpath="areas/{area}/region", within=config),
     script:
         "../scripts/res_cf/d4_tilt_mix.py"
 
@@ -166,7 +166,7 @@ rule multi:
     log:
         "logs/multi/{area}_{tech}_multi-n{n_cells}_{start_date}_{end_date}.log",
     params:
-        region=lookup(dpath="res_cf/areas/{area}/region", within=config),
+        region=lookup(dpath="areas/{area}/region", within=config),
         wind_onshore_turbine=lookup(dpath="res_cf/wind_onshore_turbine", within=config),
         wind_offshore_turbine=lookup(
             dpath="res_cf/wind_offshore_turbine", within=config

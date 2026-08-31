@@ -1,20 +1,17 @@
 """Grid market data for one (area, variant, date-range) slice.
 
 Single entry point for every `tech=grid` row in config/scenarios.csv. The area
-is a market-zone code, and the zone decides which source implementation runs:
-AEMO NEM regions go to `_nem`, everything else to ENTSO-E via `_entsoe`. Both
-modules keep their own processed cache and are unaware of this dispatcher.
+registry (config/config.yaml `areas`) says which wholesale market an area trades
+in, and that decides which source implementation runs. The sources themselves
+are unaware of this dispatcher.
 
-Areas in the scenario CSV come from two namespaces (see config/config.yaml):
-market zones like DE_LU / VIC1, and three-letter national codes like AUS used
-by the RES pipeline where a whole-country cutout is wanted. A country has no
-single wholesale price, so a national code on a grid row is rejected here —
-this is the only place that knows the difference.
+Areas are a flat namespace — nothing infers anything from the shape of an area
+code. An area with no `market` entry has no price series, so a tech=grid row on
+it is an error; that is the only thing separating an area you can grid-connect
+from one you can only model islanded.
 """
 
 import logging
-import re
-from pathlib import Path
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -26,31 +23,28 @@ import _nem
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
-# AEMO NEM regions. Every other market zone is assumed to be an ENTSO-E bidding
-# zone; _entsoe validates it against data/entsoe_cache/entsoe_bidding_zones.csv.
-NEM_AREAS = ("NSW1", "QLD1", "SA1", "TAS1", "VIC1")
-
-# Three uppercase letters = an ISO 3166-1 alpha-3 national code (see the area
-# convention in config/config.yaml). Market zones never match this shape.
-NATIONAL_AREA = re.compile(r"[A-Z]{3}")
+SOURCES = {"entsoe": _entsoe.retrieve, "nem": _nem.retrieve}
 
 
 def main() -> None:
-    """Route the request to the NEM or ENTSO-E implementation for this area."""
+    """Route the request to the source that carries this area's prices."""
     area = snakemake.wildcards.area
+    market = snakemake.params.market
 
-    if NATIONAL_AREA.fullmatch(area):
+    if not market:
+        priced = sorted(a for a, cfg in snakemake.config["areas"].items() if cfg.get("market"))
         raise ValueError(
-            f"{area!r} is a national area code, which has no wholesale price series. "
-            f"A tech=grid row needs a market zone — an ENTSO-E bidding zone (DE_LU, "
-            f"FR, ES, ...) or an AEMO NEM region ({', '.join(NEM_AREAS)}). National "
-            f"codes are for RES rows only, where they select a whole-country cutout."
+            f"area {area!r} has no `market` entry in config.yaml, so no wholesale "
+            f"price series exists for it — a tech=grid row needs one of {priced}. "
+            f"Model {area!r} islanded, or add its market and price source."
+        )
+    if market not in SOURCES:
+        raise ValueError(
+            f"area {area!r} declares market {market!r}; expected one of {sorted(SOURCES)}"
         )
 
-    source = "NEM" if area in NEM_AREAS else "ENTSO-E"
-    log.info(f"{area}: retrieving {snakemake.wildcards.variant} from {source}")
-    retrieve = _nem.retrieve if area in NEM_AREAS else _entsoe.retrieve
-    retrieve(snakemake)
+    log.info(f"{area}: retrieving {snakemake.wildcards.variant} from {market}")
+    SOURCES[market](snakemake)
 
 
 if __name__ == "__main__":

@@ -28,36 +28,40 @@ nem:
   # assumptions live in config/assumptions*.yaml.
   eur_per_aud: 0.61
 
-res_cf:
-  # Per-area metadata for the atlite + capacity factor pipeline.
-  # Keys are area codes, the same namespace config/scenarios.csv uses:
-  # three uppercase letters = an ISO 3166-1 alpha-3 national area, anything
-  # else = a market zone (ENTSO-E bidding zone, AEMO NEM region). RES rows may
-  # use either; grid rows need a market zone (retrieve_grid_data.py rejects
-  # national codes). Each key here names one cutout.
-  #   iso3:           3-letter code for Natural Earth ADM0_A3 lookup
-  #   region:         tag stored in the geo parquet (mostly ISO-2, but AUS/BRA
-  #                   stayed ISO-3 historically — kept that way to avoid
-  #                   regenerating the geometry and chasing downstream)
-  #   coarse:         use a coarser cutout resolution to avoid CDS instability
-  #                   / memory limits for large countries
-  #   mainland_bbox:  optional [lon_min, lon_max, lat_min, lat_max] — keeps only
-  #                   polygon parts whose centroid falls inside the box. Used
-  #                   to drop overseas territories (e.g. metropolitan France).
-  #   vic_bbox:       AUS-only; approximates NEM zone VIC1 for sub-national tests
-  #                   (Natural Earth 1:110m has no state boundaries, so we use a
-  #                   bbox).
-  areas:
-    DE_LU: { iso3: DEU, region: DE,  coarse: false }
-    FR:    { iso3: FRA, region: FR,  coarse: false, mainland_bbox: [-10, 15, 41, 52] }
-    ES:    { iso3: ESP, region: ES,  coarse: false }
-    AUS:   { iso3: AUS, region: AUS, coarse: false, vic_bbox: [140.96, 149.97, -39.16, -34.00] }
-    BRA:   { iso3: BRA, region: BRA, coarse: false }
-    # Demo area: a Victoria (Australia) subset shipped with a pre-sliced backup
-    # cutout + derived geo parquets, so the default `snakemake` run needs no CDS
-    # download or EEZ/NE zips. region=VIC matches the committed VIC1_*_geo.parquet.
-    VIC1:  { iso3: AUS, region: VIC, coarse: false }
+# The area registry. One entry per area; `area` in config/scenarios.csv names
+# one of these keys, and each key names one cutout. Areas are a flat namespace —
+# an area is not "a country" or "a zone", it is just an area, and what it can be
+# used for follows from the data it has rather than from the shape of its name.
+#   iso3:           3-letter code for Natural Earth ADM0_A3 lookup
+#   region:         tag stored in the geo parquet (mostly ISO-2, but AUS/BRA
+#                   stayed ISO-3 historically — kept that way to avoid
+#                   regenerating the geometry and chasing downstream)
+#   market:         which wholesale market this area trades in, `entsoe` or
+#                   `nem`. Omitted where no price series exists: a tech=grid row
+#                   on such an area is an error (retrieve_grid_data.py), and a
+#                   grid scenario spanning all areas simply skips them.
+#   coarse:         use a coarser cutout resolution to avoid CDS instability
+#                   / memory limits for large countries
+#   mainland_bbox:  optional [lon_min, lon_max, lat_min, lat_max] — keeps only
+#                   polygon parts whose centroid falls inside the box. Used
+#                   to drop overseas territories (e.g. metropolitan France).
+#   vic_bbox:       AUS-only; approximates NEM zone VIC1 for sub-national tests
+#                   (Natural Earth 1:110m has no state boundaries, so we use a
+#                   bbox).
+areas:
+  DE_LU: { iso3: DEU, region: DE,  coarse: false, market: entsoe }
+  FR:    { iso3: FRA, region: FR,  coarse: false, market: entsoe, mainland_bbox: [-10, 15, 41, 52] }
+  ES:    { iso3: ESP, region: ES,  coarse: false, market: entsoe }
+  # No market entry: neither has a wholesale price series, so both are
+  # islanded-only until one is added.
+  AUS:   { iso3: AUS, region: AUS, coarse: false, vic_bbox: [140.96, 149.97, -39.16, -34.00] }
+  BRA:   { iso3: BRA, region: BRA, coarse: false }
+  # Demo area: a Victoria (Australia) subset shipped with a pre-sliced backup
+  # cutout + derived geo parquets, so the default `snakemake` run needs no CDS
+  # download or EEZ/NE zips. region=VIC matches the committed VIC1_*_geo.parquet.
+  VIC1:  { iso3: AUS, region: VIC, coarse: false, market: nem }
 
+res_cf:
   offshore_max_distance_km: 200
 
   # Atlite cutout build settings.

@@ -26,23 +26,27 @@ optimisation model into one Snakemake workflow:
 ## Architecture at a glance
 
 Everything is a Snakemake workflow keyed off one table, `config/scenarios.csv`.
-Each row is one `(scenario, tech)` input; `rule all` expands over every row, so
-**adding a scenario is a CSV edit, not a Snakefile edit**.
+A scenario name is an **umbrella label** and means nothing to the code — any
+string works. What identifies one network is the **run key**: scenario, area,
+date range, route. Every part of it but the name comes from the rows filed under
+that name, so **adding a run is a CSV edit, not a Snakefile edit**.
 
 ```
 config/scenarios.csv ──► res_cf ─┬─► resources/timeseries/*.parquet  (hourly CF) ─┐
                      └─► grid   ─┘                        (and grid €/MWh)        │
                                                                                   ▼
-                                                       solve (PyPSA optimise) ──► results/{scenario}/{route}.nc
+                                                       solve (PyPSA optimise) ──► results/{scenario}/{area}_{route}_{dates}.nc
                                                                                   │
                                                           viz ◄───────────────────┘
                                               results/report_{scenario}.csv + plots/*.png|html
 ```
 
 A scenario is a name plus its optional `config/assumptions_{scenario}.yaml`
-overlay. It draws one or more capacity-factor series (one per RES tech) and/or a
-single grid price series, and is solved once per route in its `route` column;
-`viz` compiles the report and charts, one row per route.
+overlay. Its rows group by `(area, start_date, end_date)`; each group draws one
+or more capacity-factor series (one per RES tech) and/or a single grid price
+series, and is solved once per route. `viz` compiles the report and charts, one
+row per run — so a scenario spanning several areas and years produces the
+cross-country comparison table directly.
 
 ## Project structure
 
@@ -96,7 +100,7 @@ lcox-steel/
 │   ├── config.yaml                 # pipeline knobs (logging, entsoe, nem, res_cf)
 │   ├── assumptions.yaml            # base techno-economics (CAPEX, OPEX, WACC, lifetimes)
 │   ├── assumptions_{scenario}.yaml  # optional per-scenario overlay (presence = on)
-│   └── scenarios.csv               # one row per (scenario, tech) input
+│   └── scenarios.csv               # one row per (run, tech) input
 ├── profiles/
 │   ├── default/config.yaml         # local-run defaults (keep-going, quiet, per-rule logs)
 │   └── slurm/config.yaml.template  # HPC executor placeholder — copy & fill in
@@ -279,20 +283,21 @@ glance. Route, tech and variant follow the same rule (`moe-eaf`, `wind-onshore`,
 `area-average`, `tilt-mix-n7`).
 
 The **`area`** column is the exception — it keeps underscores, because official
-market-zone codes use them. Its two namespaces: **three uppercase letters** is an
-ISO 3166-1 alpha-3 national area (`AUS`, `BRA`), anything else is a market zone
-(ENTSO-E bidding zone `DE_LU`, `FR`, `ES`; AEMO NEM region `VIC1`). RES rows may
-use either; a `tech=grid` row needs a market zone, since a country has no single
-wholesale price — `retrieve_grid_data.py` rejects a national code there.
+market-zone codes use them (`DE_LU`). Areas are a **flat namespace**: an area is
+not "a country" or "a zone", it is just an area, and nothing infers anything from
+the shape of its code. What an area can be used for follows from the data it has.
+The registry is the top-level `areas:` block in `config/config.yaml`; an area
+with no `market:` entry has no wholesale price series, so a `tech=grid` row on it
+is an error and a grid scenario spanning all areas simply skips it.
 
 ## Configuration
 
 | File | Holds |
 |------|-------|
-| `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (per-area metadata, turbines, CF flags, cutout settings). |
+| `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (turbines, CF flags, cutout settings), `areas` (the area registry), `demo_scenarios`. |
 | `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `iron_store`), natural-gas price/CO2 (`natural_gas`) and grid connection charges. Numbers only — the route is chosen by the CSV, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
-| `config/assumptions_{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. |
-| `config/scenarios.csv` | Flat table, one row per `(scenario, tech)` input. Columns: `scenario, route, tech, variant, area, start_date, end_date`. `route` holds one route id, several separated by `|`, or `all-routes`; a scenario's route set is the union over its rows. `#` rows are planned scenarios and are not built. |
+| `config/assumptions_{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. It covers every run under that name. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. |
+| `config/scenarios.csv` | Flat table, one row per `(run, tech)` input. Columns: `scenario, route, tech, variant, area, start_date, end_date`. Rows join into a network by `(scenario, area, start_date, end_date)`. `route` holds one route id, several separated by `|`, or `all-routes`; a scenario's route set is the union over its rows. `#` rows are planned scenarios and are not built. |
 
 ## Data formats
 
@@ -350,7 +355,7 @@ logs/
 ├── make_offshore_geometry/{area}.log
 ├── retrieve_area_cutout/{area}_{start}_{end}.log
 ├── area_average/{area}_{tech}_{variant}_{start}_{end}.log
-├── solve_network/{scenario}_{route}.log
+├── solve_network/{scenario}_{area}_{route}_{start}_{end}.log
 └── compile_report/{scenario}.log
 ```
 

@@ -10,6 +10,9 @@ rule retrieve_grid_data:
     log:
         "logs/retrieve_grid_data/{area}_{variant}_{start_date}_{end_date}.log",
     params:
+        # Empty for an area with no price series — the script turns that into a
+        # clear error rather than picking a source.
+        market=lookup(dpath="areas/{area}/market", within=config, default=""),
         eur_per_aud=config["nem"]["eur_per_aud"],
     resources:
         # ENTSO-E rate limit; harmless for NEM areas, which make no API calls.

@@ -1,4 +1,4 @@
-"""Compile per-route summaries into a single scenario-level report CSV.
+"""Compile per-run summaries into a single scenario-level report CSV.
 
 Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
 """
@@ -148,7 +148,7 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
     }
 
 
-def extract_summary(n: pypsa.Network, scenario_name: str, route_name: str) -> dict:
+def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
     """Key sizing and cost metrics as a flat dict (suitable for a one-row CSV).
 
     The headline levelised cost depends on the network's route: LCOH for the
@@ -160,7 +160,7 @@ def extract_summary(n: pypsa.Network, scenario_name: str, route_name: str) -> di
     breakdown = _cost_breakdown(n)
     summary = {
         "scenario": scenario_name,
-        "route": route_name,
+        **run,
         "total_annual_cost_meur": sum(breakdown.values()) / 1e6,
     }
     # Per-group annual cost columns (zero groups omitted — a route without a
@@ -430,22 +430,24 @@ def extract_summary(n: pypsa.Network, scenario_name: str, route_name: str) -> di
 
 
 def main() -> None:
-    """Load each route network for the scenario and write the combined report CSV.
+    """Load every run under the scenario and write the combined report CSV.
 
-    Dedupes the netCDF inputs, extracts one summary row per route via
-    `extract_summary`, rounds numerics, and writes results/report_<scenario>.csv.
+    A scenario is an umbrella over runs, so the netCDF name carries the rest of
+    the run key — area, route and date range. One summary row per run via
+    `extract_summary`, rounded, written to results/report_<scenario>.csv.
     """
     scenario_name = snakemake.wildcards.scenario
 
     rows = []
     network_paths = list(dict.fromkeys(snakemake.input.networks))
-    log.info(f"compiling report for scenario={scenario_name} ({len(network_paths)} routes)")
+    log.info(f"compiling report for scenario={scenario_name} ({len(network_paths)} runs)")
     for nc_path in network_paths:
         nc_path = Path(nc_path)
-        route_name = nc_path.stem
+        area, route, start_date, end_date = nc_path.stem.split("_")
         n = pypsa.Network()
         n.import_from_netcdf(nc_path)
-        rows.append(extract_summary(n, scenario_name, route_name))
+        run = {"area": area, "route": route, "start_date": start_date, "end_date": end_date}
+        rows.append(extract_summary(n, scenario_name, run))
 
     out_path = Path(snakemake.output[0])
     out_path.parent.mkdir(parents=True, exist_ok=True)

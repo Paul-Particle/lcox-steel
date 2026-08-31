@@ -25,27 +25,30 @@ onstart:
 
 import pandas as pd
 
-from common._routes import ROUTE_PATTERN, build_routes_frame
+from common._routes import RUN_KEY, ROUTE_PATTERN, build_runs_frame, check_run_coverage
 
-# One row per input timeseries a scenario needs. `#` rows are planned scenarios
-# parked next to their live siblings (see the export routes) and are not built.
+# One row per input timeseries. `#` rows are planned scenarios parked next to
+# their live siblings (see the export routes) and are not built.
 scenarios_df = pd.read_csv(
     "config/scenarios.csv", comment="#", dtype={"start_date": str, "end_date": str}
 )
 
-# (scenario, tech) is the natural row key: two rows with the same pair would
-# hand the solve two timeseries for one tech, so reject the file at load time.
-_key = ["scenario", "tech"]
+# A scenario name is an umbrella: the rows filed under it define every run it
+# covers. One network is one (scenario, area, date range) group, so a tech may
+# appear once per group — twice would hand that solve two series for one tech.
+_key = RUN_KEY + ["tech"]
 if scenarios_df.duplicated(subset=_key).any():
     dups = scenarios_df[scenarios_df.duplicated(subset=_key, keep=False)][_key]
-    raise ValueError(f"scenarios.csv has duplicate (scenario, tech) rows:\n{dups}")
+    raise ValueError(f"scenarios.csv has duplicate rows for one run and tech:\n{dups}")
+
+check_run_coverage(scenarios_df)
 
 # One row per network to solve — `all-routes` and `a|b` cells expanded.
-routes_df = build_routes_frame(scenarios_df)
+runs_df = build_runs_frame(scenarios_df)
 
+SCENARIOS = scenarios_df["scenario"].unique()
 # A scenario name is a free-form label — nothing here reads meaning out of it,
 # so the demo set is listed in config.yaml rather than matched on a prefix.
-SCENARIOS = scenarios_df["scenario"].unique()
 DEMO_SCENARIOS = config["demo_scenarios"]
 
 
@@ -70,7 +73,7 @@ rule demo:
 
 rule all:
     input:
-        # One report per scenario — its rows are that scenario's routes.
+        # One report per scenario — its rows are that scenario's runs.
         collect("results/report_{scenario}.csv", scenario=SCENARIOS),
-        # One route-comparison bar chart per scenario.
+        # One comparison bar chart per scenario.
         collect("results/plots/capacity_bars/{scenario}.png", scenario=SCENARIOS),

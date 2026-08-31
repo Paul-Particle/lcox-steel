@@ -48,7 +48,7 @@ consumed by solve_network (same as 03c's multi-n* outputs):
     multi-site assembly.
   - `demand_site`: the anchor column name. Its presence tells solve_network
     to enter multi-site mode with the anchor cell as the plant/demand bus
-    (no config/sites_*.yaml overlay needed — the anchor IS the plant site).
+    (the anchor cell IS the plant site, so no separate demand site is derived).
   - `anchor_colocation`: JSON with per-candidate diagnostics (score,
     coincidence, correlation, dist_km), candidate counts, the run's config
     and a timestamp — the traceability data that used to be repeated
