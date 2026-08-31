@@ -120,8 +120,11 @@ ew:
 
 natural_gas:
   # Flat gas price for the fossil routes, €/MWh LHV. Fed to the gas_supply
-  # generator; scenarios override per geography (DE 2023 TTF avg ≈ 40,
-  # AUS east-coast ≈ 25).
+  # generator. One value for every geography: the per-country prices this used
+  # to carry (25-42) lived in a per-scenario overlay each, because there is no
+  # per-area assumptions mechanism yet. A single price also keeps the fossil
+  # benchmark comparable across countries, the same argument that governs the
+  # other cross-country inputs.
   price_eur_per_mwh: 35
   co2_t_per_mwh: 0.20           # combustion emissions, LHV basis
   # Carbon price applied to gas CO2 (goes into the gas marginal cost).
