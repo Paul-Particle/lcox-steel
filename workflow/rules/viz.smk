@@ -6,6 +6,8 @@ rule compile_report:
         ),
     output:
         "results/report_{scenario}.csv",
+    params:
+        best_zone_by=lookup(dpath="report/best_zone_by", within=config, default=""),
     log:
         "logs/compile_report/{scenario}.log",
     script:

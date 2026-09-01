@@ -27,6 +27,15 @@ nem:
   # assumptions live in config/assumptions*.yaml.
   eur_per_aud: 0.61
 
+# Reporting. best_zone_by names the column that decides which of a country's
+# zones represents it — a country supplying its market through zones is run once
+# per zone, and the cheapest is flagged `best_in_country` in the report rather
+# than the others being dropped. `lco_output` is the levelised cost of whatever
+# the run produces (steel, or hydrogen for h2-only). Null keeps every zone
+# flagged, i.e. no ranking.
+report:
+  best_zone_by: lco_output
+
 # The area registry. `area` in config/scenarios.csv names one of these keys, and
 # each key names one cutout. An area is a country (three-letter ISO 3166-1
 # alpha-3) or a sub-national market zone; nothing infers which from the shape of

@@ -24,6 +24,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
+from _run_display import best_zones_only, run_label
 from scripts.viz.style import (
     apply_header,
     blue_black,
@@ -100,19 +101,23 @@ def _wind_cols(df):
             and c.endswith("_gw_opt") and not c.endswith("_total_gw_opt")]
 
 
+
+
+
 def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
     """Reshape a report DataFrame into per-route rows of plottable capacities.
 
     Converts GW columns to MW, expands orientation-resolved solar columns (falling
     back to a single `solar_mw` when none are present), and carries process
     capacities (t/h output) and stores (hours of demand) through in their native
-    units. Indexed by route label.
+    units. Indexed by run label.
     """
+    df = best_zones_only(df)
     solar_cols = _solar_cols(df)
     wind_cols  = _wind_cols(df)
     rows = []
     for _, r in df.iterrows():
-        row = {"label": str(r["route"])}
+        row = {"label": run_label(r)}
         row["dri_h2_mw_lhv"]    = r.get("dri_h2_mw_lhv", float("nan"))
         row["electrolyser_mw"]  = r.get("electrolyser_gw", 0) * 1e3
         row["battery_mw"]       = r.get("battery_gw_opt", 0) * 1e3

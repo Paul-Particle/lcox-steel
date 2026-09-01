@@ -318,6 +318,22 @@ two routes each read one of them — which is why it names both routes rather th
 using `all-routes`, since a route that reads neither would just re-solve the base
 case under a sensitivity's name.
 
+### Reporting across a country's zones
+
+A country that reaches its market through zones is solved once per zone, so
+several report rows describe the same place. `report.best_zone_by` in
+`config/config.yaml` names the column that ranks them — `lco_output` by default,
+the levelised cost of whatever the run produces (steel, or hydrogen for
+`h2-only`), with `lco_output_unit` alongside because the two are not comparable
+to each other.
+
+The cheapest is flagged `best_in_country` rather than the others being dropped:
+what the losing zones cost is itself a result, and a dropped row costs a re-solve
+to recover. The plots show only the flagged ones. Ranking happens within
+(country, route, date range), so a country's routes may each report from a
+different zone — its route ranking then moves location as well as technology.
+Set `best_zone_by` to null to flag everything and rank nothing.
+
 ## Configuration
 
 | File | Holds |

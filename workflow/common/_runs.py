@@ -63,6 +63,20 @@ def area_aliases(areas: dict) -> dict:
     return aliases
 
 
+def zone_parents(areas: dict) -> dict:
+    """Zone -> the area that contains it. An area that is nobody's zone is its own.
+
+    Reporting ranks a country's zones against each other, so it needs to know
+    which runs are alternative sites for the same place rather than different
+    places.
+    """
+    parents = {area: area for area in areas}
+    for area, cfg in areas.items():
+        for zone in cfg.get("zones", []):
+            parents[zone] = area
+    return parents
+
+
 def top_level_areas(areas: dict) -> list[str]:
     """The areas `all-areas` starts from — every area that is not someone's zone."""
     nested = {zone for cfg in areas.values() for zone in cfg.get("zones", [])}

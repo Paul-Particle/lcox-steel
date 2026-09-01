@@ -19,8 +19,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # _entsoe imports ``common.*`` (workflow/) and its siblings
-# (_helpers, download_entsoe) as top-level modules (workflow/scripts/grid/).
-for _p in (REPO_ROOT / "workflow", REPO_ROOT / "workflow" / "scripts" / "grid"):
+# (_helpers, download_entsoe) as top-level modules (workflow/scripts/grid/); the
+# viz scripts likewise import each other by bare name.
+for _p in (
+    REPO_ROOT / "workflow",
+    REPO_ROOT / "workflow" / "scripts" / "grid",
+    REPO_ROOT / "workflow" / "scripts" / "viz",
+):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 

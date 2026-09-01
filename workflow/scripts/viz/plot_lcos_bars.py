@@ -20,6 +20,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
+from _run_display import best_zones_only, run_label
 from scripts.viz.style import (
     apply_header,
     blue_black,
@@ -60,24 +61,28 @@ COST_GROUPS = [
 ]
 
 
-def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Per-scenario cost-group columns in €/t steel, indexed by scenario label.
 
-    Keeps only scenarios with an LCOS (steel routes); converts each
-    cost_{group}_meur column from M€/yr to €/t via the scenario's steel output.
+
+
+def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-run cost-group columns in €/t steel, indexed by run label.
+
+    Keeps only runs with an LCOS (steel routes); converts each
+    cost_{group}_meur column from M€/yr to €/t via the run's steel output.
     """
+    df = best_zones_only(df)
     steel = df[df["lcos_eur_per_t"].notna()] if "lcos_eur_per_t" in df.columns else df.iloc[:0]
     skipped = len(df) - len(steel)
     if skipped:
-        log.info(f"skipping {skipped} scenario(s) without a steel load (no LCOS)")
+        log.info(f"skipping {skipped} run(s) without a steel load (no LCOS)")
     if steel.empty:
         raise ValueError(
-            f"{_REPORT_PATH.name} has no steel-route scenarios — "
+            f"{_REPORT_PATH.name} has no steel-route runs — "
             "plot_lcos_bars only applies to scenarios with a route other than h2-only"
         )
 
     steel_t_per_year = steel["steel_produced_mt"] * 1e6
-    plot_df = pd.DataFrame({"label": steel["route"].astype(str)})
+    plot_df = pd.DataFrame({"label": steel.apply(run_label, axis=1)})
     for group, _, _ in COST_GROUPS:
         col = f"cost_{group}_meur"
         if col in steel.columns:

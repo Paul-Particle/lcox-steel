@@ -13,6 +13,7 @@ import yaml
 
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
+from common._runs import zone_parents
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -76,6 +77,30 @@ def _marginal_costs(static: pd.DataFrame, flow_t: pd.DataFrame, mc_t: pd.DataFra
 
 
 PROCESS_LINKS = ("dri-h2", "dri-ng", "eaf", "moe", "ew")
+
+
+def mark_best_in_country(df: pd.DataFrame, parents: dict, metric: str | None) -> pd.DataFrame:
+    """Add `country`, and flag the cheapest zone of each country for every route.
+
+    A country that supplies its market through zones (Australia through its NEM
+    regions) is run once per zone, so several rows describe the same place. This
+    marks the cheapest of them rather than dropping the rest: what the other
+    zones cost is itself a result, and a dropped row costs a re-solve to recover.
+
+    Ranked within (country, route, date range) — the metric is a levelised cost
+    of output whose unit follows the route, so only the same route in different
+    places is comparable. A consequence worth knowing: a country's routes may
+    then each report from a different zone, so its route ranking moves location
+    as well as technology. Set `metric` to None to flag everything instead.
+    """
+    out = df.copy()
+    out.insert(2, "country", out["area"].map(lambda a: parents.get(a, a)))
+    if metric is None or metric not in out.columns:
+        out["best_in_country"] = True
+        return out
+    ranked = out.groupby(["country", "route", "start_date", "end_date"])[metric]
+    out["best_in_country"] = (out[metric] == ranked.transform("min")) | out[metric].isna()
+    return out
 
 
 def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
@@ -183,6 +208,18 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
 
     if "electrolyser" in n.links.index:
         summary["h2_produced_kt"] = _h2_produced_kg(n) / 1e6
+
+    # The levelised cost of whatever this run produces — steel for the steel
+    # routes, hydrogen for h2-only. One column so a comparison does not have to
+    # know which route it is looking at; the unit travels with it, because the
+    # two are not comparable to each other. Comparing the *same* route across
+    # places is what it is for.
+    if "lcos_eur_per_t" in summary:
+        summary["lco_output"] = summary["lcos_eur_per_t"]
+        summary["lco_output_unit"] = "EUR/t steel"
+    elif "lcoh_eur_per_kg" in summary:
+        summary["lco_output"] = summary["lcoh_eur_per_kg"]
+        summary["lco_output_unit"] = "EUR/kg H2"
 
     # Levelised cost of the underlying energy carriers, €/MWh, so LCOS can be read
     # against the electricity and hydrogen that drive it.
@@ -451,7 +488,11 @@ def main() -> None:
 
     out_path = Path(snakemake.output[0])
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame(rows)
+    df = mark_best_in_country(
+        pd.DataFrame(rows),
+        zone_parents(snakemake.config["areas"]),
+        snakemake.params.best_zone_by or None,
+    )
     df[df.select_dtypes("number").columns] = df.select_dtypes("number").round(2)
     df.to_csv(out_path, index=False)
     log.info(f"wrote {out_path} ({len(rows)} rows)")
