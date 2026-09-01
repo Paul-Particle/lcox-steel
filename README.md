@@ -321,18 +321,19 @@ case under a sensitivity's name.
 ### Reporting across a country's zones
 
 A country that reaches its market through zones is solved once per zone, so
-several report rows describe the same place. `report.best_zone_by` in
-`config/config.yaml` names the column that ranks them — `lco_output` by default,
-the levelised cost of whatever the run produces (steel, or hydrogen for
-`h2-only`), with `lco_output_unit` alongside because the two are not comparable
-to each other.
+several report rows describe the same place. Each route then picks the zone where
+that route came out cheapest — Australia's `moe-eaf` is reported from whichever
+NEM region made steel cheapest with `moe-eaf` — and each date range is ranked on
+its own.
 
-The cheapest is flagged `best_in_country` rather than the others being dropped:
-what the losing zones cost is itself a result, and a dropped row costs a re-solve
-to recover. The plots show only the flagged ones. Ranking happens within
-(country, route, date range), so a country's routes may each report from a
-different zone — its route ranking then moves location as well as technology.
-Set `best_zone_by` to null to flag everything and rank nothing.
+`report.best_zone_by` in `config/config.yaml` names the ranking column, defaulting
+to `lco_output`: the levelised cost of whatever the run produces, steel or (for
+`h2-only`) hydrogen, with `lco_output_unit` alongside so a row is readable on its
+own. Set it to null to rank nothing.
+
+The losers are flagged `best_in_country: False` rather than dropped — what the
+other zones cost is itself a result, and a dropped row costs a re-solve to
+recover. The plots show only the flagged ones.
 
 ## Configuration
 

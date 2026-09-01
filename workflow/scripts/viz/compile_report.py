@@ -80,18 +80,20 @@ PROCESS_LINKS = ("dri-h2", "dri-ng", "eaf", "moe", "ew")
 
 
 def mark_best_in_country(df: pd.DataFrame, parents: dict, metric: str | None) -> pd.DataFrame:
-    """Add `country`, and flag the cheapest zone of each country for every route.
+    """Add `country`, and flag each country's best zone for every route.
 
     A country that supplies its market through zones (Australia through its NEM
-    regions) is run once per zone, so several rows describe the same place. This
-    marks the cheapest of them rather than dropping the rest: what the other
-    zones cost is itself a result, and a dropped row costs a re-solve to recover.
+    regions) is run once per zone, so several rows describe the same place. Every
+    route picks the zone where that route came out cheapest: Australia's moe-eaf
+    is reported from whichever NEM region made steel cheapest with moe-eaf, and
+    each date range is ranked on its own.
 
-    Ranked within (country, route, date range) — the metric is a levelised cost
-    of output whose unit follows the route, so only the same route in different
-    places is comparable. A consequence worth knowing: a country's routes may
-    then each report from a different zone, so its route ranking moves location
-    as well as technology. Set `metric` to None to flag everything instead.
+    The losers are flagged, not dropped — what the other zones cost is itself a
+    result, and a dropped row costs a re-solve to recover.
+
+    `metric` names the ranking column, or None to flag everything. A row with no
+    value for it (h2-only produces hydrogen, so it has no cost of steel) stays
+    flagged rather than being ranked away.
     """
     out = df.copy()
     out.insert(2, "country", out["area"].map(lambda a: parents.get(a, a)))
@@ -210,10 +212,9 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
         summary["h2_produced_kt"] = _h2_produced_kg(n) / 1e6
 
     # The levelised cost of whatever this run produces — steel for the steel
-    # routes, hydrogen for h2-only. One column so a comparison does not have to
-    # know which route it is looking at; the unit travels with it, because the
-    # two are not comparable to each other. Comparing the *same* route across
-    # places is what it is for.
+    # routes, hydrogen for h2-only. One column, so ranking a route's runs against
+    # each other needs no per-route special-casing; the unit rides along so a row
+    # is readable on its own.
     if "lcos_eur_per_t" in summary:
         summary["lco_output"] = summary["lcos_eur_per_t"]
         summary["lco_output_unit"] = "EUR/t steel"
