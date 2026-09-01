@@ -21,7 +21,7 @@ optimisation model into one Snakemake workflow:
   `all-routes` in that column means every route above. The registry lives in
   `workflow/common/_routes.py`; `*-export` ids are reserved for the trade
   scenarios and are not implemented.
-- **`viz`** — a per-scenario LCOH/LCOS report plus Plotly figures.
+- **`viz`** — a per-scenario LCOH/LCOS report plus Plotly figures, one row per run.
 
 ## Architecture at a glance
 
@@ -230,14 +230,14 @@ Drop `--profile profiles/default` for the bare invocation.
 ### Targeting one output
 
 ```bash
-# Grid — ENTSO-E day-ahead prices (DE_LU, 2023). Cap concurrent API calls:
-snakemake resources/entsoe/DE_LU_grid_dayahead_20230101_20231231.parquet --cores 4 --resources entsoe_api=4
+# Grid — ENTSO-E day-ahead prices for DEU (bidding zone DE_LU). Cap concurrent API calls:
+snakemake resources/timeseries/DEU_grid_dayahead_20250101_20251231.parquet --cores 4 --resources entsoe_api=4
 
 # Grid — NEM day-ahead prices (VIC1, 2025):
 snakemake resources/nem/VIC1_grid_dayahead_20250101_20251231.parquet --cores 4
 
 # res_cf — wind-onshore CF for Germany, 2023:
-snakemake resources/timeseries/DE_LU_wind-onshore_area-average_20230101_20231231.parquet --cores 4
+snakemake resources/timeseries/DEU_wind-onshore_area-average_20250101_20251231.parquet --cores 4
 
 # solve — one network (one route):
 snakemake results/DE-2023-baseline/dedicated-res.nc --cores 4
@@ -283,12 +283,40 @@ glance. Route, tech and variant follow the same rule (`moe-eaf`, `wind-onshore`,
 `area-average`, `tilt-mix-n7`).
 
 The **`area`** column is the exception — it keeps underscores, because official
-market-zone codes use them (`DE_LU`). Areas are a **flat namespace**: an area is
-not "a country" or "a zone", it is just an area, and nothing infers anything from
-the shape of its code. What an area can be used for follows from the data it has.
-The registry is the top-level `areas:` block in `config/config.yaml`; an area
-with no `market:` entry has no wholesale price series, so a `tech=grid` row on it
-is an error and a grid scenario spanning all areas simply skips it.
+market-zone codes use them (`DE_LU`). The registry is the top-level `areas:`
+block in `config/config.yaml`, and nothing infers anything from the shape of a
+code: what an area can be used for follows from its entry.
+
+An area is a country (`DEU`, `FRA`, `ESP`, `AUS`, `BRA`) or a sub-national market
+zone (`VIC1`). Write either — a market's own code is an alias for the area it
+prices, so `DE_LU`, `FR` and `ES` resolve to `DEU`, `FRA` and `ESP`. The CSV
+prefers the three-letter form.
+
+`all-areas` starts from every area that is not someone's zone. A scenario with a
+`tech=grid` row then needs prices, so an area with no market of its own is
+replaced by the `zones:` through which it trades — naming Australia in a grid
+scenario yields its NEM regions separately, while an islanded scenario keeps the
+whole country. An area with neither market nor zones (Brazil, for now) drops out
+of grid scenarios and stays in islanded ones.
+
+## Scenarios
+
+The scenarios in `config/scenarios.csv` exist to exercise the workflow, not to
+answer anything — like the numbers in `config/assumptions.yaml`, they are
+placeholders. There are three:
+
+| scenario | covers |
+|---|---|
+| `standard-islanded` | every area, all routes, 2025, dedicated renewables only |
+| `standard-grid` | every area that has prices (Australia via its NEM zones), all routes, 2025 |
+| `sensitivity-test` | VIC1 only, two routes named explicitly — a machinery test |
+
+`sensitivity-test` is the default `snakemake` target: it sits on the shipped
+Victoria cutout, so it runs after a fresh clone with no CDS download. Its single
+overlay carries a cheap salt-cavern H2 store and a lower MOE turndown, and its
+two routes each read one of them — which is why it names both routes rather than
+using `all-routes`, since a route that reads neither would just re-solve the base
+case under a sensitivity's name.
 
 ## Configuration
 
@@ -297,7 +325,7 @@ is an error and a grid scenario spanning all areas simply skips it.
 | `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (turbines, CF flags, cutout settings), `areas` (the area registry), `demo_scenarios`. |
 | `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `iron_store`), natural-gas price/CO2 (`natural_gas`) and grid connection charges. Numbers only — the route is chosen by the CSV, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
 | `config/assumptions_{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. It covers every run under that name. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. |
-| `config/scenarios.csv` | Flat table, one row per `(run, tech)` input. Columns: `scenario, route, tech, variant, area, start_date, end_date`. Rows join into a network by `(scenario, area, start_date, end_date)`. `route` holds one route id, several separated by `|`, or `all-routes`; a scenario's route set is the union over its rows. `#` rows are planned scenarios and are not built. |
+| `config/scenarios.csv` | Flat table, one row per `(run, tech)` input. Columns: `scenario, route, tech, variant, area, start_date, end_date`. Rows join into a network by `(scenario, area, start_date, end_date)`. `route` holds one route id, several separated by `|`, or `all-routes`; `area` holds one area or `all-areas`. `#` rows are planned scenarios and are not built. **The scenarios shipped are placeholders that exercise the machinery, not a study.** |
 
 ## Data formats
 

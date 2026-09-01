@@ -143,15 +143,17 @@ def _process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def retrieve(snakemake) -> None:
+def retrieve(snakemake, area: str) -> None:
     """Slice the requested (area, variant, date range) out of the processed cache.
+
+    `area` is the code this market knows the area by — the bidding zone or NEM
+    region — which is not always the area code the rest of the workflow uses.
 
     Validates the bidding zone, downloads any missing months into the raw cache,
     processes and appends them to the shared per-variant processed cache, then
     writes the requested window to the rule output. Warm-cache runs make no API
     calls.
     """
-    area       = snakemake.wildcards.area
     variant    = snakemake.wildcards.variant
     start_date = snakemake.wildcards.start_date
     end_date   = snakemake.wildcards.end_date

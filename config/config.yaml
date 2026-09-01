@@ -8,14 +8,13 @@ logging:
   # "f-strings ok in log calls" convention (that's about call sites).
   format: "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 
-# Scenarios the default `snakemake` target (rule demo) builds. Listed by name
+# Scenarios the default `snakemake` target (rule demo) builds. sensitivity-test
+# is the one that needs no CDS download — it sits on the shipped VIC1 cutout —
+# so it doubles as the after-a-fresh-clone smoke test. Listed by name
 # rather than matched on one, because a scenario name is a free-form label: the
 # workflow never reads meaning out of it, so any string works as an id.
 demo_scenarios:
-  - DEMO-VIC-2025-bestsite-wind-onshore
-  - DEMO-VIC-2025-bestsite-wind-offshore
-  - DEMO-VIC-2025-bestsite-solar
-  - DEMO-VIC-2025-anchor-colo
+  - sensitivity-test
 
 entsoe:
   # Per-(area, data_type) downloads are pulled on demand by config/scenarios.csv;
@@ -28,18 +27,22 @@ nem:
   # assumptions live in config/assumptions*.yaml.
   eur_per_aud: 0.61
 
-# The area registry. One entry per area; `area` in config/scenarios.csv names
-# one of these keys, and each key names one cutout. Areas are a flat namespace —
-# an area is not "a country" or "a zone", it is just an area, and what it can be
-# used for follows from the data it has rather than from the shape of its name.
+# The area registry. `area` in config/scenarios.csv names one of these keys, and
+# each key names one cutout. An area is a country (three-letter ISO 3166-1
+# alpha-3) or a sub-national market zone; nothing infers which from the shape of
+# the code, it follows from the entries below.
 #   iso3:           3-letter code for Natural Earth ADM0_A3 lookup
 #   region:         tag stored in the geo parquet (mostly ISO-2, but AUS/BRA
 #                   stayed ISO-3 historically — kept that way to avoid
 #                   regenerating the geometry and chasing downstream)
 #   market:         which wholesale market this area trades in, `entsoe` or
-#                   `nem`. Omitted where no price series exists: a tech=grid row
-#                   on such an area is an error (retrieve_grid_data.py), and a
-#                   grid scenario spanning all areas simply skips them.
+#                   `nem`; absent where no price series exists.
+#   market_area:    the code that market knows this area by — the ENTSO-E
+#                   bidding zone or AEMO NEM region. Also an alias: writing it
+#                   in the CSV resolves to this area, so DE_LU and DEU both work.
+#   zones:          sub-national market zones. A country with no market of its
+#                   own supplies one only through these, so a grid scenario
+#                   naming the country runs its zones separately instead.
 #   coarse:         use a coarser cutout resolution to avoid CDS instability
 #                   / memory limits for large countries
 #   mainland_bbox:  optional [lon_min, lon_max, lat_min, lat_max] — keeps only
@@ -47,19 +50,20 @@ nem:
 #                   to drop overseas territories (e.g. metropolitan France).
 #   vic_bbox:       AUS-only; approximates NEM zone VIC1 for sub-national tests
 #                   (Natural Earth 1:110m has no state boundaries, so we use a
-#                   bbox).
+#                   bbox). NSW1/QLD1/SA1/TAS1 need one each before they can join
+#                   `zones` below — AEMO already serves their prices.
 areas:
-  DE_LU: { iso3: DEU, region: DE,  coarse: false, market: entsoe }
-  FR:    { iso3: FRA, region: FR,  coarse: false, market: entsoe, mainland_bbox: [-10, 15, 41, 52] }
-  ES:    { iso3: ESP, region: ES,  coarse: false, market: entsoe }
-  # No market entry: neither has a wholesale price series, so both are
-  # islanded-only until one is added.
-  AUS:   { iso3: AUS, region: AUS, coarse: false, vic_bbox: [140.96, 149.97, -39.16, -34.00] }
+  DEU:   { iso3: DEU, region: DE,  coarse: false, market: entsoe, market_area: DE_LU }
+  FRA:   { iso3: FRA, region: FR,  coarse: false, market: entsoe, market_area: FR, mainland_bbox: [-10, 15, 41, 52] }
+  ESP:   { iso3: ESP, region: ES,  coarse: false, market: entsoe, market_area: ES }
+  # No market of its own: a grid scenario naming AUS runs its zones instead.
+  AUS:   { iso3: AUS, region: AUS, coarse: false, zones: [VIC1], vic_bbox: [140.96, 149.97, -39.16, -34.00] }
+  # Neither a market nor zones — islanded only until Brazil's subsystems are added.
   BRA:   { iso3: BRA, region: BRA, coarse: false }
-  # Demo area: a Victoria (Australia) subset shipped with a pre-sliced backup
-  # cutout + derived geo parquets, so the default `snakemake` run needs no CDS
-  # download or EEZ/NE zips. region=VIC matches the committed VIC1_*_geo.parquet.
-  VIC1:  { iso3: AUS, region: VIC, coarse: false, market: nem }
+  # Victoria: shipped with a pre-sliced backup cutout + derived geo parquets, so
+  # the default `snakemake` run needs no CDS download or EEZ/NE zips.
+  # region=VIC matches the committed VIC1_*_geo.parquet.
+  VIC1:  { iso3: AUS, region: VIC, coarse: false, market: nem, market_area: VIC1 }
 
 res_cf:
   offshore_max_distance_km: 200

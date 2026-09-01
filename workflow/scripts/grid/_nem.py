@@ -81,14 +81,16 @@ def _process_full_month(
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def retrieve(snakemake) -> None:
+def retrieve(snakemake, area: str) -> None:
     """Slice the requested (area, variant, date range) out of the processed cache.
+
+    `area` is the code this market knows the area by — the bidding zone or NEM
+    region — which is not always the area code the rest of the workflow uses.
 
     Processes any months missing from the shared per-variant cache (NEMOSIS
     manages its own raw download cache under data/nem_cache/), appends them, then
     writes the requested window to the rule output.
     """
-    area        = snakemake.wildcards.area
     variant     = snakemake.wildcards.variant
     start_date  = snakemake.wildcards.start_date
     end_date    = snakemake.wildcards.end_date

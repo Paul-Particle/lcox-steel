@@ -13,6 +13,7 @@ rule retrieve_grid_data:
         # Empty for an area with no price series — the script turns that into a
         # clear error rather than picking a source.
         market=lookup(dpath="areas/{area}/market", within=config, default=""),
+        market_area=lookup(dpath="areas/{area}/market_area", within=config, default=""),
         eur_per_aud=config["nem"]["eur_per_aud"],
     resources:
         # ENTSO-E rate limit; harmless for NEM areas, which make no API calls.

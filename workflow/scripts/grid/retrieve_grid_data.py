@@ -5,10 +5,14 @@ registry (config/config.yaml `areas`) says which wholesale market an area trades
 in, and that decides which source implementation runs. The sources themselves
 are unaware of this dispatcher.
 
-Areas are a flat namespace — nothing infers anything from the shape of an area
-code. An area with no `market` entry has no price series, so a tech=grid row on
-it is an error; that is the only thing separating an area you can grid-connect
-from one you can only model islanded.
+Nothing infers anything from the shape of an area code. An area with no `market`
+entry has no price series of its own, so a tech=grid row reaches here only for an
+area that does — a country whose prices come from sub-national zones is replaced
+by those zones before the DAG is built (see common/_runs.py).
+
+The market knows the area by its own code (`market_area`: the ENTSO-E bidding
+zone, the AEMO NEM region), which is not always the area code the rest of the
+workflow uses — DEU's prices come from DE_LU.
 """
 
 import logging
@@ -30,6 +34,7 @@ def main() -> None:
     """Route the request to the source that carries this area's prices."""
     area = snakemake.wildcards.area
     market = snakemake.params.market
+    market_area = snakemake.params.market_area
 
     if not market:
         priced = sorted(a for a, cfg in snakemake.config["areas"].items() if cfg.get("market"))
@@ -43,8 +48,10 @@ def main() -> None:
             f"area {area!r} declares market {market!r}; expected one of {sorted(SOURCES)}"
         )
 
-    log.info(f"{area}: retrieving {snakemake.wildcards.variant} from {market}")
-    SOURCES[market](snakemake)
+    log.info(
+        f"{area}: retrieving {snakemake.wildcards.variant} from {market} as {market_area}"
+    )
+    SOURCES[market](snakemake, market_area)
 
 
 if __name__ == "__main__":

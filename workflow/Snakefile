@@ -25,12 +25,23 @@ onstart:
 
 import pandas as pd
 
-from common._routes import RUN_KEY, ROUTE_PATTERN, build_runs_frame, check_run_coverage
+from common._runs import (
+    RUN_KEY,
+    ROUTE_PATTERN,
+    build_runs_frame,
+    check_run_coverage,
+    expand_scenario_rows,
+)
 
 # One row per input timeseries. `#` rows are planned scenarios parked next to
-# their live siblings (see the export routes) and are not built.
-scenarios_df = pd.read_csv(
-    "config/scenarios.csv", comment="#", dtype={"start_date": str, "end_date": str}
+# their live siblings (see the export routes) and are not built. `all-areas`
+# cells resolve against the area registry here, so every row downstream — the
+# solve rule's lookup included — names one real area.
+scenarios_df = expand_scenario_rows(
+    pd.read_csv(
+        "config/scenarios.csv", comment="#", dtype={"start_date": str, "end_date": str}
+    ),
+    config["areas"],
 )
 
 # A scenario name is an umbrella: the rows filed under it define every run it
@@ -44,7 +55,7 @@ if scenarios_df.duplicated(subset=_key).any():
 check_run_coverage(scenarios_df)
 
 # One row per network to solve — `all-routes` and `a|b` cells expanded.
-runs_df = build_runs_frame(scenarios_df)
+runs_df = build_runs_frame(scenarios_df, config["areas"])
 
 SCENARIOS = scenarios_df["scenario"].unique()
 # A scenario name is a free-form label — nothing here reads meaning out of it,
