@@ -1,7 +1,7 @@
 """Thematic helpers shared across res_cf scripts.
 
-Lives next to its consumers (03_build_cf_timeseries, 07_make_bestsite_cf_timeseries,
-07b_make_anchor_colocated_cf_timeseries) rather than in a top-level common/ module.
+Lives next to its consumers (d1_area_average, d2_bestsite_p95,
+d3_anchor_colo) rather than in a top-level common/ module.
 The area-weighting helpers (cos_lat_weights, geom_area_weights, pick_p95_cell) and
 the land-sea eligibility helpers below are used by the active Snakemake pipeline
 (03/07/07b); the config/haversine helpers are also used by standalone analysis
@@ -208,13 +208,13 @@ def load_res_cf_cfg() -> dict:
         return yaml.safe_load(f)["res_cf"]
 
 
-def annual_cutout_path(cf_area: str, year: int) -> Path:
-    """Return the path to the single annual atlite cutout for (cf_area, year).
+def annual_cutout_path(area: str, year: int) -> Path:
+    """Return the path to the single annual atlite cutout for (area, year).
 
     Matches the output pattern of the `download_cutout` rule:
-    cutouts/{cf_area}_{year}0101_{year}1231.nc
+    cutouts/{area}_{year}0101_{year}1231.nc
     """
-    return CUTOUTS / f"{cf_area.lower()}_{year}0101_{year}1231.nc"
+    return CUTOUTS / f"{area.lower()}_{year}0101_{year}1231.nc"
 
 
 def cos_lat_weights(cutout) -> np.ndarray:
@@ -225,7 +225,7 @@ def cos_lat_weights(cutout) -> np.ndarray:
     cell's physical area is proportional to cos(lat), so multiplying the
     fraction weights by these values turns a degree-area average into a
     physical-area average (issue #37). Unlike a region-specific equal-area CRS
-    (e.g. EPSG:3035, Europe-only), cos(lat) is valid for every cf_area.
+    (e.g. EPSG:3035, Europe-only), cos(lat) is valid for every area.
 
     The ordering matches cutout.grid rows, which is also the column order of
     cutout.indicatormatrix(...) and the ravel of a (y, x) weight grid — so the

@@ -16,7 +16,7 @@ def optional(template: str):
     Use exactly like a snakemake helper:
 
         input:
-            cfg = optional("config/assumptions_{project}_{scenario}.yaml"),
+            cfg = optional("config/assumptions_{scenario}.yaml"),
 
     The wrapped attribute is always a Namedlist with 0 or 1 entries.
     """

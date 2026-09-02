@@ -1,9 +1,9 @@
-"""Bar chart comparing scenario capacities across projects.
+"""Bar chart comparing route capacities within one scenario.
 
 Snakemake rule: plot_capacity_bars (in viz.smk).
 
-One panel per unit class, stacked vertically over a shared scenario axis.
-Panels and bars with no data anywhere in the project are dropped:
+One panel per unit class, stacked vertically over a shared route axis.
+Panels and bars with no data anywhere in the scenario are dropped:
 
   Power (MW)      solar stacked by orientation · wind stacked by tech ·
                   battery · electrolyser · grid connection ·
@@ -24,6 +24,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
+from _run_display import best_zones_only, run_label
 from scripts.viz.style import (
     apply_header,
     blue_black,
@@ -100,19 +101,23 @@ def _wind_cols(df):
             and c.endswith("_gw_opt") and not c.endswith("_total_gw_opt")]
 
 
+
+
+
 def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Reshape a report DataFrame into per-scenario rows of plottable capacities.
+    """Reshape a report DataFrame into per-route rows of plottable capacities.
 
     Converts GW columns to MW, expands orientation-resolved solar columns (falling
     back to a single `solar_mw` when none are present), and carries process
     capacities (t/h output) and stores (hours of demand) through in their native
-    units. Indexed by scenario label.
+    units. Indexed by run label.
     """
+    df = best_zones_only(df)
     solar_cols = _solar_cols(df)
     wind_cols  = _wind_cols(df)
     rows = []
     for _, r in df.iterrows():
-        row = {"label": str(r["scenario"])}
+        row = {"label": run_label(r)}
         row["dri_h2_mw_lhv"]    = r.get("dri_h2_mw_lhv", float("nan"))
         row["electrolyser_mw"]  = r.get("electrolyser_gw", 0) * 1e3
         row["battery_mw"]       = r.get("battery_gw_opt", 0) * 1e3
@@ -215,7 +220,7 @@ def _build_panels(plot_df: pd.DataFrame) -> list[tuple[str, list]]:
 
     A slot is one x-offset position: ("stack", cols, cmap_range, solo_color,
     unit) or ("single", col, color, name, unit). Slots empty across the whole
-    project are dropped so they don't leave gaps and phantom legend entries;
+    scenario are dropped so they don't leave gaps and phantom legend entries;
     panels with no surviving slot are dropped entirely.
     """
     def _has_data(cols) -> bool:
@@ -265,7 +270,7 @@ def _build_panels(plot_df: pd.DataFrame) -> list[tuple[str, list]]:
     return panels
 
 
-def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
+def plot(plot_df: pd.DataFrame, out: Path, scenario_label: str) -> None:
     """Assemble the panelled capacity bar chart and write it to PNG + HTML."""
     panels = _build_panels(plot_df)
 
@@ -306,8 +311,8 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
 
     apply_header(
         fig,
-        title=f"{project_label} capacity breakdown",
-        subtitle="Optimised builds by scenario; one panel per unit class",
+        title=f"{scenario_label} capacity breakdown",
+        subtitle="Optimised builds by route; one panel per unit class",
         fig_width=max(720, 220 * n_sc + 300),
         fig_height=180 + 270 * len(panels),
         margin_l=80, margin_r=280, margin_t=110, margin_b=80,
@@ -317,10 +322,10 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
 
 
 def main() -> None:
-    """Load the project report and render its capacity bar chart."""
+    """Load the scenario report and render its capacity bar chart."""
     df = load_report(_REPORT_PATH)
-    project_label = ", ".join(dict.fromkeys(df["project"].astype(str)))
-    plot(build_plot_data(df), _OUT, project_label)
+    scenario_label = ", ".join(dict.fromkeys(df["scenario"].astype(str)))
+    plot(build_plot_data(df), _OUT, scenario_label)
 
 
 if __name__ == "__main__":

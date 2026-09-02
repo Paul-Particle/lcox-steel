@@ -30,14 +30,14 @@ from scripts.viz.style import (
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
-_CF_AREA = snakemake.wildcards.cf_area
+_AREA = snakemake.wildcards.area
 _TECH = snakemake.wildcards.tech
 _START_DATE = snakemake.wildcards.start_date
 _END_DATE = snakemake.wildcards.end_date
 _CUTOUT_PATH = Path(snakemake.input.cutout)
 _REGIONS_PATH = Path(snakemake.input.regions)
 _OFFSHORE_REGIONS_PATH = Path(snakemake.input.offshore_regions)
-_NATIONAL_MEAN_CF_PATH = Path(snakemake.input.national_mean_cf)
+_NATIONAL_MEAN_CF_PATH = Path(snakemake.input.area_average_cf)
 _REGION = snakemake.params.region
 _PV_PANEL = snakemake.params.pv_panel
 _WIND_TURBINE = snakemake.params.wind_onshore_turbine
@@ -56,14 +56,14 @@ def _find_best_cell(cell_mean, geom):
 
 def _grid_mean_unweighted(cell_mean, geom) -> float:
     """Plain (point-in-polygon, unweighted) mean CF over in-region cells.
-    NOT the area-weighted national mean — see _national_mean_cf."""
+    NOT the area-weighted national mean — see _area_average_cf."""
     inside = mask_cells_inside(cell_mean, geom)
     return float(np.nanmean(np.where(inside, cell_mean.values, np.nan)))
 
 
-def _national_mean_cf(path: Path, tech_col: str) -> float:
-    """Annual mean of the country-average CF export — the number the
-    LCOE/LCOH pipeline actually consumes for the country-average scenario."""
+def _area_average_cf(path: Path, tech_col: str) -> float:
+    """Annual mean of the area-average CF export — the number the
+    LCOE/LCOH pipeline actually consumes for the area-average scenario."""
     df = pd.read_parquet(path)
     return float(df[tech_col].mean())
 
@@ -153,7 +153,7 @@ def main() -> None:
     best_cf  = float(cell_mean.isel(y=by_idx, x=bx_idx))
     log.info(f"Best cell: lat={best_lat:.2f} lon={best_lon:.2f} cf={best_cf:.3f}")
 
-    national_mean_cf = _national_mean_cf(_NATIONAL_MEAN_CF_PATH, _TECH)
+    area_average_cf = _area_average_cf(_NATIONAL_MEAN_CF_PATH, _TECH)
     grid_mean_cf = _grid_mean_unweighted(cell_mean, geom)
 
     lons = cutout.data.coords["x"].values
@@ -213,7 +213,7 @@ def main() -> None:
     ))
 
     stats_text = (
-        f"National mean (area-weighted): {national_mean_cf:.5f}<br>"
+        f"National mean (area-weighted): {area_average_cf:.5f}<br>"
         f"Grid mean (unweighted): {grid_mean_cf:.5f}<br>"
         f"P95 CF: {p95_cf:.3f}<br>"
         f"Best CF: {best_cf:.3f}"
