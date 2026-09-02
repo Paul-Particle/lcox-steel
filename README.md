@@ -205,17 +205,18 @@ Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` per th
 The default target is a small, self-contained **demo** that runs after a fresh
 clone with **no CDS download, no EEZ/Natural-Earth zips, and no API keys**. It
 ships a pre-sliced Victoria (Australia) cutout backup plus the derived geometry
-parquets, and exercises the best-site (`07`) and complementarity (`08`)
+parquets, and exercises the best-site (`d2`) and anchor-colocation (`d3`)
 capacity-factor science through a `solve` to a `viz` report:
 
 ```bash
-snakemake --profile profiles/default --cores 4        # builds the DEMO-VIC-2025 demo
+snakemake --profile profiles/default --cores 4        # builds the demo scenarios
 ```
 
-Outputs land at `results/report_DEMO-VIC-2025.csv` and
-`results/plots/capacity_bars/DEMO-VIC-2025.png`, in a few minutes on a laptop.
+The demo set is `config.yaml`'s `demo_scenarios`. Outputs land at
+`results/report_{scenario}.csv` and
+`results/plots/capacity_bars/{scenario}.png`, in a few minutes on a laptop.
 
-### The real projects
+### The real scenarios
 
 `config/scenarios.csv` drives the full DAG. Building every real scenario needs the
 external data and credentials described under [Setup](#setup) — ERA5 cutouts via
@@ -224,7 +225,7 @@ Target them explicitly with `snakemake all`:
 
 ```bash
 snakemake -n all                                              # preview the full DAG
-snakemake all --profile profiles/default --cores 4            # build every project
+snakemake all --profile profiles/default --cores 4            # build every scenario
 snakemake all --profile profiles/default --cores 4 --verbose  # loud
 ```
 
@@ -338,9 +339,16 @@ to `lco_output`: the levelised cost of whatever the run produces, steel or (for
 `h2-only`) hydrogen, with `lco_output_unit` alongside so a row is readable on its
 own. Set it to null to rank nothing.
 
-The losers are flagged `best_in_country: False` rather than dropped — what the
-other zones cost is itself a result, and a dropped row costs a re-solve to
-recover. The plots show only the flagged ones.
+The choice is made **before** the report, so `results/report_{scenario}.csv`
+stands on its own: one row per reported place, and nothing about zones left for a
+reader to interpret. Everything downstream — the plots here, and any notebook or
+dashboard reading the CSV — takes the rows as given.
+
+The beaten zones are not lost, because what they cost is itself a result and a
+dropped row costs a re-solve to recover. They go to
+`results/.report_{scenario}_diag.csv`, the same table with every zone and the
+`best_in_country` flag that separates them. It is hidden because it answers a
+follow-up question rather than being the thing to read.
 
 ## Configuration
 
@@ -353,7 +361,7 @@ recover. The plots show only the flagged ones.
 
 ## Data formats
 
-**Grid** (`resources/{entsoe,nem}/{area}_grid_dayahead_{start}_{end}.parquet`):
+**Grid** (`resources/timeseries/{area}_grid_dayahead_{start}_{end}.parquet`):
 UTC hourly `DatetimeIndex`, single `price` column (EUR/MWh). The `_full` variant
 has MultiIndex `(area, metric)` columns covering all data types at native
 resolution.
@@ -367,10 +375,10 @@ same index, **multiple columns** — one per orientation in the sweep (`solar_az
 `solar_az30`, …). `solve_network` concatenates columns from all CF inputs into one
 multi-tech frame.
 
-**Results**: `results/<project>/<scenario>.nc` is the full solved PyPSA network;
-`results/report_<project>.csv` (from `compile_report`) carries the levelized
-cost (LCOH for `h2_only` scenarios, LCOS €/t for steel routes) and optimal
-capacities for every scenario in the project.
+**Results**: `results/{scenario}/{area}_{route}_{start}_{end}.nc` is the full
+solved PyPSA network; `results/report_{scenario}.csv` (from `compile_report`)
+carries the levelised cost (LCOH for `h2-only` routes, LCOS €/t for steel routes)
+and optimal capacities, one row per run under that scenario.
 
 ### Cutout caching
 

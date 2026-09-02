@@ -1,16 +1,12 @@
-"""How a run is labelled in a chart, and which runs a chart shows.
+"""How a run is labelled in a chart.
 
 A scenario is an umbrella over runs, so a chart of one scenario holds several
-areas, date ranges and routes. Both plot scripts need the same answers, and
-neither reads snakemake at import time, so these live here where a test can
-reach them.
+areas, date ranges and routes. Both plot scripts label them the same way, and
+neither reads snakemake at import time, so this lives here where a test can
+reach it.
 """
 
-import logging
-
 import pandas as pd
-
-log = logging.getLogger(__name__)
 
 
 def run_label(row: pd.Series) -> str:
@@ -24,19 +20,3 @@ def run_label(row: pd.Series) -> str:
     label = f"{row['area']} {row['route']}"
     years = {str(row["start_date"])[:4], str(row["end_date"])[:4]}
     return label if len(years) == 1 else f"{label} {'-'.join(sorted(years))}"
-
-
-def best_zones_only(df: pd.DataFrame) -> pd.DataFrame:
-    """Drop the zones the report did not flag as their country's cheapest.
-
-    Australia is solved once per NEM region; the report ranks them and flags one
-    (see compile_report.mark_best_in_country). Charting all of them would show
-    the same country several times over.
-    """
-    if "best_in_country" not in df.columns:
-        return df
-    kept = df[df["best_in_country"].astype(bool)]
-    hidden = len(df) - len(kept)
-    if hidden:
-        log.info(f"hiding {hidden} zone(s) beaten by a cheaper one in the same country")
-    return kept

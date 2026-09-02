@@ -5,7 +5,12 @@ rule compile_report:
             item=lookup(query="scenario == '{scenario}'", within=runs_df),
         ),
     output:
-        "results/report_{scenario}.csv",
+        # The report stands on its own: one row per reported place, the zone
+        # ranking already resolved. The diagnostic keeps every zone and the
+        # `best_in_country` flag, and is hidden because it answers a follow-up
+        # question rather than being the thing to read.
+        report="results/report_{scenario}.csv",
+        diagnostic="results/.report_{scenario}_diag.csv",
     params:
         best_zone_by=lookup(dpath="report/best_zone_by", within=config, default=""),
     log:
