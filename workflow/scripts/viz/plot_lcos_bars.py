@@ -20,6 +20,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
+from common._report_schema import read_report
 from _run_display import run_label
 from scripts.viz.style import (
     apply_header,
@@ -141,7 +142,7 @@ def plot(plot_df: pd.DataFrame, out: Path, scenario_label: str) -> None:
 
 def main() -> None:
     """Load the scenario report and render its LCOS breakdown chart."""
-    df = pd.read_csv(_REPORT_PATH)
+    df = read_report(_REPORT_PATH)
     scenario_label = ", ".join(dict.fromkeys(df["scenario"].astype(str)))
     plot(build_plot_data(df), _OUT, scenario_label)
 

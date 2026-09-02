@@ -4,8 +4,8 @@ taxonomies, the network schematic and the workflow DAG into ONE body-only
 artifact: a work-in-progress banner and a tab bar over isolated iframes.
 
 Inputs:
-  * results/dashboard_v2.html              — built by build_dashboard_v2.py
-  * results/cost_taxonomies.html           — built by build_cost_taxonomies.py
+  * results/html/dashboard_v2.html         — built by build_dashboard_v2.py
+  * results/html/cost_taxonomies.html      — built by build_cost_taxonomies.py
   * hub_pages/network_schematic.html       — static source page (no generator)
   * hub_pages/workflow_dag.html            — static source page (no generator)
 
@@ -18,11 +18,13 @@ tab activation. The outer wrapper propagates the viewer's light/dark theme into
 the active iframe.
 
 Two outputs (both git-ignored, like the other built dashboards):
-  * results/dashboard_hub.html            — body-only; publish THIS to the artifact
-                                            (the host wraps body-only content).
-  * results/dashboard_hub_standalone.html — the same content wrapped in a full
-                                            HTML document, so it opens/shares as a
-                                            complete standalone page.
+  * results/html/dashboard_hub.html            — body-only; publish THIS to the
+                                                 artifact (the host wraps
+                                                 body-only content).
+  * results/html/dashboard_hub_standalone.html — the same content wrapped in a
+                                                 full HTML document, so it
+                                                 opens/shares as a complete
+                                                 standalone page.
 """
 import json
 import re
@@ -30,10 +32,10 @@ from datetime import date
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]        # workflow/scripts/viz/ -> repo root
-RESULTS = REPO / "results"
+HTML_DIR = REPO / "results" / "html"               # where the built pages live
 HUB_PAGES = Path(__file__).with_name("hub_pages")  # tracked static source pages
-OUT_PATH = RESULTS / "dashboard_hub.html"                    # body-only, for the artifact
-STANDALONE_PATH = RESULTS / "dashboard_hub_standalone.html"  # full document, opens directly
+OUT_PATH = HTML_DIR / "dashboard_hub.html"                    # body-only, for the artifact
+STANDALONE_PATH = HTML_DIR / "dashboard_hub_standalone.html"  # full document, opens directly
 
 TITLE = "Green steel model — scenarios, network & workflow"
 # Emoji favicon as an inline SVG data URI (matches the 🏭 used on the artifact).
@@ -46,8 +48,8 @@ FAVICON = ("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22"
 # (key, path, tab label). "compare" and "taxonomies" are dashboard build artifacts;
 # the other two are static source pages tracked under hub_pages/.
 FRAGMENTS = {
-    "compare":    (RESULTS / "dashboard_v2.html",       "Scenario comparison"),
-    "taxonomies": (RESULTS / "cost_taxonomies.html",    "Cost breakdown options"),
+    "compare":    (HTML_DIR / "dashboard_v2.html",      "Scenario comparison"),
+    "taxonomies": (HTML_DIR / "cost_taxonomies.html",   "Cost breakdown options"),
     "schematic":  (HUB_PAGES / "network_schematic.html", "Network schematic"),
     "dag":        (HUB_PAGES / "workflow_dag.html",      "Workflow DAG"),
 }

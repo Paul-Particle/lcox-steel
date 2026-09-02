@@ -14,7 +14,7 @@ import pytest
 
 import compile_report  # sys.path set by conftest
 import _run_display
-from common._report_schema import REPORT_COLUMNS
+from common._report_schema import FIELD_ORDER, IDENTITY_FIELDS, read_report
 from common._runs import zone_parents
 
 AREAS = {
@@ -39,19 +39,23 @@ def _report(rows):
     return frame
 
 
-def test_inputs_hash_closes_the_row(tmp_path):
-    """A route with a column of its own must not push the fingerprint mid-row."""
+def test_a_run_is_a_column_and_a_field_is_a_row(tmp_path):
+    """The file's shape: runs across the top, the identity fields leading."""
     df = _report([
         ("s", "VIC1", "h2-dri-eaf", "20250101", "20251231", 606.0),
         ("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0),
     ])
-    # Only the MOE route reports a MOE plant, so the column joins after the hash.
-    df["plant_moe_eur_per_t"] = [float("nan"), 120.0]
     flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
 
     report_path = tmp_path / "report_s.csv"
     compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
-    assert pd.read_csv(report_path).columns[-1] == "inputs_hash"
+    stored = pd.read_csv(report_path)
+
+    assert list(stored.columns) == ["field", "s_1", "s_2"]
+    leading = list(stored["field"])[:len(IDENTITY_FIELDS) - 1]
+    # Every identity field but the diagnostic's flag, in declared order, on top.
+    assert leading == [f for f in IDENTITY_FIELDS if f != "best_in_country"]
+    assert stored.set_index("field").at["route", "s_2"] == "moe-eaf"
 
 
 def test_zone_parents_maps_zones_to_their_country():
@@ -152,11 +156,11 @@ def test_report_holds_the_selected_areas_and_the_diagnostic_holds_all(tmp_path):
     diagnostic_path = tmp_path / ".report_s_diag.csv"
     compile_report.write_report(flagged, report_path, diagnostic_path)
 
-    report = pd.read_csv(report_path)
+    report = read_report(report_path)
     assert set(report["area"]) == {"NSW1", "DEU"}
     assert "best_in_country" not in report.columns, "the flag is not viz's problem"
 
-    diagnostic = pd.read_csv(diagnostic_path)
+    diagnostic = read_report(diagnostic_path)
     assert set(diagnostic["area"]) == {"VIC1", "NSW1", "DEU"}
     assert set(diagnostic.loc[~diagnostic["best_in_country"], "area"]) == {"VIC1"}
 
@@ -208,8 +212,8 @@ def test_input_variants_do_not_leak_across_areas_or_years(run, expected):
     assert compile_report.input_variants(SCENARIOS, "s", run) == expected
 
 
-def test_every_route_writes_the_same_columns(tmp_path):
-    """The point of the schema: what a row says must not depend on its route."""
+def test_every_route_writes_the_same_fields(tmp_path):
+    """The point of the schema: what a run reports must not depend on its route."""
     df = _report([
         ("s", "VIC1", "h2-only", "20250101", "20251231", 4.1),
         ("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0),
@@ -221,9 +225,9 @@ def test_every_route_writes_the_same_columns(tmp_path):
 
     report_path = tmp_path / "report_s.csv"
     compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
-    report = pd.read_csv(report_path)
+    report = read_report(report_path)
 
-    declared = [c for c in REPORT_COLUMNS if c != "best_in_country"]
+    declared = [f for f in FIELD_ORDER if f != "best_in_country"]
     assert list(report.columns) == declared
 
 
@@ -234,7 +238,7 @@ def test_a_blank_means_undefined_and_a_zero_means_zero(tmp_path):
 
     report_path = tmp_path / "report_s.csv"
     compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
-    row = pd.read_csv(report_path).iloc[0]
+    row = read_report(report_path).iloc[0]
 
     # No H2 chain on this route: the electrolyser it did not build is 0 GW, but
     # the cost of the hydrogen it never made is not a number.
@@ -246,7 +250,7 @@ def test_a_blank_means_undefined_and_a_zero_means_zero(tmp_path):
     assert pd.isna(row["cf_wind_offshore"])
 
 
-def test_run_specific_columns_survive_ahead_of_the_hash(tmp_path):
+def test_run_specific_fields_follow_the_declared_ones(tmp_path):
     """A multi-site run names a generator per candidate site; those are not declared."""
     df = _report([("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
     df["solar-c00_gw_opt"] = 1.4
@@ -254,9 +258,10 @@ def test_run_specific_columns_survive_ahead_of_the_hash(tmp_path):
 
     report_path = tmp_path / "report_s.csv"
     compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
-    columns = list(pd.read_csv(report_path).columns)
+    report = read_report(report_path)
 
-    assert columns[-2:] == ["solar-c00_gw_opt", "inputs_hash"]
+    assert list(report.columns)[-1] == "solar-c00_gw_opt"
+    assert report.at["s_1", "solar-c00_gw_opt"] == 1.4
 
 
 def test_the_diagnostic_is_the_report_plus_the_flag(tmp_path):
@@ -269,6 +274,25 @@ def test_the_diagnostic_is_the_report_plus_the_flag(tmp_path):
     diagnostic_path = tmp_path / ".report_s_diag.csv"
     compile_report.write_report(flagged, report_path, diagnostic_path)
 
-    report = set(pd.read_csv(report_path).columns)
-    diagnostic = set(pd.read_csv(diagnostic_path).columns)
+    report = set(read_report(report_path).columns)
+    diagnostic = set(read_report(diagnostic_path).columns)
     assert diagnostic - report == {"best_in_country"}
+
+
+def test_a_report_reads_back_as_it_was_written(tmp_path):
+    """read_report is the only thing that undoes the layout, so it has to be exact."""
+    df = _report([
+        ("s", "VIC1", "h2-dri-eaf", "20250101", "20251231", 606.78),
+        ("s", "NSW1", "moe-eaf", "20240101", "20241231", 914.11),
+    ])
+    df["cf_solar"] = [0.19, 0.24]
+    flagged = compile_report.mark_best_in_country(df, PARENTS, None)
+
+    report_path = tmp_path / "report_s.csv"
+    compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
+    report = read_report(report_path)
+
+    assert list(report.index) == ["s_1", "s_2"]
+    assert list(report["cf_solar"]) == [0.19, 0.24], "numbers come back as numbers"
+    assert list(report["start_date"]) == ["20250101", "20240101"], "and dates as text"
+    assert report["lco_output"].dtype == float

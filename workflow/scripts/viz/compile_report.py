@@ -2,8 +2,9 @@
 
 Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
 Writes two files: the report viz reads, and a hidden `_diag.csv` beside it that
-keeps the zones the report did not select. Each row ends with the `inputs_hash`
-the solve stamped into the network, so a number stays tied to its inputs.
+keeps the zones the report did not select. Each run carries the `inputs_hash` the
+solve stamped into the network, so a number stays tied to its inputs. What the
+files look like is common/_report_schema.py's business.
 """
 
 import logging
@@ -16,7 +17,7 @@ import yaml
 
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
-from common._report_schema import PROCESS_LINKS, REPORT_COLUMNS, ZERO_FILLED
+from common._report_schema import PROCESS_LINKS, write_report_file
 from common._runs import load_scenarios, zone_parents
 
 if "snakemake" not in globals():
@@ -126,42 +127,18 @@ def input_variants(scenarios: pd.DataFrame, scenario_name: str, run: dict) -> di
     return variants
 
 
-def apply_schema(df: pd.DataFrame) -> pd.DataFrame:
-    """Put the frame on the declared report columns, in the declared order.
-
-    Every run then writes the same header whatever route it took, and a column
-    the run had no value for says which of the two it means: `0` where it adds
-    into a total, blank where it is undefined (see common/_report_schema.py).
-    Columns the schema does not declare — a multi-site run names a generator per
-    candidate site — keep their place after the declared ones, ahead of the hash
-    that closes the row.
-    """
-    extra = [col for col in df.columns if col not in REPORT_COLUMNS]
-    if extra:
-        log.info(f"report carries {len(extra)} run-specific column(s): {extra}")
-    declared = [col for col in REPORT_COLUMNS if col != "inputs_hash"]
-    on_schema = df.reindex(columns=declared + extra + ["inputs_hash"])
-    on_schema[list(ZERO_FILLED)] = on_schema[list(ZERO_FILLED)].fillna(0.0)
-    return on_schema
-
-
 def write_report(df: pd.DataFrame, report_path: Path, diagnostic_path: Path) -> None:
     """Write the scenario report and the hidden diagnostic beside it.
 
     The report is the seam viz reads: which zone represents its country is
-    already decided here, so it holds one row per reported place and no
-    `best_in_country` column to interpret. The diagnostic keeps every zone and
-    the flag, for the question "what would the others have cost?".
+    already decided here, so it holds one column per reported place and no
+    `best_in_country` row to interpret. The diagnostic keeps every zone and the
+    flag, for the question "what would the others have cost?".
     """
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    df = apply_schema(df)
-    numeric = df.select_dtypes("number").columns
-    df[numeric] = df[numeric].round(2)
-    df.to_csv(diagnostic_path, index=False)
-
+    write_report_file(df, diagnostic_path)
     selected = df[df["best_in_country"]].drop(columns="best_in_country")
-    selected.to_csv(report_path, index=False)
-    log.info(f"wrote {report_path} ({len(selected)} rows) and {diagnostic_path} ({len(df)} rows)")
+    write_report_file(selected, report_path)
+    log.info(f"wrote {report_path} ({len(selected)} runs) and {diagnostic_path} ({len(df)} runs)")
 
 
 def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:

@@ -28,7 +28,9 @@ from plotly.utils import PlotlyJSONEncoder
 
 REPO = Path(__file__).resolve().parents[3]  # workflow/scripts/viz/ -> repo root
 RESULTS = REPO / "results"
-OUT = RESULTS / "dashboard.html"
+# The built pages live together, away from the reports and the plot outputs.
+HTML_DIR = RESULTS / "html"
+OUT = HTML_DIR / "dashboard.html"
 TEMPLATE_HTML = Path(__file__).with_name("dashboard_template.html")
 CONFIG_DIR = REPO / "config"
 
@@ -349,6 +351,7 @@ def build_payload(report_paths):
     import scripts.viz.plot_lcos_bars as L
     import scripts.viz.plot_capacity_bars as C
     from _run_display import run_label
+    from common._report_schema import read_report
 
     scenarios = sorted(p.stem[len("report_"):] for p in report_paths)
     baseline = _baseline_scenario(scenarios)
@@ -356,7 +359,7 @@ def build_payload(report_paths):
     cases, synth, gas = {}, {}, {}
     geos, years, cf_methods = set(), set(), set()
     for report_path in sorted(report_paths):
-        df = pd.read_csv(report_path)
+        df = read_report(report_path)
         lcos_df = L.build_plot_data(df)   # €/t cost groups, indexed by run label
         cap_df = C.build_plot_data(df)    # capacities, indexed by run label
 
@@ -482,6 +485,7 @@ def build_html(template_path: Path, augment=None):
 
 def main():
     html, cases, geos = build_html(TEMPLATE_HTML)
+    OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(html)
     print(f"wrote {OUT} ({OUT.stat().st_size/1e6:.2f} MB) — {len(cases)} projects, {len(geos)} geos")
 
