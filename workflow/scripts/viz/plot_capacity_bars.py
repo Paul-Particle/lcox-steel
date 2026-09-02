@@ -64,11 +64,11 @@ WIND_SOLO_COLOR  = fca_blue
 _BAR_WIDTH = 0.12
 
 PROCESS_BARS = [
-    ("dri_t_per_h",            "H2-DRI shaft (t/h iron)",     blue_gray),
-    ("dri_ng_t_per_h",         "NG-DRI shaft (t/h iron)",     light_blue_gray),
-    ("eaf_t_per_h",            "EAF (t/h steel)",             very_dark_gray),
-    ("moe_t_per_h",            "MOE (t/h steel)",             highlight_blue),
-    ("electrowinning_t_per_h", "Electrowinning (t/h iron)",   turquois),
+    ("dri-h2_t_per_h", "H2-DRI shaft (t/h iron)",   blue_gray),
+    ("dri-ng_t_per_h", "NG-DRI shaft (t/h iron)",   light_blue_gray),
+    ("eaf_t_per_h",    "EAF (t/h steel)",           very_dark_gray),
+    ("moe_t_per_h",    "MOE (t/h steel)",           highlight_blue),
+    ("ew_t_per_h",     "Electrowinning (t/h iron)", turquois),
 ]
 
 STORAGE_BARS = [
@@ -132,7 +132,10 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
             row["solar_mw"] = r.get("solar_gw_opt", 0) * 1e3
         for col in wind_cols:
             row[f"{col.replace('_gw_opt','')}_mw"] = r.get(col, 0) * 1e3
-        for link in ("dri", "dri_ng", "eaf", "moe", "electrowinning"):
+        # The link ids the report uses, not a second spelling of them: the
+        # report writes `{link}_t_per_h_opt` for each of PROCESS_LINKS, and a
+        # key that misses is silently a zero-height bar, not an error.
+        for link in ("dri-h2", "dri-ng", "eaf", "moe", "ew"):
             row[f"{link}_t_per_h"] = r.get(f"{link}_t_per_h_opt", 0)
         row["h2_buffer_hours_dri"]    = r.get("h2_buffer_hours_dri", 0)
         row["iron_store_hours_steel"] = r.get("iron_store_hours_steel", 0)

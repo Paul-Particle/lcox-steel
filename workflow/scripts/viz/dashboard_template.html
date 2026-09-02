@@ -157,14 +157,18 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const {cases:CASES, synth:SYNTH, gas:GAS, template:FCA, geos:GEOS, years:YEARS,
     geo_names:GN, clean_routes:CLEAN, route_order:ROUTE_ORDER, route_label:RLAB,
     route_color:RCOL, co2_t_per_mwh:CO2F, h2_min:H2MIN, cost_groups:COST_GROUPS,
-    cap_panels:CAP_PANELS, variant_routes:VARIANT_ROUTES, variant_label:VLAB} = PAYLOAD;
+    cap_panels:CAP_PANELS, variant_routes:VARIANT_ROUTES, variant_label:VLAB,
+    base_variant:BASE, cf_options:CF_OPTS, default_view:DEFAULT} = PAYLOAD;
 
   const CONF = {responsive:true, displaylogo:false,
     modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
-  const CFLABEL = {avg:"Average CF", p95:"Best-site P95", compare:"Compare CF"};
+  const CFLABEL = {...Object.fromEntries(CF_OPTS), compare:"Compare CF"};
+  const CF_KEYS = CF_OPTS.map(([key])=>key);
   const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
-  const state = {geo:GEOS.includes("DE")?"DE":GEOS[0], year:YEARS[YEARS.length-1],
-                 grid:"grid", cf:"p95", variant:"base"};
+  // Opens on a run that was actually solved, rather than on a named one that
+  // may never have been.
+  const state = {geo:DEFAULT.a.geo, year:DEFAULT.a.year, grid:DEFAULT.a.grid,
+                 cf:DEFAULT.a.cf, variant:DEFAULT.a.variant};
 
   document.getElementById("sd-co2f").textContent = CO2F.toFixed(2);
 
@@ -174,26 +178,30 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const mixIsFossil = rec => rec && rec.h2_share!=null && rec.h2_share < H2MIN;
   const co2Int = rec => (rec.ng_gwh*1000*CO2F)/((rec.steel_mt||1)*1e6); // tCO₂ / t steel
 
-  // Which variant applies to a route under the current sensitivity (base otherwise).
+  // Which scenario a route is shown from: its own if that scenario solved it,
+  // otherwise the baseline.
   function effVariant(route){
-    return (VARIANT_ROUTES[state.variant]||[]).includes(route) ? state.variant : "base";
+    return (VARIANT_ROUTES[state.variant]||[]).includes(route) ? state.variant : BASE;
   }
   // Record for (route, cf) in the current case+variant; falls back to base variant.
   function recFor(route, cf){
     const rc = CASES[proj()]?.[route]; if(!rc) return null;
-    const v = rc[effVariant(route)] || rc["base"]; if(!v) return null;
-    return v[route==="ng-dri-eaf" ? "na" : cf] || null;
+    const v = rc[effVariant(route)] || rc[BASE]; if(!v) return null;
+    // ng-dri-eaf builds no renewables, so it is filed under whichever CF method
+    // its scenario carried rather than under one of its own.
+    return (route==="ng-dri-eaf" ? (v[cf] || Object.values(v)[0]) : v[cf]) || null;
   }
   const routesHere = () => ROUTE_ORDER.filter(r => CASES[proj()]?.[r]);
-  const cfKey = (route, cf) => route==="ng-dri-eaf" ? "na" : cf;      // ng has no CF
-  const cfsShown = () => state.cf==="compare" ? ["avg","p95"] : [state.cf];
-  const cfsForRow = route => route==="ng-dri-eaf" ? ["na"] : cfsShown();
-  // One "effective" record per route for the cards (compare → cheaper of avg/p95).
+  const cfKey = (route, cf) => cf;
+  // "Compare" spans every CF method in the reports, not a fixed pair of them.
+  const cfsShown = () => state.cf==="compare" ? CF_KEYS : [state.cf];
+  const cfsForRow = route => route==="ng-dri-eaf" ? [state.cf] : cfsShown();
+  // One "effective" record per route for the cards (compare → the cheapest).
   function bestRec(route){
-    if(route==="ng-dri-eaf") return recFor(route,"na");
     if(state.cf!=="compare") return recFor(route,state.cf);
-    const a=recFor(route,"avg"), p=recFor(route,"p95");
-    if(a&&p) return a.lcos<=p.lcos?a:p; return a||p;
+    const found = CF_KEYS.map(cf=>recFor(route,cf)).filter(Boolean);
+    if(!found.length) return null;
+    return found.reduce((best,rec)=> rec.lcos<=best.lcos ? rec : best);
   }
 
   function renderMeta(){
@@ -253,8 +261,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
 
   function subLabel(){
     const g=`${GN[state.geo]} · ${state.year} · ${state.grid==="grid"?"grid-connected":"islanded"}`;
-    const cf = state.cf==="compare" ? "avg vs best-site P95" : CFLABEL[state.cf];
-    const v = state.variant==="base" ? "baseline" : VLAB[state.variant];
+    const cf = state.cf==="compare" ? CF_KEYS.map(k=>CFLABEL[k]).join(" vs ") : CFLABEL[state.cf];
+    const v = state.variant===BASE ? "baseline" : (VLAB[state.variant]||state.variant);
     return `${g} · ${cf} · ${v}`;
   }
 
@@ -363,7 +371,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       const co2=co2Int(rec);
       const share = rec.h2_share==null ? '<span class="na">—</span>' : Math.round(Math.max(0,rec.h2_share)*100)+'%';
       const flag = (r==="mix-dri-eaf" && mixIsFossil(rec)) ? ' <span class="tag">≈ NG-DRI · H₂ rejected</span>' : '';
-      const cfcell = compare ? `<td class="cf">${cf==="na"?"—":(cf==="avg"?"Avg":"P95")}</td>` : "";
+      const cfcell = compare ? `<td class="cf">${CFLABEL[cf]||cf}</td>` : "";
       return `<tr class="${i===0?"best":""}">
         <td class="rt"><span class="sw" style="background:${RCOL[r]}"></span>${RLAB[r]}${flag}</td>
         ${cfcell}
@@ -404,7 +412,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   buildPills("sd-geo", GEOS.map(g=>[g,GN[g]||g]), "geo");
   buildPills("sd-year", YEARS.map(y=>[y,y]), "year");
   buildPills("sd-grid", [["grid","Grid"],["nogrid","Islanded"]], "grid");
-  buildPills("sd-cf", [["avg","Average"],["p95","Best-site P95"],["compare","Compare"]], "cf");
+  // Comparing needs at least two methods to compare.
+  buildPills("sd-cf", CF_OPTS.concat(CF_KEYS.length > 1 ? [["compare","Compare"]] : []), "cf");
 
   const vsel=document.getElementById("sd-variant");
   Object.keys(VLAB).forEach(v=>{ const o=document.createElement("option"); o.value=v; o.textContent=VLAB[v]; vsel.appendChild(o); });
