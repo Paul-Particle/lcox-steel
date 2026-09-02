@@ -23,36 +23,12 @@ onstart:
             p.write_bytes(data.replace(b'\x00', b''))
             print(f"VM workaround: Removed NUL bytes from {p.relative_to(_smk_root)}")
 
-import pandas as pd
+from common._runs import ROUTE_PATTERN, build_runs_frame, load_scenarios
 
-from common._runs import (
-    RUN_KEY,
-    ROUTE_PATTERN,
-    build_runs_frame,
-    check_run_coverage,
-    expand_scenario_rows,
-)
-
-# One row per input timeseries. `#` rows are planned scenarios parked next to
-# their live siblings (see the export routes) and are not built. `all-areas`
-# cells resolve against the area registry here, so every row downstream — the
-# solve rule's lookup included — names one real area.
-scenarios_df = expand_scenario_rows(
-    pd.read_csv(
-        "config/scenarios.csv", comment="#", dtype={"start_date": str, "end_date": str}
-    ),
-    config["areas"],
-)
-
-# A scenario name is an umbrella: the rows filed under it define every run it
-# covers. One network is one (scenario, area, date range) group, so a tech may
-# appear once per group — twice would hand that solve two series for one tech.
-_key = RUN_KEY + ["tech"]
-if scenarios_df.duplicated(subset=_key).any():
-    dups = scenarios_df[scenarios_df.duplicated(subset=_key, keep=False)][_key]
-    raise ValueError(f"scenarios.csv has duplicate rows for one run and tech:\n{dups}")
-
-check_run_coverage(scenarios_df)
+# One row per input timeseries, validated, with `all-areas` cells resolved
+# against the area registry — so every row downstream, the solve rule's lookup
+# included, names one real area.
+scenarios_df = load_scenarios("config/scenarios.csv", config["areas"])
 
 # One row per network to solve — `all-routes` and `a|b` cells expanded.
 runs_df = build_runs_frame(scenarios_df, config["areas"])

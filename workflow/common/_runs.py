@@ -168,6 +168,35 @@ def expand_scenario_rows(scenarios: pd.DataFrame, areas: dict) -> pd.DataFrame:
     return pd.concat(frames).reset_index(drop=True)
 
 
+def load_scenarios(path, areas: dict) -> pd.DataFrame:
+    """Read the scenario table into validated rows, one per input timeseries.
+
+    `#` rows are planned scenarios parked next to their live siblings (see the
+    export routes) and are skipped.
+    """
+    scenarios = pd.read_csv(
+        path, comment="#", dtype={"start_date": str, "end_date": str}
+    )
+    expanded = expand_scenario_rows(scenarios, areas)
+    check_one_series_per_tech(expanded)
+    check_run_coverage(expanded)
+    return expanded
+
+
+def check_one_series_per_tech(scenarios: pd.DataFrame) -> None:
+    """Reject a run that would be handed two timeseries for the same tech.
+
+    One network is one (scenario, area, date range) group, so a tech may appear
+    once per group — twice and the solve gets two series for one tech.
+    """
+    key = RUN_KEY + ["tech"]
+    if scenarios.duplicated(subset=key).any():
+        offenders = scenarios[scenarios.duplicated(subset=key, keep=False)][key]
+        raise ValueError(
+            f"the scenario table has duplicate rows for one run and tech:\n{offenders}"
+        )
+
+
 def check_run_coverage(scenarios: pd.DataFrame) -> None:
     """Reject a scenario that pairs renewables with prices from somewhere else.
 
