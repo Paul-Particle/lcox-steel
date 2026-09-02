@@ -1,5 +1,8 @@
 rule compile_report:
     input:
+        # The scenario table, for the variant each tech was solved with: the
+        # solve reads the parquet, not its name, so this is where that survives.
+        scenarios="config/scenarios.csv",
         networks=collect(
             "results/{item.scenario}/{item.area}_{item.route}_{item.start_date}_{item.end_date}.nc",
             item=lookup(query="scenario == '{scenario}'", within=runs_df),

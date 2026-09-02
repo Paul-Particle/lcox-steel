@@ -380,6 +380,14 @@ solved PyPSA network; `results/report_{scenario}.csv` (from `compile_report`)
 carries the levelised cost (LCOH for `h2-only` routes, LCOS €/t for steel routes)
 and optimal capacities, one row per run under that scenario.
 
+A row leads with everything needed to read the numbers after it: the run key
+(`scenario, area, country, route, start_date, end_date`) and one
+`{tech}_variant` column per input series — `solar_variant: bestsite-p95`,
+`grid_variant: dayahead`. The variant matters because a best-site P95 profile and
+an area average answer different questions, and the solved network does not carry
+it (the solve reads the parquet, not its name), so `compile_report` takes
+`config/scenarios.csv` as an input and joins it back on.
+
 ### Cutout caching
 
 ERA5 cutouts are expensive to (re-)download, so `cutouts/{name}.nc` is **not**

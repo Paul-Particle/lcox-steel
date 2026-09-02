@@ -15,7 +15,7 @@ import yaml
 
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
-from common._runs import zone_parents
+from common._runs import load_scenarios, zone_parents
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -108,6 +108,25 @@ def mark_best_in_country(df: pd.DataFrame, parents: dict, metric: str | None) ->
     return out
 
 
+def input_variants(scenarios: pd.DataFrame, scenario_name: str, run: dict) -> dict:
+    """Which series each tech contributed to one run, as `{tech}_variant` columns.
+
+    A best-site P95 profile and an area average answer different questions, so a
+    cost is not interpretable without knowing which produced it. The solve reads
+    the parquet, not its name, so the variant survives only in the scenario
+    table and is joined back on here. Rows join on the run minus the route —
+    every route of a group is built from the same series.
+    """
+    group = scenarios[
+        (scenarios["scenario"] == scenario_name)
+        & (scenarios["area"] == run["area"])
+        & (scenarios["start_date"] == run["start_date"])
+        & (scenarios["end_date"] == run["end_date"])
+    ]
+    variants = {f"{row.tech}_variant": row.variant for row in group.itertuples()}
+    return variants
+
+
 def write_report(df: pd.DataFrame, report_path: Path, diagnostic_path: Path) -> None:
     """Write the scenario report and the hidden diagnostic beside it.
 
@@ -198,6 +217,9 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
 
 def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
     """Key sizing and cost metrics as a flat dict (suitable for a one-row CSV).
+
+    `run` identifies the row — area, route, date range and the input variants —
+    and leads the columns, so what a number describes reads before the number.
 
     The headline levelised cost depends on the network's route: LCOH for the
     pure-H2 model (flat H2 load, no steel chain), LCOS for the steel routes
@@ -492,10 +514,12 @@ def main() -> None:
     """Load every run under the scenario and write the combined report CSV.
 
     A scenario is an umbrella over runs, so the netCDF name carries the rest of
-    the run key — area, route and date range. One summary row per run via
+    the run key — area, route and date range; the scenario table adds the
+    variant each tech was solved with. One summary row per run via
     `extract_summary`, then the report and its diagnostic sibling.
     """
     scenario_name = snakemake.wildcards.scenario
+    scenarios = load_scenarios(snakemake.input.scenarios, snakemake.config["areas"])
 
     rows = []
     network_paths = list(dict.fromkeys(snakemake.input.networks))
@@ -506,6 +530,7 @@ def main() -> None:
         n = pypsa.Network()
         n.import_from_netcdf(nc_path)
         run = {"area": area, "route": route, "start_date": start_date, "end_date": end_date}
+        run.update(input_variants(scenarios, scenario_name, run))
         rows.append(extract_summary(n, scenario_name, run))
 
     flagged = mark_best_in_country(
