@@ -5,7 +5,7 @@ finance:
 # never from this file: one solve builds exactly one route, named by the
 # `{route}` wildcard. This file only overrides the defaults below, and a
 # per-scenario `config/assumptions_{scenario}.yaml` overlay overrides these in
-# turn. The implemented route ids live in workflow/common/_routes.py.
+# turn. The implemented route ids live in workflow/common/_runs.py.
 
 plant:
   dri_mt_per_year: 0.526  # 100 MW H2 LHV input × 8760 h / 33.33 kWh/kg / 50 kg/t

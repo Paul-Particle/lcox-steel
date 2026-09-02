@@ -19,7 +19,7 @@ optimisation model into one Snakemake workflow:
   - `ew-eaf` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
 
   `all-routes` in that column means every route above. The registry lives in
-  `workflow/common/_routes.py`; `*-export` ids are reserved for the trade
+  `workflow/common/_runs.py`; `*-export` ids are reserved for the trade
   scenarios and are not implemented.
 - **`viz`** — a per-scenario LCOH/LCOS report plus Plotly figures, one row per run.
 
@@ -94,6 +94,7 @@ lcox-steel/
 │   │       ├── _run_display.py     # run labels + best-zone filter, shared by the plots
 │   │       └── style.py            # FCA Plotly template + colormap
 │   └── common/                     # shared, cross-pipeline Python
+│       ├── _runs.py                # route/area registries; expands scenarios.csv into runs
 │       ├── _constants.py           # physical constants (e.g. H2 LHV)
 │       ├── _logging.py             # configure_logging + tqdm progress wrapper
 │       ├── _paths.py               # repo-relative path roots
