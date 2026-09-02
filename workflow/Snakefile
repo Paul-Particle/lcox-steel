@@ -25,44 +25,66 @@ onstart:
 
 import pandas as pd
 
-projects_df = pd.read_csv(
-    "config/projects.csv", dtype={"start_date": str, "end_date": str}
+from common._runs import (
+    RUN_KEY,
+    ROUTE_PATTERN,
+    build_runs_frame,
+    check_run_coverage,
+    expand_scenario_rows,
 )
 
-# (project, scenario, tech) is the natural row key in projects.csv; two rows
-# with the same triple would silently merge in the DAG and confuse downstream
-# lookup() calls, so reject the file at load time.
-_key = ["project", "scenario", "tech"]
-if projects_df.duplicated(subset=_key).any():
-    dups = projects_df[projects_df.duplicated(subset=_key, keep=False)][_key]
-    raise ValueError(f"projects.csv has duplicate (project, scenario, tech) rows:\n{dups}")
+# One row per input timeseries. `#` rows are planned scenarios parked next to
+# their live siblings (see the export routes) and are not built. `all-areas`
+# cells resolve against the area registry here, so every row downstream — the
+# solve rule's lookup included — names one real area.
+scenarios_df = expand_scenario_rows(
+    pd.read_csv(
+        "config/scenarios.csv", comment="#", dtype={"start_date": str, "end_date": str}
+    ),
+    config["areas"],
+)
 
-PROJECTS = projects_df["project"].unique()
+# A scenario name is an umbrella: the rows filed under it define every run it
+# covers. One network is one (scenario, area, date range) group, so a tech may
+# appear once per group — twice would hand that solve two series for one tech.
+_key = RUN_KEY + ["tech"]
+if scenarios_df.duplicated(subset=_key).any():
+    dups = scenarios_df[scenarios_df.duplicated(subset=_key, keep=False)][_key]
+    raise ValueError(f"scenarios.csv has duplicate rows for one run and tech:\n{dups}")
+
+check_run_coverage(scenarios_df)
+
+# One row per network to solve — `all-routes` and `a|b` cells expanded.
+runs_df = build_runs_frame(scenarios_df, config["areas"])
+
+SCENARIOS = scenarios_df["scenario"].unique()
+# A scenario name is a free-form label — nothing here reads meaning out of it,
+# so the demo set is listed in config.yaml rather than matched on a prefix.
+DEMO_SCENARIOS = config["demo_scenarios"]
 
 
 include: "rules/_optional_shim.smk"
 include: "rules/grid.smk"
 include: "rules/res_cf.smk"
-include: "rules/h2_dri.smk"
+include: "rules/solve.smk"
 include: "rules/viz.smk"
 
 
 # Default target: a small, self-contained demo that runs after a fresh clone
 # with no CDS download, no EEZ/NE zips, and no API keys. It ships a pre-sliced
 # Victoria (AUS) cutout backup + derived geo parquets, and exercises the
-# best-site (07) and anchor-colocation (07b, multi-site PyPSA) RES-CF science
-# through to an h2_dri solve and a viz report. Run the full set of real
-# projects with `snakemake all`.
+# best-site and anchor-colocation (multi-site PyPSA) RES-CF science through to
+# a solve and a viz report. Run the full set with `snakemake all`.
 rule demo:
     default_target: True
     input:
-        "results/report_DEMO-VIC-2025.csv",
-        "results/plots/capacity_bars/DEMO-VIC-2025.png",
+        collect("results/report_{scenario}.csv", scenario=DEMO_SCENARIOS),
+        collect("results/plots/capacity_bars/{scenario}.png", scenario=DEMO_SCENARIOS),
 
 
 rule all:
     input:
-        # One report per project.
-        expand("results/report_{project}.csv", project=PROJECTS),
-        # One scenario-comparison bar chart per project.
-        expand("results/plots/capacity_bars/{project}.png", project=PROJECTS),
+        # One report per scenario — its rows are that scenario's runs.
+        collect("results/report_{scenario}.csv", scenario=SCENARIOS),
+        # One comparison bar chart per scenario.
+        collect("results/plots/capacity_bars/{scenario}.png", scenario=SCENARIOS),

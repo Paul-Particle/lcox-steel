@@ -16,7 +16,7 @@ venv/
 # Data files (broad patterns cover resources/ and other locations)
 *.parquet
 *.feather
-!config/projects.csv
+!config/scenarios.csv
 
 # Cache directories: ignore everything except the committed reference file in each
 data/nem_cache/*
@@ -26,8 +26,8 @@ data/entsoe_cache/*
 
 # Derived workflow outputs (rebuilt by snakemake)
 resources/*.parquet
+resources/timeseries/
 resources/entsoe/
-resources/res_cf/
 resources/nem/
 resources/shapes/
 

@@ -3,7 +3,7 @@
 ## Grid pipeline output completeness
 
 `test_window_completeness.py` pins the behaviour of `_helpers.assert_window_complete`,
-the guard shared by `retrieve_entsoe` and `retrieve_nem`. It runs on every
+the guard shared by `_entsoe` and `_nem`. It runs on every
 pipeline output and fails loudly when the produced window has holes. Truncated
 raw-cache months (a fetch that stopped mid-month) and partial downloads are
 otherwise silent — the slice just has fewer rows, and the hole only surfaces far

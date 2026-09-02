@@ -1,6 +1,6 @@
 """Unit tests for the grid output completeness guard.
 
-`assert_window_complete` (in _helpers, shared by retrieve_entsoe and retrieve_nem)
+`assert_window_complete` (in _helpers, shared by _entsoe and _nem)
 is the pipeline's defence against silently truncated raw-cache months and partial
 downloads — holes that otherwise only surface far downstream as NaN after a
 reindex (e.g. a solve aligning prices to a full CF year). These tests pin the

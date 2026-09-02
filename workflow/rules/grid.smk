@@ -4,23 +4,19 @@ wildcard_constraints:
     variant=r"dayahead|full",
 
 
-rule retrieve_entsoe:
+rule retrieve_grid_data:
     output:
-        temp("resources/entsoe/{area}_grid_{variant}_{start_date}_{end_date}.parquet"),
+        temp("resources/timeseries/{area}_grid_{variant}_{start_date}_{end_date}.parquet"),
     log:
-        "logs/retrieve_entsoe/{area}_{variant}_{start_date}_{end_date}.log",
+        "logs/retrieve_grid_data/{area}_{variant}_{start_date}_{end_date}.log",
+    params:
+        # Empty for an area with no price series — the script turns that into a
+        # clear error rather than picking a source.
+        market=lookup(dpath="areas/{area}/market", within=config, default=""),
+        market_area=lookup(dpath="areas/{area}/market_area", within=config, default=""),
+        eur_per_aud=config["nem"]["eur_per_aud"],
     resources:
+        # ENTSO-E rate limit; harmless for NEM areas, which make no API calls.
         entsoe_api=2,
     script:
-        "../scripts/grid/retrieve_entsoe.py"
-
-
-rule retrieve_nem:
-    output:
-        temp("resources/nem/{area}_grid_{variant}_{start_date}_{end_date}.parquet"),
-    log:
-        "logs/retrieve_nem/{area}_{variant}_{start_date}_{end_date}.log",
-    params:
-        eur_per_aud=config["nem"]["eur_per_aud"],
-    script:
-        "../scripts/grid/retrieve_nem.py"
+        "../scripts/grid/retrieve_grid_data.py"
