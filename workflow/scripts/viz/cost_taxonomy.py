@@ -44,7 +44,7 @@ import pandas as pd
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "workflow"))
 
-from scripts.solve._helpers import annuity_factor  # noqa: E402
+from scripts.solve._helpers_solve import annuity_factor  # noqa: E402
 
 # Parent groups, in stack order (bottom -> top), with the colour the coarse
 # taxonomies already use for that role.

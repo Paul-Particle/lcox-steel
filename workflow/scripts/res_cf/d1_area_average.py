@@ -6,7 +6,7 @@ from scipy.sparse import diags
 
 import logging
 from common._paths import CUTOUTS, SHAPES_RES, TIMESERIES
-from scripts.res_cf._helpers import cos_lat_weights, eligibility_matrix
+from scripts.res_cf._helpers_res_cf import cos_lat_weights, eligibility_matrix
 
 if "snakemake" not in globals():
     from common._stubs import snakemake

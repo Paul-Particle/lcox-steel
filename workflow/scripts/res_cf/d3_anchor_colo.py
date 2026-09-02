@@ -72,7 +72,7 @@ if "snakemake" not in globals():
 
 from common._logging import configure_logging
 from common._paths import CUTOUTS, SHAPES_RES, TIMESERIES
-from scripts.res_cf._helpers import (
+from scripts.res_cf._helpers_res_cf import (
     eligibility_mask_2d,
     eligibility_weights,
     haversine_distance_km,

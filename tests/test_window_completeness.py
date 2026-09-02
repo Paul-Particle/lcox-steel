@@ -1,6 +1,6 @@
 """Unit tests for the grid output completeness guard.
 
-`assert_window_complete` (in _helpers, shared by _entsoe and _nem)
+`assert_window_complete` (in _helpers_grid, shared by _entsoe and _nem)
 is the pipeline's defence against silently truncated raw-cache months and partial
 downloads — holes that otherwise only surface far downstream as NaN after a
 reindex (e.g. a solve aligning prices to a full CF year). These tests pin the
@@ -10,9 +10,9 @@ guard's behaviour on synthetic frames, so they need no raw cache and run anywher
 import pandas as pd
 import pytest
 
-import _helpers  # sys.path set by conftest
+import _helpers_grid  # sys.path set by conftest
 
-_assert_window_complete = _helpers.assert_window_complete
+_assert_window_complete = _helpers_grid.assert_window_complete
 
 
 def _dayahead_frame(start="2024-01-01", end="2024-12-31"):

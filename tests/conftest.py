@@ -19,8 +19,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # _entsoe imports ``common.*`` (workflow/) and its siblings
-# (_helpers, download_entsoe) as top-level modules (workflow/scripts/grid/); the
-# viz scripts likewise import each other by bare name.
+# (_helpers_grid, download_entsoe) as top-level modules
+# (workflow/scripts/grid/); the viz scripts likewise import each other by bare
+# name. Each scripts/ dir suffixes its helper module with its own name, so a
+# second dir on this flat path cannot shadow the first's.
 for _p in (
     REPO_ROOT / "workflow",
     REPO_ROOT / "workflow" / "scripts" / "grid",

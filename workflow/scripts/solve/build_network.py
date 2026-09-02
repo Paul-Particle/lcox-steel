@@ -42,7 +42,7 @@ import pandas as pd
 import pypsa
 import yaml
 
-from _helpers import annuity_factor, dri_to_el_mw, haversine_km
+from _helpers_solve import annuity_factor, dri_to_el_mw, haversine_km
 
 from common._constants import H2_LHV_KWH_PER_KG
 from common._runs import ROUTES

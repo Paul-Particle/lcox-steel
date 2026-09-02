@@ -43,7 +43,7 @@ def dri_to_el_mw(
 def haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     """Great-circle distance (km) between two points given in degrees.
 
-    A scalar copy of res_cf/_helpers.haversine_distance_km (which is array-oriented
+    A scalar copy of res_cf/_helpers_res_cf.haversine_distance_km (which is array-oriented
     and lives in the res_cf package); duplicated here to keep the solve package free of a
     res_cf import for the one place it needs an inter-site distance.
     """

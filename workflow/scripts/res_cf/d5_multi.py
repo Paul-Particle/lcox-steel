@@ -36,7 +36,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from scripts.res_cf._helpers import mask_cells_inside
+from scripts.res_cf._helpers_res_cf import mask_cells_inside
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)

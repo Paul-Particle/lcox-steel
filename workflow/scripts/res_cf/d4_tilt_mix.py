@@ -43,7 +43,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from scripts.res_cf._helpers import geom_area_weights, pick_p95_cell
+from scripts.res_cf._helpers_res_cf import geom_area_weights, pick_p95_cell
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
