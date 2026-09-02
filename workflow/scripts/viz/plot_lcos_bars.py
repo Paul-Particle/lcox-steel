@@ -20,7 +20,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from _run_display import best_zones_only, run_label
+from _run_display import run_label
 from scripts.viz.style import (
     apply_header,
     blue_black,
@@ -70,7 +70,6 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
     Keeps only runs with an LCOS (steel routes); converts each
     cost_{group}_meur column from M€/yr to €/t via the run's steel output.
     """
-    df = best_zones_only(df)
     steel = df[df["lcos_eur_per_t"].notna()] if "lcos_eur_per_t" in df.columns else df.iloc[:0]
     skipped = len(df) - len(steel)
     if skipped:

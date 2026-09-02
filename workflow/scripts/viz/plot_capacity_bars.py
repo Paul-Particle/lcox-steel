@@ -24,7 +24,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from _run_display import best_zones_only, run_label
+from _run_display import run_label
 from scripts.viz.style import (
     apply_header,
     blue_black,
@@ -112,7 +112,6 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
     capacities (t/h output) and stores (hours of demand) through in their native
     units. Indexed by run label.
     """
-    df = best_zones_only(df)
     solar_cols = _solar_cols(df)
     wind_cols  = _wind_cols(df)
     rows = []

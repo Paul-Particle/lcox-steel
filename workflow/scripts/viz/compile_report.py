@@ -1,6 +1,8 @@
-"""Compile per-run summaries into a single scenario-level report CSV.
+"""Compile per-run summaries into the scenario-level report CSV.
 
 Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
+Writes two files: the report viz reads, and a hidden `_diag.csv` beside it that
+keeps the zones the report did not select.
 """
 
 import logging
@@ -88,8 +90,9 @@ def mark_best_in_country(df: pd.DataFrame, parents: dict, metric: str | None) ->
     is reported from whichever NEM region made steel cheapest with moe-eaf, and
     each date range is ranked on its own.
 
-    The losers are flagged, not dropped — what the other zones cost is itself a
-    result, and a dropped row costs a re-solve to recover.
+    The losers are flagged, not dropped — this frame is the diagnostic one, where
+    what the other zones cost is itself a result and a dropped row would cost a
+    re-solve to recover. `write_report` is what narrows it down for viz.
 
     `metric` names the ranking column, or None to flag everything. A row with no
     value for it (h2-only produces hydrogen, so it has no cost of steel) stays
@@ -103,6 +106,24 @@ def mark_best_in_country(df: pd.DataFrame, parents: dict, metric: str | None) ->
     ranked = out.groupby(["country", "route", "start_date", "end_date"])[metric]
     out["best_in_country"] = (out[metric] == ranked.transform("min")) | out[metric].isna()
     return out
+
+
+def write_report(df: pd.DataFrame, report_path: Path, diagnostic_path: Path) -> None:
+    """Write the scenario report and the hidden diagnostic beside it.
+
+    The report is the seam viz reads: which zone represents its country is
+    already decided here, so it holds one row per reported place and no
+    `best_in_country` column to interpret. The diagnostic keeps every zone and
+    the flag, for the question "what would the others have cost?".
+    """
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    numeric = df.select_dtypes("number").columns
+    df[numeric] = df[numeric].round(2)
+    df.to_csv(diagnostic_path, index=False)
+
+    selected = df[df["best_in_country"]].drop(columns="best_in_country")
+    selected.to_csv(report_path, index=False)
+    log.info(f"wrote {report_path} ({len(selected)} rows) and {diagnostic_path} ({len(df)} rows)")
 
 
 def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
@@ -472,7 +493,7 @@ def main() -> None:
 
     A scenario is an umbrella over runs, so the netCDF name carries the rest of
     the run key — area, route and date range. One summary row per run via
-    `extract_summary`, rounded, written to results/report_<scenario>.csv.
+    `extract_summary`, then the report and its diagnostic sibling.
     """
     scenario_name = snakemake.wildcards.scenario
 
@@ -487,16 +508,12 @@ def main() -> None:
         run = {"area": area, "route": route, "start_date": start_date, "end_date": end_date}
         rows.append(extract_summary(n, scenario_name, run))
 
-    out_path = Path(snakemake.output[0])
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    df = mark_best_in_country(
+    flagged = mark_best_in_country(
         pd.DataFrame(rows),
         zone_parents(snakemake.config["areas"]),
         snakemake.params.best_zone_by or None,
     )
-    df[df.select_dtypes("number").columns] = df.select_dtypes("number").round(2)
-    df.to_csv(out_path, index=False)
-    log.info(f"wrote {out_path} ({len(rows)} rows)")
+    write_report(flagged, Path(snakemake.output.report), Path(snakemake.output.diagnostic))
 
 
 if __name__ == "__main__":

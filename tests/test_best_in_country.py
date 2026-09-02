@@ -2,10 +2,10 @@
 
 A country that reaches its market through zones (Australia through its NEM
 regions) is solved once per zone, so several report rows describe the same
-place. `mark_best_in_country` flags the cheapest rather than dropping the rest,
-and the plots hide the unflagged ones. These pin that behaviour on synthetic
-frames — no cutouts, no solves, so they run anywhere. Only VIC1 is configured
-today, so the multi-zone case has to be synthetic to exist at all.
+place. `mark_best_in_country` flags the cheapest rather than dropping the rest, and
+`write_report` splits that into the report viz reads and the hidden diagnostic.
+These pin that behaviour on synthetic frames — no cutouts, no solves, so they
+run anywhere.
 """
 
 import pandas as pd
@@ -119,12 +119,22 @@ def test_run_labels_are_unique_across_a_multi_area_scenario():
     assert labels.is_unique
 
 
-def test_plots_hide_the_beaten_zones():
+def test_report_holds_the_selected_areas_and_the_diagnostic_holds_all(tmp_path):
+    """The seam: the report stands alone, the diagnostic answers "and the others?"."""
     df = _report([
         ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
         ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
         ("s", "DEU", "moe-eaf", "20250101", "20251231", 1010.0),
     ])
-    out = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-    kept = _run_display.best_zones_only(out)
-    assert set(kept["area"]) == {"NSW1", "DEU"}
+    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
+    report_path = tmp_path / "report_s.csv"
+    diagnostic_path = tmp_path / ".report_s_diag.csv"
+    compile_report.write_report(flagged, report_path, diagnostic_path)
+
+    report = pd.read_csv(report_path)
+    assert set(report["area"]) == {"NSW1", "DEU"}
+    assert "best_in_country" not in report.columns, "the flag is not viz's problem"
+
+    diagnostic = pd.read_csv(diagnostic_path)
+    assert set(diagnostic["area"]) == {"VIC1", "NSW1", "DEU"}
+    assert set(diagnostic.loc[~diagnostic["best_in_country"], "area"]) == {"VIC1"}
