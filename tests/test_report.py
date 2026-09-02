@@ -29,9 +29,28 @@ PARENTS = zone_parents(AREAS)
 
 def _report(rows):
     """A report-shaped frame: one row per run, in the column order compile_report uses."""
-    return pd.DataFrame(
+    frame = pd.DataFrame(
         rows, columns=["scenario", "area", "route", "start_date", "end_date", "lco_output"]
     )
+    # Every row carries the fingerprint of the inputs behind it, so a frame
+    # without one is not a report frame.
+    frame["inputs_hash"] = "772c9cac81fe"
+    return frame
+
+
+def test_inputs_hash_closes_the_row(tmp_path):
+    """A route with a column of its own must not push the fingerprint mid-row."""
+    df = _report([
+        ("s", "VIC1", "h2-dri-eaf", "20250101", "20251231", 606.0),
+        ("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0),
+    ])
+    # Only the MOE route reports a MOE plant, so the column joins after the hash.
+    df["plant_moe_eur_per_t"] = [float("nan"), 120.0]
+    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
+
+    report_path = tmp_path / "report_s.csv"
+    compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
+    assert pd.read_csv(report_path).columns[-1] == "inputs_hash"
 
 
 def test_zone_parents_maps_zones_to_their_country():

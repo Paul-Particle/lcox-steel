@@ -2,7 +2,8 @@
 
 Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
 Writes two files: the report viz reads, and a hidden `_diag.csv` beside it that
-keeps the zones the report did not select.
+keeps the zones the report did not select. Each row ends with the `inputs_hash`
+the solve stamped into the network, so a number stays tied to its inputs.
 """
 
 import logging
@@ -138,6 +139,10 @@ def write_report(df: pd.DataFrame, report_path: Path, diagnostic_path: Path) -> 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     numeric = df.select_dtypes("number").columns
     df[numeric] = df[numeric].round(2)
+    # inputs_hash closes the row. Columns only some routes have (a MOE plant,
+    # say) join the frame where they are first seen, which would otherwise leave
+    # it stranded mid-row, so the position is set rather than assumed.
+    df = df[[col for col in df.columns if col != "inputs_hash"] + ["inputs_hash"]]
     df.to_csv(diagnostic_path, index=False)
 
     selected = df[df["best_in_country"]].drop(columns="best_in_country")
@@ -531,7 +536,11 @@ def main() -> None:
         n.import_from_netcdf(nc_path)
         run = {"area": area, "route": route, "start_date": start_date, "end_date": end_date}
         run.update(input_variants(scenarios, scenario_name, run))
-        rows.append(extract_summary(n, scenario_name, run))
+        summary = extract_summary(n, scenario_name, run)
+        # Trailing the row, because it identifies the inputs rather than
+        # describing them: the per-file map it stands for is in the network.
+        summary["inputs_hash"] = n.meta["inputs_hash"]
+        rows.append(summary)
 
     flagged = mark_best_in_country(
         pd.DataFrame(rows),
