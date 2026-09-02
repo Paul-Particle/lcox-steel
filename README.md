@@ -388,6 +388,30 @@ an area average answer different questions, and the solved network does not carr
 it (the solve reads the parquet, not its name), so `compile_report` takes
 `config/scenarios.csv` as an input and joins it back on.
 
+### The report's columns are fixed
+
+Every run writes the same columns whatever route it took, so the report is a
+table rather than something to probe column by column. The set and its order are
+declared in `workflow/common/_report_schema.py`, and `compile_report` puts each
+scenario's frame on it before writing. Without that the header was the union of
+whatever runs a scenario happened to contain: solving only `h2-only` left the
+steel chain out, adding one `moe-eaf` run grew every other row, and a consumer
+asking for a column nobody wrote got silence.
+
+A cell a run has no value for says which of two things it means:
+
+- **`0`** — an amount, and this run's is nothing. A route without a MOE cell
+  reports `plant_moe_eur_per_t: 0`; it built none, and zero is what that step
+  contributed to the cost of its steel. The cost groups stack to
+  `total_annual_cost_meur` for every row.
+- **blank** — undefined here: a ratio with nothing in its denominator. The
+  capacity factor of a turbine that was not built, `lcoh_*` on a route that
+  makes no hydrogen, the utilisation of a plant that is not there.
+
+So a blank never means "not looked at", and `0` never means "missing". A
+multi-site run additionally names a generator per candidate site; those columns
+are not declared in advance and follow the fixed ones.
+
 ### Tying a result to its inputs
 
 A run key names the inputs but does not pin them: assumptions get edited and

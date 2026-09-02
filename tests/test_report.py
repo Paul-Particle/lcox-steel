@@ -14,6 +14,7 @@ import pytest
 
 import compile_report  # sys.path set by conftest
 import _run_display
+from common._report_schema import REPORT_COLUMNS
 from common._runs import zone_parents
 
 AREAS = {
@@ -205,3 +206,69 @@ def test_input_variants_ignore_the_route():
 )
 def test_input_variants_do_not_leak_across_areas_or_years(run, expected):
     assert compile_report.input_variants(SCENARIOS, "s", run) == expected
+
+
+def test_every_route_writes_the_same_columns(tmp_path):
+    """The point of the schema: what a row says must not depend on its route."""
+    df = _report([
+        ("s", "VIC1", "h2-only", "20250101", "20251231", 4.1),
+        ("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0),
+    ])
+    # Only the MOE run has a MOE cell to report; only the H2 run has an LCOH.
+    df["plant_moe_eur_per_t"] = [float("nan"), 120.0]
+    df["lcoh_eur_per_kg"] = [4.1, float("nan")]
+    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
+
+    report_path = tmp_path / "report_s.csv"
+    compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
+    report = pd.read_csv(report_path)
+
+    declared = [c for c in REPORT_COLUMNS if c != "best_in_country"]
+    assert list(report.columns) == declared
+
+
+def test_a_blank_means_undefined_and_a_zero_means_zero(tmp_path):
+    """An amount the run has none of reads 0; a ratio with no denominator is blank."""
+    df = _report([("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
+    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
+
+    report_path = tmp_path / "report_s.csv"
+    compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
+    row = pd.read_csv(report_path).iloc[0]
+
+    # No H2 chain on this route: the electrolyser it did not build is 0 GW, but
+    # the cost of the hydrogen it never made is not a number.
+    assert row["electrolyser_gw"] == 0.0
+    assert row["cost_electrolyser_meur"] == 0.0
+    assert row["plant_dri-h2_eur_per_t"] == 0.0
+    assert pd.isna(row["lcoh_eur_per_mwh_lhv"])
+    assert pd.isna(row["electrolyser_utilization"])
+    assert pd.isna(row["cf_wind_offshore"])
+
+
+def test_run_specific_columns_survive_ahead_of_the_hash(tmp_path):
+    """A multi-site run names a generator per candidate site; those are not declared."""
+    df = _report([("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
+    df["solar-c00_gw_opt"] = 1.4
+    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
+
+    report_path = tmp_path / "report_s.csv"
+    compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
+    columns = list(pd.read_csv(report_path).columns)
+
+    assert columns[-2:] == ["solar-c00_gw_opt", "inputs_hash"]
+
+
+def test_the_diagnostic_is_the_report_plus_the_flag(tmp_path):
+    df = _report([
+        ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
+        ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
+    ])
+    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
+    report_path = tmp_path / "report_s.csv"
+    diagnostic_path = tmp_path / ".report_s_diag.csv"
+    compile_report.write_report(flagged, report_path, diagnostic_path)
+
+    report = set(pd.read_csv(report_path).columns)
+    diagnostic = set(pd.read_csv(diagnostic_path).columns)
+    assert diagnostic - report == {"best_in_country"}
