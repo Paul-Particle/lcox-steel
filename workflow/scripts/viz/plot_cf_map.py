@@ -18,7 +18,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from scripts.res_cf._helpers import geom_area_weights, mask_cells_inside, pick_p95_cell
+from scripts.res_cf._helpers_res_cf import geom_area_weights, mask_cells_inside, pick_p95_cell
 from scripts.viz.style import (
     apply_header,
     blue_black,

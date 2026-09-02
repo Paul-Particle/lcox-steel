@@ -68,7 +68,7 @@ lcox-steel/
 │   │   │   ├── _nem.py             # NEM: raw months → processed window
 │   │   │   ├── download_nem.py     # NEMOSIS download primitives
 │   │   │   ├── _nemosis_patches.py # AEMO User-Agent / URL-encoding workarounds
-│   │   │   └── _helpers.py         # month iteration, UTC-naive coercion, completeness guard
+│   │   │   └── _helpers_grid.py    # month iteration, UTC-naive coercion, completeness guard
 │   │   ├── res_cf/                 # atlite capacity-factor pipeline (numbered by stage)
 │   │   │   ├── a_make_area_geometry.py        # onshore area geometry (GeoParquet)
 │   │   │   ├── b_make_offshore_geometry.py    # EEZ-clipped offshore geometry
@@ -79,13 +79,13 @@ lcox-steel/
 │   │   │   ├── d4_tilt_mix.py                 # orientation-resolved solar CF sweep
 │   │   │   ├── d5_multi.py                    # per-cell candidate grid (multi-site siting)
 │   │   │   ├── spot_check_cutout.py           # standalone cutout inspection (NOT in the DAG)
-│   │   │   ├── _helpers.py                    # shared helpers for the CF scripts
+│   │   │   ├── _helpers_res_cf.py             # shared helpers for the CF scripts
 │   │   │   ├── reference/                     # Hannah's original scripts, verbatim (for side-by-side diffs)
 │   │   │   └── README.md                      # author's notes on the CF methodology (WIP)
 │   │   ├── solve/                  # PyPSA investment model
 │   │   │   ├── build_network.py    # network construction (pure, importable)
 │   │   │   ├── solve_network.py    # rule entrypoint: load → build → solve → write
-│   │   │   └── _helpers.py         # annuity factor + electrolyser sizing
+│   │   │   └── _helpers_solve.py   # annuity factor + electrolyser sizing
 │   │   └── viz/                    # reporting + Plotly figures
 │   │       ├── compile_report.py   # post-solve cost accounting → per-scenario CSV
 │   │       ├── plot_capacity_bars.py  # per-run capacity bar chart
@@ -563,5 +563,5 @@ unchanged — per-rule files still land under `logs/{rule}/`.
 Project conventions (logging style, Snakefile/`.smk` rules, the two script
 patterns) live in `CLAUDE.md`. Known WIP and planned work — the ENTSO-E zone-list
 migration, coverage-aware cutout-cache reuse (the keyed cache and CDS download
-monitoring already landed), and `viz/_helpers.py` cleanup — are tracked in
+monitoring already landed) — are tracked in
 `TODO.md`.

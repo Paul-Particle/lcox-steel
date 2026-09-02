@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 
 import _entsoe as R  # sys.path set by conftest
-from _helpers import assert_window_complete, iso
+from _helpers_grid import assert_window_complete, iso
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RAW_CACHE = REPO_ROOT / "data" / "entsoe_cache"

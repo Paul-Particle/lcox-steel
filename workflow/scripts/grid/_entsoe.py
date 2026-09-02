@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from _helpers import assert_window_complete, iso, to_utc_naive
+from _helpers_grid import assert_window_complete, iso, to_utc_naive
 from download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client, iter_months
 
 # Module-level logger only — retrieve_grid_data.py installs the handlers.
