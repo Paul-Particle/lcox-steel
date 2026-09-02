@@ -388,6 +388,28 @@ an area average answer different questions, and the solved network does not carr
 it (the solve reads the parquet, not its name), so `compile_report` takes
 `config/scenarios.csv` as an input and joins it back on.
 
+### Tying a result to its inputs
+
+A run key names the inputs but does not pin them: assumptions get edited and
+timeseries get rebuilt under the same name, so the same key can describe two
+different solves. Each row therefore ends with an **`inputs_hash`** — a digest
+over the *contents* of every file the solve read (assumptions base + overlay,
+area geometry, each CF and grid parquet), stamped into the network by
+`solve_network` at solve time.
+
+Two rows with the same hash were built from byte-identical inputs; two that
+differ were not, whatever their keys say. Which file moved is answered by the
+per-file map that travels with the network, one content digest per input:
+
+```python
+n = pypsa.Network(); n.import_from_netcdf("results/{scenario}/{area}_{route}_{start}_{end}.nc")
+n.meta["inputs_hash"]   # '4f2a9c1b8e30' — the value in the report
+n.meta["inputs"]        # {'config/assumptions.yaml': 'a91c02...', ...}
+```
+
+The chain stops at the solve: the CF parquets are pinned by content, not traced
+back to the cutout that produced them.
+
 ### Cutout caching
 
 ERA5 cutouts are expensive to (re-)download, so `cutouts/{name}.nc` is **not**

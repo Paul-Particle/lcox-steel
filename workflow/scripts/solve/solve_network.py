@@ -22,6 +22,7 @@ import pyarrow.parquet as pq
 from build_network import build_network, load_assumptions
 
 from common._logging import configure_logging
+from common._provenance import input_manifest
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -223,9 +224,14 @@ def main() -> None:
             solver_options["run_crossover"] = os.environ.get("HIGHS_CROSSOVER", "off")
     n.optimize(solver_name="highs", solver_options=solver_options)
 
+    # Every file the rule declared, fingerprinted into the network so the result
+    # stays tied to what produced it. compile_report lifts `inputs_hash` into a
+    # report column; the per-file map stays here.
+    n.meta.update(input_manifest([Path(raw) for raw in snakemake.input]))
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     n.export_to_netcdf(out_path)
-    log.info(f"network saved to {out_path}")
+    log.info(f"network saved to {out_path} (inputs_hash={n.meta['inputs_hash']})")
 
 
 if __name__ == "__main__":
