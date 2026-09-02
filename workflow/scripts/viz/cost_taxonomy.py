@@ -58,22 +58,23 @@ GROUPS = [
 ]
 
 # Report plant key -> (assumptions block, block whose lifetime annuitises it,
-# label). Ladle metallurgy is folded into the MOE link by `_add_moe_link` and
-# annuitised over the MOE lifetime, so it borrows MOE's lifetime here too.
+# label). The key is the link id the report writes its `plant_{key}_eur_per_t`
+# column under, and the assumptions block carries the same name.
 PROCESS_PLANTS = [
-    ("dri",            "dri",            "dri",            "H2-DRI shaft"),
-    ("dri_ng",         "dri_ng",         "dri_ng",          "NG-DRI shaft"),
-    ("moe",            "moe",            "moe",            "MOE cell"),
-    ("ladle",          "ladle",          "moe",            "Ladle metallurgy"),
-    ("electrowinning", "electrowinning", "electrowinning", "Electrowinning"),
-    ("eaf",            "eaf",            "eaf",            "EAF"),
+    ("dri-h2", "dri-h2", "dri-h2", "H2-DRI shaft"),
+    ("dri-ng", "dri-ng", "dri-ng", "NG-DRI shaft"),
+    ("moe",    "moe",    "moe",    "MOE cell"),
+    ("ew",     "ew",     "ew",     "Electrowinning"),
+    ("eaf",    "eaf",    "eaf",    "EAF"),
 ]
 
-# Renewable technology -> (assumptions block under `res`, report column stem, label).
+# Renewable technology -> (assumptions block under `res`, report column stem,
+# label). The block is hyphenated like the tech wildcard; the stem is not,
+# because the report writes `lcoe_wind_onshore_…` and `cf_wind_onshore`.
 RES_TECHS = [
-    ("solar",         "solar",         "solar",         "Solar"),
-    ("wind-onshore",  "wind_onshore",  "wind-onshore",  "Wind onshore"),
-    ("wind-offshore", "wind_offshore", "wind_offshore", "Wind offshore"),
+    ("solar",         "solar",         "Solar"),
+    ("wind-onshore",  "wind_onshore",  "Wind onshore"),
+    ("wind-offshore", "wind_offshore", "Wind offshore"),
 ]
 
 
@@ -126,7 +127,7 @@ def res_om_fractions(assumptions: dict) -> dict:
     """Fixed O&M's share of each renewable technology's annual cost, per MW."""
     wacc = assumptions["finance"]["default_wacc"]
     fractions = {}
-    for tech, _, _, _ in RES_TECHS:
+    for tech, _, _ in RES_TECHS:
         cfg = assumptions["res"].get(tech)
         if cfg is None:
             continue
@@ -195,9 +196,7 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
         if not plant_cost:
             continue
         fraction = om_fractions[key]
-        # MOE's reported capacity covers the folded moe+ladle link, so the ladle
-        # shares it rather than having a column of its own.
-        capacity_key = "moe" if key == "ladle" else key
+        capacity_key = key
         capacity = _value(row, f"{capacity_key}_t_per_h_opt")
         utilisation = _value(row, f"{capacity_key}_utilization")
         lines = [
@@ -261,13 +260,13 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
     if res_total > 0:
         fractions = res_om_fractions(assumptions)
         shares = {tech: _value(row, f"lcoe_{stem}_eur_per_mwh") or 0.0
-                  for tech, stem, _, _ in RES_TECHS}
+                  for tech, stem, _ in RES_TECHS}
         per_tech = _split_by_shares(res_total, shares)
         # A geography may build a technology the LCOE columns do not itemise; fall
         # back to one undivided renewables leaf rather than dropping the cost.
         if not per_tech:
             add("res_other", res_total)
-        for tech, stem, cf_stem, label in RES_TECHS:
+        for tech, stem, label in RES_TECHS:
             tech_total = per_tech.get(tech)
             if not tech_total:
                 continue
@@ -426,7 +425,7 @@ def alternative_carrier_bands(row: pd.Series, assumptions: dict,
         # so the pair of rows carries the mix this scenario actually built.
         fractions = res_om_fractions(assumptions)
         weights = {tech: _value(row, f"lcoe_{stem}_eur_per_mwh") or 0.0
-                   for tech, stem, _, _ in RES_TECHS}
+                   for tech, stem, _ in RES_TECHS}
         weighted = sum(weights[tech] * fractions.get(tech, 0.0) for tech in weights)
         total_weight = sum(weights.values())
         fraction = weighted / total_weight if total_weight else 0.0
@@ -482,9 +481,9 @@ def spec(assumptions: dict) -> list:
           f"{assumptions['eaf']['consumables_eur_per_t']:,.0f} €/t steel")])
 
     # Process plants: two leaves each, capital then fixed O&M.
-    shades = {"dri": ("#33434D", "#5A6B77"), "dri_ng": ("#3D4E59", "#687985"),
-              "moe": ("#2B3A44", "#54656F"), "ladle": ("#46565F", "#76858E"),
-              "electrowinning": ("#25333B", "#4C5D66"), "eaf": ("#3A4A54", "#6E7F89")}
+    shades = {"dri-h2": ("#33434D", "#5A6B77"), "dri-ng": ("#3D4E59", "#687985"),
+              "moe": ("#2B3A44", "#54656F"),
+              "ew": ("#25333B", "#4C5D66"), "eaf": ("#3A4A54", "#6E7F89")}
     for key, block, lifetime_block, label in PROCESS_PLANTS:
         plant = assumptions[block]
         lifetime = assumptions[lifetime_block]["lifetime_years"]
@@ -522,7 +521,7 @@ def spec(assumptions: dict) -> list:
 
     res_colours = {"solar": ("#0A5680", "#3E7CA3"), "wind_onshore": ("#0E6FA4", "#4B93BF"),
                    "wind_offshore": ("#0293D2", "#57B6E2")}
-    for tech, stem, _, label in RES_TECHS:
+    for tech, stem, label in RES_TECHS:
         cfg = assumptions["res"].get(tech)
         if cfg is None:
             continue

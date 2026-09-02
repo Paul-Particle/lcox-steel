@@ -213,7 +213,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const {cases:CASES, gas:GAS, template:FCA, geos:GEOS, years:YEARS, geo_names:GN,
     clean_routes:CLEAN, route_order:ROUTE_ORDER, route_label:RLAB, route_color:RCOL,
     co2_t_per_mwh:CO2F, h2_min:H2MIN, cost_groups:COST_GROUPS, cap_panels:CAP_PANELS,
-    variant_routes:VARIANT_ROUTES, variant_label:VLAB} = PAYLOAD;
+    variant_routes:VARIANT_ROUTES, variant_label:VLAB,
+    base_variant:BASE, cf_options:CF_OPTS, default_view:DEFAULT} = PAYLOAD;
 
   const CONF = {responsive:true, displaylogo:false,
     modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
@@ -234,18 +235,17 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     year: YEARS.map(y=>[String(y), String(y)]),
     grid: [["grid","Grid"],["nogrid","Islanded"]],
     route:ROUTE_ORDER.map(r=>[r, RLAB[r]]),
-    cf:   [["avg","Average CF"],["p95","Best-site P95"]],
+    cf:   CF_OPTS,
     variant: Object.keys(VLAB).map(v=>[v, VLAB[v]]),
   };
   const AXLAB = {geo:"Geography", year:"Weather year", grid:"Grid",
                  route:"Route", cf:"Capacity factor", variant:"Sensitivity"};
 
   // ---- state: A is a full scenario; Bov holds per-axis overrides (null = track A).
-  // Default view: H2-DRI-EAF with H₂ salt-cavern storage vs MOE at 70% turndown,
-  // both at the synthetic best site (P95) in Australia, 2025, grid-connected.
-  const A = {geo:"AUS", year:"2025", grid:"grid",
-             route:"h2-dri-eaf", cf:"p95", variant:"salt"};
-  const Bov = {geo:null, year:null, grid:null, route:"moe", cf:null, variant:"moe70"};
+  // Both come from the payload, which picks them from runs that were actually
+  // solved — two routes of one project, so the page opens on a comparison.
+  const A = {...DEFAULT.a};
+  const Bov = {...DEFAULT.b};
   // B before clamping: A with per-axis overrides applied.
   const resolveRaw = () => { const b={}; for(const k of AXES) b[k] = Bov[k]==null ? A[k] : Bov[k]; return b; };
 
@@ -254,12 +254,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const gridHas = (geo,year,grid) => !!CASES[`${geo}-${year}-${grid}`];
   const routeHas = (geo,year,grid,route) => !!(CASES[`${geo}-${year}-${grid}`]||{})[route];
   const routesAt = s => ROUTE_ORDER.filter(r => routeHas(s.geo,s.year,s.grid,r));
-  const variantOk = (route,v) => v==="base" || (VARIANT_ROUTES[v]||[]).includes(route);
-  const effVariant = s => variantOk(s.route, s.variant) ? s.variant : "base";
+  // A scenario covers whichever routes it solved — there is no longer a
+  // sensitivity that leaves the other routes on a baseline run.
+  const variantOk = (route,v) => (VARIANT_ROUTES[v]||[]).includes(route);
+  const effVariant = s => variantOk(s.route, s.variant) ? s.variant : BASE;
   const cfKey = s => s.route==="ng-dri-eaf" ? "na" : s.cf;
   function recFor(s){
     const rc = CASES[proj(s)]?.[s.route]; if(!rc) return null;
-    const v = rc[effVariant(s)] || rc["base"]; if(!v) return null;
+    const v = rc[effVariant(s)] || rc[BASE]; if(!v) return null;
     return v[cfKey(s)] || null;
   }
   const mixIsFossil = rec => rec && rec.h2_share!=null && rec.h2_share < H2MIN;
@@ -286,7 +288,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       const rs = ROUTE_ORDER.filter(r=>routeHas(c.geo,c.year,c.grid,r));
       if(rs.length){ const nr = rs.includes("h2-dri-eaf")?"h2-dri-eaf":rs[0]; notes.push("route → "+RLAB[nr]); c.route=nr; }
     }
-    if(!variantOk(c.route,c.variant)){ if(c.variant!=="base") notes.push("sensitivity → baseline"); c.variant="base"; }
+    if(!variantOk(c.route,c.variant)){ if(c.variant!==BASE) notes.push("sensitivity → "+(VLAB[BASE]||BASE)); c.variant=BASE; }
     c._notes=notes; c._unavail=null; return c;
   }
   const B = () => clamp(resolveRaw());
@@ -300,11 +302,12 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
 
   // ---- formatting / identity
   const geoName = g => GN[g]||g;
-  const cfShort = cf => cf==="avg" ? "avg CF" : "P95";
+  const CFLAB = Object.fromEntries(CF_OPTS);
+  const cfShort = cf => CFLAB[cf] || cf;
   function identity(s){
     const parts = [geoName(s.geo), s.year, s.grid==="grid"?"grid":"islanded", RLAB[s.route]];
     if(s.route!=="ng-dri-eaf") parts.push(cfShort(s.cf));
-    if(effVariant(s)!=="base") parts.push(VLAB[effVariant(s)]);
+    if(effVariant(s)!==BASE) parts.push(VLAB[effVariant(s)]);
     return parts.join(" · ");
   }
 
@@ -374,7 +377,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     // is inherently a grid-connected run, so grid AND islanded scenarios of a
     // geography/year compare to that same per-geo/year benchmark.
     const ngLcos = s => {
-      const r = CASES[`${s.geo}-${s.year}-grid`]?.["ng-dri-eaf"]?.["base"]?.["na"];
+      // The benchmark burns gas and builds no renewables, so it is filed under
+      // whatever CF method its scenario happened to carry — take the one there is.
+      const byCf = CASES[`${s.geo}-${s.year}-grid`]?.["ng-dri-eaf"]?.[BASE] || {};
+      const r = Object.values(byCf)[0];
       return r ? r.lcos : null;
     };
     const premRow = (tag, s, rec) => {
@@ -582,7 +588,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   function groupCtx(s){ return {geo:s.geo,year:s.year,grid:s.grid,cf:s.cf,variant:s.variant}; }
   function groupLabel(s){
     const parts=[geoName(s.geo), s.year, s.grid==="grid"?"grid":"islanded", cfShort(s.cf)];
-    if(s.variant!=="base") parts.push(VLAB[s.variant]); else parts.push("baseline");
+    parts.push(s.variant===BASE ? "baseline" : (VLAB[s.variant]||s.variant));
     return parts.join(" · ");
   }
   function groupRows(ctx){
