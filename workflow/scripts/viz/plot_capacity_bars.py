@@ -132,9 +132,9 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
             row["solar_mw"] = r.get("solar_gw_opt", 0) * 1e3
         for col in wind_cols:
             row[f"{col.replace('_gw_opt','')}_mw"] = r.get(col, 0) * 1e3
-        # The link ids the report uses, not a second spelling of them: the
-        # report writes `{link}_t_per_h_opt` for each of PROCESS_LINKS, and a
-        # key that misses is silently a zero-height bar, not an error.
+        # The link ids the report uses, not a second spelling of them: every
+        # report row carries `{link}_t_per_h_opt` for each of PROCESS_LINKS
+        # (common/_report_schema.py), reading 0 on a route without that step.
         for link in ("dri-h2", "dri-ng", "eaf", "moe", "ew"):
             row[f"{link}_t_per_h"] = r.get(f"{link}_t_per_h_opt", 0)
         row["h2_buffer_hours_dri"]    = r.get("h2_buffer_hours_dri", 0)

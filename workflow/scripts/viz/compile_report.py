@@ -16,6 +16,7 @@ import yaml
 
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
+from common._report_schema import PROCESS_LINKS, REPORT_COLUMNS, ZERO_FILLED
 from common._runs import load_scenarios, zone_parents
 
 if "snakemake" not in globals():
@@ -79,9 +80,6 @@ def _marginal_costs(static: pd.DataFrame, flow_t: pd.DataFrame, mc_t: pd.DataFra
     return total
 
 
-PROCESS_LINKS = ("dri-h2", "dri-ng", "eaf", "moe", "ew")
-
-
 def mark_best_in_country(df: pd.DataFrame, parents: dict, metric: str | None) -> pd.DataFrame:
     """Add `country`, and flag each country's best zone for every route.
 
@@ -128,6 +126,25 @@ def input_variants(scenarios: pd.DataFrame, scenario_name: str, run: dict) -> di
     return variants
 
 
+def apply_schema(df: pd.DataFrame) -> pd.DataFrame:
+    """Put the frame on the declared report columns, in the declared order.
+
+    Every run then writes the same header whatever route it took, and a column
+    the run had no value for says which of the two it means: `0` where it adds
+    into a total, blank where it is undefined (see common/_report_schema.py).
+    Columns the schema does not declare — a multi-site run names a generator per
+    candidate site — keep their place after the declared ones, ahead of the hash
+    that closes the row.
+    """
+    extra = [col for col in df.columns if col not in REPORT_COLUMNS]
+    if extra:
+        log.info(f"report carries {len(extra)} run-specific column(s): {extra}")
+    declared = [col for col in REPORT_COLUMNS if col != "inputs_hash"]
+    on_schema = df.reindex(columns=declared + extra + ["inputs_hash"])
+    on_schema[list(ZERO_FILLED)] = on_schema[list(ZERO_FILLED)].fillna(0.0)
+    return on_schema
+
+
 def write_report(df: pd.DataFrame, report_path: Path, diagnostic_path: Path) -> None:
     """Write the scenario report and the hidden diagnostic beside it.
 
@@ -137,12 +154,9 @@ def write_report(df: pd.DataFrame, report_path: Path, diagnostic_path: Path) -> 
     the flag, for the question "what would the others have cost?".
     """
     report_path.parent.mkdir(parents=True, exist_ok=True)
+    df = apply_schema(df)
     numeric = df.select_dtypes("number").columns
     df[numeric] = df[numeric].round(2)
-    # inputs_hash closes the row. Columns only some routes have (a MOE plant,
-    # say) join the frame where they are first seen, which would otherwise leave
-    # it stranded mid-row, so the position is set rather than assumed.
-    df = df[[col for col in df.columns if col != "inputs_hash"] + ["inputs_hash"]]
     df.to_csv(diagnostic_path, index=False)
 
     selected = df[df["best_in_country"]].drop(columns="best_in_country")
@@ -238,11 +252,11 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
         **run,
         "total_annual_cost_meur": sum(breakdown.values()) / 1e6,
     }
-    # Per-group annual cost columns (zero groups omitted — a route without a
-    # component shouldn't grow the CSV). plot_lcos_bars stacks these.
+    # Per-group annual cost columns, zeros written out: they stack to the total,
+    # so a group this route has no component for contributed nothing — which is
+    # a result, not a gap. plot_lcos_bars stacks these.
     for group, value in breakdown.items():
-        if value:
-            summary[f"cost_{group}_meur"] = value / 1e6
+        summary[f"cost_{group}_meur"] = value / 1e6
 
     total_annual_cost = sum(breakdown.values())
 
@@ -318,11 +332,9 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
             "lcoe_transmission": breakdown.get("transmission", 0.0),
         }
         res_total = components["lcoe_solar"] + components["lcoe_wind_onshore"] + components["lcoe_wind_offshore"]
-        if res_total > 0:
-            summary["lcoe_renewables_eur_per_mwh"] = res_total / elec_mwh
+        summary["lcoe_renewables_eur_per_mwh"] = res_total / elec_mwh
         for key, cost in components.items():
-            if cost > 0:
-                summary[f"{key}_eur_per_mwh"] = cost / elec_mwh
+            summary[f"{key}_eur_per_mwh"] = cost / elec_mwh
 
         # Per-technology LCOE (€/MWh over that tech's own generation, not the
         # system total) — a fair unit cost for the renewable itself, distinct from
@@ -405,16 +417,10 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
                 return float((n.links_t.p0[link_name] * n.links.at[link_name, "marginal_cost"]).sum()) * annual_scale
 
             for link in PROCESS_LINKS:
-                capex = _link_capex(link)
-                if capex <= 0:
-                    continue
-                summary[f"plant_{link}_eur_per_t"] = capex / steel_t
+                summary[f"plant_{link}_eur_per_t"] = _link_capex(link) / steel_t
             ore = sum(_link_marginal(l) for l in ("dri-h2", "dri-ng", "moe", "ew"))
-            consumables = _link_marginal("eaf")
-            if ore > 0:
-                summary["ore_eur_per_t_steel"] = ore / steel_t
-            if consumables > 0:
-                summary["consumables_eur_per_t_steel"] = consumables / steel_t
+            summary["ore_eur_per_t_steel"] = ore / steel_t
+            summary["consumables_eur_per_t_steel"] = _link_marginal("eaf") / steel_t
 
     # Steel-route process links: capacity in output units (t/h of iron or
     # steel — p_nom is input-side, so scale by the link efficiency) plus
@@ -473,8 +479,8 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
         # pure-H2 route, or the DRI link's mean H₂ draw on the steel route.
         if "dri_load" in n.loads.index:
             h2_demand_mw = float(n.loads.at["dri_load", "p_set"])
-        elif "dri" in n.links.index:
-            h2_demand_mw = float(n.links_t.p0["dri"].mean())
+        elif "dri-h2" in n.links.index:
+            h2_demand_mw = float(n.links_t.p0["dri-h2"].mean())
         else:
             h2_demand_mw = 0.0
         summary["h2_buffer_hours_dri"] = (
