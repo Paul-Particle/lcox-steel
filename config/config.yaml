@@ -57,9 +57,10 @@ report:
 #   mainland_bbox:  optional [lon_min, lon_max, lat_min, lat_max] — keeps only
 #                   polygon parts whose centroid falls inside the box. Used
 #                   to drop overseas territories (e.g. metropolitan France).
-#   vic_bbox:       AUS-only; approximates NEM zone VIC1 for sub-national tests
-#                   (Natural Earth 1:110m has no state boundaries, so we use a
-#                   bbox). NSW1/QLD1/SA1/TAS1 need one each before they can join
+#   vic_bbox:       the rectangle VIC1's shipped geometry was cut to. Nothing
+#                   reads this key — it records how that file was made, since
+#                   the workflow cannot currently reproduce it (see VIC1 below).
+#                   NSW1/QLD1/SA1/TAS1 need a geometry each before they can join
 #                   `zones` below — AEMO already serves their prices.
 areas:
   DEU:   { iso3: DEU, region: DE,  coarse: false, market: entsoe, market_area: DE_LU }
@@ -71,7 +72,14 @@ areas:
   BRA:   { iso3: BRA, region: BRA, coarse: false }
   # Victoria: shipped with a pre-sliced backup cutout + derived geo parquets, so
   # the default `snakemake` run needs no CDS download or EEZ/NE zips.
-  # region=VIC matches the committed VIC1_*_geo.parquet.
+  # Those parquets are the only source of this geometry. Natural Earth Admin 0
+  # is countries only, and make_area_geometry's mainland_bbox drops whole
+  # polygon parts by centroid rather than cutting one, so it cannot make a
+  # sub-national shape: rebuilding VIC1_geo.parquet from it would return the
+  # whole of Australia labelled VIC. Delete those files and this area is wrong,
+  # not missing. The shipped shape is also Australia's 110m outline cut to
+  # vic_bbox above, whose northern edge is a straight line at 34S rather than
+  # the Murray, so it is ~380,000 km2 against Victoria's ~227,000.
   VIC1:  { iso3: AUS, region: VIC, coarse: false, market: nem, market_area: VIC1 }
 
 res_cf:
