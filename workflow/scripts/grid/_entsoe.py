@@ -1,13 +1,12 @@
 """ENTSO-E source implementation, called by retrieve_grid_data.py.
 
-Maintains a persistent second-level processed cache at
-  resources/entsoe/{variant}.parquet
+Builds the requested window out of the per-month raw cache under
+  data/entsoe_cache/{area}/{YYYY-MM}/{data_type}.parquet
 
-Cache columns are a MultiIndex (area, metric) so all areas share one file per
-variant. Accessing one area's data: df["DE_LU"]. On a warm-cache run the rule
-just slices and writes the rule output; on a miss it downloads any absent months
-to the per-month raw cache (via download_entsoe primitives), processes them, and
-extends the cache before slicing.
+A month absent from it is downloaded once (via the download_entsoe primitives);
+every month the window touches is then processed and sliced. The rule output is
+itself the processed cache — it carries the whole run in its name, so Snakemake
+skips this work on a re-run.
 
 Variants
 --------
@@ -20,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from _helpers import area_month_in_cache, assert_window_complete, iso, to_utc_naive
+from _helpers import assert_window_complete, iso, to_utc_naive
 from download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client, iter_months
 
 # Module-level logger only — retrieve_grid_data.py installs the handlers.
@@ -46,17 +45,7 @@ def _months_to_process(start_date: str, end_date: str) -> list[str]:
     on its last day, so the requested window's final UTC hour(s) live in the *next*
     Brussels month. Padding by one month makes the window slice complete; without
     it `assert_window_complete` fails every Mar–Sep-ending window. (Mirrors the pad
-    in retrieve_nem.)
-
-    Unlike retrieve_nem, this does not also switch cache membership to market time.
-    Within a single run that is safe: months are processed chronologically and the
-    pad is last, so its ~1–2 h backward spill only ever lands in an already-processed
-    month. It is NOT fully safe across warm-cache runs in reverse order: processing
-    month M leaves a spill hour in M−1, so a later run requesting M−1 sees that lone
-    hour via the plain UTC-month `area_month_in_cache` check and skips M−1. That case
-    now fails loudly in `assert_window_complete` rather than corrupting silently. A
-    clean fix (matching in Brussels time) is deferred because the zone has DST, so the
-    fixed-offset trick retrieve_nem uses would hit ambiguous/nonexistent hours.
+    in _nem.py.)
     """
     months = [ym for ym, _, _ in iter_months(start_date, end_date)]
     pad_month = (pd.Timestamp(iso(end_date)) + pd.offsets.MonthBegin(1)).strftime("%Y-%m")
@@ -144,23 +133,20 @@ def _process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def retrieve(snakemake, area: str) -> None:
-    """Slice the requested (area, variant, date range) out of the processed cache.
+    """Build the requested (area, variant, date range) window and write it out.
 
     `area` is the code this market knows the area by — the bidding zone or NEM
     region — which is not always the area code the rest of the workflow uses.
 
-    Validates the bidding zone, downloads any missing months into the raw cache,
-    processes and appends them to the shared per-variant processed cache, then
-    writes the requested window to the rule output. Warm-cache runs make no API
-    calls.
+    Validates the bidding zone, downloads any month missing from the raw cache,
+    processes every month the window touches, and writes the slice to the rule
+    output. A warm raw cache means no API calls.
     """
     variant    = snakemake.wildcards.variant
     start_date = snakemake.wildcards.start_date
     end_date   = snakemake.wildcards.end_date
 
-    raw_cache_dir        = Path("data/entsoe_cache")
-    processed_cache_dir  = Path("resources/entsoe")
-    processed_cache_path = processed_cache_dir / f"{variant}.parquet"
+    raw_cache_dir = Path("data/entsoe_cache")
 
     if variant not in ("dayahead", "full"):
         raise ValueError(f"Unknown variant {variant!r}. Expected 'dayahead' or 'full'.")
@@ -175,30 +161,18 @@ def retrieve(snakemake, area: str) -> None:
     data_types    = ["prices"] if variant == "dayahead" else FULL_DATA_TYPES
     process_month = _process_dayahead_month if variant == "dayahead" else _process_full_month
 
-    cached = pd.read_parquet(processed_cache_path) if processed_cache_path.exists() else None
-
     months = _months_to_process(start_date, end_date)
-
     _ensure_raw_months(area, months, data_types, raw_cache_dir)
 
-    new_frames = []
-    for ym in months:
-        if area_month_in_cache(cached, area, ym):
-            continue
-        frame = process_month(area, ym, raw_cache_dir)
-        frame.columns = pd.MultiIndex.from_tuples([(area, c) for c in frame.columns])
-        new_frames.append(frame)
-
-    if new_frames:
-        all_frames = ([cached] if cached is not None else []) + new_frames
-        cached = pd.concat(all_frames)
-        cached = cached[~cached.index.duplicated(keep="last")].sort_index()
-        processed_cache_dir.mkdir(parents=True, exist_ok=True)
-        cached.to_parquet(processed_cache_path, index=True)
-        log.info(f"updated processed cache: {processed_cache_path} ({len(cached)} rows)")
+    monthly_frames = [process_month(area, ym, raw_cache_dir) for ym in months]
+    # Brussels months meet ~1-2 h off the UTC hour, so consecutive months can each
+    # claim the hour they straddle. Frames are chronological, so keeping the last
+    # occurrence gives that hour to the month whose calendar owns it.
+    assembled = pd.concat(monthly_frames)
+    assembled = assembled[~assembled.index.duplicated(keep="last")].sort_index()
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:00")
-    out_df = cached[area].loc[window]
+    out_df = assembled.loc[window]
     # Cross-month boundary gaps: forward-fill only (bfill would propagate future data backward).
     # Per-month processing already handles within-month gaps including start-of-month.
     out_df = out_df.ffill(limit=3)

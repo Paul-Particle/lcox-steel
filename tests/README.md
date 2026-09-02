@@ -17,10 +17,11 @@ masks NaN before comparing and tolerates hundreds of missing hours.
   Oct 2025; NEM tables are 5-min), so instead of a fixed grid the guard flags any
   gap larger than `full_gap_tolerance` — which only occurs on truncation.
 
-`test_nem_market_month_cache.py` pins the companion NEM fix: because NEM prices
-are downloaded by *market* month (AEST) but stored in UTC, cache-membership must
-be matched in market time (`area_month_in_cache(..., tz=NEM_MARKET_TZ)`), else a
-neighbouring month's spillover masks a real month and it never downloads.
+The guard is what now catches a month going missing. Both sources used to keep a
+shared processed cache and ask "is this month already in it?" — a question that
+had to be asked in market time, and got a whole month of December dropped when it
+wasn't. Each run now processes its own months, so there is no membership question
+left to get wrong, and `test_nem_market_month_cache.py` went with it.
 
 These tests use synthetic frames, so they need no raw cache and run anywhere.
 

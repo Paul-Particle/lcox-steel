@@ -56,18 +56,19 @@ lcox-steel/
 │   ├── Snakefile                   # configfile + sys.path + includes + rule all
 │   ├── rules/
 │   │   ├── _optional_shim.smk      # local stand-in for Snakemake's optional() (not shipped yet)
-│   │   ├── grid.smk                # ENTSO-E + NEM retrieval rules
+│   │   ├── grid.smk                # one retrieval rule, dispatching on the area's market
 │   │   ├── res_cf.smk              # atlite CF pipeline (shapes → cutout → CF series)
 │   │   ├── solve.smk               # PyPSA optimisation rule
 │   │   └── viz.smk                 # compile_report + plot rules
 │   ├── scripts/
 │   │   ├── grid/                   # ENTSO-E + NEM download/process
-│   │   │   ├── retrieve_entsoe.py  # rule entrypoint: warm-cache slice + on-miss download
+│   │   │   ├── retrieve_grid_data.py # rule entrypoint: dispatches on the area's market
+│   │   │   ├── _entsoe.py          # ENTSO-E: raw months → processed window
 │   │   │   ├── download_entsoe.py  # ENTSO-E per-month raw-cache primitives
-│   │   │   ├── retrieve_nem.py     # rule entrypoint (NEM)
+│   │   │   ├── _nem.py             # NEM: raw months → processed window
 │   │   │   ├── download_nem.py     # NEMOSIS download primitives
 │   │   │   ├── _nemosis_patches.py # AEMO User-Agent / URL-encoding workarounds
-│   │   │   └── _helpers.py         # month iteration, UTC-naive coercion, cache checks
+│   │   │   └── _helpers.py         # month iteration, UTC-naive coercion, completeness guard
 │   │   ├── res_cf/                 # atlite capacity-factor pipeline (numbered by stage)
 │   │   │   ├── a_make_area_geometry.py        # onshore area geometry (GeoParquet)
 │   │   │   ├── b_make_offshore_geometry.py    # EEZ-clipped offshore geometry
@@ -77,9 +78,8 @@ lcox-steel/
 │   │   │   ├── d3_anchor_colo.py              # anchor co-located CF
 │   │   │   ├── d4_tilt_mix.py                 # orientation-resolved solar CF sweep
 │   │   │   ├── d5_multi.py                    # per-cell candidate grid (multi-site siting)
-│   │   │   ├── 08_complementarity_screen.py   # complementarity triplet screen
-│   │   │   ├── 06_resource_spread.py, 100_*, 101_*  # WIP diagnostics & plots (NOT in active DAG)
-│   │   │   ├── _helpers.py                    # shared helpers for the WIP scripts
+│   │   │   ├── spot_check_cutout.py           # standalone cutout inspection (NOT in the DAG)
+│   │   │   ├── _helpers.py                    # shared helpers for the CF scripts
 │   │   │   ├── reference/                     # Hannah's original scripts, verbatim (for side-by-side diffs)
 │   │   │   └── README.md                      # author's notes on the CF methodology (WIP)
 │   │   ├── solve/                  # PyPSA investment model
@@ -87,10 +87,12 @@ lcox-steel/
 │   │   │   ├── solve_network.py    # rule entrypoint: load → build → solve → write
 │   │   │   └── _helpers.py         # annuity factor + electrolyser sizing
 │   │   └── viz/                    # reporting + Plotly figures
-│   │       ├── compile_report.py   # post-solve LCOH accounting → per-project CSV
-│   │       ├── plot_capacity_bars.py  # per-project scenario capacity bar chart
+│   │       ├── compile_report.py   # post-solve cost accounting → per-scenario CSV
+│   │       ├── plot_capacity_bars.py  # per-run capacity bar chart
+│   │       ├── plot_lcos_bars.py   # per-run cost-group breakdown in €/t steel
 │   │       ├── plot_cf_map.py      # spatial mean-CF heatmap with P95 site marked
-│   │       └── _helpers.py         # FCA Plotly template + colormap (WIP, see TODO.md)
+│   │       ├── _run_display.py     # run labels + best-zone filter, shared by the plots
+│   │       └── style.py            # FCA Plotly template + colormap
 │   └── common/                     # shared, cross-pipeline Python
 │       ├── _constants.py           # physical constants (e.g. H2 LHV)
 │       ├── _logging.py             # configure_logging + tqdm progress wrapper
@@ -234,17 +236,21 @@ Drop `--profile profiles/default` for the bare invocation.
 snakemake resources/timeseries/DEU_grid_dayahead_20250101_20251231.parquet --cores 4 --resources entsoe_api=4
 
 # Grid — NEM day-ahead prices (VIC1, 2025):
-snakemake resources/nem/VIC1_grid_dayahead_20250101_20251231.parquet --cores 4
+snakemake resources/timeseries/VIC1_grid_dayahead_20250101_20251231.parquet --cores 4
 
 # res_cf — wind-onshore CF for Germany, 2023:
 snakemake resources/timeseries/DEU_wind-onshore_area-average_20250101_20251231.parquet --cores 4
 
 # solve — one network (one route):
-snakemake results/DE-2023-baseline/dedicated-res.nc --cores 4
+snakemake results/standard-islanded/DEU_h2-dri-eaf_20250101_20251231.nc --cores 4
 ```
 
-The ENTSO-E rule keeps a per-month raw cache under `data/entsoe_cache/`; once a
-month is cached it is never re-fetched. Transient month failures are retried 3×
+The grid rule reads a per-month raw cache — `data/entsoe_cache/` for ENTSO-E,
+NEMOSIS's own `data/nem_cache/` — and once a month is cached it is never
+re-fetched. Processing those months into a window is redone per run, and the
+rule output holds the result: it is keyed by `{area}_grid_{variant}_{dates}`, so
+Snakemake reuses it on a re-run and a different date range simply writes a
+different file. Transient month failures are retried 3×
 with backoff, then logged and skipped — the rule writes partial output and fails
 only if *zero* months succeeded, and the next run re-attempts the gaps. Force a
 refresh by deleting cache files:
@@ -254,8 +260,8 @@ rm -rf data/entsoe_cache/DE_LU/2024-12   # one month, one area
 rm -rf data/entsoe_cache/*/2024-12       # one month, all areas
 ```
 
-The `res_cf` chain is `build_regions` → `build_offshore_regions` →
-`download_cutout` → `build_country_average_cf`. The `{tech}` wildcard is
+The `res_cf` chain is `make_area_geometry` → `make_offshore_geometry` →
+`retrieve_area_cutout` → `area_average`. The `{tech}` wildcard is
 `wind-onshore`, `wind-offshore`, or `solar`.
 
 > [!NOTE]

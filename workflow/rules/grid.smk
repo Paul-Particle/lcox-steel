@@ -6,7 +6,10 @@ wildcard_constraints:
 
 rule retrieve_grid_data:
     output:
-        temp("resources/timeseries/{area}_grid_{variant}_{start_date}_{end_date}.parquet"),
+        # Not temp(): this file is the processed cache. It is keyed by the whole
+        # run, so a re-run reuses it and a changed date range writes a new name
+        # instead of invalidating anything.
+        "resources/timeseries/{area}_grid_{variant}_{start_date}_{end_date}.parquet",
     log:
         "logs/retrieve_grid_data/{area}_{variant}_{start_date}_{end_date}.log",
     params:

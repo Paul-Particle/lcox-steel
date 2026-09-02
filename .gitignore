@@ -27,8 +27,6 @@ data/entsoe_cache/*
 # Derived workflow outputs (rebuilt by snakemake)
 resources/*.parquet
 resources/timeseries/
-resources/entsoe/
-resources/nem/
 resources/shapes/
 
 # Log files

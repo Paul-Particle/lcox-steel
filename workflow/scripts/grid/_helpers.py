@@ -3,8 +3,7 @@
 import pandas as pd
 
 # NEM market time is AEST (UTC+10, no daylight saving). "Australia/Brisbane" is
-# the fixed-offset zone that models it — used both to convert raw downloads to UTC
-# and to test market-month cache membership (see area_month_in_cache).
+# the fixed-offset zone that models it, used to convert raw downloads to UTC.
 NEM_MARKET_TZ = "Australia/Brisbane"
 
 
@@ -29,28 +28,6 @@ def to_utc_naive(df: pd.DataFrame) -> pd.DataFrame:
     else:
         df.index = df.index.tz_localize(NEM_MARKET_TZ).tz_convert("UTC").tz_localize(None)
     return df.sort_index()
-
-
-def area_month_in_cache(
-    cached: pd.DataFrame | None, area: str, ym: str, tz: str | None = None
-) -> bool:
-    """Return True if `cached` already holds data for (area, calendar month `ym`).
-
-    By default the cached (UTC-naive) index is matched against `ym` directly. Pass
-    `tz` to interpret the index in that timezone first. NEM stores prices in UTC
-    but downloads them by *market* month (AEST), and the ~10 h shift spills each
-    market month across two UTC months. A plain UTC-month match then reports a
-    market month as "cached" on the strength of a neighbouring month's spillover
-    (e.g. the trailing hours the pad month contributes to the prior UTC month), so
-    that month gets skipped and never downloaded. Matching in market time
-    (tz=NEM_MARKET_TZ) attributes every hour to its own market month and avoids this.
-    """
-    if cached is None or area not in cached.columns.get_level_values(0):
-        return False
-    index = cached[area].dropna(how="all").index
-    if tz is not None:
-        index = index.tz_localize("UTC").tz_convert(tz).tz_localize(None)
-    return bool((index.to_period("M") == pd.Period(ym, freq="M")).any())
 
 
 def summarise_runs(times: pd.DatetimeIndex, step: pd.Timedelta, limit: int = 3) -> str:

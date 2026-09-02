@@ -1,11 +1,9 @@
 """AEMO NEM source implementation, called by retrieve_grid_data.py.
 
-Maintains a persistent second-level processed cache at
-  resources/nem/{variant}.parquet
-
-Cache columns are a MultiIndex (area, metric) so all areas share one file per
-variant. Accessing one area's data: df["VIC1"]. NEMOSIS manages its own raw
-cache under data/nem_cache/; no per-month raw files are written here.
+Builds the requested window month by month out of the NEMOSIS raw cache under
+data/nem_cache/, which NEMOSIS manages itself; no per-month raw files are
+written here. The rule output is itself the processed cache — it carries the
+whole run in its name, so Snakemake skips this work on a re-run.
 
 Variants
 --------
@@ -19,8 +17,6 @@ from pathlib import Path
 import pandas as pd
 
 from _helpers import (
-    NEM_MARKET_TZ,
-    area_month_in_cache,
     assert_window_complete,
     iso,
     iter_months_str,
@@ -82,28 +78,23 @@ def _process_full_month(
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def retrieve(snakemake, area: str) -> None:
-    """Slice the requested (area, variant, date range) out of the processed cache.
+    """Build the requested (area, variant, date range) window and write it out.
 
     `area` is the code this market knows the area by — the bidding zone or NEM
     region — which is not always the area code the rest of the workflow uses.
 
-    Processes any months missing from the shared per-variant cache (NEMOSIS
-    manages its own raw download cache under data/nem_cache/), appends them, then
-    writes the requested window to the rule output.
+    Processes every market month the window touches (NEMOSIS manages its own raw
+    download cache under data/nem_cache/) and writes the slice to the rule output.
     """
     variant     = snakemake.wildcards.variant
     start_date  = snakemake.wildcards.start_date
     end_date    = snakemake.wildcards.end_date
     eur_per_aud = snakemake.params.eur_per_aud
 
-    cache_dir            = Path("data/nem_cache")
-    processed_cache_dir  = Path("resources/nem")
-    processed_cache_path = processed_cache_dir / f"{variant}.parquet"
+    cache_dir = Path("data/nem_cache")
 
     if variant not in ("dayahead", "full"):
         raise ValueError(f"Unknown variant {variant!r}. Expected 'dayahead' or 'full'.")
-
-    cached = pd.read_parquet(processed_cache_path) if processed_cache_path.exists() else None
 
     months = iter_months_str(start_date, end_date)
     # NEM data is downloaded in market time (AEST, UTC+10) and converted to UTC,
@@ -114,32 +105,21 @@ def retrieve(snakemake, area: str) -> None:
     if pad_month not in months:
         months = [*months, pad_month]
 
-    new_frames = []
-    for ym in months:
-        # Match cache membership in market time: NEM downloads whole market months
-        # (AEST) but stores them in UTC, so a market month spills across two UTC
-        # months. A UTC-month check would see the pad month's spillover and wrongly
-        # skip the real month (dropping ~a month of data). See area_month_in_cache.
-        if area_month_in_cache(cached, area, ym, tz=NEM_MARKET_TZ):
-            continue
-        log.info(f"{area}/{ym}/{variant}: processing")
-        if variant == "dayahead":
-            frame = _process_dayahead_month(area, ym, cache_dir, eur_per_aud)
-        else:
-            frame = _process_full_month(area, ym, cache_dir, eur_per_aud)
-        frame.columns = pd.MultiIndex.from_tuples([(area, c) for c in frame.columns])
-        new_frames.append(frame)
+    process_month = _process_dayahead_month if variant == "dayahead" else _process_full_month
 
-    if new_frames:
-        all_frames = ([cached] if cached is not None else []) + new_frames
-        cached = pd.concat(all_frames)
-        cached = cached[~cached.index.duplicated(keep="last")].sort_index()
-        processed_cache_dir.mkdir(parents=True, exist_ok=True)
-        cached.to_parquet(processed_cache_path, index=True)
-        log.info(f"updated processed cache: {processed_cache_path} ({len(cached)} rows)")
+    monthly_frames = []
+    for ym in months:
+        log.info(f"{area}/{ym}/{variant}: processing")
+        monthly_frames.append(process_month(area, ym, cache_dir, eur_per_aud))
+
+    # Market months are stored UTC, so consecutive ones meet ~10 h off the UTC month
+    # boundary and can each claim the hours they straddle. Frames are chronological,
+    # so keeping the last occurrence gives those hours to the month that owns them.
+    assembled = pd.concat(monthly_frames)
+    assembled = assembled[~assembled.index.duplicated(keep="last")].sort_index()
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:59")
-    out_df = cached[area].loc[window]
+    out_df = assembled.loc[window]
     out_df.index.name = "time"
 
     assert_window_complete(out_df, start_date, end_date, variant)
