@@ -1,11 +1,13 @@
 finance:
   default_wacc: 0.07
 
-# Steelmaking routes are selected by the `route` column in config/scenarios.csv,
-# never from this file: one solve builds exactly one route, named by the
-# `{route}` wildcard. This file only overrides the defaults below, and a
-# per-scenario `config/assumptions_{scenario}.yaml` overlay overrides these in
-# turn. The implemented route ids live in workflow/common/_runs.py.
+# Everything in this file is a default. A per-scenario
+# `config/assumptions_{scenario}.yaml` overlay is deep-merged on top of it and
+# is the only thing that overrides these values; nothing sits beneath them.
+#
+# Routes are not selected here. One solve builds exactly one route, taken from
+# the `route` column of config/scenarios.csv and named by the `{route}`
+# wildcard. The implemented route ids live in workflow/common/_runs.py.
 
 plant:
   dri_mt_per_year: 0.526  # 100 MW H2 LHV input × 8760 h / 33.33 kWh/kg / 50 kg/t
