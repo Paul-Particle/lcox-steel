@@ -4,6 +4,8 @@ wildcard_constraints:
 
 
 rule make_area_geometry:
+    wildcard_constraints:
+        area=COUNTRY_AREAS,
     input:
         "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
     output:
