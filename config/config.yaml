@@ -8,43 +8,85 @@ logging:
   # "f-strings ok in log calls" convention (that's about call sites).
   format: "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 
+# Scenarios the default `snakemake` target (rule demo) builds. sensitivity-test
+# is the one that needs no CDS download — it sits on the shipped VIC1 cutout —
+# so it doubles as the after-a-fresh-clone smoke test. Listed by name
+# rather than matched on one, because a scenario name is a free-form label: the
+# workflow never reads meaning out of it, so any string works as an id.
+demo_scenarios:
+  - sensitivity-test
+
 entsoe:
-  # Per-(area, data_type) downloads are pulled on demand by config/projects.csv;
+  # Per-(area, data_type) downloads are pulled on demand by config/scenarios.csv;
   # the bidding-zone catalog lives in data/entsoe_cache/entsoe_bidding_zones.csv.
   data_types: [prices, load_forecast, load_actual, res, generation, crossborder]
 
 nem:
   # FX rate for converting AUD-denominated NEM prices to EUR (used by
-  # grid.smk → retrieve_nem). Infra-level constant; per-scenario cost
+  # grid.smk → retrieve_grid_data). Infra-level constant; per-scenario cost
   # assumptions live in config/assumptions*.yaml.
   eur_per_aud: 0.61
 
-res_cf:
-  # Per-country metadata for the atlite + capacity factor pipeline.
-  # Lowercase key = ISO-2 (used in cutout filenames and CF output filenames).
-  #   iso3:           3-letter code for Natural Earth ADM0_A3 lookup
-  #   region:         tag stored in regions.geojson (mostly ISO-2, but AUS/BRA
-  #                   stayed ISO-3 historically — kept that way to avoid
-  #                   regenerating the geojson and chasing downstream)
-  #   coarse:         use a coarser cutout resolution to avoid CDS instability
-  #                   / memory limits for large countries
-  #   mainland_bbox:  optional [lon_min, lon_max, lat_min, lat_max] — keeps only
-  #                   polygon parts whose centroid falls inside the box. Used
-  #                   to drop overseas territories (e.g. metropolitan France).
-  #   vic_bbox:       AUS-only; approximates NEM zone VIC1 for sub-national tests
-  #                   (Natural Earth 1:110m has no state boundaries, so we use a
-  #                   bbox).
-  countries:
-    de:  { iso3: DEU, region: DE,  coarse: false }
-    fr:  { iso3: FRA, region: FR,  coarse: false, mainland_bbox: [-10, 15, 41, 52] }
-    es:  { iso3: ESP, region: ES,  coarse: false }
-    aus: { iso3: AUS, region: AUS, coarse: false,  vic_bbox: [140.96, 149.97, -39.16, -34.00] }
-    bra: { iso3: BRA, region: BRA, coarse: false  }
-    # Demo area: a Victoria (Australia) subset shipped with a pre-sliced backup
-    # cutout + derived geo parquets, so the default `snakemake` run needs no CDS
-    # download or EEZ/NE zips. region=VIC matches the committed vic_*_geo.parquet.
-    vic: { iso3: AUS, region: VIC, coarse: false }
+# Reporting. best_zone_by names the column that decides which of a country's
+# zones represents it — a country supplying its market through zones is run once
+# per zone, and the cheapest is flagged `best_in_country` in the report rather
+# than the others being dropped. `lco_output` is the levelised cost of whatever
+# the run produces (steel, or hydrogen for h2-only). Null keeps every zone
+# flagged, i.e. no ranking.
+report:
+  best_zone_by: lco_output
 
+# The area registry. `area` in config/scenarios.csv names one of these keys, and
+# each key names one cutout. An area is a country (three-letter ISO 3166-1
+# alpha-3) or a sub-national market zone; nothing infers which from the shape of
+# the code, it follows from the entries below.
+#   iso3:           3-letter code for Natural Earth ADM0_A3 lookup
+#   region:         tag stored in the geo parquet (mostly ISO-2, but AUS/BRA
+#                   stayed ISO-3 historically — kept that way to avoid
+#                   regenerating the geometry and chasing downstream)
+#   market:         which wholesale market this area trades in, `entsoe` or
+#                   `nem`; absent where no price series exists.
+#   market_area:    the code that market knows this area by — the ENTSO-E
+#                   bidding zone or AEMO NEM region. Also an alias: writing it
+#                   in the CSV resolves to this area, so DE_LU and DEU both work.
+#   zones:          sub-national market zones. A country with no market of its
+#                   own supplies one only through these, so a grid scenario
+#                   naming the country runs its zones separately instead.
+#   coarse:         use a coarser cutout resolution to avoid CDS instability
+#                   / memory limits for large countries
+#   mainland_bbox:  optional [lon_min, lon_max, lat_min, lat_max] — keeps only
+#                   polygon parts whose centroid falls inside the box. Used
+#                   to drop overseas territories (e.g. metropolitan France).
+#
+# Sub-national areas (the NEM regions) do not get their geometry from the
+# workflow. make_area_geometry reads Natural Earth Admin 0 — countries only —
+# and its mainland_bbox drops whole polygon parts by centroid rather than
+# cutting one, so it cannot make a state: pointed at VIC1 (iso3: AUS) it would
+# return the whole of Australia labelled VIC. Their geometries are instead cut
+# from Natural Earth Admin 1 by hand and committed past .gitignore as
+# resources/shapes/{area}_geo.parquet — within 0.2% of the ABS state areas.
+# Delete one and the rule cannot replace it — make_area_geometry refuses to run
+# for an area that is someone's zone rather than quietly building the country.
+# Issue #64 covers reading Admin 1 in the pipeline instead.
+areas:
+  DEU:   { iso3: DEU, region: DE,  coarse: false, market: entsoe, market_area: DE_LU }
+  FRA:   { iso3: FRA, region: FR,  coarse: false, market: entsoe, market_area: FR, mainland_bbox: [-10, 15, 41, 52] }
+  ESP:   { iso3: ESP, region: ES,  coarse: false, market: entsoe, market_area: ES }
+  # No market of its own: a grid scenario naming AUS runs its zones instead.
+  AUS:   { iso3: AUS, region: AUS, coarse: false, zones: [NSW1, QLD1, SA1, TAS1, VIC1] }
+  # Neither a market nor zones — islanded only until Brazil's subsystems are added.
+  BRA:   { iso3: BRA, region: BRA, coarse: false }
+  # The NEM regions. AEMO serves prices for all five; only VIC1 ships a cutout,
+  # so the other four cost a CDS download the first time they are solved.
+  # Victoria also ships its offshore parquet, which is why the default
+  # `snakemake` run needs no CDS download and no EEZ/NE zips.
+  VIC1:  { iso3: AUS, region: VIC, coarse: false, market: nem, market_area: VIC1 }
+  NSW1:  { iso3: AUS, region: NSW, coarse: false, market: nem, market_area: NSW1 }
+  QLD1:  { iso3: AUS, region: QLD, coarse: false, market: nem, market_area: QLD1 }
+  SA1:   { iso3: AUS, region: SA,  coarse: false, market: nem, market_area: SA1 }
+  TAS1:  { iso3: AUS, region: TAS, coarse: false, market: nem, market_area: TAS1 }
+
+res_cf:
   offshore_max_distance_km: 200
 
   # Atlite cutout build settings.
@@ -72,7 +114,7 @@ res_cf:
   pv_orientation:        latitude_optimal
 
   # Wind CF computation flags — passed to atlite.Cutout.wind() in
-  # 03_build_cf_timeseries, 07_make_bestsite_cf_timeseries, 06_resource_spread.
+  # d1_area_average, d2_bestsite_p95, d5_multi.
   # smooth=True             smooths the turbine power curve
   # add_cutout_windspeed    preserves atlite's built-in 25 m/s cutoff during smoothing
   wind_cf:
@@ -82,7 +124,7 @@ res_cf:
   # Land-sea eligibility for ONSHORE CF (issue #41). Coarse ERA5 coastal cells
   # blend sea + land and inflate onshore wind CF. Cells whose land fraction is
   # below `min_land_fraction` of the region's max are dropped from onshore
-  # weighting/selection: 03's country mean, and 07/07b's P95 / best-site / max.
+  # weighting/selection: d1's area mean, and d2/d3's P95 / best-site / max.
   # 0.98 reproduces the validated notebook cutoff; 0 disables the fix. Offshore
   # wind is never affected (sited on sea by design).
   #
@@ -113,7 +155,7 @@ res_cf:
     crs: 6933
     res: 200
 
-  # Anchor co-location for best-site RES-mix profiles (07_make_bestsite_cf_timeseries).
+  # Anchor co-location for best-site RES-mix profiles (d2_bestsite_p95).
   # max_radius_km           search radius (km) for counterpart cells across techs
   # quality_floor_fraction  keep candidates with CF >= this fraction of the best nearby cell
   spatial_matching_res_mix:
