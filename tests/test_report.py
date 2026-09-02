@@ -1,11 +1,12 @@
-"""Unit tests for zone ranking in the report and the run labels the plots use.
+"""Unit tests for what a report row says and which rows survive into it.
 
 A country that reaches its market through zones (Australia through its NEM
 regions) is solved once per zone, so several report rows describe the same
-place. `mark_best_in_country` flags the cheapest rather than dropping the rest, and
-`write_report` splits that into the report viz reads and the hidden diagnostic.
-These pin that behaviour on synthetic frames — no cutouts, no solves, so they
-run anywhere.
+place. `mark_best_in_country` flags the cheapest rather than dropping the rest,
+and `write_report` splits that into the report viz reads and the hidden
+diagnostic. `input_variants` puts back the one part of a run's identity the
+solved network does not carry. These pin that behaviour on synthetic frames —
+no cutouts, no solves, so they run anywhere.
 """
 
 import pandas as pd
@@ -138,3 +139,50 @@ def test_report_holds_the_selected_areas_and_the_diagnostic_holds_all(tmp_path):
     diagnostic = pd.read_csv(diagnostic_path)
     assert set(diagnostic["area"]) == {"VIC1", "NSW1", "DEU"}
     assert set(diagnostic.loc[~diagnostic["best_in_country"], "area"]) == {"VIC1"}
+
+
+def _scenario_rows(rows):
+    """A scenario table as `load_scenarios` returns it: one row per input series."""
+    return pd.DataFrame(
+        rows, columns=["scenario", "tech", "variant", "area", "start_date", "end_date"]
+    )
+
+
+SCENARIOS = _scenario_rows([
+    ("s", "wind-onshore", "bestsite-p95", "VIC1", "20250101", "20251231"),
+    ("s", "solar",        "tilt-mix-n5",  "VIC1", "20250101", "20251231"),
+    ("s", "grid",         "dayahead",     "VIC1", "20250101", "20251231"),
+    ("s", "solar",        "area-average", "VIC1", "20240101", "20241231"),
+    ("s", "solar",        "area-average", "NSW1", "20250101", "20251231"),
+])
+
+
+def test_input_variants_name_the_series_behind_a_run():
+    run = {"area": "VIC1", "route": "moe-eaf",
+           "start_date": "20250101", "end_date": "20251231"}
+    assert compile_report.input_variants(SCENARIOS, "s", run) == {
+        "wind-onshore_variant": "bestsite-p95",
+        "solar_variant": "tilt-mix-n5",
+        "grid_variant": "dayahead",
+    }
+
+
+def test_input_variants_ignore_the_route():
+    """Every route of a group is solved from the same series, so they all report it."""
+    group = {"area": "VIC1", "start_date": "20250101", "end_date": "20251231"}
+    moe = compile_report.input_variants(SCENARIOS, "s", {**group, "route": "moe-eaf"})
+    h2 = compile_report.input_variants(SCENARIOS, "s", {**group, "route": "h2-dri-eaf"})
+    assert moe == h2
+
+
+@pytest.mark.parametrize(
+    "run, expected",
+    [
+        ({"area": "VIC1", "start_date": "20240101", "end_date": "20241231"},
+         {"solar_variant": "area-average"}),
+        ({"area": "NSW1", "start_date": "20250101", "end_date": "20251231"},
+         {"solar_variant": "area-average"}),
+    ],
+)
+def test_input_variants_do_not_leak_across_areas_or_years(run, expected):
+    assert compile_report.input_variants(SCENARIOS, "s", run) == expected
