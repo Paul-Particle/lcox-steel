@@ -21,7 +21,7 @@ optimisation model into one Snakemake workflow:
   `all-routes` in that column means every route above. The registry lives in
   `workflow/common/_runs.py`; `*-export` ids are reserved for the trade
   scenarios and are not implemented.
-- **`viz`** — a per-scenario LCOH/LCOS report plus Plotly figures, one row per run.
+- **`viz`** — a per-scenario LCOH/LCOS report plus Plotly figures, one column per run.
 
 ## Architecture at a glance
 
@@ -38,14 +38,14 @@ config/scenarios.csv ──► res_cf ─┬─► resources/timeseries/*.parque
                                                        solve (PyPSA optimise) ──► results/{scenario}/{area}_{route}_{dates}.nc
                                                                                   │
                                                           viz ◄───────────────────┘
-                                              results/report_{scenario}.csv + plots/*.png|html
+                                     results/report_{scenario}.csv + plots/*.png|html + html/*.html
 ```
 
 A scenario is a name plus its optional `config/assumptions_{scenario}.yaml`
 overlay. Its rows group by `(area, start_date, end_date)`; each group draws one
 or more capacity-factor series (one per RES tech) and/or a single grid price
 series, and is solved once per route. `viz` compiles the report and charts, one
-row per run — so a scenario spanning several areas and years produces the
+column per run — so a scenario spanning several areas and years produces the
 cross-country comparison table directly.
 
 ## Project structure
@@ -95,6 +95,8 @@ lcox-steel/
 │   │       └── style.py            # FCA Plotly template + colormap
 │   └── common/                     # shared, cross-pipeline Python
 │       ├── _runs.py                # route/area registries; expands scenarios.csv into runs
+│       ├── _report_schema.py       # the report's fields + the only reader/writer of its layout
+│       ├── _provenance.py          # content digests of a solve's inputs (inputs_hash)
 │       ├── _constants.py           # physical constants (e.g. H2 LHV)
 │       ├── _logging.py             # configure_logging + tqdm progress wrapper
 │       ├── _paths.py               # repo-relative path roots
@@ -336,19 +338,21 @@ its own.
 
 `report.best_zone_by` in `config/config.yaml` names the ranking column, defaulting
 to `lco_output`: the levelised cost of whatever the run produces, steel or (for
-`h2-only`) hydrogen, with `lco_output_unit` alongside so a row is readable on its
+`h2-only`) hydrogen, with `lco_output_unit` alongside so a run is readable on its
 own. Set it to null to rank nothing.
 
 The choice is made **before** the report, so `results/report_{scenario}.csv`
-stands on its own: one row per reported place, and nothing about zones left for a
-reader to interpret. Everything downstream — the plots here, and any notebook or
-dashboard reading the CSV — takes the rows as given.
+stands on its own: one column per reported place, and nothing about zones left
+for a reader to interpret. Everything downstream — the plots here, and any
+notebook or dashboard reading the CSV — takes the runs as given.
 
 The beaten zones are not lost, because what they cost is itself a result and a
-dropped row costs a re-solve to recover. They go to
+dropped run costs a re-solve to recover. They go to
 `results/.report_{scenario}_diag.csv`, the same table with every zone and the
-`best_in_country` flag that separates them. It is hidden because it answers a
-follow-up question rather than being the thing to read.
+`best_in_country` field that separates them. It is hidden because it answers a
+follow-up question rather than being the thing to read. Runs are numbered within
+each file, so `sensitivity-test_2` in one is not the run of that name in the
+other — the identity rows at the top say which is which.
 
 ## Configuration
 
@@ -378,39 +382,58 @@ multi-tech frame.
 **Results**: `results/{scenario}/{area}_{route}_{start}_{end}.nc` is the full
 solved PyPSA network; `results/report_{scenario}.csv` (from `compile_report`)
 carries the levelised cost (LCOH for `h2-only` routes, LCOS €/t for steel routes)
-and optimal capacities, one row per run under that scenario.
+and optimal capacities, one column per run under that scenario.
 
-A row leads with everything needed to read the numbers after it: the run key
-(`scenario, area, country, route, start_date, end_date`) and one
-`{tech}_variant` column per input series — `solar_variant: bestsite-p95`,
-`grid_variant: dayahead`. The variant matters because a best-site P95 profile and
-an area average answer different questions, and the solved network does not carry
-it (the solve reads the parquet, not its name), so `compile_report` takes
-`config/scenarios.csv` as an input and joins it back on.
+### The shape of a report
 
-### The report's columns are fixed
+**One column per run, one row per field.** There are far more fields than runs,
+so a report reads down the page and two runs sit side by side. Columns are named
+`{scenario}_{n}`, numbered within the file.
 
-Every run writes the same columns whatever route it took, so the report is a
-table rather than something to probe column by column. The set and its order are
-declared in `workflow/common/_report_schema.py`, and `compile_report` puts each
-scenario's frame on it before writing. Without that the header was the union of
-whatever runs a scenario happened to contain: solving only `h2-only` left the
-steel chain out, adding one `moe-eaf` run grew every other row, and a consumer
-asking for a column nobody wrote got silence.
+```
+field,sensitivity-test_1,sensitivity-test_2
+scenario,sensitivity-test,sensitivity-test
+area,VIC1,VIC1
+route,h2-dri-eaf,moe-eaf
+...
+lcos_eur_per_t,606.78,914.11
+```
+
+The **identity fields lead**: the run key (`scenario, area, country, route,
+start_date, end_date`), one `{tech}_variant` row per input series
+(`solar_variant: bestsite-p95`, `grid_variant: dayahead`), the unit its
+`lco_output` is in, and the `inputs_hash`. Everything below them is numbers, so a
+reader can skip the block on top and take the rest as a numeric table. The
+variant matters because a best-site P95 profile and an area average answer
+different questions, and the solved network does not carry it (the solve reads
+the parquet, not its name), so `compile_report` takes `config/scenarios.csv` as
+an input and joins it back on.
+
+**Every run writes the same fields** whatever route it took. The set and its
+order are declared in `workflow/common/_report_schema.py`, and `compile_report`
+puts each scenario's frame on it before writing. Without that the shape was the
+union of whatever runs a scenario happened to contain: solving only `h2-only`
+left the steel chain out, adding one `moe-eaf` run grew every other run's row,
+and a consumer asking for a field nobody wrote got silence.
 
 A cell a run has no value for says which of two things it means:
 
 - **`0`** — an amount, and this run's is nothing. A route without a MOE cell
   reports `plant_moe_eur_per_t: 0`; it built none, and zero is what that step
   contributed to the cost of its steel. The cost groups stack to
-  `total_annual_cost_meur` for every row.
+  `total_annual_cost_meur` for every run.
 - **blank** — undefined here: a ratio with nothing in its denominator. The
   capacity factor of a turbine that was not built, `lcoh_*` on a route that
   makes no hydrogen, the utilisation of a plant that is not there.
 
 So a blank never means "not looked at", and `0` never means "missing". A
-multi-site run additionally names a generator per candidate site; those columns
+multi-site run additionally names a generator per candidate site; those fields
 are not declared in advance and follow the fixed ones.
+
+**Reading one back**: `common._report_schema.read_report(path)` returns a frame
+of one row per run with the numbers as numbers. It is the only thing that undoes
+the layout — every dashboard, taxonomy and plot goes through it — so how the file
+is written stays that module's business alone.
 
 ### Tying a result to its inputs
 

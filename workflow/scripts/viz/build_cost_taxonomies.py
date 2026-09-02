@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the cost-taxonomy hub tab: two ways of cutting the same levelised cost.
 
-Writes `results/cost_taxonomies.html` — a body-only, theme-aware, self-contained
+Writes `results/html/cost_taxonomies.html` — a body-only, theme-aware, self-contained
 page that puts the circulated chart mockup's *category split* next to the split
 the pipeline already reports, both populated from the same results, for any
 scenario in the matrix.
@@ -25,7 +25,6 @@ import json
 import sys
 from pathlib import Path
 
-import pandas as pd
 import yaml
 
 REPO = Path(__file__).resolve().parents[3]        # workflow/scripts/viz/ -> repo root
@@ -33,10 +32,11 @@ sys.path.insert(0, str(Path(__file__).parent))    # sibling build_dashboard, cos
 sys.path.insert(0, str(REPO / "workflow"))        # common.*, scripts.*
 
 import cost_taxonomy                                                      # noqa: E402
-from build_dashboard import RESULTS, _axes, build_html          # noqa: E402
+from build_dashboard import HTML_DIR, RESULTS, _axes, build_html          # noqa: E402
 from common._constants import H2_LHV_KWH_PER_KG                           # noqa: E402
+from common._report_schema import read_report                             # noqa: E402
 
-OUT_PATH = RESULTS / "cost_taxonomies.html"
+OUT_PATH = HTML_DIR / "cost_taxonomies.html"
 TEMPLATE_HTML = Path(__file__).with_name("cost_taxonomies_template.html")
 CONFIG_DIR = REPO / "config"
 
@@ -149,7 +149,7 @@ def attach(payload: dict, cases: dict) -> None:
     # split to the records it already built. A row finds its record through the
     # axes it declares, not through a name that has to be taken apart.
     for report in sorted(RESULTS.glob("report_*.csv")):
-        for _, row in pd.read_csv(report).iterrows():
+        for _, row in read_report(report).iterrows():
             axes = _axes(row)
             project = f"{axes['geo']}-{axes['year']}-{axes['grid']}"
             record = (cases.get(project, {})
