@@ -71,7 +71,7 @@ PROCESS_LINKS = ("dri-h2", "dri-ng", "eaf", "moe", "ew")
 # them. Together they are the total annual cost.
 COST_GROUPS = ("res", "battery", "grid", "gas", "electrolyser", "h2_buffer",
                "process", "ore_consumables", "iron_store", "steel_store",
-               "transmission")
+               "transmission", "transport", "destination_power")
 
 # The links that draw electricity, by the id `build_network` gives them. Each
 # takes it either on bus0 (electricity in, product out) or on bus2 (a by-draw
@@ -153,6 +153,9 @@ REPORT_FIELDS = {
     "iron_from_h2_share": UNDEFINED,
     "iron_store_kt": ZERO,
     "iron_store_hours_steel": UNDEFINED,
+    # Zero on a route that melts its iron where it made it.
+    "transport_km": ZERO,
+    "iron_shipped_kt": ZERO,
     "steel_store_kt": ZERO,
     "steel_store_hours_steel": UNDEFINED,
 

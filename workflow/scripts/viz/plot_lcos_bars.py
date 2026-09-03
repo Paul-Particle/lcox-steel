@@ -31,7 +31,9 @@ from scripts.viz.style import (
     fca_template,
     gray,
     green,
+    highlight_blue,
     light_blue,
+    light_blue_gray,
     magenta_red,
     sand_yellow,
     save_figure,
@@ -59,6 +61,8 @@ COST_GROUPS = [
     ("battery",         "Battery",                      magenta_red),
     ("transmission",    "Transmission (HVDC)",          turquois),
     ("grid",            "Grid (connection + energy)",   dark_gray),
+    ("transport",       "Sea freight (iron)",           light_blue_gray),
+    ("destination_power", "Destination power",          highlight_blue),
 ]
 
 
