@@ -184,25 +184,41 @@ destination:
   price_eur_per_mwh: 85         # day-ahead average; the grid block adds the fee
 
 transport:
-  # Sea freight for the export routes: charged per t and km, with no capacity
-  # decision and no capex, because ships are chartered rather than built.
+  # Freight, charged per t and km with no capacity decision and no capex,
+  # because ships and wagons are chartered rather than built.
   #
   # Distances are an assumption and not geography, which is why they live here
   # and not in the area registry — they depend on the destination port and on
-  # the routing (Suez or the Cape), and we expect to vary both. A producer
-  # already inside the EU has no sea leg and so has no distance.
+  # the routing (Suez or the Cape), and we expect to vary both.
   #
-  # Rates are order-of-magnitude eyeballs from published freight indices. Steel
-  # is dearer per t than iron: bulk carriers take briquettes and plates, while
-  # coil and plate go as breakbulk, which stows worse and handles slower.
-  iron_eur_per_t_km: 0.0022
-  steel_eur_per_t_km: 0.0050
+  # deliver_finished_steel decides where the model stops. Off (the default) it
+  # stops at the plant gate, and only an export route pays freight — it has to,
+  # because its furnace is somewhere else. On, every route also delivers its
+  # steel to the destination over the same legs, which is the comparison the
+  # export routes exist for: ship 1.1 t of iron, or ship 1 t of steel. An
+  # export route pays no steel freight either way; its steel is already there.
+  deliver_finished_steel: false
+
+  # Rates are order-of-magnitude eyeballs. Steel is dearer per t than iron:
+  # bulk carriers and open wagons take briquettes and plates, while coil and
+  # plate go as breakbulk, which stows worse and handles slower. Rail is an
+  # order of magnitude dearer than sea per t·km, which is the whole reason
+  # iron moves between continents by ship and barely moves overland at all.
+  sea:
+    iron_eur_per_t_km: 0.0022   # ~2x published iron-ore rates, for HBI handling
+    steel_eur_per_t_km: 0.0050
+  rail:
+    iron_eur_per_t_km: 0.035
+    steel_eur_per_t_km: 0.045
+
+  # Legs from the producing country to the destination, by mode. An EU producer
+  # has no sea leg, only a token overland run to the furnace.
   distance_km:
-    DEU: 0
-    FRA: 0
-    ESP: 0
-    BRA: 9_500                  # Tubarao -> Rotterdam
-    AUS: 19_500                 # Port Hedland -> Rotterdam via Suez
+    DEU: { rail: 300 }
+    FRA: { rail: 800 }
+    ESP: { rail: 1_500 }
+    BRA: { sea: 9_500 }         # Tubarao -> Rotterdam
+    AUS: { sea: 19_500 }        # Port Hedland -> Rotterdam via Suez
 
 transmission:
   # HVDC link connecting a candidate RES site to the electrolyser/demand site.

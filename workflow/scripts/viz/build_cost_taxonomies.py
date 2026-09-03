@@ -57,7 +57,7 @@ ALT_LCOS_BANDS = [
     ["rest",      "Electricity — rest of plant", C_ELEC],
     ["gas",       "Gas + CO₂ (fossil routes)",   C_GAS],
     ["store",     "Storage (iron/steel)",        C_STORE],
-    ["transport", "Sea freight (iron)",          "#BDCCD9"],
+    ["transport", "Freight",                     "#BDCCD9"],
 ]
 ALT_LCOE_BANDS = [
     ["res_capex",       "Renewables — capital",     C_ELEC],
