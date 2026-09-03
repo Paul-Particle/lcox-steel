@@ -273,9 +273,10 @@
 
   <div class="notes">
     <p><b>Simplified rule graph.</b> These are the rules; at run time each fans out over wildcards (<code>scenario</code>, <code>area</code>, <code>route</code>, <code>tech</code>, <code>variant</code>, dates…) into many jobs — one solve per run key, one report per scenario, and so on.</p>
-    <p><b>Overview vs Faithful:</b> Overview draws only the defining dependency (the cutout) into each CF rule. Switch to <b>Faithful</b> to also draw the geometry parquets every CF rule (and <code>cf_map</code>) really declares, and the two rules that read <code>config/scenarios.csv</code> as a file — <code>compile_report</code>, for the variant each tech was solved with. <code>config.yaml</code> reaches the rules as params via <code>lookup</code>, and the scenario table also shapes the fan-out at parse time, so those stay annotations here rather than arrows.</p>
+    <p><b>Overview vs Faithful:</b> Overview draws only the defining dependency (the cutout) into each CF rule. Switch to <b>Faithful</b> to also draw the geometry parquets every CF rule (and <code>cf_map</code>) really declares, and the one rule that reads <code>config/scenarios.csv</code> as a file — <code>compile_report</code>, for the variant each tech was solved with. <code>config.yaml</code> reaches the rules as params via <code>lookup</code>, and the scenario table also shapes the fan-out at parse time, so those stay annotations here rather than arrows.</p>
     <p><b>Default target <code>demo</code></b> (and <code>all</code>) build the report + capacity bars. Dashed rules — <code>plot_cf_map</code>, <code>plot_lcos_bars</code>, <code>plot_siting_map</code>, <code>plot_site_capacity_bars</code> — are requested on demand. The grid parquets are <code>temp()</code>, deleted after the solve consumes them.</p>
-    <p><b>Runs offline:</b> the demo ships a pre-sliced Victoria (AUS) cutout backup, so <code>download_cutout</code> needs no CDS download; an <code>onstart</code> hook also scrubs stray VM NUL bytes from sources before any rule runs.</p>
+    <p><b>Not in this graph:</b> the browsable pages under <code>results/html/</code> — the dashboard, its v2, the cost taxonomies, and the hub carrying this diagram — are built by hand from the reports (<code>scripts/viz/build_*.py</code>), not by a rule. They sit a level above the workflow and are rebuilt whenever they change; the Snakemake outputs are <code>results/report_{scenario}.csv</code>, the solved networks, and the plots under <code>results/plots/</code>.</p>
+    <p><b>Runs offline:</b> the demo ships a pre-sliced Victoria (AUS) cutout backup, so <code>retrieve_area_cutout</code> needs no CDS download; an <code>onstart</code> hook also scrubs stray VM NUL bytes from sources before any rule runs.</p>
   </div>
 
   <p class="foot">Derived from workflow/Snakefile + workflow/rules/{grid,res_cf,solve,viz}.smk · rule graph for review</p>
@@ -342,7 +343,7 @@
 
     // row 6
     { id:"report", group:"viz", x:430, y:906, name:"report", kick:"VIZ RULE · TARGET",
-      title:"compile_report", body:"scripts/viz/compile_report.py\nin: every solved network of one scenario + scenarios.csv\nout: results/report_{scenario}.csv\n   + results/.report_{scenario}_diag.csv (hidden)\nThe report holds the selected areas; the diagnostic keeps\nevery zone and the best_in_country flag. Built by demo / all." },
+      title:"compile_report", body:"scripts/viz/compile_report.py\nin: every solved network of one scenario + scenarios.csv\nout: results/report_{scenario}.csv\n   + results/.report_{scenario}_diag.csv (hidden)\nA column per run, a row per field, on the fixed schema in\ncommon/_report_schema.py — every run writes the same fields\nwhatever route it took. The report holds the selected areas;\nthe diagnostic keeps every zone and the best_in_country\nflag. Built by demo / all." },
     { id:"siting_map", group:"viz", x:760, y:906, name:"siting_map", kick:"VIZ RULE", ondemand:true,
       title:"plot_siting_map", body:"scripts/viz/plot_siting_map.py\nin: results/{scenario}/{area}_{route}_{dates}.nc\nout: results/plots/siting_map/*\nMulti-site only; on-demand." },
     { id:"site_capacity", group:"viz", x:950, y:906, name:"site_capacity", kick:"VIZ RULE", ondemand:true,
@@ -352,7 +353,7 @@
     { id:"capacity_bars", group:"viz", x:340, y:1036, name:"capacity_bars", kick:"VIZ RULE · TARGET",
       title:"plot_capacity_bars", body:"scripts/viz/plot_capacity_bars.py\nin: report_{scenario}.csv\nout: results/plots/capacity_bars/{scenario}.png + .html\nDefault target (demo / all)." },
     { id:"lcos_bars", group:"viz", x:540, y:1036, name:"lcos_bars", kick:"VIZ RULE", ondemand:true,
-      title:"plot_lcos_bars", body:"scripts/viz/plot_lcos_bars.py\nin: report_{scenario}.csv\nout: results/plots/lcos_bars/*\nSteel routes only; on-demand." },
+      title:"plot_lcos_bars", body:"scripts/viz/plot_lcos_bars.py\nin: report_{scenario}.csv\nout: results/plots/lcos_bars/{scenario}.png + .html\nSteel routes only; on-demand." },
   ];
 
   const E = (from, to, ondemand) => ({ from, to, ondemand: !!ondemand });
@@ -517,7 +518,7 @@
     res: "<b>res_cf.smk</b> — build the area and offshore geometries, cut an ERA5 weather slice, then derive capacity-factor timeseries per method (d1–d5): area average, best-site P95, anchor co-location, solar tilt mix, and multi-site candidates. Every output lands in one flat resources/timeseries/ directory, named by the CSV row that asked for it.",
     grid: "<b>grid.smk</b> — day-ahead price retrieval, one rule for both markets: ENTSO-E for Europe, AEMO NEM (via NEMOSIS) for Australia, chosen by the area registry. The output is the processed cache, keyed by the whole run.",
     opt: "<b>solve.smk</b> — solve_network builds and solves one PyPSA network per run key (scenario, area, date range, route), pulling that run's CF and grid parquets plus the assumptions, and stamping a content hash of every input into the network.",
-    viz: "<b>viz.smk</b> — compile_report aggregates one scenario's solved networks into a report CSV (plus a hidden _diag.csv holding the zones it did not select); plots render from it (capacity bars is a default target) or straight from a network (siting / site-capacity / cf maps — on-demand).",
+    viz: "<b>viz.smk</b> — compile_report aggregates one scenario's solved networks into a report CSV on a fixed schema, a column per run (plus a hidden _diag.csv holding the zones it did not select); plots render from it (capacity bars is a default target) or straight from a network (siting / site-capacity / cf maps — on-demand). The pages under results/html/ are built outside the workflow.",
   };
 
   let active = "all";
