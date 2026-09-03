@@ -72,7 +72,7 @@ COST_GROUPS = [
     ["ore_consumables", "Ore & consumables",          "#E2B681"],
     ["gas",             "Natural gas (fuel)",         "#525F6A"],
     ["iron_store",      "Iron stockpile",             "#B7C1C8"],
-    ["transport",       "Sea freight (iron)",         "#BDCCD9"],
+    ["transport",       "Freight",                    "#BDCCD9"],
     ["destination_power", "Destination power",        "#0293D2"],
     ["steel_store",     "Steel inventory",            "#8CA5B7"],
     ["electrolyser",    "Electrolyser",               "#91C096"],

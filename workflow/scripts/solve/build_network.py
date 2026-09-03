@@ -76,6 +76,9 @@ _COLD_IRON_ROUTES = ("ew-eaf", "moe-eaf-export", "ew-eaf-export")
 DESTINATION_IRON_BUS = "iron_destination"
 DESTINATION_ELEC_BUS = "electricity_destination"
 
+# Where finished steel is wanted, when the model is set to deliver it.
+DELIVERED_STEEL_BUS = "steel_delivered"
+
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
     """Recursively merge `overlay` into `base` (neither input mutated).
@@ -110,7 +113,7 @@ def build_network(
     price_series: pd.Series | None = None,
     sites: pd.DataFrame | None = None,
     demand_site: str | None = None,
-    transport_km: float | None = None,
+    transport_legs: dict | None = None,
 ) -> pypsa.Network:
     """Build (but do not solve) the PyPSA network for one scenario.
 
@@ -130,13 +133,20 @@ def build_network(
     (`demand_site`), which hosts the process chain, storage and any grid import.
     `sites` is indexed by site_id with columns `x` (lon), `y` (lat).
 
-    `transport_km` is the sea distance from the producing area to the export
-    destination, and is required by (and only used by) the `-export` routes.
+    `transport_legs` maps freight mode to km between the producing area and the
+    destination (`{"sea": 9500}`). An `-export` route needs it to ship its iron;
+    every steel route needs it when assumptions turn finished-steel delivery on.
     """
     if route not in ROUTES:
         raise ValueError(f"unknown route '{route}' — expected one of {ROUTES}")
     wacc = assumptions["finance"]["default_wacc"]
     plant = assumptions["plant"]
+    transport_cfg = assumptions["transport"]
+    # An export route's steel is made at the destination, so it is already
+    # where it is wanted and only the iron pays freight. h2-only makes none.
+    deliver_steel = (transport_cfg["deliver_finished_steel"]
+                     and route not in _EXPORT_ROUTES
+                     and route != "h2-only")
 
     multisite = sites is not None
 
@@ -150,11 +160,12 @@ def build_network(
         res_techs = list(cf_timeseries.columns)
         elec_bus = "electricity"
 
-    _add_carriers(n, res_techs=res_techs, route=route, multisite=multisite)
+    _add_carriers(n, res_techs=res_techs, route=route, multisite=multisite,
+                  deliver_steel=deliver_steel)
     if multisite:
-        _add_buses_multisite(n, sites, demand_site, route)
+        _add_buses_multisite(n, sites, demand_site, route, deliver_steel)
     else:
-        _add_buses(n, route)
+        _add_buses(n, route, deliver_steel)
     _add_generators(n, cf_timeseries, assumptions["res"], wacc, multisite=multisite)
     _add_battery(n, assumptions["battery"], wacc, bus=elec_bus)
 
@@ -180,7 +191,8 @@ def build_network(
         _add_dri_load(n, el_mw, el_efficiency, plant["availability_target"])
     else:
         steel_t_per_h = plant["steel_mt_per_year"] * 1e6 / HOURS_PER_YEAR
-        _add_steel_load(n, steel_t_per_h)
+        _add_steel_load(n, steel_t_per_h,
+                        bus=DELIVERED_STEEL_BUS if deliver_steel else "steel")
         _add_steel_store(n, assumptions["steel_store"], wacc, steel_t_per_h)
         if route in _H2_DRI_ROUTES:
             _add_dri_link(n, plant, assumptions["dri-h2"], wacc, elec_bus)
@@ -196,10 +208,12 @@ def build_network(
             # other route hands the EAF hot metal or hot sponge iron, and the
             # iron bus just balances the two links hour by hour.
             _add_iron_store(n, assumptions["iron_store"], wacc)
+        if deliver_steel:
+            _add_steel_transport(n, transport_cfg, transport_legs)
         if route in _EXPORT_ROUTES:
-            if transport_km is None:
-                raise ValueError(f"route '{route}' needs transport_km")
-            _add_iron_transport(n, assumptions["transport"], transport_km)
+            if transport_legs is None:
+                raise ValueError(f"route '{route}' needs transport_legs")
+            _add_iron_transport(n, transport_cfg, transport_legs)
             # The destination EAF buys its power where it stands, not where the
             # iron was made. A flat price, because a furnace fed from a
             # stockpile has no reason to chase the hourly market — and because
@@ -226,7 +240,8 @@ def build_network(
 
 
 def _add_carriers(
-    n: pypsa.Network, res_techs: list[str], route: str, multisite: bool = False
+    n: pypsa.Network, res_techs: list[str], route: str, multisite: bool = False,
+    deliver_steel: bool = False,
 ) -> None:
     """Register every carrier referenced by a component, before those components are added.
 
@@ -250,7 +265,7 @@ def _add_carriers(
         base += ["ew"]
     if route in _MOE_ROUTES:
         base += ["moe"]
-    if route in _EXPORT_ROUTES:
+    if route in _EXPORT_ROUTES or deliver_steel:
         base += ["transport"]
     if multisite:
         base.append("HVDC")
@@ -258,7 +273,7 @@ def _add_carriers(
     n.add("Carrier", carriers)
 
 
-def _route_process_buses(route: str) -> list[tuple[str, str]]:
+def _route_process_buses(route: str, deliver_steel: bool = False) -> list[tuple[str, str]]:
     """(bus name, carrier) pairs for the process buses the route needs."""
     buses = []
     if route in _H2_ROUTES:
@@ -272,24 +287,27 @@ def _route_process_buses(route: str) -> list[tuple[str, str]]:
         buses.append((DESTINATION_ELEC_BUS, "AC"))
     if route != "h2-only":
         buses.append(("steel", "steel"))
+    if deliver_steel:
+        buses.append((DELIVERED_STEEL_BUS, "steel"))
     return buses
 
 
-def _add_buses(n: pypsa.Network, route: str) -> None:
+def _add_buses(n: pypsa.Network, route: str, deliver_steel: bool = False) -> None:
     """Add the electricity (AC) bus plus the route's process buses."""
     n.add("Bus", "electricity", carrier="AC")
-    for name, carrier in _route_process_buses(route):
+    for name, carrier in _route_process_buses(route, deliver_steel):
         n.add("Bus", name, carrier=carrier)
 
 
 def _add_buses_multisite(
-    n: pypsa.Network, sites: pd.DataFrame, demand_site: str, route: str
+    n: pypsa.Network, sites: pd.DataFrame, demand_site: str, route: str,
+    deliver_steel: bool = False,
 ) -> None:
     """Add one AC bus per site (with lon/lat coords) plus the demand-site process buses."""
     for site_id, row in sites.iterrows():
         n.add("Bus", f"electricity_{site_id}", carrier="AC", x=row["x"], y=row["y"])
     dem = sites.loc[demand_site]
-    for name, carrier in _route_process_buses(route):
+    for name, carrier in _route_process_buses(route, deliver_steel):
         n.add("Bus", name, carrier=carrier, x=dem["x"], y=dem["y"])
 
 
@@ -427,9 +445,9 @@ def _add_dri_load(
     n.add("Load", "dri_load", bus="hydrogen", carrier="H2", p_set=h2_demand_mw_lhv)
 
 
-def _add_steel_load(n: pypsa.Network, steel_t_per_h: float) -> None:
-    """Add the flat steel demand (t/h) on the steel bus."""
-    n.add("Load", "steel_load", bus="steel", carrier="steel", p_set=steel_t_per_h)
+def _add_steel_load(n: pypsa.Network, steel_t_per_h: float, bus: str = "steel") -> None:
+    """Add the flat steel demand (t/h), at the plant gate or at the destination."""
+    n.add("Load", "steel_load", bus=bus, carrier="steel", p_set=steel_t_per_h)
 
 
 def _process_capital_cost(cfg: dict, wacc: float, output_t_per_p0_unit: float) -> float:
@@ -607,15 +625,19 @@ def _add_iron_store(n: pypsa.Network, store_cfg: dict, wacc: float) -> None:
     )
 
 
-def _add_iron_transport(
-    n: pypsa.Network, transport_cfg: dict, distance_km: float
-) -> None:
-    """Ship iron (t/h) from the producing area to the destination bus.
+def _freight_eur_per_t(transport_cfg: dict, legs: dict, commodity: str) -> float:
+    """What one t of `commodity` costs to move over the run's legs."""
+    return sum(km * transport_cfg[mode][f"{commodity}_eur_per_t_km"]
+               for mode, km in legs.items())
 
-    Cost is per t and km with no capacity decision and no capex: ships are
-    chartered, not built. Nor is there a transit time — iron arrives the hour
-    it leaves, so the weeks of stock floating on the ocean are free, which
-    understates the inventory the chain really needs.
+
+def _add_iron_transport(n: pypsa.Network, transport_cfg: dict, legs: dict) -> None:
+    """Carry iron (t/h) from the producing area to the destination bus.
+
+    Cost is per t and km with no capacity decision and no capex: ships and
+    wagons are chartered, not built. Nor is there a transit time — iron arrives
+    the hour it leaves, so the weeks of stock floating on the ocean are free,
+    which understates the inventory the chain really needs.
     """
     n.add(
         "Link",
@@ -624,10 +646,30 @@ def _add_iron_transport(
         bus1=DESTINATION_IRON_BUS,
         carrier="transport",
         p_nom_extendable=True,
-        length=distance_km,
+        length=sum(legs.values()),
         efficiency=1.0,
         capital_cost=0.0,
-        marginal_cost=transport_cfg["iron_eur_per_t_km"] * distance_km,
+        marginal_cost=_freight_eur_per_t(transport_cfg, legs, "iron"),
+    )
+
+
+def _add_steel_transport(n: pypsa.Network, transport_cfg: dict, legs: dict) -> None:
+    """Carry finished steel (t/h) from the plant gate to the destination.
+
+    The other half of the question the export routes ask: 1.1 t of iron over
+    these legs, or 1 t of steel over the same ones.
+    """
+    n.add(
+        "Link",
+        "steel_transport",
+        bus0="steel",
+        bus1=DELIVERED_STEEL_BUS,
+        carrier="transport",
+        p_nom_extendable=True,
+        length=sum(legs.values()),
+        efficiency=1.0,
+        capital_cost=0.0,
+        marginal_cost=_freight_eur_per_t(transport_cfg, legs, "steel"),
     )
 
 
