@@ -643,8 +643,13 @@ def _add_iron_store(n: pypsa.Network, store_cfg: dict, wacc: float) -> None:
 
 
 def _freight_eur_per_t(transport_cfg: dict, legs: dict, commodity: str) -> float:
-    """What one t of `commodity` costs to move over the run's legs."""
-    return sum(km * transport_cfg[mode][f"{commodity}_eur_per_t_km"]
+    """What one t of `commodity` costs to move over the run's legs.
+
+    Each leg pays a charge that does not depend on distance and one that does,
+    so a short haul stays dear per km the way real freight is.
+    """
+    rates = {mode: transport_cfg[mode][commodity] for mode in legs}
+    return sum(rates[mode]["eur_per_t"] + km * rates[mode]["eur_per_t_km"]
                for mode, km in legs.items())
 
 
