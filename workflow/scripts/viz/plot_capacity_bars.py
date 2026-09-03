@@ -67,6 +67,7 @@ _BAR_WIDTH = 0.12
 PROCESS_BARS = [
     ("dri_h2_t_per_h", "H2-DRI shaft (t/h iron)",   blue_gray),
     ("dri_ng_t_per_h", "NG-DRI shaft (t/h iron)",   light_blue_gray),
+    ("dri_mix_t_per_h", "Blended shaft (t/h iron)", green),
     ("eaf_t_per_h",    "EAF (t/h steel)",           very_dark_gray),
     ("moe_t_per_h",    "MOE (t/h steel)",           highlight_blue),
     ("ew_t_per_h",     "Electrowinning (t/h iron)", turquois),

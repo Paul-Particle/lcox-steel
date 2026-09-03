@@ -34,7 +34,7 @@ def route_stem(route: str) -> str:
 # An export route always charges cold. Its iron went across an ocean.
 _IRON_SOURCE = {
     "h2-dri-eaf": "dri-h2", "ng-dri-eaf": "dri-ng",
-    "mix-dri-eaf": "dri-h2",                # both shafts run on DR pellets
+    "mix-dri-eaf": "dri-mix",
     "moe-eaf": "moe", "ew-eaf": "ew",
 }
 _CHARGE_STATE = {"h2-dri-eaf": "hot", "ng-dri-eaf": "hot", "mix-dri-eaf": "hot",

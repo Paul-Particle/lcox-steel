@@ -10,9 +10,9 @@ from the assumptions, which only carry the numbers):
   h2-only:     electricity → electrolyser → H2 → flat H2 load (LCOH model)
   h2-dri-eaf:  electricity → electrolyser → H2 → DRI shaft → iron → EAF → steel
   ng-dri-eaf:  fossil benchmark — gas supply → NG-DRI shaft → iron → EAF → steel
-  mix-dri-eaf: H2 and NG DRI shafts side by side on one iron bus; the
-               optimiser picks the production split (each shaft pays its own
-               capex — a greenfield fuel choice, not co-firing in one shaft)
+  mix-dri-eaf: one shaft reducing with a blend — H2 and gas both feed a
+               reductant bus and the optimiser picks the mix, paying for one
+               furnace rather than two (see `_add_mix_dri_links`)
   moe-eaf:     electricity → molten oxide electrolysis → iron → EAF → steel
   ew-eaf:      electricity → iron electrowinning → iron → EAF → steel
 
@@ -29,6 +29,8 @@ Bus unit convention:
   electricity buses: MW AC
   hydrogen bus:      MW H2 LHV  (1 MWh H2 LHV ≈ 30 kg H2 at LHV ≈ 33.33 kWh/kg)
   gas bus:           MW CH4 LHV (supplied at a flat price incl. optional CO2 cost)
+  reductant bus:     MW LHV on an H2-equivalent basis, for mix-dri-eaf — gas
+                     enters derated by what reforming costs (see below)
   iron bus:          t/h  (sponge iron for the DRI routes, hot metal for
                      moe-eaf, electrolytic iron plates for ew-eaf)
   hbi bus:           t/h  (briquettes, on a DRI export route only)
@@ -78,7 +80,8 @@ HOURS_PER_YEAR = 8760.0
 # groups say what makes iron, and `is_export` says what happens to it after.
 _H2_ROUTES  = ("h2-only", "h2-dri-eaf", "mix-dri-eaf")   # electrolyser + H2 buffer
 _GAS_ROUTES = ("ng-dri-eaf", "mix-dri-eaf")              # gas bus + NG-DRI shaft
-_H2_DRI_ROUTES = ("h2-dri-eaf", "mix-dri-eaf")           # H2 DRI shaft
+_H2_DRI_ROUTES = ("h2-dri-eaf",)                         # single-fuel H2 shaft
+_MIX_ROUTES = ("mix-dri-eaf",)                           # one shaft, blended feed
 _DRI_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf")
 _IRON_ROUTES = (*_DRI_ROUTES, "moe-eaf", "ew-eaf")
 
@@ -198,7 +201,13 @@ def build_network(
             _add_dri_link(n, plant, assumptions["dri-h2"], wacc, elec_bus)
         if stem in _GAS_ROUTES:
             _add_gas_supply(n, assumptions["natural_gas"])
+        if stem == "ng-dri-eaf":
             _add_ng_dri_link(n, assumptions["dri-ng"], wacc, elec_bus)
+        if stem in _MIX_ROUTES:
+            _add_mix_dri_links(
+                n, plant, assumptions["dri-mix"], assumptions["dri-ng"], wacc, elec_bus,
+                steel_t_per_h=steel_t_per_h,
+            )
         if stem == "moe-eaf":
             _add_moe_link(n, assumptions["moe"], wacc, elec_bus)
         if stem == "ew-eaf":
@@ -280,6 +289,8 @@ def _add_carriers(
         base += ["steel"]
     if stem in _H2_DRI_ROUTES:
         base += ["dri-h2"]
+    if stem in _MIX_ROUTES:
+        base += ["reductant", "dri-mix"]
     if stem == "ew-eaf":
         base += ["ew"]
     if stem == "moe-eaf":
@@ -303,6 +314,8 @@ def _route_process_buses(route: str, deliver_steel: bool = False) -> list[tuple[
         buses.append(("hydrogen", "H2"))
     if stem in _GAS_ROUTES:
         buses.append(("gas", "gas"))
+    if stem in _MIX_ROUTES:
+        buses.append(("reductant", "reductant"))
     if stem in _IRON_ROUTES:
         buses.append(("iron", "iron"))
     if is_export and stem in _DRI_ROUTES:
@@ -516,6 +529,61 @@ def _add_dri_link(
         p_min_pu=dri_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(dri_cfg, wacc, t_iron_per_mwh_h2),
         marginal_cost=dri_cfg["ore_eur_per_t"] * t_iron_per_mwh_h2,
+    )
+
+
+def _add_mix_dri_links(
+    n: pypsa.Network, plant: dict, mix_cfg: dict, dri_ng_cfg: dict,
+    wacc: float, elec_bus: str, steel_t_per_h: float,
+) -> None:
+    """One shaft on a blended reductant: H2 and gas both feed it, it makes iron.
+
+    The reductant bus is MW LHV on an H2-equivalent basis. Hydrogen enters
+    one-for-one and carries the preheat electricity the gas feed does not need;
+    natural gas enters derated by the ratio of the two single-fuel shafts' own
+    intensities, which is what reforming costs. Both corners therefore land on
+    the routes either side: all-H2 reproduces h2-dri-eaf, all-gas ng-dri-eaf.
+
+    What makes the blend worth having is that there is one furnace to pay for,
+    not two. The small fixed store is a smoothing buffer on top of that.
+    """
+    reductant_mwh_per_t = plant["h2_intensity_kg_per_t_dri"] * H2_LHV_KWH_PER_KG / 1000.0
+    t_iron_per_mwh = 1.0 / reductant_mwh_per_t
+
+    n.add(
+        "Link", "reductant-h2",
+        bus0="hydrogen", bus1="reductant", bus2=elec_bus,
+        carrier="reductant",
+        p_nom_extendable=True,
+        efficiency=1.0,
+        efficiency2=-mix_cfg["h2_preheat_el_mwh_per_t"] * t_iron_per_mwh,
+    )
+    n.add(
+        "Link", "reductant-ng",
+        bus0="gas", bus1="reductant",
+        carrier="reductant",
+        p_nom_extendable=True,
+        efficiency=reductant_mwh_per_t / dri_ng_cfg["gas_mwh_per_t"],
+    )
+    n.add(
+        "Link", "dri-mix",
+        bus0="reductant", bus1="iron", bus2=elec_bus,
+        carrier="dri-mix",
+        p_nom_extendable=True,
+        efficiency=t_iron_per_mwh,
+        efficiency2=-mix_cfg["el_mwh_per_t"] * t_iron_per_mwh,
+        p_min_pu=mix_cfg["p_min_pu"],
+        capital_cost=_process_capital_cost(mix_cfg, wacc, t_iron_per_mwh),
+        marginal_cost=mix_cfg["ore_eur_per_t"] * t_iron_per_mwh,
+    )
+    nominal_mwh_per_h = (
+        steel_t_per_h * mix_cfg["iron_t_per_t_steel"] * reductant_mwh_per_t
+    )
+    n.add(
+        "Store", "reductant_store",
+        bus="reductant", carrier="reductant",
+        e_nom=mix_cfg["reductant_store_hours"] * nominal_mwh_per_h,
+        e_cyclic=True,
     )
 
 
