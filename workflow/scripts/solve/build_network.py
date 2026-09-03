@@ -20,10 +20,8 @@ Bus unit convention:
   electricity buses: MW AC
   hydrogen bus:      MW H2 LHV  (1 MWh H2 LHV ≈ 30 kg H2 at LHV ≈ 33.33 kWh/kg)
   gas bus:           MW CH4 LHV (supplied at a flat price incl. optional CO2 cost)
-  iron bus:          t/h  (sponge iron / HBI for the DRI routes, electrolytic
-                     iron plates for ew-eaf, hot metal for moe-eaf — all
-                     treated as freely storable, which hot metal is not; the
-                     no-store topology moe-eaf really wants is a separate fix)
+  iron bus:          t/h  (sponge iron for the DRI routes, hot metal for
+                     moe-eaf, electrolytic iron plates for ew-eaf)
   steel bus:         t/h  (liquid steel)
 
 Process steps that consume electricity alongside their bus0 feed (DRI shaft,
@@ -167,7 +165,11 @@ def build_network(
             _add_moe_link(n, assumptions["moe"], wacc, elec_bus)
         if route == "ew-eaf":
             _add_ew_link(n, assumptions["ew"], wacc, elec_bus)
-        _add_iron_store(n, assumptions["iron_store"], wacc)
+            # Electrowon plates are the only iron this side of the EAF that is
+            # a cold solid, so they are the only iron that can sit in a pile.
+            # Every other route hands the EAF hot metal or hot sponge iron and
+            # the iron bus just balances the two links hour by hour.
+            _add_iron_store(n, assumptions["iron_store"], wacc)
         _add_eaf_link(n, assumptions["eaf"], wacc, elec_bus)
 
     if multisite:
@@ -537,6 +539,7 @@ def _add_ew_link(n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str) -> 
 def _add_iron_store(n: pypsa.Network, store_cfg: dict, wacc: float) -> None:
     """Add the extendable, cyclic iron stockpile (t) on the iron bus.
 
+    Only routes whose iron is a cold solid get one — see `build_network`.
     Deliberately cheap-but-not-free (see assumptions) so the optimal stockpile
     size is unique and meaningful in reports.
     """

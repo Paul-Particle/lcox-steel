@@ -96,10 +96,8 @@ moe:
   # Molten oxide electrolysis (Boston Metal type), electricity → liquid iron.
   # ~4 MWh/t and ~$1000/(t/yr) per Boston Metal's public estimates; capex
   # highly uncertain (pre-commercial). The cell can barely turn down (freeze
-  # risk), hence p_min_pu near 1. Output goes to the iron bus and on through
-  # the EAF — note the iron store then buffers hot metal, which is not
-  # physical and is the reason this route wants its own no-store topology
-  # (tracked separately from this naming pass).
+  # risk), hence p_min_pu near 1. Output is hot metal, so there is no store on
+  # the iron bus: the cell feeds the EAF directly, hour for hour.
   capex_per_t_per_year_eur: 900
   opex_per_t_per_year_eur: 27         # ≈3 % of capex
   lifetime_years: 20
@@ -146,7 +144,8 @@ dri-ng:
   p_min_pu: 0.5
 
 iron_store:
-  # HBI / iron-plate stockpile on the iron bus (shed + handling). Cheap but
+  # Iron-plate stockpile on the iron bus (shed + handling), for ew-eaf only —
+  # the one route whose iron reaches the EAF as a cold solid. Cheap but
   # deliberately non-zero so the optimal store size is unique and reportable.
   capex_per_t_eur: 20
   lifetime_years: 25
