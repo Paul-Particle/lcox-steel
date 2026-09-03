@@ -427,11 +427,15 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
     # How much of the iron came from the H2 shaft (production share, not capacity
     # share). Emitted for any DRI route so a pure H2-DRI reads 1.0 and a pure
     # NG-DRI 0.0 — not a missing value that downstream would coerce to 0.
-    if "dri-h2" in n.links.index or "dri-ng" in n.links.index:
-        iron_h2 = -float(n.links_t.p1["dri-h2"].sum()) if "dri-h2" in n.links.index else 0.0
-        iron_ng = -float(n.links_t.p1["dri-ng"].sum()) if "dri-ng" in n.links.index else 0.0
-        total = iron_h2 + iron_ng
-        summary["iron_from_h2_share"] = iron_h2 / total if total else float("nan")
+    # On mix-dri-eaf the split happens on the reductant bus, one shaft
+    # upstream; on the single-fuel routes it is the shafts themselves.
+    h2_link, ng_link = (("reductant-h2", "reductant-ng")
+                        if "dri-mix" in n.links.index else ("dri-h2", "dri-ng"))
+    if h2_link in n.links.index or ng_link in n.links.index:
+        from_h2 = -float(n.links_t.p1[h2_link].sum()) if h2_link in n.links.index else 0.0
+        from_ng = -float(n.links_t.p1[ng_link].sum()) if ng_link in n.links.index else 0.0
+        total = from_h2 + from_ng
+        summary["iron_from_h2_share"] = from_h2 / total if total else float("nan")
 
     if "iron_store" in n.stores.index:
         store_t = n.stores.at["iron_store", "e_nom_opt"]
