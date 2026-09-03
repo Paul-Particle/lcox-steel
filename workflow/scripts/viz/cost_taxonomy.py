@@ -45,6 +45,7 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "workflow"))
 
 from common._report_schema import field_stem  # noqa: E402
+from common._runs import EAF_CHARGE  # noqa: E402
 from scripts.solve._helpers_solve import annuity_factor  # noqa: E402
 
 # Parent groups, in stack order (bottom -> top), with the colour the coarse
@@ -184,8 +185,10 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
         if "ore_eur_per_t" in assumptions[link] and _value(row, f"plant_{field_stem(link)}_eur_per_t")
     ]
     if _value(row, "plant_eaf_eur_per_t"):
+        _, iron_source = EAF_CHARGE[row["route"]]
         ore_quotes.append(("iron per t steel",
-                           f"{assumptions['eaf']['iron_t_per_t_steel']:.2f} t (melting yield)"))
+                           f"{assumptions[iron_source]['iron_t_per_t_steel']:.2f} t "
+                           "(gangue and melting loss)"))
     add("ore", _value(row, "ore_eur_per_t_steel") or 0.0, ore_quotes)
     add("consumables", _value(row, "consumables_eur_per_t_steel") or 0.0)
 
@@ -386,7 +389,9 @@ def alternative_lcos_bands(row: pd.Series, assumptions: dict,
     hydrogen_electricity = ((_value(row, "lcoh_electricity_eur_per_mwh_lhv") or 0.0)
                             * h2_mwh_lhv / steel_t)
     eaf_built = (_value(row, "eaf_t_per_h_opt") or 0.0) > 0
-    eaf_mwh_per_t = assumptions["eaf"]["el_mwh_per_t"] if eaf_built else 0.0
+    charge_state, _ = EAF_CHARGE[row["route"]]
+    eaf_mwh_per_t = (assumptions["eaf"]["charge"][charge_state]["el_mwh_per_t"]
+                     if eaf_built else 0.0)
     # An export route's furnace melts on bought power at the destination, so
     # its band is priced there rather than at the origin's levelised cost.
     if str(row["route"]).endswith("-export"):

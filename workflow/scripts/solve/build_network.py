@@ -32,6 +32,12 @@ Bus unit convention:
                      route has a second iron bus at the destination)
   steel bus:         t/h  (liquid steel)
 
+What the steel bus carries is liquid steel at the furnace, alloyed and ready
+to tap. Casting, rolling and finishing are not in the model, on either side of
+a comparison — so an LCOS here is not a mill's selling cost, and the routes are
+only comparable to each other. Alloys, electrodes, fluxes and carbon *are* in,
+inside the EAF's consumables, and cost the same on every route.
+
 Process steps that consume electricity alongside their bus0 feed (DRI shaft,
 EAF) are PyPSA multi-links: bus2 is an electricity bus and efficiency2 is
 negative, so p2 = -efficiency2 * p0 is the electricity withdrawal.
@@ -51,7 +57,7 @@ import yaml
 from _helpers_solve import annuity_factor, dri_to_el_mw, haversine_km
 
 from common._constants import H2_LHV_KWH_PER_KG
-from common._runs import ROUTES
+from common._runs import EAF_CHARGE, ROUTES
 
 HOURS_PER_YEAR = 8760.0
 
@@ -208,6 +214,10 @@ def build_network(
             # other route hands the EAF hot metal or hot sponge iron, and the
             # iron bus just balances the two links hour by hour.
             _add_iron_store(n, assumptions["iron_store"], wacc)
+        # How hot the iron arrives, and what made it: the first sets the
+        # furnace's electricity, the second how much iron a t of steel takes.
+        charge_state, iron_source = EAF_CHARGE[route]
+
         if deliver_steel:
             _add_steel_transport(n, transport_cfg, transport_legs)
         if route in _EXPORT_ROUTES:
@@ -225,10 +235,15 @@ def build_network(
                 assumptions["grid"], wacc,
                 bus=DESTINATION_ELEC_BUS, name="destination_supply",
             )
-            _add_eaf_link(n, assumptions["eaf"], wacc, DESTINATION_ELEC_BUS,
-                          bus0=DESTINATION_IRON_BUS)
+            eaf_elec_bus, eaf_iron_bus = DESTINATION_ELEC_BUS, DESTINATION_IRON_BUS
         else:
-            _add_eaf_link(n, assumptions["eaf"], wacc, elec_bus)
+            eaf_elec_bus, eaf_iron_bus = elec_bus, "iron"
+        _add_eaf_link(
+            n, assumptions["eaf"], wacc, eaf_elec_bus,
+            el_mwh_per_t=assumptions["eaf"]["charge"][charge_state]["el_mwh_per_t"],
+            iron_t_per_t_steel=assumptions[iron_source]["iron_t_per_t_steel"],
+            bus0=eaf_iron_bus,
+        )
 
     if multisite:
         _add_transmission(n, sites, demand_site, assumptions["transmission"], wacc)
@@ -543,14 +558,16 @@ def _add_ng_dri_link(
 
 
 def _add_eaf_link(
-    n: pypsa.Network, eaf_cfg: dict, wacc: float, elec_bus: str, bus0: str = "iron"
+    n: pypsa.Network, eaf_cfg: dict, wacc: float, elec_bus: str,
+    el_mwh_per_t: float, iron_t_per_t_steel: float, bus0: str = "iron",
 ) -> None:
     """EAF: iron (t/h) → steel (t/h), drawing melting electricity.
 
-    Per-t-steel quotes (electricity, consumables, capex) are scaled by the
-    iron→steel yield onto the link's p0 side (t/h iron).
+    Electricity and yield come from the caller because both depend on the iron
+    the route delivers, not on the furnace. Per-t-steel quotes (electricity,
+    consumables, capex) are scaled by the yield onto the link's p0 side.
     """
-    t_steel_per_t_iron = 1.0 / eaf_cfg["iron_t_per_t_steel"]
+    t_steel_per_t_iron = 1.0 / iron_t_per_t_steel
     n.add(
         "Link",
         "eaf",
@@ -560,7 +577,7 @@ def _add_eaf_link(
         carrier="eaf",
         p_nom_extendable=True,
         efficiency=t_steel_per_t_iron,
-        efficiency2=-eaf_cfg["el_mwh_per_t"] * t_steel_per_t_iron,
+        efficiency2=-el_mwh_per_t * t_steel_per_t_iron,
         p_min_pu=eaf_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(eaf_cfg, wacc, t_steel_per_t_iron),
         marginal_cost=eaf_cfg["consumables_eur_per_t"] * t_steel_per_t_iron,
