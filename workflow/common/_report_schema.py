@@ -65,7 +65,7 @@ INPUT_TECHS = ("solar", "wind-onshore", "wind-offshore", "grid")
 RES_TECHS = ("solar", "wind-onshore", "wind-offshore")
 
 # The steel chain's links, by the id `build_network` gives them.
-PROCESS_LINKS = ("dri-h2", "dri-ng", "eaf", "moe", "ew")
+PROCESS_LINKS = ("dri-h2", "dri-ng", "eaf", "moe", "ew", "briquetting")
 
 # Annualised cost groups, in the order `compile_report._cost_breakdown` builds
 # them. Together they are the total annual cost.

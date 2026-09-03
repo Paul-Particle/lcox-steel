@@ -165,10 +165,23 @@ dri-ng:
   iron_t_per_t_steel: 1.10            # same pellets as the H2 shaft, same yield
   p_min_pu: 0.5
 
+briquetting:
+  # Hot briquetting presses sponge iron leaving the shaft at ~700 °C into dense
+  # briquettes (HBI) that will keep. Un-briquetted DRI re-oxidises and will not
+  # travel, which is why only the export routes build one. The press itself is
+  # mechanical and cheap to run; what the route really pays for this step is
+  # downstream, where the briquettes reach the furnace cold.
+  capex_per_t_per_year_eur: 40
+  opex_per_t_per_year_eur: 1.2        # ≈3 % of capex
+  lifetime_years: 20
+  el_mwh_per_t: 0.025                 # press, screening and handling
+  yield_t_per_t: 0.98                 # fines lost on screening
+
 iron_store:
-  # Iron-plate stockpile on the iron bus (shed + handling), for ew-eaf only —
-  # the one route whose iron reaches the EAF as a cold solid. Cheap but
-  # deliberately non-zero so the optimal store size is unique and reportable.
+  # Stockpile of cold solid iron — electrowon plates for ew-eaf, briquettes for
+  # an export route waiting on a ship (shed + handling). Routes that hand the
+  # furnace hot metal or hot sponge iron have nowhere to put it and get none.
+  # Cheap but deliberately non-zero so the optimal size is unique and reportable.
   capex_per_t_eur: 20
   lifetime_years: 25
 

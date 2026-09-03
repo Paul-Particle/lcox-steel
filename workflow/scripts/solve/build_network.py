@@ -16,20 +16,23 @@ from the assumptions, which only carry the numbers):
   moe-eaf:     electricity → molten oxide electrolysis → iron → EAF → steel
   ew-eaf:      electricity → iron electrowinning → iron → EAF → steel
 
-An `-export` route makes iron in the scenario's area and melts it somewhere
-else: the iron is shipped to a fixed destination and the EAF sits there, on
-destination electricity. Only routes whose iron is already a cold solid have
-one, because that is what survives a ship — moe-eaf-export casts its iron
-rather than pouring it into the furnace, and pays for that in the EAF, which
-has to melt from cold. Sponge iron needs briquetting first, which is not built.
+Every steel route also has an `-export` twin, which makes iron in the
+scenario's area and melts it somewhere else: the same chain up to the iron,
+then a stockpile, a freight leg, and an EAF at the destination running on
+destination electricity. What survives a ship is cold solid iron, so the DRI
+routes press their sponge iron into briquettes first, while moe-eaf-export and
+ew-eaf-export need no such step — the MOE cell simply lets its iron go cold
+instead of pouring it into the furnace. Either way the iron arrives cold and
+the export route pays the full melt, which is what the domestic twin saves.
 
 Bus unit convention:
   electricity buses: MW AC
   hydrogen bus:      MW H2 LHV  (1 MWh H2 LHV ≈ 30 kg H2 at LHV ≈ 33.33 kWh/kg)
   gas bus:           MW CH4 LHV (supplied at a flat price incl. optional CO2 cost)
   iron bus:          t/h  (sponge iron for the DRI routes, hot metal for
-                     moe-eaf, electrolytic iron plates for ew-eaf; an export
-                     route has a second iron bus at the destination)
+                     moe-eaf, electrolytic iron plates for ew-eaf)
+  hbi bus:           t/h  (briquettes, on a DRI export route only)
+  destination buses: the far side of the freight leg — iron, and its own AC
   steel bus:         t/h  (liquid steel)
 
 What the steel bus carries is liquid steel at the furnace, alloyed and ready
@@ -57,28 +60,24 @@ import yaml
 from _helpers_solve import annuity_factor, dri_to_el_mw, haversine_km
 
 from common._constants import H2_LHV_KWH_PER_KG
-from common._runs import EAF_CHARGE, ROUTES
+from common._runs import EAF_CHARGE, ROUTES, route_stem
 
 HOURS_PER_YEAR = 8760.0
 
 # Route groups used when wiring buses/components. Every steel route reaches
 # the steel bus through the iron bus and the shared EAF link.
+#
+# These are tested against the route *stem*, because an `-export` route builds
+# the same chain as the route it is named after and then adds a tail. So the
+# groups say what makes iron, and `is_export` says what happens to it after.
 _H2_ROUTES  = ("h2-only", "h2-dri-eaf", "mix-dri-eaf")   # electrolyser + H2 buffer
 _GAS_ROUTES = ("ng-dri-eaf", "mix-dri-eaf")              # gas bus + NG-DRI shaft
 _H2_DRI_ROUTES = ("h2-dri-eaf", "mix-dri-eaf")           # H2 DRI shaft
-_MOE_ROUTES = ("moe-eaf", "moe-eaf-export")
-_EW_ROUTES  = ("ew-eaf", "ew-eaf-export")
-_IRON_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf",
-                *_MOE_ROUTES, *_EW_ROUTES)
+_DRI_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf")
+_IRON_ROUTES = (*_DRI_ROUTES, "moe-eaf", "ew-eaf")
 
-# Iron shipped to a destination EAF, which runs on destination electricity.
-_EXPORT_ROUTES = ("moe-eaf-export", "ew-eaf-export")
-
-# Routes whose iron reaches the furnace as a cold solid, and so can sit in a
-# pile. Everything else hands the EAF hot metal or hot sponge iron.
-_COLD_IRON_ROUTES = ("ew-eaf", "moe-eaf-export", "ew-eaf-export")
-
-# Bus names on the far side of the sea.
+# Bus names for iron that has been made storable, and for the far side of the sea.
+HBI_BUS = "hbi"
 DESTINATION_IRON_BUS = "iron_destination"
 DESTINATION_ELEC_BUS = "electricity_destination"
 
@@ -148,10 +147,12 @@ def build_network(
     wacc = assumptions["finance"]["default_wacc"]
     plant = assumptions["plant"]
     transport_cfg = assumptions["transport"]
+    stem = route_stem(route)
+    is_export = route != stem
     # An export route's steel is made at the destination, so it is already
     # where it is wanted and only the iron pays freight. h2-only makes none.
     deliver_steel = (transport_cfg["deliver_finished_steel"]
-                     and route not in _EXPORT_ROUTES
+                     and not is_export
                      and route != "h2-only")
 
     multisite = sites is not None
@@ -172,10 +173,11 @@ def build_network(
         _add_buses_multisite(n, sites, demand_site, route, deliver_steel)
     else:
         _add_buses(n, route, deliver_steel)
+
     _add_generators(n, cf_timeseries, assumptions["res"], wacc, multisite=multisite)
     _add_battery(n, assumptions["battery"], wacc, bus=elec_bus)
 
-    if route in _H2_ROUTES:
+    if stem in _H2_ROUTES:
         el_cfg = assumptions["electrolyser"]
         el_efficiency = H2_LHV_KWH_PER_KG / el_cfg["efficiency_kwh_per_kg"]
         if route == "h2-only":
@@ -200,30 +202,38 @@ def build_network(
         _add_steel_load(n, steel_t_per_h,
                         bus=DELIVERED_STEEL_BUS if deliver_steel else "steel")
         _add_steel_store(n, assumptions["steel_store"], wacc, steel_t_per_h)
-        if route in _H2_DRI_ROUTES:
+        if stem in _H2_DRI_ROUTES:
             _add_dri_link(n, plant, assumptions["dri-h2"], wacc, elec_bus)
-        if route in _GAS_ROUTES:
+        if stem in _GAS_ROUTES:
             _add_gas_supply(n, assumptions["natural_gas"])
             _add_ng_dri_link(n, assumptions["dri-ng"], wacc, elec_bus)
-        if route in _MOE_ROUTES:
+        if stem == "moe-eaf":
             _add_moe_link(n, assumptions["moe"], wacc, elec_bus)
-        if route in _EW_ROUTES:
+        if stem == "ew-eaf":
             _add_ew_link(n, assumptions["ew"], wacc, elec_bus)
-        if route in _COLD_IRON_ROUTES:
-            # Cold solid iron is the only iron that can sit in a pile. Every
-            # other route hands the EAF hot metal or hot sponge iron, and the
-            # iron bus just balances the two links hour by hour.
-            _add_iron_store(n, assumptions["iron_store"], wacc)
+
+        # Where this route's iron waits, if it is in a state that can wait at
+        # all. Sponge iron has to be briquetted first; hot metal never can.
+        if is_export and stem in _DRI_ROUTES:
+            _add_briquetting_link(n, assumptions["briquetting"], wacc, elec_bus)
+            cold_iron_bus = HBI_BUS
+        elif is_export or stem == "ew-eaf":
+            cold_iron_bus = "iron"
+        else:
+            cold_iron_bus = None
+        if cold_iron_bus:
+            _add_iron_store(n, assumptions["iron_store"], wacc, bus=cold_iron_bus)
+
         # How hot the iron arrives, and what made it: the first sets the
         # furnace's electricity, the second how much iron a t of steel takes.
         charge_state, iron_source = EAF_CHARGE[route]
 
         if deliver_steel:
             _add_steel_transport(n, transport_cfg, transport_legs)
-        if route in _EXPORT_ROUTES:
+        if is_export:
             if transport_legs is None:
                 raise ValueError(f"route '{route}' needs transport_legs")
-            _add_iron_transport(n, transport_cfg, transport_legs)
+            _add_iron_transport(n, transport_cfg, transport_legs, bus0=cold_iron_bus)
             # The destination EAF buys its power where it stands, not where the
             # iron was made. A flat price, because a furnace fed from a
             # stockpile has no reason to chase the hourly market — and because
@@ -265,22 +275,26 @@ def _add_carriers(
     constraints, grouped stats). Only the carriers the chosen route actually
     uses are added; the HVDC carrier is only added in multi-site mode.
     """
+    stem = route_stem(route)
+    is_export = route != stem
     base = ["AC", "battery"]
-    if route in _H2_ROUTES:
+    if stem in _H2_ROUTES:
         base += ["H2", "electrolyser"]
-    if route in _GAS_ROUTES:
+    if stem in _GAS_ROUTES:
         base += ["gas", "dri-ng"]
-    if route in _IRON_ROUTES:
+    if stem in _IRON_ROUTES:
         base += ["iron", "eaf"]
     if route != "h2-only":
         base += ["steel"]
-    if route in _H2_DRI_ROUTES:
+    if stem in _H2_DRI_ROUTES:
         base += ["dri-h2"]
-    if route in _EW_ROUTES:
+    if stem == "ew-eaf":
         base += ["ew"]
-    if route in _MOE_ROUTES:
+    if stem == "moe-eaf":
         base += ["moe"]
-    if route in _EXPORT_ROUTES or deliver_steel:
+    if is_export and stem in _DRI_ROUTES:
+        base += ["briquetting"]
+    if is_export or deliver_steel:
         base += ["transport"]
     if multisite:
         base.append("HVDC")
@@ -290,14 +304,18 @@ def _add_carriers(
 
 def _route_process_buses(route: str, deliver_steel: bool = False) -> list[tuple[str, str]]:
     """(bus name, carrier) pairs for the process buses the route needs."""
+    stem = route_stem(route)
+    is_export = route != stem
     buses = []
-    if route in _H2_ROUTES:
+    if stem in _H2_ROUTES:
         buses.append(("hydrogen", "H2"))
-    if route in _GAS_ROUTES:
+    if stem in _GAS_ROUTES:
         buses.append(("gas", "gas"))
-    if route in _IRON_ROUTES:
+    if stem in _IRON_ROUTES:
         buses.append(("iron", "iron"))
-    if route in _EXPORT_ROUTES:
+    if is_export and stem in _DRI_ROUTES:
+        buses.append((HBI_BUS, "iron"))
+    if is_export:
         buses.append((DESTINATION_IRON_BUS, "iron"))
         buses.append((DESTINATION_ELEC_BUS, "AC"))
     if route != "h2-only":
@@ -622,10 +640,36 @@ def _add_ew_link(n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str) -> 
     )
 
 
-def _add_iron_store(n: pypsa.Network, store_cfg: dict, wacc: float) -> None:
-    """Add the extendable, cyclic iron stockpile (t) on the iron bus.
+def _add_briquetting_link(
+    n: pypsa.Network, briq_cfg: dict, wacc: float, elec_bus: str
+) -> None:
+    """Hot briquetting: sponge iron (t/h) → HBI (t/h), drawing press electricity.
 
-    Only routes whose iron is a cold solid get one — see `build_network`.
+    Sponge iron off the shaft re-oxidises and will not travel; pressed into
+    briquettes it keeps, which is what lets an export route stockpile and ship
+    it. The heat it carries out of the shaft is lost here — the route pays for
+    that at the far end, where the furnace charges cold.
+    """
+    n.add(
+        "Link",
+        "briquetting",
+        bus0="iron",
+        bus1=HBI_BUS,
+        bus2=elec_bus,
+        carrier="briquetting",
+        p_nom_extendable=True,
+        efficiency=briq_cfg["yield_t_per_t"],
+        efficiency2=-briq_cfg["el_mwh_per_t"] * briq_cfg["yield_t_per_t"],
+        capital_cost=_process_capital_cost(briq_cfg, wacc, briq_cfg["yield_t_per_t"]),
+    )
+
+
+def _add_iron_store(
+    n: pypsa.Network, store_cfg: dict, wacc: float, bus: str = "iron"
+) -> None:
+    """Add the extendable, cyclic iron stockpile (t), on whichever bus holds
+    iron this route can actually stack — see `build_network`.
+
     Deliberately cheap-but-not-free (see assumptions) so the optimal stockpile
     size is unique and meaningful in reports.
     """
@@ -633,7 +677,7 @@ def _add_iron_store(n: pypsa.Network, store_cfg: dict, wacc: float) -> None:
     n.add(
         "Store",
         "iron_store",
-        bus="iron",
+        bus=bus,
         carrier="iron",
         e_nom_extendable=True,
         e_cyclic=True,
@@ -653,7 +697,9 @@ def _freight_eur_per_t(transport_cfg: dict, legs: dict, commodity: str) -> float
                for mode, km in legs.items())
 
 
-def _add_iron_transport(n: pypsa.Network, transport_cfg: dict, legs: dict) -> None:
+def _add_iron_transport(
+    n: pypsa.Network, transport_cfg: dict, legs: dict, bus0: str = "iron"
+) -> None:
     """Carry iron (t/h) from the producing area to the destination bus.
 
     Cost is per t and km with no capacity decision and no capex: ships and
@@ -664,7 +710,7 @@ def _add_iron_transport(n: pypsa.Network, transport_cfg: dict, legs: dict) -> No
     n.add(
         "Link",
         "iron_transport",
-        bus0="iron",
+        bus0=bus0,
         bus1=DESTINATION_IRON_BUS,
         carrier="transport",
         p_nom_extendable=True,

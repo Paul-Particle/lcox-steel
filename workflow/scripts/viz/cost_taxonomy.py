@@ -67,6 +67,7 @@ PROCESS_PLANTS = [
     ("dri-ng", "NG-DRI shaft"),
     ("moe",    "MOE cell"),
     ("ew",     "Electrowinning"),
+    ("briquetting", "Briquetting press"),
     ("eaf",    "EAF"),
 ]
 

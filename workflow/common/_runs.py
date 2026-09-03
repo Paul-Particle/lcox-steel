@@ -13,14 +13,17 @@ Deliberately free of heavy imports: the Snakefile reads this on every DAG build.
 
 import pandas as pd
 
-ROUTES = ("h2-only", "h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf",
-          "moe-eaf-export", "ew-eaf-export")
+# An `-export` route builds the same chain as the route it is named after and
+# then ships the iron to a furnace somewhere else.
+_DOMESTIC_ROUTES = ("h2-only", "h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf",
+                    "moe-eaf", "ew-eaf")
+ROUTES = (*_DOMESTIC_ROUTES,
+          *(f"{route}-export" for route in _DOMESTIC_ROUTES if route != "h2-only"))
 
-# Reserved: an `-export` route ships its iron to the EU and melts it there. The
-# DRI routes cannot yet, because sponge iron has to be briquetted before it will
-# survive the trip and the briquetting step is not built. The two routes above
-# make cold solid iron to begin with and needed no such step.
-PLANNED_ROUTES = ("h2-dri-eaf-export", "ng-dri-eaf-export", "mix-dri-eaf-export")
+def route_stem(route: str) -> str:
+    """The domestic route an `-export` route is built from."""
+    return route.removesuffix("-export")
+
 
 # How the iron reaches the furnace, and which step made it. The first decides
 # how much electricity the EAF needs — melting from cold is most of an EAF's
@@ -29,14 +32,17 @@ PLANNED_ROUTES = ("h2-dri-eaf-export", "ng-dri-eaf-export", "mix-dri-eaf-export"
 # pellets bring some, and the electrolytic routes almost none.
 #
 # An export route always charges cold. Its iron went across an ocean.
+_IRON_SOURCE = {
+    "h2-dri-eaf": "dri-h2", "ng-dri-eaf": "dri-ng",
+    "mix-dri-eaf": "dri-h2",                # both shafts run on DR pellets
+    "moe-eaf": "moe", "ew-eaf": "ew",
+}
+_CHARGE_STATE = {"h2-dri-eaf": "hot", "ng-dri-eaf": "hot", "mix-dri-eaf": "hot",
+                 "moe-eaf": "liquid", "ew-eaf": "cold"}
 EAF_CHARGE = {
-    "h2-dri-eaf":     ("hot", "dri-h2"),
-    "ng-dri-eaf":     ("hot", "dri-ng"),
-    "mix-dri-eaf":    ("hot", "dri-h2"),    # both shafts run on DR pellets
-    "moe-eaf":        ("liquid", "moe"),
-    "ew-eaf":         ("cold", "ew"),
-    "moe-eaf-export": ("cold", "moe"),
-    "ew-eaf-export":  ("cold", "ew"),
+    route: ("cold" if route.endswith("-export") else _CHARGE_STATE[route_stem(route)],
+            _IRON_SOURCE[route_stem(route)])
+    for route in ROUTES if route != "h2-only"
 }
 
 ALL_ROUTES = "all-routes"
@@ -60,10 +66,8 @@ def expand_route_cell(cell: str) -> list[str]:
     routes = cell.split(ROUTE_SEPARATOR)
     unknown = set(routes) - set(ROUTES)
     if unknown:
-        planned = unknown & set(PLANNED_ROUTES)
-        hint = " (reserved but not implemented yet)" if planned else ""
         raise ValueError(
-            f"config/scenarios.csv names unknown route(s) {sorted(unknown)}{hint} — "
+            f"config/scenarios.csv names unknown route(s) {sorted(unknown)} — "
             f"expected {ALL_ROUTES!r} or one of {ROUTES}"
         )
     return routes
