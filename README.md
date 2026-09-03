@@ -401,13 +401,21 @@ lcos_eur_per_t,606.78,914.11
 
 The **identity fields lead**: the run key (`scenario, area, country, route,
 start_date, end_date`), one `{tech}_variant` row per input series
-(`solar_variant: bestsite-p95`, `grid_variant: dayahead`), the unit its
+(`solar_variant: bestsite-p95`, `wind_onshore_variant: bestsite-p95`), the unit its
 `lco_output` is in, and the `inputs_hash`. Everything below them is numbers, so a
 reader can skip the block on top and take the rest as a numeric table. The
 variant matters because a best-site P95 profile and an area average answer
 different questions, and the solved network does not carry it (the solve reads
 the parquet, not its name), so `compile_report` takes `config/scenarios.csv` as
 an input and joins it back on.
+
+**Field names use `_` throughout**, including the part that names a tech or a
+link. The network and `config/scenarios.csv` hyphenate those ids, so the report
+puts every one through `field_stem`: the tech `wind-onshore` reports as
+`wind_onshore_gw_opt` and `cf_wind_onshore`, the link `dri-h2` as
+`plant_dri_h2_eur_per_t` and `dri_h2_utilization`. Only the *values* keep the
+hyphens (`route: moe-eaf`, `solar_variant: bestsite-p95`) — those are ids, and
+they still name files and config keys.
 
 **Every run writes the same fields** whatever route it took. The set and its
 order are declared in `workflow/common/_report_schema.py`, and `compile_report`

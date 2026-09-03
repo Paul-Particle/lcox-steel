@@ -17,7 +17,7 @@ import yaml
 
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
-from common._report_schema import PROCESS_LINKS, write_report_file
+from common._report_schema import PROCESS_LINKS, RES_TECHS, field_stem, write_report_file
 from common._runs import load_scenarios, zone_parents
 
 if "snakemake" not in globals():
@@ -109,13 +109,14 @@ def mark_best_in_country(df: pd.DataFrame, parents: dict, metric: str | None) ->
 
 
 def input_variants(scenarios: pd.DataFrame, scenario_name: str, run: dict) -> dict:
-    """Which series each tech contributed to one run, as `{tech}_variant` columns.
+    """Which series each tech contributed to one run, as `{tech}_variant` fields.
 
     A best-site P95 profile and an area average answer different questions, so a
     cost is not interpretable without knowing which produced it. The solve reads
     the parquet, not its name, so the variant survives only in the scenario
     table and is joined back on here. Rows join on the run minus the route —
-    every route of a group is built from the same series.
+    every route of a group is built from the same series. The scenario table
+    spells a tech `wind-onshore`; the field it lands in is `wind_onshore_variant`.
     """
     group = scenarios[
         (scenarios["scenario"] == scenario_name)
@@ -123,7 +124,7 @@ def input_variants(scenarios: pd.DataFrame, scenario_name: str, run: dict) -> di
         & (scenarios["start_date"] == run["start_date"])
         & (scenarios["end_date"] == run["end_date"])
     ]
-    variants = {f"{row.tech}_variant": row.variant for row in group.itertuples()}
+    variants = {f"{field_stem(row.tech)}_variant": row.variant for row in group.itertuples()}
     return variants
 
 
@@ -270,7 +271,7 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
     annual_scale = 8760.0 / len(n.snapshots)
     elec_gens = [g for g in n.generators.index if g != "gas_supply"]
     elec_mwh = (float(n.generators_t.p[elec_gens].sum().sum()) * annual_scale) if elec_gens else 0.0
-    elec_cost = sum(breakdown.get(k, 0.0) for k in ("res", "battery", "grid", "transmission"))
+    elec_cost = sum(breakdown[k] for k in ("res", "battery", "grid", "transmission"))
     lcoe = elec_cost / elec_mwh if elec_mwh > 0 and elec_cost > 0 else float("nan")
     if lcoe == lcoe:  # not NaN
         summary["lcoe_eur_per_mwh"] = lcoe
@@ -300,15 +301,13 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
             grid_mwh = float(n.generators_t.p["grid_import"].sum()) * annual_scale
 
         components = {
-            "lcoe_solar": _res_cost("solar"),
-            "lcoe_wind_onshore": _res_cost("wind-onshore"),
-            "lcoe_wind_offshore": _res_cost("wind-offshore"),
-            "lcoe_storage": breakdown.get("battery", 0.0),
+            **{f"lcoe_{field_stem(tech)}": _res_cost(tech) for tech in RES_TECHS},
+            "lcoe_storage": breakdown["battery"],
             "lcoe_grid_connection": grid_conn,
             "lcoe_grid_energy": grid_energy,
-            "lcoe_transmission": breakdown.get("transmission", 0.0),
+            "lcoe_transmission": breakdown["transmission"],
         }
-        res_total = components["lcoe_solar"] + components["lcoe_wind_onshore"] + components["lcoe_wind_offshore"]
+        res_total = sum(components[f"lcoe_{field_stem(tech)}"] for tech in RES_TECHS)
         summary["lcoe_renewables_eur_per_mwh"] = res_total / elec_mwh
         for key, cost in components.items():
             summary[f"{key}_eur_per_mwh"] = cost / elec_mwh
@@ -316,17 +315,16 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
         # Per-technology LCOE (€/MWh over that tech's own generation, not the
         # system total) — a fair unit cost for the renewable itself, distinct from
         # its lcoe_<tech> contribution to the system LCOE above.
-        for prefix, tech in (("solar", "solar"), ("wind-onshore", "wind_onshore"),
-                             ("wind-offshore", "wind_offshore")):
-            cost, mwh = _res_cost(prefix), _res_mwh(prefix)
+        for tech in RES_TECHS:
+            cost, mwh = _res_cost(tech), _res_mwh(tech)
             if cost > 0 and mwh > 0:
-                summary[f"lcoe_{tech}_own_eur_per_mwh"] = cost / mwh
+                summary[f"lcoe_{field_stem(tech)}_own_eur_per_mwh"] = cost / mwh
 
         # Blended renewable own LCOE (over renewable generation only) — the
         # generation-weighted mean of the per-tech own LCOEs, so it sits between
         # them. Distinct from lcoe_renewables (contribution over all electricity,
         # which grid imports drag below the per-tech figures).
-        res_mwh = _res_mwh("solar") + _res_mwh("wind-onshore") + _res_mwh("wind-offshore")
+        res_mwh = sum(_res_mwh(tech) for tech in RES_TECHS)
         if res_total > 0 and res_mwh > 0:
             summary["lcoe_renewables_own_eur_per_mwh"] = res_total / res_mwh
 
@@ -336,11 +334,10 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
             idx = [g for g in res_idx if str(g).startswith(prefix)]
             return float(n.generators.loc[idx, "p_nom_opt"].sum()) if idx else 0.0
 
-        for prefix, tech in (("solar", "solar"), ("wind-onshore", "wind_onshore"),
-                             ("wind-offshore", "wind_offshore")):
-            cap = _res_cap(prefix)
+        for tech in RES_TECHS:
+            cap = _res_cap(tech)
             if cap > 0:
-                summary[f"cf_{tech}"] = _res_mwh(prefix) / (cap * 8760.0)
+                summary[f"cf_{field_stem(tech)}"] = _res_mwh(tech) / (cap * 8760.0)
         if grid_mwh > 0:
             grid_p_nom = float(n.generators.at["grid_import", "p_nom_opt"])
             if grid_p_nom > 0:
@@ -363,8 +360,8 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
         h2_mwh = _h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
         if h2_mwh > 0:
             elec_for_h2 = el_mwh * (lcoe if lcoe == lcoe else 0.0)
-            el_cost = breakdown.get("electrolyser", 0.0)
-            buf_cost = breakdown.get("h2_buffer", 0.0)
+            el_cost = breakdown["electrolyser"]
+            buf_cost = breakdown["h2_buffer"]
             lcoh = (el_cost + buf_cost + elec_for_h2) / h2_mwh
             summary["lcoh_eur_per_mwh_lhv"] = lcoh
             # LCOH decomposition, €/MWh LHV over the same H2 denominator so the
@@ -394,7 +391,7 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
                 return float((n.links_t.p0[link_name] * n.links.at[link_name, "marginal_cost"]).sum()) * annual_scale
 
             for link in PROCESS_LINKS:
-                summary[f"plant_{link}_eur_per_t"] = _link_capex(link) / steel_t
+                summary[f"plant_{field_stem(link)}_eur_per_t"] = _link_capex(link) / steel_t
             ore = sum(_link_marginal(l) for l in ("dri-h2", "dri-ng", "moe", "ew"))
             summary["ore_eur_per_t_steel"] = ore / steel_t
             summary["consumables_eur_per_t_steel"] = _link_marginal("eaf") / steel_t
@@ -406,8 +403,8 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
         if link not in n.links.index:
             continue
         p_nom = n.links.at[link, "p_nom_opt"]
-        summary[f"{link}_t_per_h_opt"] = p_nom * n.links.at[link, "efficiency"]
-        summary[f"{link}_utilization"] = (
+        summary[f"{field_stem(link)}_t_per_h_opt"] = p_nom * n.links.at[link, "efficiency"]
+        summary[f"{field_stem(link)}_utilization"] = (
             float(n.links_t.p0[link].mean() / p_nom) if p_nom > 0 else float("nan")
         )
 
@@ -442,7 +439,7 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
             )
 
     for gen in n.generators.index[n.generators.p_nom_extendable]:
-        summary[f"{gen}_gw_opt"] = n.generators.at[gen, "p_nom_opt"] / 1e3
+        summary[f"{field_stem(gen)}_gw_opt"] = n.generators.at[gen, "p_nom_opt"] / 1e3
 
     if "battery" in n.storage_units.index:
         p_opt = n.storage_units.at["battery", "p_nom_opt"]
@@ -485,7 +482,7 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
         trans_cost = 0.0
         for link in hvdc:
             cap = n.links.at[link, "p_nom_opt"]
-            summary[f"{link}_gw_opt"] = cap / 1e3
+            summary[f"{field_stem(link)}_gw_opt"] = cap / 1e3
             trans_cost += n.links.at[link, "capital_cost"] * cap
         summary["transmission_total_annual_cost_meur"] = trans_cost / 1e6
 
@@ -493,7 +490,7 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
     if len(ac_buses) > 1:
         ext = n.generators[n.generators.p_nom_extendable]
         for carrier, grp in ext.groupby("carrier"):
-            summary[f"{carrier}_total_gw_opt"] = grp["p_nom_opt"].sum() / 1e3
+            summary[f"{field_stem(carrier)}_total_gw_opt"] = grp["p_nom_opt"].sum() / 1e3
 
     return summary
 
