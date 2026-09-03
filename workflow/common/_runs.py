@@ -22,6 +22,23 @@ ROUTES = ("h2-only", "h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-e
 # make cold solid iron to begin with and needed no such step.
 PLANNED_ROUTES = ("h2-dri-eaf-export", "ng-dri-eaf-export", "mix-dri-eaf-export")
 
+# How the iron reaches the furnace, and which step made it. The first decides
+# how much electricity the EAF needs — melting from cold is most of an EAF's
+# bill, and iron that arrives hot or liquid has already been paid for upstream.
+# The second decides how much iron a t of steel takes, which is gangue: DR
+# pellets bring some, and the electrolytic routes almost none.
+#
+# An export route always charges cold. Its iron went across an ocean.
+EAF_CHARGE = {
+    "h2-dri-eaf":     ("hot", "dri-h2"),
+    "ng-dri-eaf":     ("hot", "dri-ng"),
+    "mix-dri-eaf":    ("hot", "dri-h2"),    # both shafts run on DR pellets
+    "moe-eaf":        ("liquid", "moe"),
+    "ew-eaf":         ("cold", "ew"),
+    "moe-eaf-export": ("cold", "moe"),
+    "ew-eaf-export":  ("cold", "ew"),
+}
+
 ALL_ROUTES = "all-routes"
 ALL_AREAS = "all-areas"
 
