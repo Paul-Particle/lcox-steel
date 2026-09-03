@@ -77,6 +77,32 @@ dri-h2:
   iron_t_per_t_steel: 1.10            # DR pellets: gangue plus metallisation loss
   p_min_pu: 0.5
 
+dri-mix:
+  # One shaft reducing with whatever blend of H2 and natural gas it is fed —
+  # not two furnaces side by side. A Midrex-type shaft takes a blended
+  # reductant gas, so the route buys one furnace and the optimiser picks the
+  # mix, instead of paying capex twice for the option to switch.
+  #
+  # Both single-fuel shafts are quoted at the same 230 €/(t/yr), so a
+  # dual-capable one is taken at that level too.
+  capex_per_t_per_year_eur: 230
+  opex_per_t_per_year_eur: 7          # ≈3 % of capex
+  lifetime_years: 20
+  # Shaft auxiliaries alone, as the NG shaft. The H2 feed's preheat is charged
+  # where it belongs, on the H2 side: 0.10 + 0.25 is the single-fuel H2 shaft's
+  # 0.35, so the blend's corners meet the routes it sits between.
+  el_mwh_per_t: 0.10
+  h2_preheat_el_mwh_per_t: 0.25
+  ore_eur_per_t: 200                  # DR-grade pellets, as the other shafts
+  iron_t_per_t_steel: 1.10
+  p_min_pu: 0.5
+  # A small buffer on the reductant bus, fixed rather than sized by the
+  # optimiser, so the shaft draws from a mixed volume instead of straight off
+  # whichever feed is cheapest that hour. Measured in hours of the plant's
+  # nominal reductant draw. It is not what makes the blend worth having — the
+  # shared furnace is — so keep it small enough to stay a smoothing buffer.
+  reductant_store_hours: 4
+
 eaf:
   # Shared by every route that melts iron. Capex is the same furnace whatever
   # arrives in it — a full EAF, including for moe-eaf: the cell pours iron, not

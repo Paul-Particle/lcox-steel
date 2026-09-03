@@ -65,6 +65,7 @@ GROUPS = [
 PROCESS_PLANTS = [
     ("dri-h2", "H2-DRI shaft"),
     ("dri-ng", "NG-DRI shaft"),
+    ("dri-mix", "Blended-reductant shaft"),
     ("moe",    "MOE cell"),
     ("ew",     "Electrowinning"),
     ("briquetting", "Briquetting press"),
