@@ -173,6 +173,37 @@ grid:
   fee_eur_per_mw_per_year: 60_000     # capacity charge (Leistungspreis)
   fee_eur_per_mwh: 10.0               # volumetric charge (Arbeitspreis)
 
+destination:
+  # Where an `-export` route melts its iron. German prices, as a placeholder
+  # while the choice of destination is still open. A flat price rather than an
+  # hourly series on purpose: the destination furnace is fed from a stockpile,
+  # so it has no reason to chase the hourly market, and an average is the
+  # honest resolution for a number this provisional. Connection charges come
+  # from the `grid` block, which is already German HV level.
+  country: DEU
+  price_eur_per_mwh: 85         # day-ahead average; the grid block adds the fee
+
+transport:
+  # Sea freight for the export routes: charged per t and km, with no capacity
+  # decision and no capex, because ships are chartered rather than built.
+  #
+  # Distances are an assumption and not geography, which is why they live here
+  # and not in the area registry — they depend on the destination port and on
+  # the routing (Suez or the Cape), and we expect to vary both. A producer
+  # already inside the EU has no sea leg and so has no distance.
+  #
+  # Rates are order-of-magnitude eyeballs from published freight indices. Steel
+  # is dearer per t than iron: bulk carriers take briquettes and plates, while
+  # coil and plate go as breakbulk, which stows worse and handles slower.
+  iron_eur_per_t_km: 0.0022
+  steel_eur_per_t_km: 0.0050
+  distance_km:
+    DEU: 0
+    FRA: 0
+    ESP: 0
+    BRA: 9_500                  # Tubarao -> Rotterdam
+    AUS: 19_500                 # Port Hedland -> Rotterdam via Suez
+
 transmission:
   # HVDC link connecting a candidate RES site to the electrolyser/demand site.
   # Only used by multi-site scenarios (those with a config/sites_{project}_{scenario}.yaml

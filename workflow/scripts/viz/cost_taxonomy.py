@@ -333,6 +333,14 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
         [("levelised", f"{transmission:,.1f} €/MWh delivered")
          if transmission is not None else None])
 
+    # -- getting the iron to a furnace that is somewhere else
+    shipped = _value(row, "iron_shipped_kt")
+    distance = _value(row, "transport_km")
+    add("transport", _group_eur_per_t(row, "transport", steel_t),
+        [("distance", f"{distance:,.0f} km" if distance else None),
+         ("shipped", f"{shipped:,.0f} kt/yr" if shipped else None)])
+    add("destination_power", _group_eur_per_t(row, "destination_power", steel_t))
+
     # -- the solid stores that make turndown possible
     for group, hours_column, label in (("iron_store", "iron_store_hours_steel", "iron"),
                                        ("steel_store", "steel_store_hours_steel", "steel")):
@@ -367,16 +375,24 @@ def alternative_lcos_bands(row: pd.Series, assumptions: dict,
         plant_cost = _value(row, f"plant_{field_stem(link)}_eur_per_t") or 0.0
         fixed_om += plant_cost * om_fractions[link]
 
-    electricity_total = sum(_group_eur_per_t(row, group, steel_t)
-                            for group in ("res", "grid", "battery", "transmission"))
+    electricity_total = sum(
+        _group_eur_per_t(row, group, steel_t)
+        for group in ("res", "grid", "battery", "transmission", "destination_power")
+    )
     lcoe = _value(row, "lcoe_eur_per_mwh") or 0.0
     h2_mwh_lhv = (_value(row, "h2_produced_kt") or 0.0) * 1e6 * h2_lhv_kwh_per_kg / 1000.0
     hydrogen_electricity = ((_value(row, "lcoh_electricity_eur_per_mwh_lhv") or 0.0)
                             * h2_mwh_lhv / steel_t)
-    # The EAF melts only on routes that build one; MOE pours liquid steel directly.
     eaf_built = (_value(row, "eaf_t_per_h_opt") or 0.0) > 0
     eaf_mwh_per_t = assumptions["eaf"]["el_mwh_per_t"] if eaf_built else 0.0
-    eaf_electricity = eaf_mwh_per_t * lcoe
+    # An export route's furnace melts on bought power at the destination, so
+    # its band is priced there rather than at the origin's levelised cost.
+    if str(row["route"]).endswith("-export"):
+        eaf_lcoe = (assumptions["destination"]["price_eur_per_mwh"]
+                    + assumptions["grid"]["fee_eur_per_mwh"])
+    else:
+        eaf_lcoe = lcoe
+    eaf_electricity = eaf_mwh_per_t * eaf_lcoe
 
     return {
         "ore": _group_eur_per_t(row, "ore_consumables", steel_t),
@@ -388,6 +404,7 @@ def alternative_lcos_bands(row: pd.Series, assumptions: dict,
         "eaf": eaf_electricity,
         "rest": max(electricity_total - hydrogen_electricity - eaf_electricity, 0.0),
         "gas": _group_eur_per_t(row, "gas", steel_t),
+        "transport": _group_eur_per_t(row, "transport", steel_t),
         "store": (_group_eur_per_t(row, "iron_store", steel_t)
                   + _group_eur_per_t(row, "steel_store", steel_t)),
         # Carried for the hover: what the single hydrogen block is actually made of,
@@ -555,6 +572,12 @@ def spec(assumptions: dict) -> list:
     add("grid_fee", "Grid energy — volumetric fee", "electricity", "#D3DAE0",
         [("volumetric charge (Arbeitspreis)", f"{grid['fee_eur_per_mwh']:,.1f} €/MWh imported")])
     add("transmission", "Transmission (HVDC)", "electricity", "#83D1DD")
+    destination = assumptions["destination"]
+    add("destination_power", "Destination power", "electricity", "#0293D2",
+        [("country", f"{destination['country']}"),
+         ("flat price", f"{destination['price_eur_per_mwh']:,.0f} €/MWh")])
+    add("transport", "Sea freight — iron", "storage", "#BDCCD9",
+        [("rate", f"{assumptions['transport']['iron_eur_per_t_km'] * 1000:,.2f} €/t per 1000 km")])
 
     add("iron_store", "Iron stockpile", "storage", "#D75674",
         [("capex quote", f"{assumptions['iron_store']['capex_per_t_eur']:,.0f} €/t"),

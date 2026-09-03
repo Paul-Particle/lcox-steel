@@ -16,12 +16,20 @@ from the assumptions, which only carry the numbers):
   moe-eaf:     electricity → molten oxide electrolysis → iron → EAF → steel
   ew-eaf:      electricity → iron electrowinning → iron → EAF → steel
 
+An `-export` route makes iron in the scenario's area and melts it somewhere
+else: the iron is shipped to a fixed destination and the EAF sits there, on
+destination electricity. Only routes whose iron is already a cold solid have
+one, because that is what survives a ship — moe-eaf-export casts its iron
+rather than pouring it into the furnace, and pays for that in the EAF, which
+has to melt from cold. Sponge iron needs briquetting first, which is not built.
+
 Bus unit convention:
   electricity buses: MW AC
   hydrogen bus:      MW H2 LHV  (1 MWh H2 LHV ≈ 30 kg H2 at LHV ≈ 33.33 kWh/kg)
   gas bus:           MW CH4 LHV (supplied at a flat price incl. optional CO2 cost)
   iron bus:          t/h  (sponge iron for the DRI routes, hot metal for
-                     moe-eaf, electrolytic iron plates for ew-eaf)
+                     moe-eaf, electrolytic iron plates for ew-eaf; an export
+                     route has a second iron bus at the destination)
   steel bus:         t/h  (liquid steel)
 
 Process steps that consume electricity alongside their bus0 feed (DRI shaft,
@@ -52,7 +60,21 @@ HOURS_PER_YEAR = 8760.0
 _H2_ROUTES  = ("h2-only", "h2-dri-eaf", "mix-dri-eaf")   # electrolyser + H2 buffer
 _GAS_ROUTES = ("ng-dri-eaf", "mix-dri-eaf")              # gas bus + NG-DRI shaft
 _H2_DRI_ROUTES = ("h2-dri-eaf", "mix-dri-eaf")           # H2 DRI shaft
-_IRON_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf")
+_MOE_ROUTES = ("moe-eaf", "moe-eaf-export")
+_EW_ROUTES  = ("ew-eaf", "ew-eaf-export")
+_IRON_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf",
+                *_MOE_ROUTES, *_EW_ROUTES)
+
+# Iron shipped to a destination EAF, which runs on destination electricity.
+_EXPORT_ROUTES = ("moe-eaf-export", "ew-eaf-export")
+
+# Routes whose iron reaches the furnace as a cold solid, and so can sit in a
+# pile. Everything else hands the EAF hot metal or hot sponge iron.
+_COLD_IRON_ROUTES = ("ew-eaf", "moe-eaf-export", "ew-eaf-export")
+
+# Bus names on the far side of the sea.
+DESTINATION_IRON_BUS = "iron_destination"
+DESTINATION_ELEC_BUS = "electricity_destination"
 
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
@@ -88,6 +110,7 @@ def build_network(
     price_series: pd.Series | None = None,
     sites: pd.DataFrame | None = None,
     demand_site: str | None = None,
+    transport_km: float | None = None,
 ) -> pypsa.Network:
     """Build (but do not solve) the PyPSA network for one scenario.
 
@@ -106,6 +129,9 @@ def build_network(
     generators, and an extendable HVDC link connects every site to the demand site
     (`demand_site`), which hosts the process chain, storage and any grid import.
     `sites` is indexed by site_id with columns `x` (lon), `y` (lat).
+
+    `transport_km` is the sea distance from the producing area to the export
+    destination, and is required by (and only used by) the `-export` routes.
     """
     if route not in ROUTES:
         raise ValueError(f"unknown route '{route}' — expected one of {ROUTES}")
@@ -161,16 +187,34 @@ def build_network(
         if route in _GAS_ROUTES:
             _add_gas_supply(n, assumptions["natural_gas"])
             _add_ng_dri_link(n, assumptions["dri-ng"], wacc, elec_bus)
-        if route == "moe-eaf":
+        if route in _MOE_ROUTES:
             _add_moe_link(n, assumptions["moe"], wacc, elec_bus)
-        if route == "ew-eaf":
+        if route in _EW_ROUTES:
             _add_ew_link(n, assumptions["ew"], wacc, elec_bus)
-            # Electrowon plates are the only iron this side of the EAF that is
-            # a cold solid, so they are the only iron that can sit in a pile.
-            # Every other route hands the EAF hot metal or hot sponge iron and
-            # the iron bus just balances the two links hour by hour.
+        if route in _COLD_IRON_ROUTES:
+            # Cold solid iron is the only iron that can sit in a pile. Every
+            # other route hands the EAF hot metal or hot sponge iron, and the
+            # iron bus just balances the two links hour by hour.
             _add_iron_store(n, assumptions["iron_store"], wacc)
-        _add_eaf_link(n, assumptions["eaf"], wacc, elec_bus)
+        if route in _EXPORT_ROUTES:
+            if transport_km is None:
+                raise ValueError(f"route '{route}' needs transport_km")
+            _add_iron_transport(n, assumptions["transport"], transport_km)
+            # The destination EAF buys its power where it stands, not where the
+            # iron was made. A flat price, because a furnace fed from a
+            # stockpile has no reason to chase the hourly market — and because
+            # which country this is remains an open question.
+            dest_cfg = assumptions["destination"]
+            _add_grid_import(
+                n,
+                pd.Series(dest_cfg["price_eur_per_mwh"], index=n.snapshots),
+                assumptions["grid"], wacc,
+                bus=DESTINATION_ELEC_BUS, name="destination_supply",
+            )
+            _add_eaf_link(n, assumptions["eaf"], wacc, DESTINATION_ELEC_BUS,
+                          bus0=DESTINATION_IRON_BUS)
+        else:
+            _add_eaf_link(n, assumptions["eaf"], wacc, elec_bus)
 
     if multisite:
         _add_transmission(n, sites, demand_site, assumptions["transmission"], wacc)
@@ -202,10 +246,12 @@ def _add_carriers(
         base += ["steel"]
     if route in _H2_DRI_ROUTES:
         base += ["dri-h2"]
-    if route == "ew-eaf":
+    if route in _EW_ROUTES:
         base += ["ew"]
-    if route == "moe-eaf":
+    if route in _MOE_ROUTES:
         base += ["moe"]
+    if route in _EXPORT_ROUTES:
+        base += ["transport"]
     if multisite:
         base.append("HVDC")
     carriers = list(dict.fromkeys([*base, *res_techs]))
@@ -221,6 +267,9 @@ def _route_process_buses(route: str) -> list[tuple[str, str]]:
         buses.append(("gas", "gas"))
     if route in _IRON_ROUTES:
         buses.append(("iron", "iron"))
+    if route in _EXPORT_ROUTES:
+        buses.append((DESTINATION_IRON_BUS, "iron"))
+        buses.append((DESTINATION_ELEC_BUS, "AC"))
     if route != "h2-only":
         buses.append(("steel", "steel"))
     return buses
@@ -475,7 +524,9 @@ def _add_ng_dri_link(
     )
 
 
-def _add_eaf_link(n: pypsa.Network, eaf_cfg: dict, wacc: float, elec_bus: str) -> None:
+def _add_eaf_link(
+    n: pypsa.Network, eaf_cfg: dict, wacc: float, elec_bus: str, bus0: str = "iron"
+) -> None:
     """EAF: iron (t/h) → steel (t/h), drawing melting electricity.
 
     Per-t-steel quotes (electricity, consumables, capex) are scaled by the
@@ -485,7 +536,7 @@ def _add_eaf_link(n: pypsa.Network, eaf_cfg: dict, wacc: float, elec_bus: str) -
     n.add(
         "Link",
         "eaf",
-        bus0="iron",
+        bus0=bus0,
         bus1="steel",
         bus2=elec_bus,
         carrier="eaf",
@@ -556,6 +607,30 @@ def _add_iron_store(n: pypsa.Network, store_cfg: dict, wacc: float) -> None:
     )
 
 
+def _add_iron_transport(
+    n: pypsa.Network, transport_cfg: dict, distance_km: float
+) -> None:
+    """Ship iron (t/h) from the producing area to the destination bus.
+
+    Cost is per t and km with no capacity decision and no capex: ships are
+    chartered, not built. Nor is there a transit time — iron arrives the hour
+    it leaves, so the weeks of stock floating on the ocean are free, which
+    understates the inventory the chain really needs.
+    """
+    n.add(
+        "Link",
+        "iron_transport",
+        bus0="iron",
+        bus1=DESTINATION_IRON_BUS,
+        carrier="transport",
+        p_nom_extendable=True,
+        length=distance_km,
+        efficiency=1.0,
+        capital_cost=0.0,
+        marginal_cost=transport_cfg["iron_eur_per_t_km"] * distance_km,
+    )
+
+
 def _add_steel_store(
     n: pypsa.Network, store_cfg: dict, wacc: float, steel_t_per_h: float
 ) -> None:
@@ -589,6 +664,7 @@ def _add_grid_import(
     grid_cfg: dict,
     wacc: float,
     bus: str = "electricity",
+    name: str = "grid_import",
 ) -> None:
     """Add an extendable grid-import generator with connection charges.
 
@@ -604,7 +680,7 @@ def _add_grid_import(
     )
     n.add(
         "Generator",
-        "grid_import",
+        name,
         bus=bus,
         carrier="AC",
         p_nom_extendable=True,

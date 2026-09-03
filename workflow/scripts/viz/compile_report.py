@@ -168,13 +168,24 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         return float(n.stores.at[name, "capital_cost"] * n.stores.at[name, "e_nom_opt"])
 
     gens = n.generators
-    non_res = ("grid_import", "gas_supply")
+    # Bought power, not built power: these are priced, so they are not part of
+    # the renewables the run chose to build.
+    non_res = ("grid_import", "gas_supply", "destination_supply")
     res_idx = gens.index[gens.p_nom_extendable & ~gens.index.isin(non_res)]
-    grid_capital = 0.0
-    if "grid_import" in gens.index and gens.at["grid_import", "p_nom_extendable"]:
-        grid_capital = float(
-            gens.at["grid_import", "capital_cost"] * gens.at["grid_import", "p_nom_opt"]
-        )
+
+    def gen_capital(name: str) -> float:
+        if name not in gens.index or not gens.at[name, "p_nom_extendable"]:
+            return 0.0
+        return float(gens.at[name, "capital_cost"] * gens.at[name, "p_nom_opt"])
+
+    def gen_marginal(name: str) -> float:
+        if name not in gens.index:
+            return 0.0
+        return _marginal_costs(
+            gens.loc[[name]], n.generators_t.p, n.generators_t.marginal_cost
+        ) * annual_scale
+
+    grid_capital = gen_capital("grid_import")
     hvdc = list(n.links.index[n.links.carrier == "HVDC"])
 
     return {
@@ -189,19 +200,13 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         # generic sum minus gas lands in the grid bucket.
         "grid": grid_capital
         + _marginal_costs(
-            gens.drop(index="gas_supply", errors="ignore"),
+            gens.drop(index=["gas_supply", "destination_supply"], errors="ignore"),
             n.generators_t.p,
             n.generators_t.marginal_cost,
         ) * annual_scale,
         # Gas bill incl. any carbon price (both live on the gas_supply
         # generator's marginal cost).
-        "gas": (
-            _marginal_costs(
-                gens.loc[["gas_supply"]], n.generators_t.p, n.generators_t.marginal_cost
-            ) * annual_scale
-            if "gas_supply" in gens.index
-            else 0.0
-        ),
+        "gas": gen_marginal("gas_supply"),
         "electrolyser": link_capital(["electrolyser"]) + link_marginal(["electrolyser"]),
         "h2_buffer": store_capital("h2_buffer"),
         "process": link_capital(PROCESS_LINKS),
@@ -209,6 +214,12 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         "iron_store": store_capital("iron_store"),
         "steel_store": store_capital("steel_store"),
         "transmission": link_capital(hvdc),
+        # Sea freight has no capex — the whole bill is the per-t-km charge.
+        "transport": link_marginal(["iron_transport"]),
+        # The destination furnace's own power, kept out of the grid group so an
+        # export run shows what it pays at each end.
+        "destination_power": (gen_capital("destination_supply")
+                              + gen_marginal("destination_supply")),
     }
 
 
@@ -428,6 +439,15 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
             summary["iron_store_hours_steel"] = (
                 store_t / steel_t_per_h if steel_t_per_h else float("nan")
             )
+
+    if "iron_transport" in n.links.index:
+        annual = 8760.0 / len(n.snapshots)
+        summary["iron_shipped_kt"] = (
+            float(n.links_t.p0["iron_transport"].sum()) * annual / 1e3
+        )
+        # The distance behind the freight bill, so the report carries it rather
+        # than the reader having to go back to the assumptions.
+        summary["transport_km"] = float(n.links.at["iron_transport", "length"])
 
     if "steel_store" in n.stores.index:
         store_t = n.stores.at["steel_store", "e_nom_opt"]

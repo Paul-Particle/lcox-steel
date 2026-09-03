@@ -13,13 +13,14 @@ Deliberately free of heavy imports: the Snakefile reads this on every DAG build.
 
 import pandas as pd
 
-ROUTES = ("h2-only", "h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf")
+ROUTES = ("h2-only", "h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf",
+          "moe-eaf-export", "ew-eaf-export")
 
-# Reserved for the trade scenarios (produce abroad, ship the product to the EU).
-# Not implemented: `*-export` appears in config/scenarios.csv as commented rows
-# only, and is excluded from ROUTES until a route actually builds a network.
-PLANNED_ROUTES = ("h2-dri-eaf-export", "ng-dri-eaf-export", "mix-dri-eaf-export",
-                  "moe-eaf-export", "ew-eaf-export")
+# Reserved: an `-export` route ships its iron to the EU and melts it there. The
+# DRI routes cannot yet, because sponge iron has to be briquetted before it will
+# survive the trip and the briquetting step is not built. The two routes above
+# make cold solid iron to begin with and needed no such step.
+PLANNED_ROUTES = ("h2-dri-eaf-export", "ng-dri-eaf-export", "mix-dri-eaf-export")
 
 ALL_ROUTES = "all-routes"
 ALL_AREAS = "all-areas"
@@ -27,7 +28,9 @@ ALL_AREAS = "all-areas"
 # Several routes in one cell are separated by this.
 ROUTE_SEPARATOR = "|"
 
-ROUTE_PATTERN = "|".join(ROUTES)
+# Longest first: `moe-eaf` is a prefix of `moe-eaf-export`, and a regex
+# alternation takes the first branch that matches.
+ROUTE_PATTERN = "|".join(sorted(ROUTES, key=len, reverse=True))
 
 # The columns that, with the scenario, identify one network.
 RUN_KEY = ["scenario", "area", "start_date", "end_date"]
