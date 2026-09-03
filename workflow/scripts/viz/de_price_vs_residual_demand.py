@@ -25,7 +25,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from dotenv import load_dotenv
 
-from _helpers import to_utc_naive
+from _helpers_grid import to_utc_naive
 from download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client
 from scripts.viz.style import (
     apply_header,

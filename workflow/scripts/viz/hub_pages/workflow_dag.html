@@ -256,7 +256,7 @@
         <span class="lg"><span class="sw" style="border-color:var(--g-src);background:var(--surface-2)"></span>Source (external input / config)</span>
         <span class="lg"><span class="sw" style="border-color:var(--g-res);background:color-mix(in srgb,var(--g-res) 8%,var(--surface))"></span>res_cf.smk (shapes · cutout · CF)</span>
         <span class="lg"><span class="sw" style="border-color:var(--g-grid);background:color-mix(in srgb,var(--g-grid) 8%,var(--surface))"></span>grid.smk (price retrieval)</span>
-        <span class="lg"><span class="sw" style="border-color:var(--g-opt);background:color-mix(in srgb,var(--g-opt) 13%,var(--surface))"></span>h2_dri.smk (optimise)</span>
+        <span class="lg"><span class="sw" style="border-color:var(--g-opt);background:color-mix(in srgb,var(--g-opt) 13%,var(--surface))"></span>solve.smk (optimise)</span>
         <span class="lg"><span class="sw" style="border-color:var(--g-viz);background:color-mix(in srgb,var(--g-viz) 8%,var(--surface))"></span>viz.smk (report · plots)</span>
         <span class="lg"><span class="sw" style="border-style:dashed;border-color:var(--accent);background:var(--surface)"></span>on-demand (not in rule all / demo)</span>
       </div>
@@ -272,13 +272,14 @@
   </div>
 
   <div class="notes">
-    <p><b>Simplified rule graph.</b> These are the rules; at run time each fans out over wildcards (<code>project</code>, <code>scenario</code>, <code>cf_area</code>, <code>tech</code>, dates…) into many jobs — one optimise per (project, scenario), one report per project, and so on.</p>
-    <p><b>Overview vs Faithful:</b> Overview draws only the defining dependency (the cutout) into each CF rule. Switch to <b>Faithful</b> to also draw the region / offshore parquet inputs every CF rule (and <code>cf_map</code>) really declares — the complete file-dependency fan-in. <code>config.yaml</code> (params via <code>lookup</code>) and <code>projects.csv</code> (fan-out + <code>compile_report</code>'s network collection) shape the run globally but are configfile / parse-time, not file-dependency edges, so they stay annotations here rather than arrows.</p>
+    <p><b>Simplified rule graph.</b> These are the rules; at run time each fans out over wildcards (<code>scenario</code>, <code>area</code>, <code>route</code>, <code>tech</code>, <code>variant</code>, dates…) into many jobs — one solve per run key, one report per scenario, and so on.</p>
+    <p><b>Overview vs Faithful:</b> Overview draws only the defining dependency (the cutout) into each CF rule. Switch to <b>Faithful</b> to also draw the geometry parquets every CF rule (and <code>cf_map</code>) really declares, and the one rule that reads <code>config/scenarios.csv</code> as a file — <code>compile_report</code>, for the variant each tech was solved with. <code>config.yaml</code> reaches the rules as params via <code>lookup</code>, and the scenario table also shapes the fan-out at parse time, so those stay annotations here rather than arrows.</p>
     <p><b>Default target <code>demo</code></b> (and <code>all</code>) build the report + capacity bars. Dashed rules — <code>plot_cf_map</code>, <code>plot_lcos_bars</code>, <code>plot_siting_map</code>, <code>plot_site_capacity_bars</code> — are requested on demand. The grid parquets are <code>temp()</code>, deleted after the solve consumes them.</p>
-    <p><b>Runs offline:</b> the demo ships a pre-sliced Victoria (AUS) cutout backup, so <code>download_cutout</code> needs no CDS download; an <code>onstart</code> hook also scrubs stray VM NUL bytes from sources before any rule runs.</p>
+    <p><b>Not in this graph:</b> the browsable pages under <code>results/html/</code> — the dashboard, its v2, the cost taxonomies, and the hub carrying this diagram — are built by hand from the reports (<code>scripts/viz/build_*.py</code>), not by a rule. They sit a level above the workflow and are rebuilt whenever they change; the Snakemake outputs are <code>results/report_{scenario}.csv</code>, the solved networks, and the plots under <code>results/plots/</code>.</p>
+    <p><b>Runs offline:</b> the demo ships a pre-sliced Victoria (AUS) cutout backup, so <code>retrieve_area_cutout</code> needs no CDS download; an <code>onstart</code> hook also scrubs stray VM NUL bytes from sources before any rule runs.</p>
   </div>
 
-  <p class="foot">Derived from workflow/Snakefile + workflow/rules/{grid,res_cf,h2_dri,viz}.smk · rule graph for review</p>
+  <p class="foot">Derived from workflow/Snakefile + workflow/rules/{grid,res_cf,solve,viz}.smk · rule graph for review</p>
 </div>
 
 <div class="tip" id="tip" aria-hidden="true"></div>
@@ -296,112 +297,109 @@
   const NODES = [
     // sources (row 0)
     { id:"ne_zip",   group:"src", x:150,  y:60, name:"Natural Earth", kick:"SOURCE · SHAPES",
-      title:"data/shapes/ne_110m_admin_0_countries", body:"Natural Earth admin-0 country polygons (zip).\nInput to build_regions." },
+      title:"data/shapes/ne_110m_admin_0_countries", body:"Natural Earth admin-0 country polygons (zip).\nInput to make_area_geometry, which is constrained to\ntop-level areas — Admin 0 is countries only, so a market\nzone's geometry is a committed source file (issue #64)." },
     { id:"eez_zip",  group:"src", x:330,  y:60, name:"EEZ v12", kick:"SOURCE · SHAPES",
-      title:"data/shapes/offshore_zones/eez_v12.zip", body:"Marine Exclusive Economic Zones v12 (zip).\nInput to build_offshore_regions." },
+      title:"data/shapes/offshore_zones/eez_v12.zip", body:"Marine Exclusive Economic Zones v12 (zip).\nInput to make_offshore_geometry." },
     { id:"era5",     group:"src", x:510,  y:60, name:"ERA5 / CDS", kick:"SOURCE · WEATHER",
       title:"ERA5 reanalysis (Copernicus CDS API)", body:"Hourly reanalysis pulled by atlite.\nThe demo ships a pre-sliced Victoria cutout backup,\nso it runs with no CDS download." },
     { id:"config",   group:"src", x:720,  y:60, name:"config", kick:"SOURCE · CONFIG",
-      title:"config/*.yaml + projects.csv", body:"config.yaml, projects.csv, assumptions.yaml\n(+ optional per-scenario assumptions / sites overlays).\nDrives rule fan-out and the solve." },
+      title:"config/*.yaml + scenarios.csv", body:"config.yaml (area registry, pipeline knobs),\nscenarios.csv (one row per input timeseries),\nassumptions.yaml + an optional per-scenario overlay.\nDrives rule fan-out and the solve." },
     { id:"entsoe_src", group:"src", x:1010, y:60, name:"ENTSO-E API", kick:"SOURCE · PRICES",
       title:"ENTSO-E Transparency API", body:"EU day-ahead electricity prices." },
     { id:"nem_src",  group:"src", x:1180, y:60, name:"AEMO NEM", kick:"SOURCE · PRICES",
       title:"AEMO NEM (via NEMOSIS)", body:"Australian day-ahead electricity prices." },
 
     // row 1
-    { id:"regions",  group:"res", x:150,  y:196, name:"regions", kick:"RES-CF RULE",
-      title:"build_regions", body:"scripts/res_cf/01_build_regions.py\nin: Natural Earth zip\nout: resources/shapes/{area}_geo.parquet" },
-    { id:"retrieve_entsoe", group:"grid", x:1010, y:196, name:"entsoe", kick:"GRID RULE",
-      title:"retrieve_entsoe", body:"scripts/grid/retrieve_entsoe.py\nout: resources/entsoe/{area}_grid_{variant}_{dates}.parquet (temp)\nThrottled via resource entsoe_api=2." },
-    { id:"retrieve_nem", group:"grid", x:1180, y:196, name:"nem", kick:"GRID RULE",
-      title:"retrieve_nem", body:"scripts/grid/retrieve_nem.py\nout: resources/nem/{area}_grid_{variant}_{dates}.parquet (temp)\nAUD -> EUR via config.nem.eur_per_aud." },
+    { id:"area_geometry", group:"res", x:150, y:196, name:"area_geometry", kick:"RES-CF RULE",
+      title:"make_area_geometry", body:"scripts/res_cf/a_make_area_geometry.py\nin: Natural Earth zip\nout: resources/shapes/{area}_geo.parquet" },
+    { id:"grid_data", group:"grid", x:1095, y:196, name:"grid_data", kick:"GRID RULE",
+      title:"retrieve_grid_data", body:"scripts/grid/retrieve_grid_data.py\nout: resources/timeseries/{area}_grid_{variant}_{dates}.parquet\nOne rule for both markets — the area registry says which.\nThe output is the processed cache: it is keyed by the whole\nrun, so a re-run reuses it. ENTSO-E throttled via entsoe_api=2." },
 
     // row 2
-    { id:"offshore_regions", group:"res", x:330, y:326, name:"offshore_regions", kick:"RES-CF RULE",
-      title:"build_offshore_regions", body:"01b_build_offshore_regions.py\nin: {area}_geo.parquet + EEZ zip\nout: {area}_offshore_geo.parquet" },
+    { id:"offshore_geometry", group:"res", x:330, y:326, name:"offshore_geometry", kick:"RES-CF RULE",
+      title:"make_offshore_geometry", body:"scripts/res_cf/b_make_offshore_geometry.py\nin: {area}_geo.parquet + EEZ zip\nout: resources/shapes/{area}_offshore_geo.parquet" },
 
     // row 3
     { id:"cutout",   group:"res", x:430, y:456, name:"cutout", kick:"RES-CF RULE",
-      title:"download_cutout", body:"02_make_cutouts.py\nin: region + offshore parquets (+ ERA5 / CDS)\nout: cutouts/{area}_{dates}.nc\nPreserves expensive downloads via a _backup.nc sibling." },
+      title:"retrieve_area_cutout", body:"scripts/res_cf/c_retrieve_area_cutout.py\nin: region + offshore parquets (+ ERA5 / CDS)\nout: cutouts/{area}_{start_date}_{end_date}.nc\nPreserves expensive downloads via a _backup.nc sibling." },
 
-    // row 4 — CF rules + cf_map
-    { id:"country_average_cf", group:"res", x:130,  y:606, name:"country_average_cf", kick:"RES-CF RULE",
-      title:"build_country_average_cf", body:"03_build_cf_timeseries.py\nin: cutout + regions + offshore\nout: {area}_{tech}_country-average_{dates}.parquet\nSingle-site baseline CF per tech." },
-    { id:"solar_tilt_mix_p95", group:"res", x:315,  y:606, name:"solar_tilt_mix_p95", kick:"RES-CF RULE",
-      title:"build_solar_tilt_mix_p95", body:"03b_build_solar_tilt_mix_p95.py\nin: cutout + regions\nout: {area}_solar_tilt-mix-n{n}_{dates}.parquet" },
-    { id:"bestsite_p95", group:"res", x:500,  y:606, name:"bestsite_p95", kick:"RES-CF RULE",
-      title:"build_bestsite_p95", body:"07_make_bestsite_cf_timeseries.py\nout: {area}_{tech}_bestsite-p95_{dates}.parquet\nBest single grid cell (p95)." },
-    { id:"anchored_res_mix_cfs", group:"res", x:685, y:606, name:"anchored_res_mix_cfs", kick:"RES-CF RULE",
-      title:"build_anchored_res_mix_cfs", body:"07_make_bestsite_cf_timeseries.py (variant anchored-w{}-s{})\nout: {area}_{tech}_anchored-w{}-s{}_{dates}.parquet" },
-    { id:"complementarity_screen", group:"res", x:870, y:606, name:"complementarity_screen", kick:"RES-CF RULE",
-      title:"build_complementarity_screen", body:"08_complementarity_screen.py\nout: complementarity-screen + complementarity-top1 parquets\nScreens spatial wind/solar complementarity." },
-    { id:"multi_site_cfs", group:"res", x:1055, y:606, name:"multi_site_cfs", kick:"RES-CF RULE",
-      title:"build_multi_site_cfs", body:"03c_build_res_cf_candidates.py\nout: {area}_{tech}_multi-n{cells}_{dates}.parquet\nPer-cell candidates for multi-site siting." },
+    // row 4 — the CF methods (d1..d5) + cf_map
+    { id:"area_average", group:"res", x:220, y:606, name:"area_average", kick:"RES-CF RULE",
+      title:"area_average", body:"scripts/res_cf/d1_area_average.py\nvariant: area-average\nout: resources/timeseries/{area}_{tech}_{variant}_{dates}.parquet\nLand-eligibility-weighted mean over the whole area." },
+    { id:"bestsite_p95", group:"res", x:405, y:606, name:"bestsite_p95", kick:"RES-CF RULE",
+      title:"bestsite_p95", body:"scripts/res_cf/d2_bestsite_p95.py\nvariant: bestsite-p95\nBest single grid cell, taken at the P95 of eligible cells." },
+    { id:"anchor_colo", group:"res", x:590, y:606, name:"anchor_colo", kick:"RES-CF RULE",
+      title:"anchor_colo", body:"scripts/res_cf/d3_anchor_colo.py\nvariant: anchor-colo-n{N}\nAn anchor tech's best cells, with the other techs co-located.\nColumns are {tech}@{cell} — this is what puts the solve\ninto multi-site mode." },
+    { id:"tilt_mix", group:"res", x:775, y:606, name:"tilt_mix", kick:"RES-CF RULE",
+      title:"tilt_mix", body:"scripts/res_cf/d4_tilt_mix.py\nvariant: tilt-mix-n{N} (solar only)\nOne column per panel orientation in the sweep." },
+    { id:"multi", group:"res", x:960, y:606, name:"multi", kick:"RES-CF RULE",
+      title:"multi", body:"scripts/res_cf/d5_multi.py\nvariant: multi-n{N}\nPer-cell candidates for multi-site siting; {tech}@{cell} columns." },
     { id:"cf_map", group:"viz", x:1240, y:606, name:"cf_map", kick:"VIZ RULE", ondemand:true,
-      title:"plot_cf_map", body:"scripts/viz/plot_cf_map.py\nin: cutout + regions\nout: results/plots/cf_map/*.png + .html\nOn-demand." },
+      title:"plot_cf_map", body:"scripts/viz/plot_cf_map.py\nin: cutout + regions + the area-average CF\nout: results/plots/cf_map/*.png + .html\nOn-demand." },
 
     // row 5 — the hub
-    { id:"optimize", group:"opt", x:560, y:770, hub:true, name:"optimize", kick:"OPTIMISE · h2_dri",
-      title:"h2_dri_optimize", body:"scripts/h2_dri/solve_network.py\nin: assumptions (+overlays) + collected CF & grid parquets\nout: results/{project}/{scenario}.nc\nBuilds & solves one PyPSA network per (project, scenario)." },
+    { id:"solve", group:"opt", x:560, y:770, hub:true, name:"solve_network", kick:"OPTIMISE · solve",
+      title:"solve_network", body:"scripts/solve/solve_network.py\nin: assumptions (+ optional overlay) + area geometry\n    + the run's CF and grid parquets\nout: results/{scenario}/{area}_{route}_{dates}.nc\nOne network per run key: scenario, area, date range, route.\nStamps a content hash of every input into n.meta." },
 
     // row 6
     { id:"report", group:"viz", x:430, y:906, name:"report", kick:"VIZ RULE · TARGET",
-      title:"compile_report", body:"scripts/viz/compile_report.py\nin: all solved networks for a project\nout: results/report_{project}.csv\nBuilt by demo / all." },
+      title:"compile_report", body:"scripts/viz/compile_report.py\nin: every solved network of one scenario + scenarios.csv\nout: results/report_{scenario}.csv\n   + results/.report_{scenario}_diag.csv (hidden)\nA column per run, a row per field, on the fixed schema in\ncommon/_report_schema.py — every run writes the same fields\nwhatever route it took. The report holds the selected areas;\nthe diagnostic keeps every zone and the best_in_country\nflag. Built by demo / all." },
     { id:"siting_map", group:"viz", x:760, y:906, name:"siting_map", kick:"VIZ RULE", ondemand:true,
-      title:"plot_siting_map", body:"scripts/viz/plot_siting_map.py\nin: results/{project}/{scenario}.nc\nout: results/plots/siting_map/*\nMulti-site only; on-demand." },
+      title:"plot_siting_map", body:"scripts/viz/plot_siting_map.py\nin: results/{scenario}/{area}_{route}_{dates}.nc\nout: results/plots/siting_map/*\nMulti-site only; on-demand." },
     { id:"site_capacity", group:"viz", x:950, y:906, name:"site_capacity", kick:"VIZ RULE", ondemand:true,
-      title:"plot_site_capacity_bars", body:"scripts/viz/plot_site_capacity_bars.py\nin: network .nc\nout: results/plots/site_capacity/*\nMulti-site only; on-demand." },
+      title:"plot_site_capacity_bars", body:"scripts/viz/plot_site_capacity_bars.py\nin: network .nc\nout: results/plots/site_capacity_bars/*\nMulti-site only; on-demand." },
 
     // row 7
     { id:"capacity_bars", group:"viz", x:340, y:1036, name:"capacity_bars", kick:"VIZ RULE · TARGET",
-      title:"plot_capacity_bars", body:"scripts/viz/plot_capacity_bars.py\nin: report_{project}.csv\nout: results/plots/capacity_bars/{project}.png + .html\nDefault target (demo / all)." },
+      title:"plot_capacity_bars", body:"scripts/viz/plot_capacity_bars.py\nin: report_{scenario}.csv\nout: results/plots/capacity_bars/{scenario}.png + .html\nDefault target (demo / all)." },
     { id:"lcos_bars", group:"viz", x:540, y:1036, name:"lcos_bars", kick:"VIZ RULE", ondemand:true,
-      title:"plot_lcos_bars", body:"scripts/viz/plot_lcos_bars.py\nin: report_{project}.csv\nout: results/plots/lcos_bars/*\nSteel routes only; on-demand." },
+      title:"plot_lcos_bars", body:"scripts/viz/plot_lcos_bars.py\nin: report_{scenario}.csv\nout: results/plots/lcos_bars/{scenario}.png + .html\nSteel routes only; on-demand." },
   ];
 
   const E = (from, to, ondemand) => ({ from, to, ondemand: !!ondemand });
   // secondary = real file-dependency edge shown only in the Faithful view
   const S = (from, to) => ({ from, to, ondemand: false, secondary: true });
   const EDGES = [
-    E("ne_zip", "regions"),
-    E("eez_zip", "offshore_regions"),
+    E("ne_zip", "area_geometry"),
+    E("eez_zip", "offshore_geometry"),
     E("era5", "cutout"),
-    E("config", "optimize"),
-    E("entsoe_src", "retrieve_entsoe"),
-    E("nem_src", "retrieve_nem"),
-    E("regions", "offshore_regions"),
-    E("regions", "cutout"),
-    E("offshore_regions", "cutout"),
-    E("cutout", "country_average_cf"),
-    E("cutout", "solar_tilt_mix_p95"),
+    E("config", "solve"),
+    E("entsoe_src", "grid_data"),
+    E("nem_src", "grid_data"),
+    E("area_geometry", "offshore_geometry"),
+    E("area_geometry", "cutout"),
+    E("offshore_geometry", "cutout"),
+    E("cutout", "area_average"),
     E("cutout", "bestsite_p95"),
-    E("cutout", "anchored_res_mix_cfs"),
-    E("cutout", "complementarity_screen"),
-    E("cutout", "multi_site_cfs"),
+    E("cutout", "anchor_colo"),
+    E("cutout", "tilt_mix"),
+    E("cutout", "multi"),
     E("cutout", "cf_map", true),
-    E("country_average_cf", "optimize"),
-    E("solar_tilt_mix_p95", "optimize"),
-    E("bestsite_p95", "optimize"),
-    E("anchored_res_mix_cfs", "optimize"),
-    E("complementarity_screen", "optimize"),
-    E("multi_site_cfs", "optimize"),
-    E("retrieve_entsoe", "optimize"),
-    E("retrieve_nem", "optimize"),
-    E("optimize", "report"),
-    E("optimize", "siting_map", true),
-    E("optimize", "site_capacity", true),
+    E("area_average", "solve"),
+    E("bestsite_p95", "solve"),
+    E("anchor_colo", "solve"),
+    E("tilt_mix", "solve"),
+    E("multi", "solve"),
+    E("grid_data", "solve"),
+    E("solve", "report"),
+    E("solve", "siting_map", true),
+    E("solve", "site_capacity", true),
     E("report", "capacity_bars"),
     E("report", "lcos_bars", true),
 
-    // --- Faithful view only: the region / offshore parquet inputs each CF rule
-    //     (and cf_map) really declares, beyond the defining cutout dependency ---
-    S("regions", "country_average_cf"), S("regions", "solar_tilt_mix_p95"),
-    S("regions", "bestsite_p95"), S("regions", "anchored_res_mix_cfs"),
-    S("regions", "complementarity_screen"), S("regions", "multi_site_cfs"),
-    S("regions", "cf_map"),
-    S("offshore_regions", "country_average_cf"), S("offshore_regions", "bestsite_p95"),
-    S("offshore_regions", "anchored_res_mix_cfs"), S("offshore_regions", "complementarity_screen"),
-    S("offshore_regions", "multi_site_cfs"),
+    // --- Faithful view only: the geometry inputs each CF rule (and cf_map)
+    //     really declares, beyond the defining cutout dependency ---
+    S("area_geometry", "area_average"), S("area_geometry", "bestsite_p95"),
+    S("area_geometry", "anchor_colo"), S("area_geometry", "tilt_mix"),
+    S("area_geometry", "multi"), S("area_geometry", "cf_map"),
+    S("area_geometry", "solve"),
+    S("offshore_geometry", "area_average"), S("offshore_geometry", "bestsite_p95"),
+    S("offshore_geometry", "anchor_colo"), S("offshore_geometry", "multi"),
+    S("offshore_geometry", "cf_map"),
+    // compile_report reads the scenario table for the variant each tech was
+    // solved with — the network does not carry it.
+    S("config", "report"),
+    S("area_average", "cf_map"),
   ];
 
   const nodeById = {};
@@ -515,12 +513,12 @@
   function hideTip() { tip.classList.remove("show"); tip.setAttribute("aria-hidden", "true"); }
 
   const CAPTIONS = {
-    all: "The Snakemake rule graph, top-to-bottom by dependency depth. RES-CF science on the left, grid prices on the right, both converging on the per-scenario optimise, then report + plots.",
-    src: "<b>Sources</b> — external inputs: Natural Earth + EEZ shapes, ERA5 (via CDS), the ENTSO-E / AEMO price APIs, and the config (config.yaml, projects.csv, assumptions.yaml + optional overlays).",
-    res: "<b>res_cf.smk</b> — build land/offshore regions, cut an ERA5 weather slice, then derive capacity-factor timeseries per method: country-average baseline, best-site, anchored mixes, complementarity screen, and multi-site candidates.",
-    grid: "<b>grid.smk</b> — day-ahead price retrieval: ENTSO-E for Europe, AEMO NEM (via NEMOSIS) for Australia. Outputs are temp parquets consumed by the optimise.",
-    opt: "<b>h2_dri.smk</b> — h2_dri_optimize (solve_network.py) builds and solves one PyPSA network per (project, scenario), pulling the matching CF + grid parquets and the assumptions.",
-    viz: "<b>viz.smk</b> — compile_report aggregates the solved networks into one CSV per project; plots render from it (capacity bars is a default target) or straight from a network (siting / site-capacity / cf maps — on-demand).",
+    all: "The Snakemake rule graph, top-to-bottom by dependency depth. RES-CF science on the left, grid prices on the right, both converging on the per-run solve, then report + plots.",
+    src: "<b>Sources</b> — external inputs: Natural Earth + EEZ shapes, ERA5 (via CDS), the ENTSO-E / AEMO price APIs, and the config (config.yaml, scenarios.csv, assumptions.yaml + an optional per-scenario overlay).",
+    res: "<b>res_cf.smk</b> — build the area and offshore geometries, cut an ERA5 weather slice, then derive capacity-factor timeseries per method (d1–d5): area average, best-site P95, anchor co-location, solar tilt mix, and multi-site candidates. Every output lands in one flat resources/timeseries/ directory, named by the CSV row that asked for it.",
+    grid: "<b>grid.smk</b> — day-ahead price retrieval, one rule for both markets: ENTSO-E for Europe, AEMO NEM (via NEMOSIS) for Australia, chosen by the area registry. The output is the processed cache, keyed by the whole run.",
+    opt: "<b>solve.smk</b> — solve_network builds and solves one PyPSA network per run key (scenario, area, date range, route), pulling that run's CF and grid parquets plus the assumptions, and stamping a content hash of every input into the network.",
+    viz: "<b>viz.smk</b> — compile_report aggregates one scenario's solved networks into a report CSV on a fixed schema, a column per run (plus a hidden _diag.csv holding the zones it did not select); plots render from it (capacity bars is a default target) or straight from a network (siting / site-capacity / cf maps — on-demand). The pages under results/html/ are built outside the workflow.",
   };
 
   let active = "all";

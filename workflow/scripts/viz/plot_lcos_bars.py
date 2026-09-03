@@ -5,8 +5,8 @@ Snakemake rule: plot_lcos_bars (in viz.smk).
 The core route-comparison figure: each scenario's levelised cost of steel
 (€/t) stacked by cost group (process capex, ore & consumables, renewables,
 grid, electrolyser, storage, transmission), with the LCOS total on top of
-each bar. Scenarios without a steel load (h2_only) are skipped — they have
-no LCOS; requesting this plot for a project with no steel scenarios at all
+each bar. Routes without a steel load (h2-only) are skipped — they have
+no LCOS; requesting this plot for a scenario with no steel routes at all
 is an error.
 """
 
@@ -20,6 +20,8 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
+from common._report_schema import read_report
+from _run_display import run_label
 from scripts.viz.style import (
     apply_header,
     blue_black,
@@ -60,37 +62,38 @@ COST_GROUPS = [
 ]
 
 
-def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Per-scenario cost-group columns in €/t steel, indexed by scenario label.
 
-    Keeps only scenarios with an LCOS (steel routes); converts each
-    cost_{group}_meur column from M€/yr to €/t via the scenario's steel output.
+
+
+def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-run cost-group columns in €/t steel, indexed by run label.
+
+    Keeps only runs with an LCOS (steel routes); converts each
+    cost_{group}_meur column from M€/yr to €/t via the run's steel output.
     """
-    steel = df[df["lcos_eur_per_t"].notna()] if "lcos_eur_per_t" in df.columns else df.iloc[:0]
+    steel = df[df["lcos_eur_per_t"].notna()]
     skipped = len(df) - len(steel)
     if skipped:
-        log.info(f"skipping {skipped} scenario(s) without a steel load (no LCOS)")
+        log.info(f"skipping {skipped} run(s) without a steel load (no LCOS)")
     if steel.empty:
         raise ValueError(
-            f"{_REPORT_PATH.name} has no steel-route scenarios — "
-            "plot_lcos_bars only applies to projects with route != h2_only"
+            f"{_REPORT_PATH.name} has no steel-route runs — "
+            "plot_lcos_bars only applies to scenarios with a route other than h2-only"
         )
 
     steel_t_per_year = steel["steel_produced_mt"] * 1e6
-    plot_df = pd.DataFrame({"label": steel["scenario"].astype(str)})
+    plot_df = pd.DataFrame({"label": steel.apply(run_label, axis=1)})
     for group, _, _ in COST_GROUPS:
-        col = f"cost_{group}_meur"
-        if col in steel.columns:
-            plot_df[group] = steel[col].fillna(0.0) * 1e6 / steel_t_per_year.values
+        plot_df[group] = steel[f"cost_{group}_meur"] * 1e6 / steel_t_per_year.values
     plot_df["lcos_total"] = steel["lcos_eur_per_t"].values
     return plot_df.set_index("label")
 
 
-def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
+def plot(plot_df: pd.DataFrame, out: Path, scenario_label: str) -> None:
     """Assemble the stacked LCOS bar chart and write it to PNG + HTML."""
     fig = go.Figure()
     for group, label, color in COST_GROUPS:
-        if group not in plot_df.columns or (plot_df[group] == 0).all():
+        if (plot_df[group] == 0).all():
             continue
         fig.add_trace(go.Bar(
             x=plot_df.index,
@@ -126,7 +129,7 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
 
     apply_header(
         fig,
-        title=f"{project_label} levelised cost of steel",
+        title=f"{scenario_label} levelised cost of steel",
         subtitle="€/t liquid steel, by cost group; label = LCOS total",
         fig_width=max(720, 200 * n_sc + 320), fig_height=600,
         margin_l=80, margin_r=280, margin_t=110, margin_b=80,
@@ -136,10 +139,10 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
 
 
 def main() -> None:
-    """Load the project report and render its LCOS breakdown chart."""
-    df = pd.read_csv(_REPORT_PATH)
-    project_label = ", ".join(dict.fromkeys(df["project"].astype(str)))
-    plot(build_plot_data(df), _OUT, project_label)
+    """Load the scenario report and render its LCOS breakdown chart."""
+    df = read_report(_REPORT_PATH)
+    scenario_label = ", ".join(dict.fromkeys(df["scenario"].astype(str)))
+    plot(build_plot_data(df), _OUT, scenario_label)
 
 
 if __name__ == "__main__":

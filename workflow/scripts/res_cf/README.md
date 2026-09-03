@@ -64,7 +64,7 @@ Annual hourly CF time series aggregated at country level from Atlite cutouts usi
 
 ## Best-site P95 CFs
 
-- `resources/res_cf/<cc>_cf_2023_bestsite_p95.parquet`
+- `resources/timeseries/<cc>_cf_2023_bestsite_p95.parquet`
 
 ### Definition
 **Best-site P95 CFs**:  
@@ -186,7 +186,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   - calculates area-weighted spatial statistics (mean, P90, P95, max)
   - computes uplift factors relative to the national mean  
   Outputs:
-  - `resources/res_cf/resource_spread_2023.parquet`
+  - `resources/timeseries/resource_spread_2023.parquet`
 
 - `scripts/res_cf/determine_bestsite_p95.py`  
 
@@ -200,7 +200,7 @@ Best-site CFs represent **resource-optimised project locations** and should be i
   - applies 3×3 spatial averaging (wind only)
 
   Outputs:
-  - `resources/res_cf/<cc>_cf_2023_bestsite_p95.parquet`
+  - `resources/timeseries/<cc>_cf_2023_bestsite_p95.parquet`
 
   No longer:
   - multiplies national CF by uplift factors
@@ -282,8 +282,8 @@ python -c "import pandas as pd; from pathlib import Path;
 countries=['de','fr','es','aus','bra'];
 
 for c in countries:
-    nat=pd.read_parquet(f'resources/res_cf/{c}_cf_2023.parquet');
-    best=pd.read_parquet(f'resources/res_cf/{c}_cf_2023_bestsite_p95.parquet');
+    nat=pd.read_parquet(f'resources/timeseries/{c}_cf_2023.parquet');
+    best=pd.read_parquet(f'resources/timeseries/{c}_cf_2023_bestsite_p95.parquet');
 
     print('\n' + c.upper());
 

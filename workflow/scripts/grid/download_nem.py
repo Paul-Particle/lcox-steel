@@ -1,4 +1,4 @@
-"""NEM download primitives — imported by retrieve_nem.py.
+"""NEM download primitives — imported by _nem.py.
 
 Provides four download functions (price, generation, load, crossborder) that
 pull data from NEMOSIS and return DataFrames in a shape compatible with their
@@ -16,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 from nemosis import dynamic_data_compiler
 
-# Module-level logger only — the rule script (retrieve_nem.py) installs handlers.
+# Module-level logger only — the rule script (_nem.py) installs handlers.
 log = logging.getLogger(__name__)
 
 

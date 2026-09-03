@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the cost-taxonomy hub tab: two ways of cutting the same levelised cost.
 
-Writes `results/cost_taxonomies.html` — a body-only, theme-aware, self-contained
+Writes `results/html/cost_taxonomies.html` — a body-only, theme-aware, self-contained
 page that puts the circulated chart mockup's *category split* next to the split
 the pipeline already reports, both populated from the same results, for any
 scenario in the matrix.
@@ -25,7 +25,6 @@ import json
 import sys
 from pathlib import Path
 
-import pandas as pd
 import yaml
 
 REPO = Path(__file__).resolve().parents[3]        # workflow/scripts/viz/ -> repo root
@@ -33,10 +32,11 @@ sys.path.insert(0, str(Path(__file__).parent))    # sibling build_dashboard, cos
 sys.path.insert(0, str(REPO / "workflow"))        # common.*, scripts.*
 
 import cost_taxonomy                                                      # noqa: E402
-from build_dashboard import RESULTS, _parse_scenario, build_html          # noqa: E402
+from build_dashboard import HTML_DIR, RESULTS, _axes, build_html          # noqa: E402
 from common._constants import H2_LHV_KWH_PER_KG                           # noqa: E402
+from common._report_schema import read_report                             # noqa: E402
 
-OUT_PATH = RESULTS / "cost_taxonomies.html"
+OUT_PATH = HTML_DIR / "cost_taxonomies.html"
 TEMPLATE_HTML = Path(__file__).with_name("cost_taxonomies_template.html")
 CONFIG_DIR = REPO / "config"
 
@@ -87,15 +87,15 @@ DASH_LCOH_BANDS = [
 ]
 
 
-def _assumptions(project: str, scenario: str) -> dict:
-    """Base assumptions with the scenario's generated overlay applied on top.
+def _assumptions(scenario: str) -> dict:
+    """Base assumptions with the scenario's overlay applied on top.
 
-    The generated `assumptions_{project}_{scenario}.yaml` files are thin overlays —
-    typically just `route:` — so the physical coefficients come from the base file.
-    Reading the overlay alone silently yields nothing.
+    An overlay is thin — it carries only the keys it bumps — so the physical
+    coefficients come from the base file. Reading the overlay alone silently
+    yields nothing.
     """
     merged = yaml.safe_load((CONFIG_DIR / "assumptions.yaml").read_text())
-    overlay_path = CONFIG_DIR / f"assumptions_{project}_{scenario}.yaml"
+    overlay_path = CONFIG_DIR / f"assumptions_{scenario}.yaml"
     if overlay_path.exists():
         for key, value in (yaml.safe_load(overlay_path.read_text()) or {}).items():
             if isinstance(value, dict) and isinstance(merged.get(key), dict):
@@ -145,17 +145,20 @@ def attach(payload: dict, cases: dict) -> None:
         return specs[fingerprint]
 
     attached = missing = 0
-    for project in sorted(cases):
-        report = RESULTS / f"report_{project}.csv"
-        if not report.exists():
-            continue
-        for _, row in pd.read_csv(report).iterrows():
-            scenario = str(row["scenario"])
-            route, variant, cf = _parse_scenario(scenario)
-            record = cases.get(project, {}).get(route, {}).get(variant, {}).get(cf)
+    # The same reports build_dashboard read, walked again to attach the leaf
+    # split to the records it already built. A row finds its record through the
+    # axes it declares, not through a name that has to be taken apart.
+    for report in sorted(RESULTS.glob("report_*.csv")):
+        for _, row in read_report(report).iterrows():
+            axes = _axes(row)
+            project = f"{axes['geo']}-{axes['year']}-{axes['grid']}"
+            record = (cases.get(project, {})
+                           .get(axes["route"], {})
+                           .get(axes["variant"], {})
+                           .get(axes["cf"]))
             if record is None:
                 continue
-            assumptions = _assumptions(project, scenario)
+            assumptions = _assumptions(axes["variant"])
             bands = cost_taxonomy.alternative_lcos_bands(row, assumptions, H2_LHV_KWH_PER_KG)
             if not bands:
                 missing += 1

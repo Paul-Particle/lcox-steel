@@ -11,7 +11,7 @@ groundwork is built with it in mind, but the two are kept separate.
 
 Coarse ERA5 (~27–31 km) coastal cells blend smooth-sea and rough-land wind, so
 onshore wind CF is inflated wherever a cell contains sea. Confirmed across all six
-cf_areas (FR/DE/ES/AUS/BRA/VIC) by the decomposition in
+areas (FR/DE/ES/AUS/BRA/VIC) by the decomposition in
 `notebooks/res_cf_coastal_cf_exploration.ipynb` and the multi-country re-run posted
 to #41:
 
@@ -28,9 +28,9 @@ comment: those close as symptoms once this lands).
 CF weighting uses `cutout.indicatormatrix([geom])` — the **land-coverage fraction**
 of each cell against the Natural-Earth region polygon (EPSG:4326). Consumers:
 
-- `03_build_cf_timeseries.py` — country-average CF (per_unit over the matrix).
-- `07_make_bestsite_cf_timeseries.py` — P95/best-site selection + resource summary.
-- `07b_make_anchor_colocated_cf_timeseries.py` — anchor P95 (reuses 07).
+- `d1_area_average.py` — area-average CF (per_unit over the matrix).
+- `d2_bestsite_p95.py` — P95/best-site selection + resource summary.
+- `d3_anchor_colo.py` — anchor P95 (reuses 07).
 - `03b` / `03c` — solar tilt-mix and candidate lattice (point-in-polygon mask).
 
 The gap this leaves (and the subject of this doc): the land fraction correctly
@@ -50,7 +50,7 @@ land-coverage fraction and down-weights sea, but a mostly-sea coastal cell keeps
 inflated CF and can still win P95 / best-site / `max`. The notebook decomposition
 showed the fix directly: classify cells on that existing land fraction
 (`full = w ≥ 0.98·wmax`, `border = w < 0.98·wmax`) and drop the border cells — the
-P95 gap collapses to ≈0 (`explained% ≈ 100`) in every cf_area, with no new data.
+P95 gap collapses to ≈0 (`explained% ≈ 100`) in every area, with no new data.
 
 So the MVP is a **minimum-land-fraction cutoff on the weight we already compute**, not
 a new raster:
@@ -121,11 +121,11 @@ No new Snakemake rule. A shared helper, a config block, and a small manual data 
   `res_cf.eligibility_source` (default `indicatormatrix`), and an `availability` block
   (land-shapes path, `crs: 6933`, `res: 200`) used only by `availabilitymatrix`.
 - **Consumers**, onshore only (offshore passes 0):
-  - `03_build_cf_timeseries` — `eligibility_matrix` feeds the per_unit country mean;
+  - `d1_area_average` — `eligibility_matrix` feeds the per_unit country mean;
     offshore matrix untouched.
-  - `07_make_bestsite_cf_timeseries` — `eligibility_weights` per tech drives the
+  - `d2_bestsite_p95` — `eligibility_weights` per tech drives the
     national mean, P90/P95, `max`, and the P95-cell pick.
-  - `07b_make_anchor_colocated_cf_timeseries` — same cutoff on the anchor P95 pick and
+  - `d3_anchor_colo` — same cutoff on the anchor P95 pick and
     on onshore candidate validity.
 
 ## Plan (this branch)
@@ -136,7 +136,7 @@ Land–sea eligibility cutoff + a selectable finer-coastline source:
    (offshore exempt).
 2. ✅ `eligibility_source` selector; `availabilitymatrix` wired to NE-10m land via
    `ExclusionContainer` (`crs 6933`, `res 200`).
-3. ✅ Verify across all six cf_areas (see Validation): the cutoff collapses the onshore
+3. ✅ Verify across all six areas (see Validation): the cutoff collapses the onshore
    `max` tail everywhere (largest where coastline is largest; VIC #24 resolved), and the
    two sources agree — identical in 5/6 areas, DE differs only in P95 by 0.0014.
 
@@ -150,7 +150,7 @@ No capacity-cap work here — that is #31, sketched in [Future work](#future-wor
    selection paths (07/07b). Currently applied to both for consistency; it barely
    moves the mean.
 3. Default `eligibility_source`: shipping `indicatormatrix` (no download, and it agrees
-   with the finer source across all six cf_areas — see Validation). `availabilitymatrix`
+   with the finer source across all six areas — see Validation). `availabilitymatrix`
    stays available as the cross-check / finer-coastline option.
 
 ## Future work — capacity cap (#31)
@@ -197,7 +197,7 @@ Acceptance test = the notebook decomposition: with the cutoff on, coastal border
 carry 0 eligible weight and the P95 weighted-vs-unweighted gap collapses *without* a
 hand-picked border cutoff (it is now the configured `min_land_fraction`).
 
-### The fix across all six cf_areas (wind-onshore, `min_land_fraction` off → on = 0 → 0.98)
+### The fix across all six areas (wind-onshore, `min_land_fraction` off → on = 0 → 0.98)
 
 `indicatormatrix` source; 2023 (VIC 2025):
 

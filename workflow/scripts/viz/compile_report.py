@@ -1,6 +1,10 @@
-"""Compile per-scenario summaries into a single project-level report CSV.
+"""Compile per-run summaries into the scenario-level report CSV.
 
 Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
+Writes two files: the report viz reads, and a hidden `_diag.csv` beside it that
+keeps the zones the report did not select. Each run carries the `inputs_hash` the
+solve stamped into the network, so a number stays tied to its inputs. What the
+files look like is common/_report_schema.py's business.
 """
 
 import logging
@@ -13,6 +17,8 @@ import yaml
 
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
+from common._report_schema import PROCESS_LINKS, RES_TECHS, field_stem, write_report_file
+from common._runs import load_scenarios, zone_parents
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -22,30 +28,6 @@ log = logging.getLogger(__name__)
 
 # repo root: workflow/scripts/viz/compile_report.py -> parents[3]
 _ASSUMPTIONS_PATH = Path(__file__).resolve().parents[3] / "config" / "assumptions.yaml"
-
-
-@lru_cache(maxsize=1)
-def _ladle_capital_fraction() -> float:
-    """Ladle metallurgy's share of the folded MOE link capital.
-
-    `_add_moe_link` folds ladle capex+opex into the single moe link, both
-    annuitised over the MOE lifetime — so the split is a config constant (the
-    dashboard's projects don't overlay moe/ladle/wacc). Returns the ladle
-    fraction of the combined annualised (capex+opex), used to break the reported
-    MOE plant cost into MOE proper vs ladle. Zero if unavailable.
-    """
-    try:
-        cfg = yaml.safe_load(_ASSUMPTIONS_PATH.read_text()) or {}
-        moe, ladle = cfg["moe"], cfg["ladle"]
-        wacc = cfg["finance"]["default_wacc"]
-        life = moe["lifetime_years"]
-        annuity = (wacc * (1.0 + wacc) ** life) / ((1.0 + wacc) ** life - 1.0)
-        moe_per_t = annuity * moe["capex_per_t_per_year_eur"] + moe["opex_per_t_per_year_eur"]
-        ladle_per_t = annuity * ladle["capex_per_t_per_year_eur"] + ladle["opex_per_t_per_year_eur"]
-        total = moe_per_t + ladle_per_t
-        return ladle_per_t / total if total > 0 else 0.0
-    except (OSError, ValueError, TypeError, KeyError, ZeroDivisionError):
-        return 0.0
 
 
 @lru_cache(maxsize=1)
@@ -99,7 +81,65 @@ def _marginal_costs(static: pd.DataFrame, flow_t: pd.DataFrame, mc_t: pd.DataFra
     return total
 
 
-PROCESS_LINKS = ("dri", "dri_ng", "eaf", "moe", "electrowinning")
+def mark_best_in_country(df: pd.DataFrame, parents: dict, metric: str | None) -> pd.DataFrame:
+    """Add `country`, and flag each country's best zone for every route.
+
+    A country that supplies its market through zones (Australia through its NEM
+    regions) is run once per zone, so several rows describe the same place. Every
+    route picks the zone where that route came out cheapest: Australia's moe-eaf
+    is reported from whichever NEM region made steel cheapest with moe-eaf, and
+    each date range is ranked on its own.
+
+    The losers are flagged, not dropped — this frame is the diagnostic one, where
+    what the other zones cost is itself a result and a dropped row would cost a
+    re-solve to recover. `write_report` is what narrows it down for viz.
+
+    `metric` names the ranking column, or None to flag everything. A row with no
+    value for it (h2-only produces hydrogen, so it has no cost of steel) stays
+    flagged rather than being ranked away.
+    """
+    out = df.copy()
+    out.insert(2, "country", out["area"].map(lambda a: parents.get(a, a)))
+    if metric is None or metric not in out.columns:
+        out["best_in_country"] = True
+        return out
+    ranked = out.groupby(["country", "route", "start_date", "end_date"])[metric]
+    out["best_in_country"] = (out[metric] == ranked.transform("min")) | out[metric].isna()
+    return out
+
+
+def input_variants(scenarios: pd.DataFrame, scenario_name: str, run: dict) -> dict:
+    """Which series each tech contributed to one run, as `{tech}_variant` fields.
+
+    A best-site P95 profile and an area average answer different questions, so a
+    cost is not interpretable without knowing which produced it. The solve reads
+    the parquet, not its name, so the variant survives only in the scenario
+    table and is joined back on here. Rows join on the run minus the route —
+    every route of a group is built from the same series. The scenario table
+    spells a tech `wind-onshore`; the field it lands in is `wind_onshore_variant`.
+    """
+    group = scenarios[
+        (scenarios["scenario"] == scenario_name)
+        & (scenarios["area"] == run["area"])
+        & (scenarios["start_date"] == run["start_date"])
+        & (scenarios["end_date"] == run["end_date"])
+    ]
+    variants = {f"{field_stem(row.tech)}_variant": row.variant for row in group.itertuples()}
+    return variants
+
+
+def write_report(df: pd.DataFrame, report_path: Path, diagnostic_path: Path) -> None:
+    """Write the scenario report and the hidden diagnostic beside it.
+
+    The report is the seam viz reads: which zone represents its country is
+    already decided here, so it holds one column per reported place and no
+    `best_in_country` row to interpret. The diagnostic keeps every zone and the
+    flag, for the question "what would the others have cost?".
+    """
+    write_report_file(df, diagnostic_path)
+    selected = df[df["best_in_country"]].drop(columns="best_in_country")
+    write_report_file(selected, report_path)
+    log.info(f"wrote {report_path} ({len(selected)} runs) and {diagnostic_path} ({len(df)} runs)")
 
 
 def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
@@ -172,8 +212,11 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
     }
 
 
-def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> dict:
+def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
     """Key sizing and cost metrics as a flat dict (suitable for a one-row CSV).
+
+    `run` identifies the row — area, route, date range and the input variants —
+    and leads the columns, so what a number describes reads before the number.
 
     The headline levelised cost depends on the network's route: LCOH for the
     pure-H2 model (flat H2 load, no steel chain), LCOS for the steel routes
@@ -183,15 +226,15 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     """
     breakdown = _cost_breakdown(n)
     summary = {
-        "project": project_name,
         "scenario": scenario_name,
+        **run,
         "total_annual_cost_meur": sum(breakdown.values()) / 1e6,
     }
-    # Per-group annual cost columns (zero groups omitted — a scenario without a
-    # component shouldn't grow the CSV). plot_lcos_bars stacks these.
+    # Per-group annual cost columns, zeros written out: they stack to the total,
+    # so a group this route has no component for contributed nothing — which is
+    # a result, not a gap. plot_lcos_bars stacks these.
     for group, value in breakdown.items():
-        if value:
-            summary[f"cost_{group}_meur"] = value / 1e6
+        summary[f"cost_{group}_meur"] = value / 1e6
 
     total_annual_cost = sum(breakdown.values())
 
@@ -208,6 +251,17 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     if "electrolyser" in n.links.index:
         summary["h2_produced_kt"] = _h2_produced_kg(n) / 1e6
 
+    # The levelised cost of whatever this run produces — steel for the steel
+    # routes, hydrogen for h2-only. One column, so ranking a route's runs against
+    # each other needs no per-route special-casing; the unit rides along so a row
+    # is readable on its own.
+    if "lcos_eur_per_t" in summary:
+        summary["lco_output"] = summary["lcos_eur_per_t"]
+        summary["lco_output_unit"] = "EUR/t steel"
+    elif "lcoh_eur_per_kg" in summary:
+        summary["lco_output"] = summary["lcoh_eur_per_kg"]
+        summary["lco_output_unit"] = "EUR/kg H2"
+
     # Levelised cost of the underlying energy carriers, €/MWh, so LCOS can be read
     # against the electricity and hydrogen that drive it.
     #   LCOE = electricity-system cost (renewables + battery + grid + transmission)
@@ -217,7 +271,7 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     annual_scale = 8760.0 / len(n.snapshots)
     elec_gens = [g for g in n.generators.index if g != "gas_supply"]
     elec_mwh = (float(n.generators_t.p[elec_gens].sum().sum()) * annual_scale) if elec_gens else 0.0
-    elec_cost = sum(breakdown.get(k, 0.0) for k in ("res", "battery", "grid", "transmission"))
+    elec_cost = sum(breakdown[k] for k in ("res", "battery", "grid", "transmission"))
     lcoe = elec_cost / elec_mwh if elec_mwh > 0 and elec_cost > 0 else float("nan")
     if lcoe == lcoe:  # not NaN
         summary["lcoe_eur_per_mwh"] = lcoe
@@ -247,35 +301,30 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
             grid_mwh = float(n.generators_t.p["grid_import"].sum()) * annual_scale
 
         components = {
-            "lcoe_solar": _res_cost("solar"),
-            "lcoe_wind_onshore": _res_cost("wind-onshore"),
-            "lcoe_wind_offshore": _res_cost("wind-offshore"),
-            "lcoe_storage": breakdown.get("battery", 0.0),
+            **{f"lcoe_{field_stem(tech)}": _res_cost(tech) for tech in RES_TECHS},
+            "lcoe_storage": breakdown["battery"],
             "lcoe_grid_connection": grid_conn,
             "lcoe_grid_energy": grid_energy,
-            "lcoe_transmission": breakdown.get("transmission", 0.0),
+            "lcoe_transmission": breakdown["transmission"],
         }
-        res_total = components["lcoe_solar"] + components["lcoe_wind_onshore"] + components["lcoe_wind_offshore"]
-        if res_total > 0:
-            summary["lcoe_renewables_eur_per_mwh"] = res_total / elec_mwh
+        res_total = sum(components[f"lcoe_{field_stem(tech)}"] for tech in RES_TECHS)
+        summary["lcoe_renewables_eur_per_mwh"] = res_total / elec_mwh
         for key, cost in components.items():
-            if cost > 0:
-                summary[f"{key}_eur_per_mwh"] = cost / elec_mwh
+            summary[f"{key}_eur_per_mwh"] = cost / elec_mwh
 
         # Per-technology LCOE (€/MWh over that tech's own generation, not the
         # system total) — a fair unit cost for the renewable itself, distinct from
         # its lcoe_<tech> contribution to the system LCOE above.
-        for prefix, tech in (("solar", "solar"), ("wind-onshore", "wind_onshore"),
-                             ("wind-offshore", "wind_offshore")):
-            cost, mwh = _res_cost(prefix), _res_mwh(prefix)
+        for tech in RES_TECHS:
+            cost, mwh = _res_cost(tech), _res_mwh(tech)
             if cost > 0 and mwh > 0:
-                summary[f"lcoe_{tech}_own_eur_per_mwh"] = cost / mwh
+                summary[f"lcoe_{field_stem(tech)}_own_eur_per_mwh"] = cost / mwh
 
         # Blended renewable own LCOE (over renewable generation only) — the
         # generation-weighted mean of the per-tech own LCOEs, so it sits between
         # them. Distinct from lcoe_renewables (contribution over all electricity,
         # which grid imports drag below the per-tech figures).
-        res_mwh = _res_mwh("solar") + _res_mwh("wind-onshore") + _res_mwh("wind-offshore")
+        res_mwh = sum(_res_mwh(tech) for tech in RES_TECHS)
         if res_total > 0 and res_mwh > 0:
             summary["lcoe_renewables_own_eur_per_mwh"] = res_total / res_mwh
 
@@ -285,11 +334,10 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
             idx = [g for g in res_idx if str(g).startswith(prefix)]
             return float(n.generators.loc[idx, "p_nom_opt"].sum()) if idx else 0.0
 
-        for prefix, tech in (("solar", "solar"), ("wind-onshore", "wind_onshore"),
-                             ("wind-offshore", "wind_offshore")):
-            cap = _res_cap(prefix)
+        for tech in RES_TECHS:
+            cap = _res_cap(tech)
             if cap > 0:
-                summary[f"cf_{tech}"] = _res_mwh(prefix) / (cap * 8760.0)
+                summary[f"cf_{field_stem(tech)}"] = _res_mwh(tech) / (cap * 8760.0)
         if grid_mwh > 0:
             grid_p_nom = float(n.generators.at["grid_import", "p_nom_opt"])
             if grid_p_nom > 0:
@@ -312,8 +360,8 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         h2_mwh = _h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
         if h2_mwh > 0:
             elec_for_h2 = el_mwh * (lcoe if lcoe == lcoe else 0.0)
-            el_cost = breakdown.get("electrolyser", 0.0)
-            buf_cost = breakdown.get("h2_buffer", 0.0)
+            el_cost = breakdown["electrolyser"]
+            buf_cost = breakdown["h2_buffer"]
             lcoh = (el_cost + buf_cost + elec_for_h2) / h2_mwh
             summary["lcoh_eur_per_mwh_lhv"] = lcoh
             # LCOH decomposition, €/MWh LHV over the same H2 denominator so the
@@ -343,23 +391,10 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
                 return float((n.links_t.p0[link_name] * n.links.at[link_name, "marginal_cost"]).sum()) * annual_scale
 
             for link in PROCESS_LINKS:
-                capex = _link_capex(link)
-                if capex <= 0:
-                    continue
-                if link == "moe":
-                    # Split the folded MOE link capital into MOE proper vs ladle
-                    # metallurgy, so both are visible (they sum to the moe link).
-                    frac = _ladle_capital_fraction()
-                    summary["plant_moe_eur_per_t"] = capex * (1.0 - frac) / steel_t
-                    summary["plant_ladle_eur_per_t"] = capex * frac / steel_t
-                else:
-                    summary[f"plant_{link}_eur_per_t"] = capex / steel_t
-            ore = sum(_link_marginal(l) for l in ("dri", "dri_ng", "moe", "electrowinning"))
-            consumables = _link_marginal("eaf")
-            if ore > 0:
-                summary["ore_eur_per_t_steel"] = ore / steel_t
-            if consumables > 0:
-                summary["consumables_eur_per_t_steel"] = consumables / steel_t
+                summary[f"plant_{field_stem(link)}_eur_per_t"] = _link_capex(link) / steel_t
+            ore = sum(_link_marginal(l) for l in ("dri-h2", "dri-ng", "moe", "ew"))
+            summary["ore_eur_per_t_steel"] = ore / steel_t
+            summary["consumables_eur_per_t_steel"] = _link_marginal("eaf") / steel_t
 
     # Steel-route process links: capacity in output units (t/h of iron or
     # steel — p_nom is input-side, so scale by the link efficiency) plus
@@ -368,8 +403,8 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         if link not in n.links.index:
             continue
         p_nom = n.links.at[link, "p_nom_opt"]
-        summary[f"{link}_t_per_h_opt"] = p_nom * n.links.at[link, "efficiency"]
-        summary[f"{link}_utilization"] = (
+        summary[f"{field_stem(link)}_t_per_h_opt"] = p_nom * n.links.at[link, "efficiency"]
+        summary[f"{field_stem(link)}_utilization"] = (
             float(n.links_t.p0[link].mean() / p_nom) if p_nom > 0 else float("nan")
         )
 
@@ -379,9 +414,9 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     # How much of the iron came from the H2 shaft (production share, not capacity
     # share). Emitted for any DRI route so a pure H2-DRI reads 1.0 and a pure
     # NG-DRI 0.0 — not a missing value that downstream would coerce to 0.
-    if "dri" in n.links.index or "dri_ng" in n.links.index:
-        iron_h2 = -float(n.links_t.p1["dri"].sum()) if "dri" in n.links.index else 0.0
-        iron_ng = -float(n.links_t.p1["dri_ng"].sum()) if "dri_ng" in n.links.index else 0.0
+    if "dri-h2" in n.links.index or "dri-ng" in n.links.index:
+        iron_h2 = -float(n.links_t.p1["dri-h2"].sum()) if "dri-h2" in n.links.index else 0.0
+        iron_ng = -float(n.links_t.p1["dri-ng"].sum()) if "dri-ng" in n.links.index else 0.0
         total = iron_h2 + iron_ng
         summary["iron_from_h2_share"] = iron_h2 / total if total else float("nan")
 
@@ -404,7 +439,7 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
             )
 
     for gen in n.generators.index[n.generators.p_nom_extendable]:
-        summary[f"{gen}_gw_opt"] = n.generators.at[gen, "p_nom_opt"] / 1e3
+        summary[f"{field_stem(gen)}_gw_opt"] = n.generators.at[gen, "p_nom_opt"] / 1e3
 
     if "battery" in n.storage_units.index:
         p_opt = n.storage_units.at["battery", "p_nom_opt"]
@@ -418,8 +453,8 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         # pure-H2 route, or the DRI link's mean H₂ draw on the steel route.
         if "dri_load" in n.loads.index:
             h2_demand_mw = float(n.loads.at["dri_load", "p_set"])
-        elif "dri" in n.links.index:
-            h2_demand_mw = float(n.links_t.p0["dri"].mean())
+        elif "dri-h2" in n.links.index:
+            h2_demand_mw = float(n.links_t.p0["dri-h2"].mean())
         else:
             h2_demand_mw = 0.0
         summary["h2_buffer_hours_dri"] = (
@@ -447,7 +482,7 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
         trans_cost = 0.0
         for link in hvdc:
             cap = n.links.at[link, "p_nom_opt"]
-            summary[f"{link}_gw_opt"] = cap / 1e3
+            summary[f"{field_stem(link)}_gw_opt"] = cap / 1e3
             trans_cost += n.links.at[link, "capital_cost"] * cap
         summary["transmission_total_annual_cost_meur"] = trans_cost / 1e6
 
@@ -455,38 +490,44 @@ def extract_summary(n: pypsa.Network, project_name: str, scenario_name: str) -> 
     if len(ac_buses) > 1:
         ext = n.generators[n.generators.p_nom_extendable]
         for carrier, grp in ext.groupby("carrier"):
-            summary[f"{carrier}_total_gw_opt"] = grp["p_nom_opt"].sum() / 1e3
+            summary[f"{field_stem(carrier)}_total_gw_opt"] = grp["p_nom_opt"].sum() / 1e3
 
     return summary
 
 
 def main() -> None:
-    """Load each scenario network for the project and write the combined report CSV.
+    """Load every run under the scenario and write the combined report CSV.
 
-    Dedupes the netCDF inputs (collect fans out per tech row), extracts one summary
-    row per scenario via `extract_summary`, rounds numerics, and writes
-    results/report_<project>.csv.
+    A scenario is an umbrella over runs, so the netCDF name carries the rest of
+    the run key — area, route and date range; the scenario table adds the
+    variant each tech was solved with. One summary row per run via
+    `extract_summary`, then the report and its diagnostic sibling.
     """
-    project_name = snakemake.wildcards.project
+    scenario_name = snakemake.wildcards.scenario
+    scenarios = load_scenarios(snakemake.input.scenarios, snakemake.config["areas"])
 
     rows = []
-    # networks may contain duplicates (collect fans out per tech row); dedupe
-    # while preserving order so each scenario appears once.
     network_paths = list(dict.fromkeys(snakemake.input.networks))
-    log.info(f"compiling report for project={project_name} ({len(network_paths)} scenarios)")
+    log.info(f"compiling report for scenario={scenario_name} ({len(network_paths)} runs)")
     for nc_path in network_paths:
         nc_path = Path(nc_path)
-        scenario_name = nc_path.stem
+        area, route, start_date, end_date = nc_path.stem.split("_")
         n = pypsa.Network()
         n.import_from_netcdf(nc_path)
-        rows.append(extract_summary(n, project_name, scenario_name))
+        run = {"area": area, "route": route, "start_date": start_date, "end_date": end_date}
+        run.update(input_variants(scenarios, scenario_name, run))
+        summary = extract_summary(n, scenario_name, run)
+        # Trailing the row, because it identifies the inputs rather than
+        # describing them: the per-file map it stands for is in the network.
+        summary["inputs_hash"] = n.meta["inputs_hash"]
+        rows.append(summary)
 
-    out_path = Path(snakemake.output[0])
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame(rows)
-    df[df.select_dtypes("number").columns] = df.select_dtypes("number").round(2)
-    df.to_csv(out_path, index=False)
-    log.info(f"wrote {out_path} ({len(rows)} rows)")
+    flagged = mark_best_in_country(
+        pd.DataFrame(rows),
+        zone_parents(snakemake.config["areas"]),
+        snakemake.params.best_zone_by or None,
+    )
+    write_report(flagged, Path(snakemake.output.report), Path(snakemake.output.diagnostic))
 
 
 if __name__ == "__main__":
