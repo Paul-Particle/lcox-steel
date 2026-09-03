@@ -74,23 +74,42 @@ dri-h2:
   el_mwh_per_t: 0.35                  # shaft auxiliaries + electric H2 preheat
   # DR-grade pellets: ~1.45 t pellets per t DRI at ~140 €/t incl. premium.
   ore_eur_per_t: 200
+  iron_t_per_t_steel: 1.10            # DR pellets: gangue plus metallisation loss
   p_min_pu: 0.5
 
 eaf:
-  # Shared by every route that melts iron: h2-dri-eaf and ng-dri-eaf (HBI),
-  # ew-eaf (electrolytic iron plates) and moe-eaf (hot metal). Ladle
-  # metallurgy for moe-eaf is this same link made cheap by a scenario
-  # overlay rather than a component of its own, e.g.
-  #   eaf: {capex_per_t_per_year_eur: 50, opex_per_t_per_year_eur: 1.5,
-  #         el_mwh_per_t: 0.1}
+  # Shared by every route that melts iron. Capex is the same furnace whatever
+  # arrives in it — a full EAF, including for moe-eaf: the cell pours iron, not
+  # steel, and the refining, alloying and superheating still have to happen
+  # somewhere. Hannah's cheap-ladle case is that same furnace with the capex
+  # written down by a scenario overlay, e.g.
+  #   eaf: {capex_per_t_per_year_eur: 50, opex_per_t_per_year_eur: 1.5}
   # Capex from Vogl et al. (2018), 184 €/(t/yr).
   capex_per_t_per_year_eur: 184
   opex_per_t_per_year_eur: 6          # ≈3 % of capex
   lifetime_years: 20
-  el_mwh_per_t: 0.65                  # per t liquid steel, cold charge
-  iron_t_per_t_steel: 1.1             # yield: gangue/losses in DRI melting
   consumables_eur_per_t: 40           # electrodes, fluxes, alloys, carbon; per t steel
   p_min_pu: 0.4
+
+  # Electricity by how hot the iron arrives (common._runs.EAF_CHARGE says which
+  # state a route delivers). Melting is nearly all of an EAF's electricity, so
+  # iron that shows up hot has had part of that bill paid upstream.
+  charge:
+    cold:
+      # 25 °C: HBI or plates off a stockpile, and anything that crossed an
+      # ocean. The textbook cold-charge figure and the basis for the others.
+      el_mwh_per_t: 0.65
+    hot:
+      # ~650 °C: sponge iron walked straight from the shaft to the furnace.
+      # Hot charging is worth ~130 kWh/t in practice.
+      el_mwh_per_t: 0.52
+    liquid:
+      # ~1550 °C from the MOE cell, so the melt is already done. Deliberately
+      # not the full thermodynamic credit: this also has to cover getting the
+      # metal across to the furnace, the heat it loses on the way, holding the
+      # bath, and superheating to tapping temperature. Superheat is small, the
+      # handling is not.
+      el_mwh_per_t: 0.20
 
 moe:
   # Molten oxide electrolysis (Boston Metal type), electricity → liquid iron.
@@ -104,6 +123,7 @@ moe:
   el_mwh_per_t: 4.0                   # per t liquid iron
   # Non-DR-grade fines/concentrate: ~1.6 t per t iron at ~100 €/t.
   ore_eur_per_t: 160
+  iron_t_per_t_steel: 1.04            # hot metal, near gangue-free; refining loss only
   p_min_pu: 0.95
 
 ew:
@@ -116,6 +136,7 @@ ew:
   el_mwh_per_t: 2.5                   # per t iron
   # Tolerates lower-grade ore than DR pellets — part of the route's pitch.
   ore_eur_per_t: 150
+  iron_t_per_t_steel: 1.05            # high-purity plates; little gangue to slag off
   p_min_pu: 0.2                       # marketed as load-following
 
 natural_gas:
@@ -141,6 +162,7 @@ dri-ng:
   gas_mwh_per_t: 2.75                 # LHV, per t DRI
   el_mwh_per_t: 0.1
   ore_eur_per_t: 200                  # DR-grade pellets, same as H2 DRI
+  iron_t_per_t_steel: 1.10            # same pellets as the H2 shaft, same yield
   p_min_pu: 0.5
 
 iron_store:
