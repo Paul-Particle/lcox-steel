@@ -41,13 +41,19 @@ a comparison — so an LCOS here is not a mill's selling cost, and the routes ar
 only comparable to each other. Alloys, electrodes, fluxes and carbon *are* in,
 inside the EAF's consumables, and cost the same on every route.
 
+The iron is drawn the same way, one step earlier: a levelised cost of iron is
+the cost of iron delivered and ready to be made into steel — everything up to
+and including whatever it took to get it to the furnace's own bus, freight and
+briquetting included on an export route. It stops where the EAF starts, so the
+melt, the alloying and the yield loss are LCOS and not LCOI.
+
 Process steps that consume electricity alongside their bus0 feed (DRI shaft,
 EAF) are PyPSA multi-links: bus2 is an electricity bus and efficiency2 is
 negative, so p2 = -efficiency2 * p0 is the electricity withdrawal.
 
-Electrolyser efficiency is:
-  efficiency = h2_lhv_kwh_per_kg / efficiency_kwh_per_kg
-             = 33.33 / 55 ≈ 0.606 (MW H2 LHV per MW electricity)
+Electrolyser efficiency, in MW H2 LHV per MW electricity, is
+h2_lhv_kwh_per_kg / electrolyser.efficiency_kwh_per_kg. The denominator lives
+in config/assumptions.yaml and is deliberately not repeated here.
 """
 
 import re
@@ -57,7 +63,7 @@ import pandas as pd
 import pypsa
 import yaml
 
-from _helpers_solve import annuity_factor, dri_to_el_mw, haversine_km
+from _helpers_solve import annuity_factor, deep_merge, dri_to_el_mw, haversine_km
 
 from common._constants import H2_LHV_KWH_PER_KG
 from common._runs import EAF_CHARGE, ROUTES, route_stem
@@ -85,20 +91,6 @@ DESTINATION_ELEC_BUS = "electricity_destination"
 DELIVERED_STEEL_BUS = "steel_delivered"
 
 
-def _deep_merge(base: dict, overlay: dict) -> dict:
-    """Recursively merge `overlay` into `base` (neither input mutated).
-
-    Overlay leaves replace base leaves; dict branches are merged key-by-key.
-    """
-    out = dict(base)
-    for k, v in overlay.items():
-        if isinstance(v, dict) and isinstance(out.get(k), dict):
-            out[k] = _deep_merge(out[k], v)
-        else:
-            out[k] = v
-    return out
-
-
 def load_assumptions(base_path: Path, overlay_path: Path | None) -> dict:
     """Load base assumptions and optionally merge a per-scenario overlay on top.
 
@@ -108,7 +100,7 @@ def load_assumptions(base_path: Path, overlay_path: Path | None) -> dict:
     if overlay_path is None or Path(overlay_path) == Path(base_path):
         return base
     overlay = yaml.safe_load(Path(overlay_path).read_text()) or {}
-    return _deep_merge(base, overlay)
+    return deep_merge(base, overlay)
 
 
 def build_network(

@@ -1,6 +1,20 @@
-"""Financial and sizing utilities for the DRI-hydrogen model."""
+"""Financial, sizing and config utilities for the steel model."""
 
 import numpy as np
+
+
+def deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively merge `overlay` into `base` (neither input mutated).
+
+    Overlay leaves replace base leaves; dict branches are merged key-by-key.
+    """
+    out = dict(base)
+    for k, v in overlay.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
 
 
 def annuity_factor(wacc: float, lifetime_years: float) -> float:
