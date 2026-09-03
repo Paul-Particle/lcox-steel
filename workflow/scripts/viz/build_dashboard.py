@@ -87,15 +87,15 @@ COST_GROUPS = [
 CAP_PANELS = [
     ["Power capacity (MW)", "MW", [
         ["solar_mw",         "Solar",                "#E2B681"],
-        ["wind-onshore_mw",  "Wind onshore",         "#0A5680"],
-        ["wind-offshore_mw", "Wind offshore",        "#3E7CB1"],
+        ["wind_onshore_mw",  "Wind onshore",         "#0A5680"],
+        ["wind_offshore_mw", "Wind offshore",        "#3E7CB1"],
         ["battery_mw",       "Battery",              "#D75674"],
         ["electrolyser_mw",  "Electrolyser (input)", "#91C096"],
         ["grid_mw",          "Grid connection",      "#71828F"],
     ]],
     ["Process capacity (t/h output)", "t/h", [
-        ["dri-h2_t_per_h", "H2-DRI shaft",   "#8CA5B7"],
-        ["dri-ng_t_per_h", "NG-DRI shaft",   "#BDCCD9"],
+        ["dri_h2_t_per_h", "H2-DRI shaft",   "#8CA5B7"],
+        ["dri_ng_t_per_h", "NG-DRI shaft",   "#BDCCD9"],
         ["eaf_t_per_h",    "EAF",            "#525F6A"],
         ["moe_t_per_h",    "MOE",            "#0293D2"],
         ["ew_t_per_h",     "Electrowinning", "#83D1DD"],
@@ -122,20 +122,17 @@ def _seed_stub():
 
 
 def _num(v, default=0.0):
-    try:
-        f = float(v)
-        return f if pd.notna(f) else default
-    except (TypeError, ValueError):
+    """A reported number, or `default` where the run left the field blank."""
+    if pd.isna(v):
         return default
+    return float(v)
 
 
 def _opt(v):
-    """Round to 1 dp, or None if missing/NaN (so absent LCOH stays absent, not 0)."""
-    try:
-        f = float(v)
-        return round(f, 1) if pd.notna(f) else None
-    except (TypeError, ValueError):
+    """Round to 1 dp, or None where the field is blank (so absent LCOH stays absent, not 0)."""
+    if pd.isna(v):
         return None
+    return round(float(v), 1)
 
 
 def _axes(row):
@@ -186,14 +183,14 @@ def _record(row, lcos_row, cap_row):
                 costs[group] = round(v, 1)
     caps = {}
     solar = sum(_num(cap_row[c]) for c in cap_row.index if str(c).startswith("solar"))
-    wind = sum(_num(cap_row[c]) for c in cap_row.index if str(c).startswith("wind-onshore"))
-    wind_off = sum(_num(cap_row[c]) for c in cap_row.index if str(c).startswith("wind-offshore"))
+    wind = sum(_num(cap_row[c]) for c in cap_row.index if str(c).startswith("wind_onshore"))
+    wind_off = sum(_num(cap_row[c]) for c in cap_row.index if str(c).startswith("wind_offshore"))
     for key in _CAP_KEYS:
         if key == "solar_mw":
             v = solar
-        elif key == "wind-onshore_mw":
+        elif key == "wind_onshore_mw":
             v = wind
-        elif key == "wind-offshore_mw":
+        elif key == "wind_offshore_mw":
             v = wind_off
         else:
             v = _num(cap_row[key]) if key in cap_row.index else 0.0
@@ -211,7 +208,7 @@ def _record(row, lcos_row, cap_row):
         ("lcoe_grid_energy_eur_per_mwh", "grid_energy"),
         ("lcoe_transmission_eur_per_mwh", "transmission"),
     ):
-        v = _opt(row.get(col))
+        v = _opt(row[col])
         if v is not None:
             lcoe_parts[key] = v
     # Per-tech LCOE over each tech's own generation (the unit cost of the
@@ -223,7 +220,7 @@ def _record(row, lcos_row, cap_row):
         ("lcoe_wind_onshore_own_eur_per_mwh", "wind_onshore"),
         ("lcoe_wind_offshore_own_eur_per_mwh", "wind_offshore"),
     ):
-        v = _opt(row.get(col))
+        v = _opt(row[col])
         if v is not None:
             lcoe_own[key] = v
     # LCOH breakdown in €/MWh LHV (parts sum to LCOH); absent parts stay absent.
@@ -233,22 +230,22 @@ def _record(row, lcos_row, cap_row):
         ("lcoh_electricity_eur_per_mwh_lhv", "electricity"),
         ("lcoh_h2_storage_eur_per_mwh_lhv", "storage"),
     ):
-        v = _opt(row.get(col))
+        v = _opt(row[col])
         if v is not None:
             lcoh_parts[key] = v
     # €/t-steel cost detail: per-plant capex (sums to the "process" group) plus the
     # ore/consumables split (sums to "ore_consumables"). For the segment hovers.
     cost_detail = {}
     for col, key in (
-        ("plant_dri-h2_eur_per_t", "dri"),
-        ("plant_dri-ng_eur_per_t", "dri_ng"),
+        ("plant_dri_h2_eur_per_t", "dri"),
+        ("plant_dri_ng_eur_per_t", "dri_ng"),
         ("plant_eaf_eur_per_t", "eaf"),
         ("plant_moe_eur_per_t", "moe"),
         ("plant_ew_eur_per_t", "electrowinning"),
         ("ore_eur_per_t_steel", "ore"),
         ("consumables_eur_per_t_steel", "consumables"),
     ):
-        v = _opt(row.get(col))
+        v = _opt(row[col])
         if v is not None:
             cost_detail[key] = v
     # Capacity factors as integer percent (0–1 fraction × 100 — 1 dp would collapse
@@ -256,34 +253,34 @@ def _record(row, lcos_row, cap_row):
     cf = {}
     for capkey, col in (
         ("solar_mw", "cf_solar"),
-        ("wind-onshore_mw", "cf_wind_onshore"),
-        ("wind-offshore_mw", "cf_wind_offshore"),
+        ("wind_onshore_mw", "cf_wind_onshore"),
+        ("wind_offshore_mw", "cf_wind_offshore"),
         ("grid_mw", "cf_grid_connection"),
         ("electrolyser_mw", "electrolyser_utilization"),
-        ("dri-h2_t_per_h", "dri-h2_utilization"),
-        ("dri-ng_t_per_h", "dri-ng_utilization"),
+        ("dri_h2_t_per_h", "dri_h2_utilization"),
+        ("dri_ng_t_per_h", "dri_ng_utilization"),
         ("eaf_t_per_h", "eaf_utilization"),
         ("moe_t_per_h", "moe_utilization"),
         ("ew_t_per_h", "ew_utilization"),
     ):
-        raw = row.get(col)
-        if raw is not None and pd.notna(raw):
+        raw = row[col]
+        if pd.notna(raw):
             cf[capkey] = round(float(raw) * 100)
     return {
-        "lcos": round(_num(row.get("lcos_eur_per_t")), 0),
-        "lcoe": _opt(row.get("lcoe_eur_per_mwh")),
-        "lcoh": _opt(row.get("lcoh_eur_per_mwh_lhv")),
-        "steel_mt": round(_num(row.get("steel_produced_mt")), 4),
-        "ng_gwh": round(_num(row.get("ng_gwh_lhv")), 1),
-        "h2_share": round(_num(row.get("iron_from_h2_share")), 3),
+        "lcos": round(_num(row["lcos_eur_per_t"]), 0),
+        "lcoe": _opt(row["lcoe_eur_per_mwh"]),
+        "lcoh": _opt(row["lcoh_eur_per_mwh_lhv"]),
+        "steel_mt": round(_num(row["steel_produced_mt"]), 4),
+        "ng_gwh": round(_num(row["ng_gwh_lhv"]), 1),
+        "h2_share": round(_num(row["iron_from_h2_share"]), 3),
         "costs": costs,
         "caps": caps,
         "lcoe_parts": lcoe_parts,
         "lcoe_own": lcoe_own,
         "lcoh_parts": lcoh_parts,
-        "grid_price": _opt(row.get("grid_price_eur_per_mwh")),
-        "grid_fee": _opt(row.get("grid_fee_eur_per_mwh")),
-        "grid_conn_imported": _opt(row.get("grid_connection_eur_per_mwh_imported")),
+        "grid_price": _opt(row["grid_price_eur_per_mwh"]),
+        "grid_fee": _opt(row["grid_fee_eur_per_mwh"]),
+        "grid_conn_imported": _opt(row["grid_connection_eur_per_mwh_imported"]),
         "cost_detail": cost_detail,
         "cf": cf,
     }

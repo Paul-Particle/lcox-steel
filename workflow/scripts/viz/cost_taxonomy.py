@@ -44,6 +44,7 @@ import pandas as pd
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "workflow"))
 
+from common._report_schema import field_stem  # noqa: E402
 from scripts.solve._helpers_solve import annuity_factor  # noqa: E402
 
 # Parent groups, in stack order (bottom -> top), with the colour the coarse
@@ -57,32 +58,31 @@ GROUPS = [
     ("storage",     "Solid stores",       "#D75674"),
 ]
 
-# Report plant key -> (assumptions block, block whose lifetime annuitises it,
-# label). The key is the link id the report writes its `plant_{key}_eur_per_t`
-# column under, and the assumptions block carries the same name.
+# The steel chain's plants, in stack order: the link id `build_network` gives
+# each one — which is also the assumptions block it is quoted in — and its
+# label. `field_stem` turns the id into the stem the report and the leaves use.
 PROCESS_PLANTS = [
-    ("dri-h2", "dri-h2", "dri-h2", "H2-DRI shaft"),
-    ("dri-ng", "dri-ng", "dri-ng", "NG-DRI shaft"),
-    ("moe",    "moe",    "moe",    "MOE cell"),
-    ("ew",     "ew",     "ew",     "Electrowinning"),
-    ("eaf",    "eaf",    "eaf",    "EAF"),
+    ("dri-h2", "H2-DRI shaft"),
+    ("dri-ng", "NG-DRI shaft"),
+    ("moe",    "MOE cell"),
+    ("ew",     "Electrowinning"),
+    ("eaf",    "EAF"),
 ]
 
-# Renewable technology -> (assumptions block under `res`, report column stem,
-# label). The block is hyphenated like the tech wildcard; the stem is not,
-# because the report writes `lcoe_wind_onshore_…` and `cf_wind_onshore`.
-RES_TECHS = [
-    ("solar",         "solar",         "Solar"),
-    ("wind-onshore",  "wind_onshore",  "Wind onshore"),
-    ("wind-offshore", "wind_offshore", "Wind offshore"),
+# Renewable technology -> label. The tech names the assumptions block under
+# `res` and the network's carrier; `field_stem` gives the report's stem.
+RES_TECH_LABELS = [
+    ("solar",         "Solar"),
+    ("wind-onshore",  "Wind onshore"),
+    ("wind-offshore", "Wind offshore"),
 ]
 
 
-def _value(row: pd.Series, column: str):
-    """A report column as a float, or None when this scenario does not have it."""
-    if column not in row.index or pd.isna(row[column]):
+def _value(row: pd.Series, field: str):
+    """A report field as a float, or None where the run left it blank (undefined)."""
+    if pd.isna(row[field]):
         return None
-    return float(row[column])
+    return float(row[field])
 
 
 def _group_eur_per_t(row: pd.Series, group: str, steel_t: float) -> float:
@@ -115,11 +115,11 @@ def process_om_fractions(assumptions: dict) -> dict:
     """Fixed O&M's share of each process plant's annual cost."""
     wacc = assumptions["finance"]["default_wacc"]
     fractions = {}
-    for key, block, lifetime_block, _ in PROCESS_PLANTS:
-        plant = assumptions[block]
-        annual_capex = (annuity_factor(wacc, assumptions[lifetime_block]["lifetime_years"])
+    for link, _ in PROCESS_PLANTS:
+        plant = assumptions[link]
+        annual_capex = (annuity_factor(wacc, plant["lifetime_years"])
                         * plant["capex_per_t_per_year_eur"])
-        fractions[key] = _fixed_om_fraction(annual_capex, plant["opex_per_t_per_year_eur"])
+        fractions[link] = _fixed_om_fraction(annual_capex, plant["opex_per_t_per_year_eur"])
     return fractions
 
 
@@ -127,7 +127,7 @@ def res_om_fractions(assumptions: dict) -> dict:
     """Fixed O&M's share of each renewable technology's annual cost, per MW."""
     wacc = assumptions["finance"]["default_wacc"]
     fractions = {}
-    for tech, _, _ in RES_TECHS:
+    for tech, _ in RES_TECH_LABELS:
         cfg = assumptions["res"].get(tech)
         if cfg is None:
             continue
@@ -179,9 +179,9 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
     # The ore quote that applies is the one on whichever reduction step was built,
     # and a route melting DRI in an EAF also pays for the yield loss in melting.
     ore_quotes = [
-        (f"ore quote, {label.lower()}", f"{assumptions[block]['ore_eur_per_t']:,.0f} €/t output")
-        for key, block, _, label in PROCESS_PLANTS
-        if "ore_eur_per_t" in assumptions.get(block, {}) and _value(row, f"plant_{key}_eur_per_t")
+        (f"ore quote, {label.lower()}", f"{assumptions[link]['ore_eur_per_t']:,.0f} €/t output")
+        for link, label in PROCESS_PLANTS
+        if "ore_eur_per_t" in assumptions[link] and _value(row, f"plant_{field_stem(link)}_eur_per_t")
     ]
     if _value(row, "plant_eaf_eur_per_t"):
         ore_quotes.append(("iron per t steel",
@@ -191,23 +191,23 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
 
     # -- process plants, each cut into annualised capital and fixed O&M
     om_fractions = process_om_fractions(assumptions)
-    for key, block, lifetime_block, _ in PROCESS_PLANTS:
-        plant_cost = _value(row, f"plant_{key}_eur_per_t")
+    for link, _ in PROCESS_PLANTS:
+        stem = field_stem(link)
+        plant_cost = _value(row, f"plant_{stem}_eur_per_t")
         if not plant_cost:
             continue
-        fraction = om_fractions[key]
-        capacity_key = key
-        capacity = _value(row, f"{capacity_key}_t_per_h_opt")
-        utilisation = _value(row, f"{capacity_key}_utilization")
+        fraction = om_fractions[link]
+        capacity = _value(row, f"{stem}_t_per_h_opt")
+        utilisation = _value(row, f"{stem}_utilization")
         lines = [
             ("built", f"{capacity:,.0f} t/h output" if capacity is not None else None),
             ("utilisation", f"{utilisation * 100:.0f}%" if utilisation is not None else None),
             ("annuity factor",
-             f"{annuity_factor(wacc, assumptions[lifetime_block]['lifetime_years']):.4f}"),
+             f"{annuity_factor(wacc, assumptions[link]['lifetime_years']):.4f}"),
         ]
         lines = [line for line in lines if line[1] is not None]
-        add(f"{key}_capex", plant_cost * (1.0 - fraction), lines)
-        add(f"{key}_fom", plant_cost * fraction, lines[:2])
+        add(f"{stem}_capex", plant_cost * (1.0 - fraction), lines)
+        add(f"{stem}_fom", plant_cost * fraction, lines[:2])
 
     # -- natural gas: the fuel bill and, separately, any carbon price on it
     gas_total = _group_eur_per_t(row, "gas", steel_t)
@@ -259,17 +259,18 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
     res_total = _group_eur_per_t(row, "res", steel_t)
     if res_total > 0:
         fractions = res_om_fractions(assumptions)
-        shares = {tech: _value(row, f"lcoe_{stem}_eur_per_mwh") or 0.0
-                  for tech, stem, _ in RES_TECHS}
+        shares = {tech: _value(row, f"lcoe_{field_stem(tech)}_eur_per_mwh") or 0.0
+                  for tech, _ in RES_TECH_LABELS}
         per_tech = _split_by_shares(res_total, shares)
         # A geography may build a technology the LCOE columns do not itemise; fall
         # back to one undivided renewables leaf rather than dropping the cost.
         if not per_tech:
             add("res_other", res_total)
-        for tech, stem, label in RES_TECHS:
+        for tech, _ in RES_TECH_LABELS:
             tech_total = per_tech.get(tech)
             if not tech_total:
                 continue
+            stem = field_stem(tech)
             own = _value(row, f"lcoe_{stem}_own_eur_per_mwh")
             capacity_factor = _value(row, f"cf_{stem}")
             lines = [
@@ -362,9 +363,9 @@ def alternative_lcos_bands(row: pd.Series, assumptions: dict,
     process_total = _group_eur_per_t(row, "process", steel_t)
     om_fractions = process_om_fractions(assumptions)
     fixed_om = 0.0
-    for key, _, _, _ in PROCESS_PLANTS:
-        plant_cost = _value(row, f"plant_{key}_eur_per_t") or 0.0
-        fixed_om += plant_cost * om_fractions[key]
+    for link, _ in PROCESS_PLANTS:
+        plant_cost = _value(row, f"plant_{field_stem(link)}_eur_per_t") or 0.0
+        fixed_om += plant_cost * om_fractions[link]
 
     electricity_total = sum(_group_eur_per_t(row, group, steel_t)
                             for group in ("res", "grid", "battery", "transmission"))
@@ -424,8 +425,8 @@ def alternative_carrier_bands(row: pd.Series, assumptions: dict,
         # Blend the per-technology O&M fractions by what each contributes to LCOE,
         # so the pair of rows carries the mix this scenario actually built.
         fractions = res_om_fractions(assumptions)
-        weights = {tech: _value(row, f"lcoe_{stem}_eur_per_mwh") or 0.0
-                   for tech, stem, _ in RES_TECHS}
+        weights = {tech: _value(row, f"lcoe_{field_stem(tech)}_eur_per_mwh") or 0.0
+                   for tech, _ in RES_TECH_LABELS}
         weighted = sum(weights[tech] * fractions.get(tech, 0.0) for tech in weights)
         total_weight = sum(weights.values())
         fraction = weighted / total_weight if total_weight else 0.0
@@ -484,14 +485,14 @@ def spec(assumptions: dict) -> list:
     shades = {"dri-h2": ("#33434D", "#5A6B77"), "dri-ng": ("#3D4E59", "#687985"),
               "moe": ("#2B3A44", "#54656F"),
               "ew": ("#25333B", "#4C5D66"), "eaf": ("#3A4A54", "#6E7F89")}
-    for key, block, lifetime_block, label in PROCESS_PLANTS:
-        plant = assumptions[block]
-        lifetime = assumptions[lifetime_block]["lifetime_years"]
-        capex_colour, om_colour = shades[key]
-        add(f"{key}_capex", f"{label} — capital", "process", capex_colour,
+    for link, label in PROCESS_PLANTS:
+        plant = assumptions[link]
+        stem = field_stem(link)
+        capex_colour, om_colour = shades[link]
+        add(f"{stem}_capex", f"{label} — capital", "process", capex_colour,
             [("capex quote", f"{plant['capex_per_t_per_year_eur']:,.0f} €/(t·yr)"),
-             ("lifetime", f"{lifetime:.0f} y"), wacc_line])
-        add(f"{key}_fom", f"{label} — fixed O&M", "process", om_colour,
+             ("lifetime", f"{plant['lifetime_years']:.0f} y"), wacc_line])
+        add(f"{stem}_fom", f"{label} — fixed O&M", "process", om_colour,
             [("fixed opex", f"{plant['opex_per_t_per_year_eur']:,.1f} €/(t·yr)"),
              ("as a share of capex",
               f"{plant['opex_per_t_per_year_eur'] / plant['capex_per_t_per_year_eur'] * 100:.1f}% / yr")])
@@ -521,10 +522,11 @@ def spec(assumptions: dict) -> list:
 
     res_colours = {"solar": ("#0A5680", "#3E7CA3"), "wind_onshore": ("#0E6FA4", "#4B93BF"),
                    "wind_offshore": ("#0293D2", "#57B6E2")}
-    for tech, stem, label in RES_TECHS:
+    for tech, label in RES_TECH_LABELS:
         cfg = assumptions["res"].get(tech)
         if cfg is None:
             continue
+        stem = field_stem(tech)
         capex_colour, om_colour = res_colours[stem]
         add(f"res_{stem}_capex", f"{label} — capital", "electricity", capex_colour,
             [("capex quote", f"{cfg['capex_per_mw_eur'] / 1e6:,.2f} M€/MW"),

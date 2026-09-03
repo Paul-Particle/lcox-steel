@@ -185,7 +185,7 @@ def test_input_variants_name_the_series_behind_a_run():
     run = {"area": "VIC1", "route": "moe-eaf",
            "start_date": "20250101", "end_date": "20251231"}
     assert compile_report.input_variants(SCENARIOS, "s", run) == {
-        "wind-onshore_variant": "bestsite-p95",
+        "wind_onshore_variant": "bestsite-p95",
         "solar_variant": "tilt-mix-n5",
         "grid_variant": "dayahead",
     }
@@ -244,7 +244,7 @@ def test_a_blank_means_undefined_and_a_zero_means_zero(tmp_path):
     # the cost of the hydrogen it never made is not a number.
     assert row["electrolyser_gw"] == 0.0
     assert row["cost_electrolyser_meur"] == 0.0
-    assert row["plant_dri-h2_eur_per_t"] == 0.0
+    assert row["plant_dri_h2_eur_per_t"] == 0.0
     assert pd.isna(row["lcoh_eur_per_mwh_lhv"])
     assert pd.isna(row["electrolyser_utilization"])
     assert pd.isna(row["cf_wind_offshore"])
@@ -253,15 +253,15 @@ def test_a_blank_means_undefined_and_a_zero_means_zero(tmp_path):
 def test_run_specific_fields_follow_the_declared_ones(tmp_path):
     """A multi-site run names a generator per candidate site; those are not declared."""
     df = _report([("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
-    df["solar-c00_gw_opt"] = 1.4
+    df["solar_c00_gw_opt"] = 1.4
     flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
 
     report_path = tmp_path / "report_s.csv"
     compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
     report = read_report(report_path)
 
-    assert list(report.columns)[-1] == "solar-c00_gw_opt"
-    assert report.at["s_1", "solar-c00_gw_opt"] == 1.4
+    assert list(report.columns)[-1] == "solar_c00_gw_opt"
+    assert report.at["s_1", "solar_c00_gw_opt"] == 1.4
 
 
 def test_the_diagnostic_is_the_report_plus_the_flag(tmp_path):

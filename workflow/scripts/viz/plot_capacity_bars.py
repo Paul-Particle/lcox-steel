@@ -24,7 +24,7 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-from common._report_schema import read_report
+from common._report_schema import PROCESS_LINKS, field_stem, read_report
 from _run_display import run_label
 from scripts.viz.style import (
     apply_header,
@@ -65,8 +65,8 @@ WIND_SOLO_COLOR  = fca_blue
 _BAR_WIDTH = 0.12
 
 PROCESS_BARS = [
-    ("dri-h2_t_per_h", "H2-DRI shaft (t/h iron)",   blue_gray),
-    ("dri-ng_t_per_h", "NG-DRI shaft (t/h iron)",   light_blue_gray),
+    ("dri_h2_t_per_h", "H2-DRI shaft (t/h iron)",   blue_gray),
+    ("dri_ng_t_per_h", "NG-DRI shaft (t/h iron)",   light_blue_gray),
     ("eaf_t_per_h",    "EAF (t/h steel)",           very_dark_gray),
     ("moe_t_per_h",    "MOE (t/h steel)",           highlight_blue),
     ("ew_t_per_h",     "Electrowinning (t/h iron)", turquois),
@@ -94,7 +94,7 @@ def _wind_cols(df):
     # multisite `{tech}_total_gw_opt` aggregate so it isn't double-counted against
     # the per-site columns it sums.
     return [c for c in df.columns
-            if c.startswith(("wind-onshore", "wind-offshore"))
+            if c.startswith(("wind_onshore", "wind_offshore"))
             and c.endswith("_gw_opt") and not c.endswith("_total_gw_opt")]
 
 
@@ -114,29 +114,30 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for _, r in df.iterrows():
         row = {"label": run_label(r)}
-        row["dri_h2_mw_lhv"]    = r.get("dri_h2_mw_lhv", float("nan"))
-        row["electrolyser_mw"]  = r.get("electrolyser_gw", 0) * 1e3
-        row["battery_mw"]       = r.get("battery_gw_opt", 0) * 1e3
-        row["grid_mw"]          = r.get("grid_import_gw_opt", 0) * 1e3
+        row["dri_h2_mw_lhv"]    = r["dri_h2_mw_lhv"]
+        row["electrolyser_mw"]  = r["electrolyser_gw"] * 1e3
+        row["battery_mw"]       = r["battery_gw_opt"] * 1e3
+        row["grid_mw"]          = r["grid_import_gw_opt"] * 1e3
         # If no orientation-resolved solar columns are present, fall back to the
         # plain solar_gw_opt column so single-orientation runs (e.g. DE baseline)
         # still show a solar bar.
         if solar_cols:
             for col in solar_cols:
                 az = col.replace("solar_", "").replace("_gw_opt", "")
-                row[f"solar_{az}_mw"] = r.get(col, 0) * 1e3
+                row[f"solar_{az}_mw"] = r[col] * 1e3
         elif "solar_gw_opt" in df.columns:
-            row["solar_mw"] = r.get("solar_gw_opt", 0) * 1e3
+            row["solar_mw"] = r["solar_gw_opt"] * 1e3
         for col in wind_cols:
-            row[f"{col.replace('_gw_opt','')}_mw"] = r.get(col, 0) * 1e3
-        # The link ids the report uses, not a second spelling of them: every
-        # report row carries `{link}_t_per_h_opt` for each of PROCESS_LINKS
-        # (common/_report_schema.py), reading 0 on a route without that step.
-        for link in ("dri-h2", "dri-ng", "eaf", "moe", "ew"):
-            row[f"{link}_t_per_h"] = r.get(f"{link}_t_per_h_opt", 0)
-        row["h2_buffer_hours_dri"]    = r.get("h2_buffer_hours_dri", 0)
-        row["iron_store_hours_steel"] = r.get("iron_store_hours_steel", 0)
-        row["steel_store_hours_steel"] = r.get("steel_store_hours_steel", 0)
+            row[f"{col.replace('_gw_opt','')}_mw"] = r[col] * 1e3
+        # Every report row carries `{link}_t_per_h_opt` for each of
+        # PROCESS_LINKS (common/_report_schema.py), reading 0 on a route
+        # without that step.
+        for link in PROCESS_LINKS:
+            stem = field_stem(link)
+            row[f"{stem}_t_per_h"] = r[f"{stem}_t_per_h_opt"]
+        row["h2_buffer_hours_dri"]    = r["h2_buffer_hours_dri"]
+        row["iron_store_hours_steel"] = r["iron_store_hours_steel"]
+        row["steel_store_hours_steel"] = r["steel_store_hours_steel"]
         rows.append(row)
     return pd.DataFrame(rows).set_index("label")
 
@@ -153,8 +154,8 @@ def _pretty(col: str) -> str:
     """Humanize a plot_df column name for the legend, e.g.
     'solar_mw' → 'Solar (MW nominal)',
     'solar_az180_mw' → 'Solar az180 (MW nominal)',
-    'wind-onshore_mw' → 'Wind onshore (MW nominal)'."""
-    base = col.removesuffix("_mw").replace("-", " ").replace("_", " ")
+    'wind_onshore_mw' → 'Wind onshore (MW nominal)'."""
+    base = col.removesuffix("_mw").replace("_", " ")
     return f"{base.capitalize()} (MW nominal)"
 
 
@@ -228,7 +229,7 @@ def _build_panels(plot_df: pd.DataFrame) -> list[tuple[str, list]]:
 
     solar_mw_cols = [c for c in plot_df.columns if c.startswith("solar")]
     wind_mw_cols  = [c for c in plot_df.columns
-                     if c.startswith(("wind-onshore", "wind-offshore"))]
+                     if c.startswith(("wind_onshore", "wind_offshore"))]
 
     power_slots: list = []
     if _has_data(solar_mw_cols):
