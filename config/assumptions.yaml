@@ -221,17 +221,27 @@ transport:
   # export route pays no steel freight either way; its steel is already there.
   deliver_finished_steel: false
 
-  # Rates are order-of-magnitude eyeballs. Steel is dearer per t than iron:
-  # bulk carriers and open wagons take briquettes and plates, while coil and
-  # plate go as breakbulk, which stows worse and handles slower. Rail is an
-  # order of magnitude dearer than sea per t·km, which is the whole reason
-  # iron moves between continents by ship and barely moves overland at all.
+  # Two parts per leg: a charge per t that does not care how far the cargo
+  # goes (port dues, loading, discharge) and a charge per t and km that does.
+  # Published ore rates only make sense that way — Western Australia to
+  # Qingdao is a third of the distance of Tubarao to Qingdao but costs almost
+  # half as much, which no single per-km rate reproduces. Fitting the two
+  # gives about $4/t plus $0.0010/t·km, and that is what the sea numbers are
+  # anchored on.
+  #
+  # Iron carries a premium over ore for handling: DRI and HBI re-oxidise, so
+  # they travel in fitted holds under inert gas. Steel is dearer again — coil
+  # and plate go breakbulk, which stows worse and handles slower than bulk.
+  # Rail is an order of magnitude dearer per t·km than sea, which is the whole
+  # reason iron moves between continents by ship and barely moves overland;
+  # its per-t part is zero because the European rates we anchor on are already
+  # quoted all-in.
   sea:
-    iron_eur_per_t_km: 0.0022   # ~2x published iron-ore rates, for HBI handling
-    steel_eur_per_t_km: 0.0050
+    iron:  { eur_per_t: 5,  eur_per_t_km: 0.0015 }
+    steel: { eur_per_t: 12, eur_per_t_km: 0.0033 }
   rail:
-    iron_eur_per_t_km: 0.035
-    steel_eur_per_t_km: 0.045
+    iron:  { eur_per_t: 0,  eur_per_t_km: 0.035 }
+    steel: { eur_per_t: 0,  eur_per_t_km: 0.045 }
 
   # Legs from the producing country to the destination, by mode. An EU producer
   # has no sea leg, only a token overland run to the furnace.

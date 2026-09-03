@@ -585,9 +585,10 @@ def spec(assumptions: dict) -> list:
          ("flat price", f"{destination['price_eur_per_mwh']:,.0f} €/MWh")])
     freight = assumptions["transport"]
     add("transport", "Freight", "storage", "#BDCCD9",
-        [("sea, iron", f"{freight['sea']['iron_eur_per_t_km'] * 1000:,.2f} €/t per 1000 km"),
-         ("sea, steel", f"{freight['sea']['steel_eur_per_t_km'] * 1000:,.2f} €/t per 1000 km"),
-         ("rail, iron", f"{freight['rail']['iron_eur_per_t_km'] * 1000:,.2f} €/t per 1000 km")])
+        [(f"{mode}, {commodity}",
+          f"{freight[mode][commodity]['eur_per_t']:,.0f} €/t "
+          f"+ {freight[mode][commodity]['eur_per_t_km'] * 1000:,.2f} €/t per 1000 km")
+         for mode in ("sea", "rail") for commodity in ("iron", "steel")])
 
     add("iron_store", "Iron stockpile", "storage", "#D75674",
         [("capex quote", f"{assumptions['iron_store']['capex_per_t_eur']:,.0f} €/t"),
