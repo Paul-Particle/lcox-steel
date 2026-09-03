@@ -70,6 +70,7 @@ PROCESS_BARS = [
     ("eaf_t_per_h",    "EAF (t/h steel)",           very_dark_gray),
     ("moe_t_per_h",    "MOE (t/h steel)",           highlight_blue),
     ("ew_t_per_h",     "Electrowinning (t/h iron)", turquois),
+    ("briquetting_t_per_h", "Briquetting (t/h HBI)", gray),
 ]
 
 STORAGE_BARS = [
