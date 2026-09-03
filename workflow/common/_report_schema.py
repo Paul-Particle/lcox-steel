@@ -136,9 +136,11 @@ REPORT_FIELDS = {
     "iron_from_h2_share": UNDEFINED,
     "iron_store_kt": ZERO,
     "iron_store_hours_steel": UNDEFINED,
-    # Zero on a route that melts its iron where it made it.
+    # Zero on a route that melts its iron where it made it and stops at the
+    # plant gate. Only one of the two commodities is ever shipped.
     "transport_km": ZERO,
     "iron_shipped_kt": ZERO,
+    "steel_shipped_kt": ZERO,
     "steel_store_kt": ZERO,
     "steel_store_hours_steel": UNDEFINED,
 

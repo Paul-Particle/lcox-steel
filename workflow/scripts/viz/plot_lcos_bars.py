@@ -61,7 +61,7 @@ COST_GROUPS = [
     ("battery",         "Battery",                      magenta_red),
     ("transmission",    "Transmission (HVDC)",          turquois),
     ("grid",            "Grid (connection + energy)",   dark_gray),
-    ("transport",       "Sea freight (iron)",           light_blue_gray),
+    ("transport",       "Freight",                      light_blue_gray),
     ("destination_power", "Destination power",          highlight_blue),
 ]
 

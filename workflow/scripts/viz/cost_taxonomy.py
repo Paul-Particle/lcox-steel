@@ -334,11 +334,13 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
          if transmission is not None else None])
 
     # -- getting the iron to a furnace that is somewhere else
-    shipped = _value(row, "iron_shipped_kt")
+    iron_kt = _value(row, "iron_shipped_kt")
+    steel_kt = _value(row, "steel_shipped_kt")
     distance = _value(row, "transport_km")
     add("transport", _group_eur_per_t(row, "transport", steel_t),
         [("distance", f"{distance:,.0f} km" if distance else None),
-         ("shipped", f"{shipped:,.0f} kt/yr" if shipped else None)])
+         ("iron shipped", f"{iron_kt:,.0f} kt/yr" if iron_kt else None),
+         ("steel shipped", f"{steel_kt:,.0f} kt/yr" if steel_kt else None)])
     add("destination_power", _group_eur_per_t(row, "destination_power", steel_t))
 
     # -- the solid stores that make turndown possible
@@ -576,8 +578,11 @@ def spec(assumptions: dict) -> list:
     add("destination_power", "Destination power", "electricity", "#0293D2",
         [("country", f"{destination['country']}"),
          ("flat price", f"{destination['price_eur_per_mwh']:,.0f} €/MWh")])
-    add("transport", "Sea freight — iron", "storage", "#BDCCD9",
-        [("rate", f"{assumptions['transport']['iron_eur_per_t_km'] * 1000:,.2f} €/t per 1000 km")])
+    freight = assumptions["transport"]
+    add("transport", "Freight", "storage", "#BDCCD9",
+        [("sea, iron", f"{freight['sea']['iron_eur_per_t_km'] * 1000:,.2f} €/t per 1000 km"),
+         ("sea, steel", f"{freight['sea']['steel_eur_per_t_km'] * 1000:,.2f} €/t per 1000 km"),
+         ("rail, iron", f"{freight['rail']['iron_eur_per_t_km'] * 1000:,.2f} €/t per 1000 km")])
 
     add("iron_store", "Iron stockpile", "storage", "#D75674",
         [("capex quote", f"{assumptions['iron_store']['capex_per_t_eur']:,.0f} €/t"),

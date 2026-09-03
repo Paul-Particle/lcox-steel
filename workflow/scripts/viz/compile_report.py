@@ -214,8 +214,10 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         "iron_store": store_capital("iron_store"),
         "steel_store": store_capital("steel_store"),
         "transmission": link_capital(hvdc),
-        # Sea freight has no capex — the whole bill is the per-t-km charge.
-        "transport": link_marginal(["iron_transport"]),
+        # Freight has no capex — the whole bill is the per-t-km charge. Only
+        # one of the two links ever exists: an export route ships its iron, and
+        # every other route ships its steel, if it delivers at all.
+        "transport": link_marginal(["iron_transport", "steel_transport"]),
         # The destination furnace's own power, kept out of the grid group so an
         # export run shows what it pays at each end.
         "destination_power": (gen_capital("destination_supply")
@@ -440,14 +442,14 @@ def extract_summary(n: pypsa.Network, scenario_name: str, run: dict) -> dict:
                 store_t / steel_t_per_h if steel_t_per_h else float("nan")
             )
 
-    if "iron_transport" in n.links.index:
-        annual = 8760.0 / len(n.snapshots)
-        summary["iron_shipped_kt"] = (
-            float(n.links_t.p0["iron_transport"].sum()) * annual / 1e3
-        )
-        # The distance behind the freight bill, so the report carries it rather
-        # than the reader having to go back to the assumptions.
-        summary["transport_km"] = float(n.links.at["iron_transport", "length"])
+    annual = 8760.0 / len(n.snapshots)
+    for link, field in (("iron_transport", "iron_shipped_kt"),
+                        ("steel_transport", "steel_shipped_kt")):
+        if link in n.links.index:
+            summary[field] = float(n.links_t.p0[link].sum()) * annual / 1e3
+            # The distance behind the freight bill, so the report carries it
+            # rather than the reader going back to the assumptions.
+            summary["transport_km"] = float(n.links.at[link, "length"])
 
     if "steel_store" in n.stores.index:
         store_t = n.stores.at["steel_store", "e_nom_opt"]
