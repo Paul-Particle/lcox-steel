@@ -37,6 +37,9 @@ Bus unit convention:
   destination buses: the far side of the freight leg — iron, and its own AC
   steel bus:         t/h  (liquid steel)
 
+These units are not a solver lever: the LP's wide coefficient range is capex
+in EUR/MW against energy in EUR/MWh, and moving t/h to kt/h would widen it.
+
 What the steel bus carries is liquid steel at the furnace, alloyed and ready
 to tap. Casting, rolling and finishing are not in the model, on either side of
 a comparison — so an LCOS here is not a mill's selling cost, and the routes are
