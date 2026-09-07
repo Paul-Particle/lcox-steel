@@ -1,0 +1,219 @@
+                                                                    Brussels, 19 May 2026
+     Interinstitutional files:
+       2025/0419 (COD)                                              WK 7009/2026 INIT
+
+                                                                    LIMITE
+
+                                                                    ECOFIN
+                                                                    FISC
+                                                                    UD
+                                                                    ENV
+                                                                    CLIMA
+                                                                    CODEC
+
+
+             This is a paper intended for a specific community of recipients. Handling and
+             further distribution are under the sole responsibility of community members.
+
+
+
+MEETING DOCUMENT
+From:                Presidency
+To:                  Delegations
+Subject:             CBAM: abusive practices
+
+
+
+
+WK 7009/2026 INIT
+LIMITE                                                                                       EN
+The Presidency considers inserting into the compromise text the following modifications
+concerning the issue of abusive practices (changes compared to the text in doc. ST 9201/26
+are highlighted in red bold underline:
+
+
+
+RECITALS:
+
+(12a) Abusive practices include, but are not limited to, practices of harmful resource
+       shuffling, where actors, controlling several production sites, with different
+       technologies of production with material differences in emission intensity
+       purposefully export to the Union the cleanest proportion of the goods without
+       engaging in any structural decarbonisation strategy for the rest of the production
+       of those goods. Due to harmful resource shuffling, imported goods could make
+       Union producers’ operations unviable. The subsequent emissions reduction in the
+       Union due to disappearance of EU production would be offset by an increase in
+       emissions in the rest of the world, if the demand for these goods in the Union
+       would be covered by third-country production, meaning carbon leakage occurs.
+       Therefore, harmful resource shuffling risks undermining the effectiveness of the
+       CBAM in addressing the risk of carbon leakage in the Union and the attainment
+       of the Union’s climate policy objectives.
+
+(12b) The risk of abusive practices in the form of harmful resource shuffling can be
+       circumscribed to a subset of CN codes and origins of the goods listed in Annex I
+       to Regulation (EU) 2023/956, for which a high likelihood of harmful resource
+       shuffling occurring can be demonstrated. This risk can be appreciated by
+       reference to the heterogeneity of emissions, at country-level, embedded in
+       products imported into the EU, the volume of goods imported into the Union
+       from a third-country, as well as the economic incentives for operators to engage
+       in harmful resource shuffling. For this subset of CN codes and origins, it is
+       justified to introduce conditions as well as evidence, demonstrating that no
+       harmful resource shuffling has occurred, given the high degree of uncertainty of
+       the market response to the introduction of a financial liability corresponding to
+       the emissions embedded in goods imported into the EU and the parallel phase-out
+       of EU ETS free allocations. The conditions to be fulfilled, as well as the evidence
+       to be provided demonstrating the fulfilment of these conditions, should be
+
+                                                                                             1
+       designed in a way that is proportionate to the identified risks and do not burden
+       operators and importers unnecessarily.
+
+(12c) The Commission should monitor and assess the evolution of the risk of abusive
+       practices, including harmful resource shuffling, for combinations of goods and
+       third countries and swiftly update the list of goods for which additional evidence
+       is required for the determination of the embedded emissions on the basis of actual
+       emissions. When specifying the evidence to be included in the CBAM declaration,
+       the Commission should reduce as much as possible the administrative burden for
+       operators and authorised CBAM declarants.
+
+(13)   The Commission should monitor the impact of the CBAM on the Union internal
+       market with a view to assessing the risk of abusive practices undermining the
+       effectiveness of the CBAM and the potential impact on the Union internal market,
+       including through an analysis of customs import declarations and CBAM declarations
+       or on the basis of any relevant source of information, including from Member States
+       through exchanges in the Expert Group on the CBAM or other relevant exchanges.
+
+(14)   To enable a swift reaction in the case of evidence pointing towards a high risk of
+       abusive practices, including in the form of harmful resource shuffling, the
+       Commission should be empowered to adopt delegated implementing acts to lay down,
+       for the use of actual emissions for a combination of goods and origins, the information
+       to be declared as well as the evidence demonstrating that such abusive practices have
+       not occurred materialised. Where the Commission finds sufficient evidence pointing
+       towards a high risk of abusive practices, the Commission should be required to act by
+       way of delegated implementing acts by a set deadlinewithin three months after the
+       finding. These conditions and evidence should be designed in a proportionate manner
+       and they should not place unnecessary burden on operators and importers.
+
+
+
+
+                                                                                               2
+OPERATIVE PROVISIONS:
+
+[…]
+
+(5)    Article 6 is amended as follows:
+
+       (a)   paragraph 2 is amended as follows:
+
+             (1)   point (b) is replaced by the following:
+
+      ‘(b) the total embedded emissions in the goods referred to in point (a) of this
+      paragraph, expressed in tonnes of CO2e emissions per megawatt-hour of electricity or,
+      for other goods, in tonnes of CO2e emissions per tonne of each type of goods,
+      calculated in accordance with Article 7 and, where the embedded emissions are
+      determined on the basis of actual emissions provided by the operator via the CBAM
+      registry in accordance with Article 10, verified in accordance with Article 8;’;
+
+
+
+             (2)   the following points (e) and (f) are added:
+
+      ‘(e) where applicable, in accordance with the implementing act referred to in
+      paragraph 6a of this Article, for the purpose of addressing the risk of misdeclaration of
+      emission intensities resulting from the lack of supply chain traceability, evidence that
+      the goods imported during the preceding calendar year were produced at the declared
+      installation and at the actual time of production referred to in the CBAM declaration;
+
+      (f) where, in accordance with an implementing delegated act adopted in accordance
+      with paragraph 7, the embedded emissions are determined on the basis of actual
+      emissions for a combination of good and origin that are subject to a high risk of
+      abusive practices, evidence demonstrating that no abusive practices have occurred.’;
+
+       (aa) paragraph 5 is replaced by the following:
+
+             “For goods referred to in Article 116(1), point (b), of Regulation (EU) No
+             952/2013 and the imported goods which are returned goods referred to in
+             Article 203 of that Regulation, the authorised CBAM declarant shall report
+             separately, in the CBAM declaration, ‘zero’ for the total embedded emissions
+             corresponding to those goods.”;
+
+
+
+
+                                                                                               3
+ (b)   in paragraph 6, the first sentence is replaced by the following:
+
+‘The Commission is empowered to adopt implementing acts concerning the standard
+format of the CBAM declaration, including detailed information for each installation
+and country of origin or other third country and type of goods to be reported, which
+supports the totals referred to in paragraph 2 of this Article, in particular as regards
+embedded emissions, the carbon price paid, the default carbon price for the purpose of
+Article 9(4), the procedure for submitting and the correction of the CBAM declaration
+via the CBAM registry, including procedures for the review of CBAM declarations in
+accordance with Article 19 via the CBAM registry, and the arrangements for
+surrendering the CBAM certificates referred to in paragraph 2, point (c), of this
+Article, in accordance with Article 22(1), in particular as regards the process and the
+selection by the authorised CBAM declarant of certificates to be surrendered.’;
+
+
+
+ (c)   the following paragraphs 6a and 7 are added:
+
+‘6a. The Commission is empowered to adopt implementing acts concerning the
+identification of goods or combinations of good and origin at risk of misdeclaration
+of emission intensities for which evidence is to be included in the CBAM declaration
+pursuant to paragraph 2, point (e), as well as the specific type and format of evidence
+to be provided. Those implementing acts shall be adopted in accordance with the
+examination procedure referred to in Article 29(2).
+
+
+
+
+                                                                                           4
+7. The Commission shall monitor at Union level the impact of the CBAM on the
+Union internal market. Where the Commission, taking into account relevant
+information, including from customs import declarations and CBAM declarations,
+finds that there is sufficient evidence pointing towards a high risk of abusive practices
+for a combination of good and origin:
+
+      a)   it may inform importers and authorised CBAM declarants about these risks,
+
+      b)   it may inform competent authorities and customs authorities about these risks,
+           and
+
+      c)   it is empowered to adopt implementingdelegated acts in accordance with
+           Article 2928 to supplement this Regulation by laying down
+
+           (i)    the combinations of goods and origins that are at risk of abusive
+                  practices,
+
+           (ii)   the methods for the identification of the combination of good and
+                  origin,
+
+           (iii) the conditions to be fulfilled information to be declared for the use of
+                  actual emissions for those combinations of good and origin as well as
+
+           (iv) the evidence to be provided to demonstrate that these conditions are
+                  fulfilledno abusive practices have occurred.
+
+For abusive practices in the form of harmful resource shuffling, the methods for
+the identification of the goods referred to in point (c) shall take into account at
+least the following factors:
+
+(a)        The heterogeneity of emissions embedded in goods imported into the EU;
+
+(b)        Relevance for the internal market, including as measured by trade
+           volumes and trade flows;
+
+(c)        The economic incentives for operators to engage in harmful resource
+           shuffling.
+
+The Commission shall adopt the implementingdelegated acts referred to in the first
+subparagraph within sixthree months of finding that there is sufficient evidence
+pointing towards a high risk of abusive practices’;
+
+                                    ___________
+
+                                                                                            5
+
