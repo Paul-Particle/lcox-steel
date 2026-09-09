@@ -3,7 +3,7 @@ standard-islanded,all-routes,wind-onshore,bestsite-p95,all-areas,20250101,202512
 standard-islanded,all-routes,solar,bestsite-p95,all-areas,20250101,20251231
 standard-grid,all-routes,wind-onshore,bestsite-p95,all-areas,20250101,20251231
 standard-grid,all-routes,solar,bestsite-p95,all-areas,20250101,20251231
-standard-grid,all-routes,grid,dayahead,all-areas,20250101,20251231
+standard-grid,all-routes,grid,emissions,all-areas,20250101,20251231
 sensitivity-test,h2-dri-eaf|moe-eaf,wind-onshore,bestsite-p95,VIC1,20250101,20251231
 sensitivity-test,h2-dri-eaf|moe-eaf,solar,bestsite-p95,VIC1,20250101,20251231
 # Every route has an -export twin now, and `all-routes` picks them up. Brazil

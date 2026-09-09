@@ -172,14 +172,13 @@ REPORT_FIELDS = {
     # the freight: the process steps' own direct emissions (electrodes, carbon
     # injection, pellet carbon, carbonate fluxes) sit outside the model boundary,
     # which is why a figure here is not a CBAM or an ETS number. `emissions_basis`
-    # says which of the three factor bases produced them, and
-    # `emissions_grid_source` whether the grid figure came from a real generation
-    # mix or an area default — so no number here can be read on the wrong footing.
+    # says which of the three factor bases produced them, so no number here can be
+    # read on the wrong footing; a grid run's intensity always comes from its own
+    # `variant: emissions` generation series, never from a stand-in.
     #
     # In kg rather than t throughout: the report rounds to two decimals, and a
     # clean route's tonne of steel lands near a thousandth of a tonne of CO2e.
     "emissions_basis": UNDEFINED,
-    "emissions_grid_source": UNDEFINED,
     "emissions_kt_co2e_per_year": ZERO,
     "emissions_kg_co2e_per_t_steel": ZERO,
     "emissions_kg_co2e_per_kg_h2": UNDEFINED,
@@ -211,7 +210,7 @@ ZERO_FILLED = tuple(field for field, fill in REPORT_FIELDS.items() if fill == ZE
 IDENTITY_FIELDS = ("scenario", "area", "country", "route", "start_date", "end_date",
                    *(f"{field_stem(tech)}_variant" for tech in INPUT_TECHS),
                    "best_in_country", "lco_output_unit",
-                   "emissions_basis", "emissions_grid_source", "inputs_hash")
+                   "emissions_basis", "inputs_hash")
 
 # Fields only the diagnostic carries: the report has already acted on the flag,
 # so a frame without it is not missing anything.
