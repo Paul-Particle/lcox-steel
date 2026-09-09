@@ -114,7 +114,7 @@ def _emissions_breakdown(
     n: pypsa.Network, emissions_cfg: dict, natural_gas_cfg: dict,
     area: str, transport_legs: dict | None, grid_mix: pd.DataFrame | None,
 ) -> dict[str, object]:
-    """What the run emitted in a year, cut four ways.
+    """What the run emitted in a year, and who to charge it to.
 
     `by_step` is annual t CO2e per step and stacks to the total. `electricity_mwh`
     and `electricity_t` are each user's draw and the emissions of that draw alone
