@@ -236,11 +236,11 @@ Drop `--profile profiles/default` for the bare invocation.
 ### Targeting one output
 
 ```bash
-# Grid — ENTSO-E day-ahead prices for DEU (bidding zone DE_LU). Cap concurrent API calls:
-snakemake resources/timeseries/DEU_grid_dayahead_20250101_20251231.parquet --cores 4 --resources entsoe_api=4
+# Grid — ENTSO-E prices + generation mix for DEU (bidding zone DE_LU). Cap concurrent API calls:
+snakemake resources/timeseries/DEU_grid_emissions_20250101_20251231.parquet --cores 4 --resources entsoe_api=4
 
-# Grid — NEM day-ahead prices (VIC1, 2025):
-snakemake resources/timeseries/VIC1_grid_dayahead_20250101_20251231.parquet --cores 4
+# Grid — NEM prices + generation mix (VIC1, 2025):
+snakemake resources/timeseries/VIC1_grid_emissions_20250101_20251231.parquet --cores 4
 
 # res_cf — wind-onshore CF for Germany, 2023:
 snakemake resources/timeseries/DEU_wind-onshore_area-average_20250101_20251231.parquet --cores 4
@@ -365,10 +365,20 @@ other — the identity rows at the top say which is which.
 
 ## Data formats
 
-**Grid** (`resources/timeseries/{area}_grid_dayahead_{start}_{end}.parquet`):
-UTC hourly `DatetimeIndex`, single `price` column (EUR/MWh). The `_full` variant
-has MultiIndex `(area, metric)` columns covering all data types at native
-resolution.
+**Grid** (`resources/timeseries/{area}_grid_{variant}_{start}_{end}.parquet`):
+UTC hourly `DatetimeIndex`, leading `price` column (EUR/MWh). Three variants:
+
+| variant | columns | for |
+|---|---|---|
+| `dayahead` | `price` | a solve, and nothing else |
+| `emissions` | `price` + one per carrier, hourly | the default for grid rows — the solve buys at the price, the report weights the mix by `emissions.electricity_t_co2e_per_mwh` |
+| `full` | all data types, native resolution | analysis; adds load, RES forecast and cross-border flows |
+
+The carrier column names are the shared vocabulary both downloaders emit
+(`brown_coal`, `hard_coal`, `gas`, `wind_onshore`, …), which is what lets one
+factor table serve ENTSO-E and NEM alike. A grid run whose series carries no
+mix has no emission intensity, and `compile_report` says so rather than
+substituting a figure.
 
 **Capacity factors** (`resources/timeseries/{area}_{tech}_area-average_{start}_{end}.parquet`):
 hourly parquet, `DatetimeIndex` named `time`, one column whose name *is* the tech

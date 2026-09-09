@@ -10,8 +10,9 @@ skips this work on a re-run.
 
 Variants
 --------
-dayahead  prices data_type only → single "price" column, hourly UTC-naive
-full      all six data_types → wide frame with derived residual-load columns
+dayahead   prices data_type only → single "price" column, hourly UTC-naive
+emissions  prices + generation → "price" and one column per carrier, hourly
+full       all six data_types → wide frame with derived residual-load columns
 """
 
 import logging
@@ -26,6 +27,7 @@ from download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client,
 log = logging.getLogger(__name__)
 
 FULL_DATA_TYPES = ["prices", "load_forecast", "load_actual", "res", "generation", "crossborder"]
+EMISSIONS_DATA_TYPES = ["prices", "generation"]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -88,6 +90,25 @@ def _process_dayahead_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataF
     return price.to_frame()
 
 
+def _process_emissions_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame:
+    """One month of prices and per-carrier generation, hourly and UTC-naive.
+
+    What it takes to say how dirty an imported MWh was: the price the solve buys
+    at, and the mix behind it. Two data types rather than `full`'s six, because
+    load, the RES forecast and cross-border flows answer other questions.
+
+    Hourly means, as `dayahead` does — the solve and the report are both hourly,
+    so resampling belongs here rather than in each consumer. `price` leads the
+    columns and the generation follows it.
+    """
+    month_dir = raw_cache_dir / area / ym
+    raw_price = to_utc_naive(pd.read_parquet(month_dir / "prices.parquet")).iloc[:, 0]
+    price = raw_price.ffill(limit=3).bfill(limit=3).resample("1h").mean().rename("price")
+    generation = to_utc_naive(pd.read_parquet(month_dir / "generation.parquet").copy())
+    generation.columns = generation.columns.droplevel(0)
+    return pd.concat([price, generation.resample("1h").mean()], axis=1, sort=False)
+
+
 def _process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame:
     """Assemble one month's six data types into a wide frame with residual-load columns.
 
@@ -128,7 +149,17 @@ def _process_full_month(area: str, ym: str, raw_cache_dir: Path) -> pd.DataFrame
     return df.sort_index(axis=1)
 
 
-# ── Completeness guard ─────────────────────────────────────────────────────────
+# ── Variants ──────────────────────────────────────────────────────────────────
+
+# What each variant fetches, and how one month of it is assembled. The raw
+# per-month cache is shared, so a window already downloaded for `full` costs
+# nothing to reprocess as `emissions`.
+VARIANTS = {
+    "dayahead":  (["prices"], _process_dayahead_month),
+    "emissions": (EMISSIONS_DATA_TYPES, _process_emissions_month),
+    "full":      (FULL_DATA_TYPES, _process_full_month),
+}
+
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -148,8 +179,8 @@ def retrieve(snakemake, area: str) -> None:
 
     raw_cache_dir = Path("data/entsoe_cache")
 
-    if variant not in ("dayahead", "full"):
-        raise ValueError(f"Unknown variant {variant!r}. Expected 'dayahead' or 'full'.")
+    if variant not in VARIANTS:
+        raise ValueError(f"Unknown variant {variant!r}. Expected one of {sorted(VARIANTS)}.")
 
     valid_zones = _load_bidding_zones(raw_cache_dir)
     if area not in valid_zones:
@@ -158,8 +189,7 @@ def retrieve(snakemake, area: str) -> None:
             f"See data/entsoe_cache/entsoe_bidding_zones.csv for the full list."
         )
 
-    data_types    = ["prices"] if variant == "dayahead" else FULL_DATA_TYPES
-    process_month = _process_dayahead_month if variant == "dayahead" else _process_full_month
+    data_types, process_month = VARIANTS[variant]
 
     months = _months_to_process(start_date, end_date)
     _ensure_raw_months(area, months, data_types, raw_cache_dir)
@@ -178,6 +208,12 @@ def retrieve(snakemake, area: str) -> None:
     out_df = out_df.ffill(limit=3)
     if variant == "full":
         out_df = out_df.fillna(0.0)
+    if variant == "emissions":
+        # A carrier that reported nothing generated nothing, so zero is its
+        # value. The price is left alone: a hole there must not become a free
+        # hour, and the completeness guard below is what should catch it.
+        carriers = out_df.columns.difference(["price"])
+        out_df[carriers] = out_df[carriers].fillna(0.0)
     out_df.index.name = "time"
 
     assert_window_complete(out_df, start_date, end_date, variant)
