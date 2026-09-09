@@ -69,18 +69,33 @@ def _months_to_process(start_date: str, end_date: str) -> list[str]:
 def _ensure_raw_months(
     area: str, months: list[str], data_types: list[str], raw_cache_dir: Path
 ) -> None:
-    """Download any (month, data_type) pairs absent from the raw monthly cache."""
+    """Download any (month, data_type) pair the raw monthly cache is missing or short.
+
+    Short counts as missing. ENTSO-E used to answer an over-long generation
+    request by returning what fitted its P1M cap rather than erroring, so the
+    cache holds months that stop a day early — DE_LU's October 2024 and 2025 both
+    end on the 30th — and file existence alone would keep them forever. A month
+    still running is exempt: `_months_to_process` pads by one, so the pad month
+    is sometimes the current one and is short for an honest reason.
+    """
     area_cache_dir = raw_cache_dir / area
     client = None  # lazily instantiated — warm cache = no API call
     for ym in months:
+        month_start = pd.Timestamp(ym + "-01", tz="Europe/Brussels")
+        next_month = month_start + pd.offsets.MonthBegin(1)
+        still_running = next_month > pd.Timestamp.now(tz="Europe/Brussels")
         for dt in data_types:
             cache_path = area_cache_dir / ym / f"{dt}.parquet"
             if cache_path.exists():
-                continue
+                last_reading = pd.read_parquet(cache_path).index[-1]
+                if still_running or last_reading >= next_month - pd.Timedelta(hours=1):
+                    continue
+                log.warning(
+                    f"{area}/{ym}/{dt}: cached copy stops at {last_reading} instead of "
+                    f"{next_month} — a truncated fetch, re-fetching it"
+                )
             if client is None:
                 client = get_entsoe_client()
-            month_start = pd.Timestamp(ym + "-01", tz="Europe/Brussels")
-            next_month = month_start + pd.offsets.MonthBegin(1)
             log.info(f"{area}/{ym}/{dt}: fetching")
             df = download_with_retry(DOWNLOADERS[dt], client, area, month_start, next_month)
             cache_path.parent.mkdir(parents=True, exist_ok=True)
