@@ -426,6 +426,29 @@ def test_storage_is_left_out_of_the_grid_mix_rather_than_counted_at_zero():
     assert emitted["by_step"]["eaf"] == pytest.approx(10.0 * 4 * SCALE * 1.0)
 
 
+def test_a_carrier_s_own_consumption_is_not_a_source_of_its_own():
+    """ENTSO-E reports an "Actual Consumption" figure for any carrier that has
+    one, not only for storage — Germany publishes one for solar and onshore wind.
+    It is what those plants drew, so it is not in the mix, and it is certainly
+    not a carrier the factor table should have to know."""
+    n = _network()
+    n.add("Generator", "grid_import", bus="electricity", carrier="AC")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    _dispatch(n, "generators", "p", {"grid_import": [10.0] * 4})
+    _dispatch(n, "links", "p0", {"eaf": [5.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [10.0] * 4})
+
+    # Three quarters coal to one quarter wind, and both renewables draw a little.
+    mix = pd.DataFrame(
+        {"hard_coal": [30.0] * 4, "wind_onshore": [10.0] * 4,
+         "wind_onshore_cons": [-2.0] * 4, "solar": [0.0] * 4,
+         "solar_cons": [-1.0] * 4, "price": [50.0] * 4},
+        index=n.snapshots,
+    )
+    emitted = _breakdown(n, grid_mix=mix)
+    assert emitted["by_step"]["eaf"] == pytest.approx(10.0 * 4 * SCALE * 0.75)
+
+
 def test_a_link_drawing_power_the_report_cannot_name_is_an_error():
     """The report has one column per declared user, and the run's total is the sum
     over them — so an undeclared drawing link would go missing from the total
