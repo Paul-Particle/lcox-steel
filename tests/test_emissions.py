@@ -250,6 +250,36 @@ def test_what_comes_out_of_storage_is_not_free():
     assert emitted["losses_mwh"] == pytest.approx(2.0 * SCALE)
 
 
+def test_stored_energy_carries_the_hours_it_charged_in():
+    """Not the year's average, which is a number the run does not contain. A
+    battery filled on wind gives back wind, however dirty the rest of the year
+    was — and its round-trip loss is charged at the same rate."""
+    n = _network()
+    n.add("Generator", "wind-onshore", bus="electricity", carrier="wind-onshore")
+    n.add("Generator", "solar", bus="electricity", carrier="solar")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    n.add("StorageUnit", "battery", bus="electricity", carrier="battery")
+    # Hour 1 is all wind and fills the battery; hour 2 runs off it; hour 3 is
+    # all solar. The year's mean intensity would be 0.1, halfway between them.
+    _dispatch(n, "generators", "p", {
+        "wind-onshore": [10.0, 0.0, 0.0, 0.0],
+        "solar":        [0.0, 0.0, 10.0, 0.0],
+    })
+    _dispatch(n, "links", "p0", {"eaf": [1.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [5.0, 4.0, 10.0, 0.0]})
+    _dispatch(n, "storage_units", "p", {"battery": [-5.0, 4.0, 0.0, 0.0]})
+
+    emitted = compile_report._emissions_breakdown(
+        n, EMISSIONS, NATURAL_GAS, "VIC1", None, None
+    )
+
+    # The furnace's dark hour is free because the wind that filled the battery
+    # was; only the solar hour costs anything.
+    assert emitted["by_step"]["eaf"] == pytest.approx(10.0 * SCALE * 0.2)
+    assert emitted["by_step"]["battery_losses"] == pytest.approx(0.0)
+    assert sum(emitted["by_step"].values()) == pytest.approx(10.0 * SCALE * 0.2)
+
+
 def test_a_battery_that_never_ran_is_not_a_missing_column():
     """PyPSA's netCDF export drops an all-zero dispatch column, so a run that
     built no battery comes back with one in the index and none in the frame. An
