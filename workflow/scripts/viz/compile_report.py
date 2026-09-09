@@ -33,6 +33,13 @@ if "snakemake" not in globals():
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
+# The grid carriers that store rather than generate, as both downloaders name
+# them (ENTSO-E also publishes their charging as `{carrier}_cons`). They are not
+# a source of their own, so they are left out of a mix rather than counted in it
+# at zero — see `_grid_intensity`.
+STORAGE_CARRIERS = ("energy_storage", "pumped_storage")
+
+
 def _carrier_key(carrier: str) -> str:
     """The emission table's key for a generator carrier: `wind-onshore` → `wind_onshore`.
 
@@ -48,46 +55,59 @@ def _grid_intensity(
 ) -> pd.Series:
     """t CO2e per MWh imported, hour by hour, from the area's own generation mix.
 
-    A grid series solved on `variant: emissions` (or `full`) carries the area's
-    generation by carrier, and those column names are the factor table's keys —
-    which is what the two downloaders' shared vocabulary was for. A series
-    solved on `dayahead` carries prices only, and there is nothing to stand in
-    for a mix, so that is an error in the scenario table rather than a number to
-    invent.
+    A grid series solved on `variant: emissions` carries the area's generation
+    by carrier, and those column names are the factor table's keys — which is
+    what the two downloaders' shared vocabulary was for. A series solved on
+    `dayahead` carries prices only, and there is nothing to stand in for a mix,
+    so that is an error in the scenario table rather than a number to invent. A
+    `full` series carries the carriers too, but at native resolution and beside
+    load and flow columns, so it is not a mix source either.
+
+    Storage carriers are left out of the mix altogether rather than counted at
+    zero: what a reservoir gives back was generated in some earlier hour that is
+    already in here, so excluding both its discharge and its charging is what
+    makes stored energy carry the average of everything else. Counting the
+    discharge at a factor of zero would instead dilute the mix.
 
     Production-based: a zone importing coal power from next door reads as clean
-    as its own plants. The cross-border columns are in the series if that is
-    ever worth fixing.
+    as its own plants. The cross-border columns are in the `full` series if that
+    is ever worth fixing.
     """
-    carriers = [col for col in (grid_mix.columns if grid_mix is not None else [])
-                if col in factors]
-    if not carriers:
+    columns = [col for col in (grid_mix.columns if grid_mix is not None else [])
+               if col != "price"
+               and col.removesuffix("_cons") not in STORAGE_CARRIERS]
+    if not columns:
         raise ValueError(
             f"{area}: this run imports from the grid, but its grid series carries no "
             f"generation mix, so its emission intensity is unknown. Set the area's "
             f"grid row in config/scenarios.csv to `variant: emissions`."
         )
+    unknown = [col for col in columns if col not in factors]
+    if unknown:
+        raise ValueError(
+            f"{area}: its grid series has generation columns the emission factor "
+            f"table has no entry for: {sorted(unknown)}. Either they are carriers "
+            f"and belong in `emissions.electricity_t_co2e_per_mwh` in "
+            f"config/assumptions.yaml, or the series is not a `variant: emissions` "
+            f"one — a `full` series carries load and flow columns too."
+        )
+    missing = pd.Index(snapshots).difference(grid_mix.index)
+    if len(missing):
+        raise ValueError(
+            f"{area}: its grid series does not cover {len(missing)} of the run's "
+            f"snapshots (first {missing[0]}, last {missing[-1]}). The series and the "
+            f"solved network are for different windows, so pairing them would report "
+            f"an intensity from the wrong year."
+        )
     # ENTSO-E publishes the odd negative generation hour; a negative would
     # otherwise pull the weighted mean the wrong way.
-    generation = grid_mix[carriers].clip(lower=0.0)
+    generation = grid_mix[columns].clip(lower=0.0)
     generated = generation.sum(axis=1)
-    carried = sum(generation[carrier] * factors[carrier] for carrier in carriers)
+    carried = sum(generation[carrier] * factors[carrier] for carrier in columns)
+    # An hour the zone generated nothing at all is an hour with no mix to read,
+    # so it carries the neighbouring hours' rather than a fabricated zero.
     hourly = (carried / generated.where(generated > 0)).reindex(snapshots)
     return hourly.ffill().bfill()
-
-
-def _electricity_draw(n: pypsa.Network, link: str) -> tuple[pd.Series, str]:
-    """A link's electricity draw in MW, and the bus it draws on.
-
-    Some links take electricity as their input (bus0: an electrolyser, a MOE
-    cell), others as a by-draw alongside the conversion they exist for (bus2: a
-    shaft's auxiliaries, the furnace's melt). Either way PyPSA reads a positive
-    port flow as withdrawn from that bus, so both are positive as they stand —
-    it is the bus that differs, not the sign.
-    """
-    if n.buses.at[n.links.at[link, "bus0"], "carrier"] == "AC":
-        return n.links_t.p0[link], n.links.at[link, "bus0"]
-    return n.links_t.p2[link], n.links.at[link, "bus2"]
 
 
 def _emissions_breakdown(
@@ -100,8 +120,9 @@ def _emissions_breakdown(
     and `electricity_t` are each user's draw and the emissions of that draw alone
     — kept apart from `by_step` because a gas-fired shaft's step total carries its
     combustion too, and dividing that by its MWh would report a furnace as
-    buying impossibly dirty power. `sources` splits the total into electricity,
-    gas and freight.
+    buying impossibly dirty power. `losses_mwh` is the electricity the round trip
+    and the lines took, which no user drew. `sources` splits the total into
+    electricity, gas and freight.
 
     Accounting only: none of this reaches the objective, so nothing here can
     move a solve. And it covers the run's energy and freight alone — the process
@@ -120,39 +141,78 @@ def _emissions_breakdown(
                for carrier, values in emissions_cfg["electricity_t_co2e_per_mwh"].items()}
     annual = 8760.0 / len(n.snapshots)
 
+    # PyPSA's netCDF export drops a time-varying column whose every value is the
+    # default, so a component that never ran comes back missing from the
+    # dispatch frame rather than zero — an optimum that builds no battery is an
+    # ordinary outcome, not a reason for the whole report to fail.
+    generator_p = n.generators_t.p.reindex(columns=n.generators.index, fill_value=0.0)
+    storage_p = n.storage_units_t.p.reindex(columns=n.storage_units.index, fill_value=0.0)
+    link_p0 = n.links_t.p0.reindex(columns=n.links.index, fill_value=0.0)
+    # bus2 is optional, so a route whose links all take their electricity on
+    # bus0 has neither the column nor the frame.
+    link_p2 = (n.links_t["p2"].reindex(columns=n.links.index, fill_value=0.0)
+               if "p2" in n.links_t else link_p0 * 0.0)
+    link_bus2 = (n.links["bus2"] if "bus2" in n.links.columns
+                 else pd.Series("", index=n.links.index))
+
     # The destination is found by who feeds it rather than by name, so the bus
     # can be renamed in build_network without breaking the report.
     destination_bus = (n.generators.at["destination_supply", "bus"]
                        if "destination_supply" in n.generators.index else None)
-    destination_intensity = pd.Series(
-        emissions_cfg["destination_t_co2e_per_mwh"], index=n.snapshots
-    )
-
-    grid_hourly = (_grid_intensity(area, grid_mix, factors, n.snapshots)
-                   if "grid_import" in n.generators.index
-                   else pd.Series(0.0, index=n.snapshots))
+    destination_intensity = emissions_cfg["destination_t_co2e_per_mwh"][basis]
 
     # What a MWh on the producing area's electricity buses carried, hour by hour:
     # its own generation at the carriers' factors, its imports at the grid's.
     home_buses = set(n.buses.index[n.buses.carrier == "AC"]) - {destination_bus}
     home_gens = n.generators.index[n.generators.bus.isin(home_buses)]
-    generated = n.generators_t.p[home_gens].sum(axis=1)
+    generated = generator_p[home_gens].sum(axis=1)
     carried = pd.Series(0.0, index=n.snapshots)
     for gen in home_gens:
-        factor = (grid_hourly if gen == "grid_import"
+        factor = (_grid_intensity(area, grid_mix, factors, n.snapshots)
+                  if gen == "grid_import"
                   else factors[_carrier_key(n.generators.at[gen, "carrier"])])
-        carried += n.generators_t.p[gen] * factor
-    home_intensity = (carried / generated.where(generated > 0)).fillna(0.0)
+        carried += generator_p[gen] * factor
 
+    # Weighted by the energy, not by the hour: an idle hour is not a clean one,
+    # and this is what values both losses below.
+    mean_intensity = (float(carried.sum() / generated.sum())
+                      if float(generated.sum()) > 0 else 0.0)
+    # Storage is a source like any other, at the year's mean intensity. Without
+    # it an hour supplied out of the battery has nothing generating in it, and
+    # everything drawn in that hour would come out free — a solar plant that
+    # runs its furnace through the night would report half its emissions.
+    discharged = storage_p.clip(lower=0.0).sum(axis=1)
+    supplied = generated + discharged
+    home_intensity = ((carried + discharged * mean_intensity)
+                      / supplied.where(supplied > 0)).fillna(0.0)
+
+    # Which links draw electricity is read off the network — on bus0 as their
+    # input (an electrolyser, a MOE cell) or on bus2 alongside the conversion
+    # they exist for (a shaft's auxiliaries, the furnace's melt) — and either way
+    # PyPSA reads a positive port flow as withdrawn from that bus, so both are
+    # positive as they stand. The schema's list is what the report has columns
+    # for, so a new drawing link is an error here rather than a silent hole in
+    # the total.
     electricity_mwh = {}
     electricity_by_user = {}
-    for user in ELECTRICITY_USERS:
-        if user not in n.links.index:
+    for link in n.links.index:
+        if n.links.at[link, "carrier"] == "HVDC":
+            continue    # a line rather than a user; its loss is charged below
+        on_bus0 = n.buses.at[n.links.at[link, "bus0"], "carrier"] == "AC"
+        bus2 = link_bus2[link]
+        if not on_bus0 and not (bus2 and n.buses.at[bus2, "carrier"] == "AC"):
             continue
-        draw, bus = _electricity_draw(n, user)
+        if link not in ELECTRICITY_USERS:
+            raise ValueError(
+                f"{link} draws electricity but the report has no field for it. Add it "
+                f"to ELECTRICITY_USERS in common/_report_schema.py, or its draw goes "
+                f"missing from the run's total while every share still reads 100 %."
+            )
+        draw, bus = ((link_p0[link], n.links.at[link, "bus0"]) if on_bus0
+                     else (link_p2[link], bus2))
         intensity = destination_intensity if bus == destination_bus else home_intensity
-        electricity_mwh[user] = float(draw.sum()) * annual
-        electricity_by_user[user] = float((draw * intensity).sum()) * annual
+        electricity_mwh[link] = float(draw.sum()) * annual
+        electricity_by_user[link] = float((draw * intensity).sum()) * annual
     emissions = dict(electricity_by_user)
     electricity_t = sum(electricity_by_user.values())
 
@@ -162,42 +222,48 @@ def _emissions_breakdown(
                      + emissions_cfg["gas_upstream_t_co2e_per_mwh"][basis])
     gas_t = 0.0
     for link in n.links.index[n.links.bus0 == "gas"]:
-        burned = float(n.links_t.p0[link].sum()) * annual * gas_t_per_mwh
+        burned = float(link_p0[link].sum()) * annual * gas_t_per_mwh
         emissions[link] = emissions.get(link, 0.0) + burned
         gas_t += burned
 
     # Freight over the run's own legs, each mode at its own factor.
     freight = emissions_cfg["freight_kg_co2e_per_t_km"]
     legs = transport_legs or {}
-    t_co2e_per_t = sum(freight[mode] * km for mode, km in legs.items()) / 1000.0
+    t_co2e_per_t = sum(freight[mode][basis] * km for mode, km in legs.items()) / 1000.0
     freight_t = 0.0
     for link in ("iron_transport", "steel_transport"):
         if link not in n.links.index:
             continue
-        shipped = float(n.links_t.p0[link].sum()) * annual
+        shipped = float(link_p0[link].sum()) * annual
         emissions[link] = shipped * t_co2e_per_t
         freight_t += emissions[link]
 
     # Round-trip and line losses are electricity nobody consumed, so they belong
-    # to no step. Valued at the year's mean intensity rather than hour by hour:
-    # a loss is incurred across the charge and the discharge, and splitting it
-    # between them would be a guess dressed up as arithmetic.
-    mean_intensity = float(home_intensity.mean())
+    # to no step. Valued at the mean intensity rather than hour by hour: a loss
+    # is incurred across the charge and the discharge, and splitting it between
+    # them would be a guess dressed up as arithmetic. That is also the intensity
+    # the discharge itself carries above, so the books close: what the users are
+    # charged plus what the losses are charged is what the generation carried.
+    losses_mwh = 0.0
     if "battery" in n.storage_units.index:
-        lost = -float(n.storage_units_t.p["battery"].sum()) * annual
+        lost = -float(storage_p["battery"].sum()) * annual
         emissions["battery_losses"] = lost * mean_intensity
         electricity_t += emissions["battery_losses"]
-    hvdc = [link for link in n.links.index if link.startswith("hvdc_")]
+        losses_mwh += lost
+    hvdc = list(n.links.index[n.links.carrier == "HVDC"])
     if hvdc:
-        lost = float((n.links_t.p0[hvdc].sum(axis=1)
-                      + n.links_t.p1[hvdc].sum(axis=1)).sum()) * annual
+        link_p1 = n.links_t.p1.reindex(columns=n.links.index, fill_value=0.0)
+        lost = float((link_p0[hvdc].sum(axis=1)
+                      + link_p1[hvdc].sum(axis=1)).sum()) * annual
         emissions["transmission_losses"] = lost * mean_intensity
         electricity_t += emissions["transmission_losses"]
+        losses_mwh += lost
 
     return {
         "by_step": emissions,
         "electricity_mwh": electricity_mwh,
         "electricity_t": electricity_by_user,
+        "losses_mwh": losses_mwh,
         "sources": {"electricity": electricity_t, "gas": gas_t, "freight": freight_t},
     }
 
@@ -717,16 +783,25 @@ def extract_summary(
     # 3.38 kg CO2e per kg H2, and only the electrolyser's electricity is in the
     # hydrogen's production chain. On a steel route the furnace is downstream of
     # it and belongs to the steel.
+    #
+    # The losses ride along in proportion to what the electrolyser drew: the
+    # battery cycle and the line that delivered its power were incurred to
+    # deliver it, and a run whose every MWh exists to make hydrogen would
+    # otherwise read a third light against a threshold it is being held to.
+    drawn_t = sum(emitted["electricity_t"].values())
     if "electrolyser" in n.links.index:
         h2_kg = _h2_produced_kg(n)
-        if h2_kg > 0:
+        if h2_kg > 0 and drawn_t > 0:
             summary["emissions_kg_co2e_per_kg_h2"] = (
-                emitted["electricity_t"].get("electrolyser", 0.0) * 1e3 / h2_kg
+                emitted["electricity_t"].get("electrolyser", 0.0)
+                * (sources["electricity"] / drawn_t) * 1e3 / h2_kg
             )
 
     # Electricity by who drew it, and how dirty their own hours were — the number
     # that separates a user chasing cheap renewable hours from one running flat.
-    total_el_mwh = sum(electricity_mwh.values())
+    # The losses are on both sides of the system average: they emitted, and they
+    # were MWh the system drew, so a user can sit either side of it.
+    total_el_mwh = sum(electricity_mwh.values()) + emitted["losses_mwh"]
     if total_el_mwh > 0:
         summary["emissions_kg_co2e_per_mwh_el"] = (
             sources["electricity"] * 1e3 / total_el_mwh
@@ -754,11 +829,18 @@ def main() -> None:
     assumptions = yaml.safe_load(Path(snakemake.input.assumptions).read_text())
     parents = zone_parents(snakemake.config["areas"])
 
-    # The grid series each area was solved against, by area. Only the emission
-    # fields read them, and only for the generation mix: a series solved on
-    # `dayahead` has none, and an islanded scenario has no series at all.
-    grid_paths = {Path(p).stem.split("_")[0]: Path(p)
-                  for p in snakemake.input.get("grid_input", [])}
+    # The grid series each run was solved against. Only the emission fields read
+    # them, and only for the generation mix: a series solved on `dayahead` has
+    # none, and an islanded scenario has no series at all.
+    #
+    # Keyed by the part of the run key the series belongs to, not by area alone:
+    # a scenario can hold several date windows for one area, and one key per
+    # area would quietly hand a run another year's mix.
+    grid_series = {}
+    for grid_path in snakemake.input.grid_input:
+        area_tech_variant, grid_start, grid_end = Path(grid_path).stem.rsplit("_", 2)
+        grid_area = area_tech_variant.rsplit("_", 2)[0]
+        grid_series[(grid_area, grid_start, grid_end)] = pd.read_parquet(grid_path)
 
     rows = []
     network_paths = list(dict.fromkeys(snakemake.input.networks))
@@ -773,7 +855,7 @@ def main() -> None:
         # Freight legs are the country's, not the zone's — a NEM region ships
         # from Australia. Same resolution as solve_network's.
         legs = assumptions["transport"]["distance_km"].get(parents.get(area, area))
-        grid_mix = (pd.read_parquet(grid_paths[area]) if area in grid_paths else None)
+        grid_mix = grid_series.get((area, start_date, end_date))
         summary = extract_summary(n, scenario_name, run, assumptions, legs, grid_mix)
         # Trailing the row, because it identifies the inputs rather than
         # describing them: the per-file map it stands for is in the network.

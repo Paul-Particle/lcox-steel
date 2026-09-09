@@ -378,7 +378,10 @@ The carrier column names are the shared vocabulary both downloaders emit
 (`brown_coal`, `hard_coal`, `gas`, `wind_onshore`, …), which is what lets one
 factor table serve ENTSO-E and NEM alike. A grid run whose series carries no
 mix has no emission intensity, and `compile_report` says so rather than
-substituting a figure.
+substituting a figure — as it does for a carrier the factor table has no entry
+for, rather than renormalising the mix over the rest of it. `full` is not a mix
+source despite carrying the carriers: it is at native resolution, so reading an
+hour off it would take the `:00` instant for the hour's mean.
 
 **Capacity factors** (`resources/timeseries/{area}_{tech}_area-average_{start}_{end}.parquet`):
 hourly parquet, `DatetimeIndex` named `time`, one column whose name *is* the tech

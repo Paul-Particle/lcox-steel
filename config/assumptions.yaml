@@ -346,11 +346,9 @@ emissions:
   # for, which is how the two meet. A carrier appearing in a generation series
   # but missing here is an error, not a zero.
   #
-  # combustion:    Agora Energiewende's Agorameter factors, recovered from this
-  #                repo's own history (scripts/optimize_grid_capacity_factor.py,
-  #                deleted in e89ac11). The 1.57 shared by the dirty catch-alls
-  #                is deliberately punitive: they are small, mixed, and mostly
-  #                worse than lignite.
+  # combustion:    Agora Energiewende's Agorameter factors. The 1.57 shared by
+  #                the dirty catch-alls is deliberately punitive: they are
+  #                small, mixed, and mostly worse than lignite.
   # delegated_act: combustion + upstream, where upstream is
   #                   u [gCO2eq/MJ fuel] * 3600 / eta * 1e-6
   #                with u from Part C of Commission Delegated Regulation (EU)
@@ -368,10 +366,13 @@ emissions:
   #                (marked *). The rest are extrapolations and the least
   #                defensible numbers in this file.
   #
-  # Storage carriers are zero on every basis on purpose. What comes out of a
-  # battery or a pumped-hydro reservoir was generated somewhere already counted,
-  # so giving it a factor of its own would count those emissions twice. Their
-  # round-trip loss is charged where it belongs, as extra electricity drawn.
+  # Storage carriers are here for the vocabulary rather than for their factor:
+  # the report leaves them out of a mix altogether, both what a reservoir gives
+  # back and what it took to fill it, which is what makes stored energy carry
+  # the average of everything else. Counting the discharge at a factor of zero
+  # would instead read as free power and dilute the mix (a couple of per cent in
+  # DE, more in a hydro-heavy NEM region). Their round-trip loss is charged
+  # where it belongs, as extra electricity drawn.
   electricity_t_co2e_per_mwh:
     #                 combustion  delegated_act  lifecycle
     biomass:        { combustion: 0,        delegated_act: 0,      lifecycle: 0.230 }   # * AR5 dedicated biomass
@@ -407,8 +408,18 @@ emissions:
   # here that is not derived from a series: the destination is a placeholder
   # rather than a modelled place, which is why its price is flat too (see the
   # `destination` block). Wiring it to its own country's series is the obvious
-  # next step, and would retire this number along with the flat price.
-  destination_t_co2e_per_mwh: 0.363    # DEU, matching the destination block
+  # next step, and would retire these numbers along with the flat price.
+  #
+  # Keyed by basis like everything else, because the destination furnace is
+  # usually the largest single draw on an `-export` route: a combustion-grade
+  # figure here on a `lifecycle` run would understate exactly the export-vs-home
+  # comparison the routes exist to make. All three are the table above weighted
+  # by one declared German mix — wind 30 %, solar 14, biomass 8, hydro 4,
+  # lignite 17, hard coal 7, gas 15, other 5 — so they differ only by basis.
+  destination_t_co2e_per_mwh:
+    combustion:    0.383
+    delegated_act: 0.417
+    lifecycle:     0.382
 
   # Natural gas burned in a shaft, per MWh LHV. The combustion figure is
   # `natural_gas.co2_t_per_mwh`, which the optional carbon price also uses, so
@@ -420,14 +431,26 @@ emissions:
     delegated_act: 0.046
     lifecycle:     0.055
 
-  # Freight, kg CO2e per t of cargo and km travelled, well-to-wake. Sea is a
-  # capesize bulk carrier; scale up by about half for panamax parcels, which
-  # are dearer per t*km. Rail is European electric traction — note that its
-  # emissions are already inside whatever grid the railway buys from, so this
-  # is a footprint number and not an additional cost.
+  # Freight, kg CO2e per t of cargo and km travelled. Sea is a capesize bulk
+  # carrier; scale up by about half for panamax parcels, which are dearer per
+  # t*km. Rail is European electric traction — note that its emissions are
+  # already inside whatever grid the railway buys from, so this is a footprint
+  # number and not an additional cost.
   #
-  # Source: GLEC Framework v3.2 (bulk >200k dwt 3.1, 60-100k dwt 5.2; rail
-  # electric 10.8, diesel 30.7 gCO2e/t*km). Capesize interpolates to ~3.5.
+  # Source: GLEC Framework v3.2, which is well-to-wake (bulk >200k dwt 3.1,
+  # 60-100k dwt 5.2; rail electric 10.8, diesel 30.7 gCO2e/t*km). Capesize
+  # interpolates to ~3.5. Keyed by basis so a freight tonne-km is counted on the
+  # same footing as a MWh: the GLEC figure is the `delegated_act` column, the
+  # `combustion` one drops the fuel's own supply chain (~15 % of a ship's
+  # well-to-wake; for electric rail it is the generation behind the wire, which
+  # is a stack emission and stays), and `lifecycle` adds the vessel and the
+  # rolling stock.
   freight_kg_co2e_per_t_km:
-    sea:  0.0035
-    rail: 0.0108
+    sea:
+      combustion:    0.0030
+      delegated_act: 0.0035
+      lifecycle:     0.0037
+    rail:
+      combustion:    0.0108
+      delegated_act: 0.0119
+      lifecycle:     0.0125
