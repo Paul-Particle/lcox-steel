@@ -36,14 +36,6 @@ log = logging.getLogger(__name__)
 FULL_DATA_TYPES = ["prices", "load_forecast", "load_actual", "res", "generation", "crossborder"]
 EMISSIONS_DATA_TYPES = ["prices", "generation"]
 
-# How long an unreported stretch may be carried forward before the window is
-# refused. ENTSO-E leaves the odd hole inside a column — German reservoir hydro
-# went unpublished for four and a half hours on 14 January 2025, one carrier of
-# nineteen — and refusing a year over that would be the wrong trade. Longer than
-# this is a truncated fetch rather than a publication gap, and every hour filled
-# is logged, so nothing here is silent.
-CARRY_LIMIT_HOURS = 6
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -242,26 +234,48 @@ def retrieve(snakemake, area: str) -> None:
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:00")
     out_df = assembled.loc[window]
-    # Cross-month boundary gaps and the hours ENTSO-E leaves unpublished inside a
-    # column: forward-fill only (bfill would propagate future data backward).
-    # Per-month processing already handles within-month gaps including start-of-month.
-    unreported = out_df.isna().sum()
-    out_df = out_df.ffill(limit=CARRY_LIMIT_HOURS)
-    if unreported.any():
-        log.warning(
-            f"{area} {variant} {start_date}-{end_date}: unreported hours carried "
-            f"forward from the last reading — {dict(unreported[unreported > 0])}; "
-            f"{int(out_df.isna().sum().sum())} cell(s) too long a gap to carry"
-        )
-    if variant in ("emissions", "full"):
-        # A carrier this zone never reported over the whole window has no plants
-        # of that kind, so zero is its value. A hole *inside* a column is a
-        # truncated fetch instead, and is left as NaN for the guard below to
-        # catch — the same reason the price is left alone on both variants: an
-        # hour with no price must not become a free hour to buy in.
-        absent = [col for col in out_df.columns
-                  if col != "price" and out_df[col].isna().all()]
-        out_df = out_df.assign(**{col: 0.0 for col in absent})
+    if variant == "emissions":
+        # Every column but the price is a carrier, and a carrier is absent from
+        # an hour when nothing of that kind generated in it. That is how the
+        # publication works rather than a defect in it: France reports hard coal
+        # only while a unit is online, so 2025 is missing 7705 hours of it in
+        # blocks as long as 4518; Spain's battery column simply begins in
+        # November, when the first battery was reported. Carrying the last
+        # reading across either would assert French coal burning all summer.
+        #
+        # An hour where *every* carrier is absent — Spain had one 35-hour stretch
+        # in 2025 — reads as a zone that generated nothing, and `_grid_intensity`
+        # already carries the neighbouring hours' intensity for such an hour
+        # rather than reading a fabricated zero.
+        #
+        # None of this is how a truncated fetch looks: that loses whole rows, and
+        # both `_ensure_raw_months` and the guard below still refuse one.
+        carriers = [col for col in out_df.columns if col != "price"]
+        unreported = out_df[carriers].isna().sum()
+        if unreported.any():
+            log.info(
+                f"{area} {variant} {start_date}-{end_date}: hours with no "
+                f"generation reported, taken as none generated — "
+                f"{dict(unreported[unreported > 0])}"
+            )
+        out_df[carriers] = out_df[carriers].fillna(0.0)
+        # The price is never invented: an hour with no price must not become a
+        # free hour to buy in. A short gap where two months meet is carried
+        # forward (bfill would propagate future data backward); anything longer
+        # is left for the guard.
+        out_df["price"] = out_df["price"].ffill(limit=3)
+    else:
+        # Cross-month boundary gaps: forward-fill only. Per-month processing
+        # already handles within-month gaps including start-of-month.
+        out_df = out_df.ffill(limit=3)
+        if variant == "full":
+            # This variant carries load and flows beside the carriers, so it
+            # cannot read an absence as a zero the way `emissions` does. A column
+            # absent for the whole window is the exception: the zone has no
+            # plants of that kind.
+            absent = [col for col in out_df.columns
+                      if col != "price" and out_df[col].isna().all()]
+            out_df = out_df.assign(**{col: 0.0 for col in absent})
     out_df.index.name = "time"
 
     assert_window_complete(out_df, start_date, end_date, variant)
