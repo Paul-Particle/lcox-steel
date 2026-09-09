@@ -104,6 +104,37 @@ def test_a_hole_inside_a_carrier_column_does_not_pass_the_guard():
         assert_window_complete(truncated, "20250101", "20250101", "emissions")
 
 
+def test_a_month_the_cache_kept_short_is_fetched_again(tmp_path, monkeypatch):
+    """The same cap used to be answered by truncating rather than refusing, so the
+    raw cache holds months that stop a day early — DE_LU's October 2024 and 2025
+    both end on the 30th. Existence alone would keep them forever, and the window
+    guard would refuse every year that touches one with no way to fix it."""
+    month_dir = tmp_path / AREA / "2025-01"
+    month_dir.mkdir(parents=True)
+    short = pd.date_range("2025-01-01", "2025-01-30 23:45", freq="15min",
+                          tz="Europe/Brussels")
+    pd.DataFrame({"gas": 1.0}, index=short).to_parquet(month_dir / "generation.parquet")
+
+    whole = pd.date_range("2025-01-01", "2025-02-01", freq="15min",
+                          tz="Europe/Brussels")
+    fetched = []
+
+    def _download(client, area, start, end):
+        fetched.append((start, end))
+        return pd.DataFrame({"gas": 1.0}, index=whole)
+
+    monkeypatch.setattr(_entsoe, "get_entsoe_client", lambda: object())
+    monkeypatch.setattr(_entsoe, "DOWNLOADERS", {"generation": _download})
+
+    _entsoe._ensure_raw_months(AREA, ["2025-01"], ["generation"], tmp_path)
+    assert len(fetched) == 1
+    assert pd.read_parquet(month_dir / "generation.parquet").index[-1] == whole[-1]
+
+    # And once it reaches the end of the month, it is left alone.
+    _entsoe._ensure_raw_months(AREA, ["2025-01"], ["generation"], tmp_path)
+    assert len(fetched) == 1
+
+
 def test_a_month_of_generation_is_fetched_in_two_halves():
     """ENTSO-E caps this one document at P1M measured from the query's own start,
     and a Brussels month starts on the last day of the month before — so March,
