@@ -29,6 +29,14 @@ log = logging.getLogger(__name__)
 FULL_DATA_TYPES = ["prices", "load_forecast", "load_actual", "res", "generation", "crossborder"]
 EMISSIONS_DATA_TYPES = ["prices", "generation"]
 
+# How long an unreported stretch may be carried forward before the window is
+# refused. ENTSO-E leaves the odd hole inside a column — German reservoir hydro
+# went unpublished for four and a half hours on 14 January 2025, one carrier of
+# nineteen — and refusing a year over that would be the wrong trade. Longer than
+# this is a truncated fetch rather than a publication gap, and every hour filled
+# is logged, so nothing here is silent.
+CARRY_LIMIT_HOURS = 6
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -203,9 +211,17 @@ def retrieve(snakemake, area: str) -> None:
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:00")
     out_df = assembled.loc[window]
-    # Cross-month boundary gaps: forward-fill only (bfill would propagate future data backward).
+    # Cross-month boundary gaps and the hours ENTSO-E leaves unpublished inside a
+    # column: forward-fill only (bfill would propagate future data backward).
     # Per-month processing already handles within-month gaps including start-of-month.
-    out_df = out_df.ffill(limit=3)
+    unreported = out_df.isna().sum()
+    out_df = out_df.ffill(limit=CARRY_LIMIT_HOURS)
+    if unreported.any():
+        log.warning(
+            f"{area} {variant} {start_date}-{end_date}: unreported hours carried "
+            f"forward from the last reading — {dict(unreported[unreported > 0])}; "
+            f"{int(out_df.isna().sum().sum())} cell(s) too long a gap to carry"
+        )
     if variant in ("emissions", "full"):
         # A carrier this zone never reported over the whole window has no plants
         # of that kind, so zero is its value. A hole *inside* a column is a

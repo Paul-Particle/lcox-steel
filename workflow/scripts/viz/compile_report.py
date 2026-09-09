@@ -35,10 +35,15 @@ configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
 # The grid carriers that store rather than generate, as both downloaders name
-# them (ENTSO-E also publishes their charging as `{carrier}_cons`). They are not
-# a source of their own, so they are left out of a mix rather than counted in it
-# at zero — see `_grid_intensity`.
+# them. They are not a source of their own, so they are left out of a mix rather
+# than counted in it at zero — see `_grid_intensity`.
 STORAGE_CARRIERS = ("energy_storage", "pumped_storage")
+
+# ENTSO-E publishes an "Actual Consumption" figure beside the generation of any
+# carrier that has one, which the downloader negates and suffixes `_cons`. It is
+# a plant's own draw and not a source, whatever the carrier: Germany reports one
+# for solar and onshore wind as well as for its storage.
+CONSUMPTION_SUFFIX = "_cons"
 
 
 def _carrier_key(carrier: str) -> str:
@@ -70,13 +75,18 @@ def _grid_intensity(
     makes stored energy carry the average of everything else. Counting the
     discharge at a factor of zero would instead dilute the mix.
 
+    A `_cons` column is left out for a related reason: it is what a carrier's own
+    plants drew rather than anything they made, so the mix is over gross
+    generation. It is a few MW against tens of GW either way.
+
     Production-based: a zone importing coal power from next door reads as clean
     as its own plants. The cross-border columns are in the `full` series if that
     is ever worth fixing.
     """
     columns = [col for col in (grid_mix.columns if grid_mix is not None else [])
                if col != "price"
-               and col.removesuffix("_cons") not in STORAGE_CARRIERS]
+               and not col.endswith(CONSUMPTION_SUFFIX)
+               and col not in STORAGE_CARRIERS]
     if not columns:
         raise ValueError(
             f"{area}: this run imports from the grid, but its grid series carries no "
