@@ -100,8 +100,25 @@ def download_generation(client: entsoe.EntsoePandasClient, area: str, start: pd.
     ENTSO-E's verbose carrier labels are mapped to short keys (e.g. 'Fossil Gas'
     → 'gas'); 'Actual Consumption' columns are negated and suffixed `_cons` so
     storage/pumped-hydro consumption reads as negative generation.
+
+    Fetched in two halves, because this is the one document ENTSO-E caps at
+    P1M — and it measures that month from the query's own start, which for a
+    Brussels-time month is 22:00 or 23:00 UTC on the last day of the month
+    before. So March, starting from a 28-day February, asks for three days more
+    than the cap allows and comes back 400; so does every month that follows a
+    30-day one. Halves are well under the cap whatever the calendar does.
     """
-    data = client.query_generation(area, start=start, end=end)
+    # On the hour, so both halves start where a reading does — a month is an odd
+    # number of hours long twice a year, and the raw half-hour would land the
+    # second request's start between two of them.
+    midpoint = (start + (end - start) / 2).floor("h")
+    halves = [
+        client.query_generation(area, start=half_start, end=half_end)
+        for half_start, half_end in ((start, midpoint), (midpoint, end))
+    ]
+    # ENTSO-E's end is inclusive, so the midpoint row comes back in both halves.
+    data = pd.concat(halves)
+    data = data[~data.index.duplicated(keep="first")].sort_index()
     if data.columns.nlevels == 2:
         data.columns = ["_".join(col) for col in data.columns]
     else:
