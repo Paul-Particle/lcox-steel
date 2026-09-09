@@ -11,7 +11,8 @@ skips this work on a re-run.
 Variants
 --------
 dayahead   prices data_type only → single "price" column, hourly UTC-naive
-emissions  prices + generation → "price" and one column per carrier, hourly
+emissions  prices + generation → "price" and one column per generating carrier,
+           hourly (a carrier's own consumption is not a source; `full` has it)
 full       all six data_types → wide frame with derived residual-load columns
 """
 
@@ -21,7 +22,13 @@ from pathlib import Path
 import pandas as pd
 
 from _helpers_grid import assert_window_complete, iso, to_utc_naive
-from download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client, iter_months
+from download_entsoe import (
+    CONSUMPTION_SUFFIX,
+    DOWNLOADERS,
+    download_with_retry,
+    get_entsoe_client,
+    iter_months,
+)
 
 # Module-level logger only — retrieve_grid_data.py installs the handlers.
 log = logging.getLogger(__name__)
@@ -129,6 +136,15 @@ def _process_emissions_month(area: str, ym: str, raw_cache_dir: Path) -> pd.Data
     price = raw_price.ffill(limit=3).bfill(limit=3).resample("1h").mean().rename("price")
     generation = to_utc_naive(pd.read_parquet(month_dir / "generation.parquet").copy())
     generation.columns = generation.columns.droplevel(0)
+    # A carrier's own consumption is not part of a mix, so this variant carries
+    # only what it is for. Germany began reporting one for solar and onshore wind
+    # partway through 2025, and keeping the columns would have the completeness
+    # guard refuse the year over half a column nothing reads. The raw month keeps
+    # them and `full` still carries them, so nothing is lost here.
+    generation = generation.drop(
+        columns=[col for col in generation.columns
+                 if col.endswith(CONSUMPTION_SUFFIX)]
+    )
     return pd.concat([price, generation.resample("1h").mean()], axis=1, sort=False)
 
 

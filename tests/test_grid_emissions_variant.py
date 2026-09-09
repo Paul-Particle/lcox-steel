@@ -57,6 +57,30 @@ def test_the_carriers_come_through_named_as_the_factor_table_keys(raw_cache):
     assert all(field_stem(col) == col for col in out.columns)
 
 
+def test_a_carrier_s_consumption_column_does_not_reach_the_variant(tmp_path):
+    """ENTSO-E reports what a carrier's own plants drew beside what they made, and
+    Germany began doing so for solar and onshore wind partway through 2025. Not a
+    source, so not in a mix — and keeping the column would leave the completeness
+    guard refusing a year over the half of it that predates the reporting."""
+    month_dir = tmp_path / AREA / "2025-01"
+    month_dir.mkdir(parents=True)
+    pd.DataFrame({"price": 50.0}, index=INDEX).to_parquet(month_dir / "prices.parquet")
+    generation = pd.DataFrame(
+        {"solar": 100.0, "solar_cons": None, "pumped_storage_cons": -5.0}, index=INDEX
+    )
+    # Reported for the second half of the window only, as the real series is.
+    generation.iloc[len(INDEX) // 2:, generation.columns.get_loc("solar_cons")] = -2.0
+    generation.columns = pd.MultiIndex.from_tuples(
+        [(AREA, carrier) for carrier in generation.columns]
+    )
+    generation.to_parquet(month_dir / "generation.parquet")
+
+    out = _entsoe._process_emissions_month(AREA, "2025-01", tmp_path)
+
+    assert set(out.columns) == {"price", "solar"}
+    assert not out.isna().any().any()
+
+
 def test_a_sub_hourly_month_is_resampled_to_hourly_means(raw_cache):
     """Both consumers are hourly, so the resolution is settled here rather than
     reindexed away twice, differently."""
