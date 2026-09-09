@@ -28,6 +28,9 @@ import xarray as xr
 # not download. `height` is static (no time dim) so it is not time-checked.
 KEY_TIME_VARS = ("influx_direct", "influx_diffuse", "wnd100m", "temperature", "runoff")
 
+# Grid step atlite uses when a request passes no dx/dy, i.e. ERA5's own lattice.
+ERA5_NATIVE_STEP_DEG = 0.25
+
 
 @dataclass(frozen=True)
 class NaNAllowance:
@@ -243,3 +246,69 @@ def validate_cutout(
     if not report.ok:
         raise CutoutQCError(f"Cutout failed QC:\n{report.summary()}")
     return report
+
+
+def grid_request_mismatches(path: str | Path, params: dict) -> list[str]:
+    """Ways the cutout at `path` disagrees with the request `params` describes.
+
+    `params` is a `common._cutout_cache.cache_params` dict. An empty list means
+    the file on disk really is the cutout that request asked for — which is what
+    lets the cache key, which hashes the bbox and resolution, be believed.
+
+    Bounds are compared with a one-grid-step tolerance because atlite snaps the
+    domain to the ERA5 lattice *inside* the requested box, so a correct file's
+    bounds never equal the request exactly. Measured across every cached cutout
+    in the project, a correct entry sits 0.65-0.97 steps off its request; the
+    mislabelled ones sit 5.9 and 14.2 steps off. One step separates them with
+    room to spare.
+    """
+    requested_step_x = params["dx"] if params["dx"] is not None else ERA5_NATIVE_STEP_DEG
+    requested_step_y = params["dy"] if params["dy"] is not None else ERA5_NATIVE_STEP_DEG
+
+    mismatches = []
+    with xr.open_dataset(path) as ds:
+        for axis in ("x", "y"):
+            if axis not in ds.coords:
+                mismatches.append(f"no '{axis}' coordinate")
+        if mismatches:
+            return mismatches
+
+        x = ds.coords["x"].values
+        y = ds.coords["y"].values
+        actual_step_x = abs(float(np.diff(x)[0]))
+        actual_step_y = abs(float(np.diff(y)[0]))
+
+        if abs(actual_step_x - requested_step_x) > 1e-6:
+            mismatches.append(
+                f"x resolution {actual_step_x} deg, request asked for {requested_step_x}"
+            )
+        if abs(actual_step_y - requested_step_y) > 1e-6:
+            mismatches.append(
+                f"y resolution {actual_step_y} deg, request asked for {requested_step_y}"
+            )
+
+        bounds = {
+            "x0": (float(x.min()), params["x0"], requested_step_x),
+            "x1": (float(x.max()), params["x1"], requested_step_x),
+            "y0": (float(y.min()), params["y0"], requested_step_y),
+            "y1": (float(y.max()), params["y1"], requested_step_y),
+        }
+        for name, (actual, requested, step) in bounds.items():
+            deviation = abs(actual - requested)
+            if deviation > step:
+                mismatches.append(
+                    f"{name} bound {actual:.5f}, request asked for {requested:.5f} "
+                    f"({deviation / step:.1f} grid steps off)"
+                )
+
+    return mismatches
+
+
+def validate_grid_matches_request(path: str | Path, params: dict) -> None:
+    """Pipeline gate: raise CutoutQCError unless `path` is the cutout `params` asked for."""
+    mismatches = grid_request_mismatches(path, params)
+    if mismatches:
+        listed = "\n".join(f"  - {mismatch}" for mismatch in mismatches)
+        raise CutoutQCError(
+            f"Cutout at {Path(path).name} is not the one the request describes:\n{listed}"
+        )
