@@ -173,17 +173,22 @@ def _emissions_breakdown(
                   else factors[_carrier_key(n.generators.at[gen, "carrier"])])
         carried += generator_p[gen] * factor
 
-    # Weighted by the energy, not by the hour: an idle hour is not a clean one,
-    # and this is what values both losses below.
-    mean_intensity = (float(carried.sum() / generated.sum())
-                      if float(generated.sum()) > 0 else 0.0)
-    # Storage is a source like any other, at the year's mean intensity. Without
-    # it an hour supplied out of the battery has nothing generating in it, and
-    # everything drawn in that hour would come out free — a solar plant that
-    # runs its furnace through the night would report half its emissions.
-    discharged = storage_p.clip(lower=0.0).sum(axis=1)
+    # A battery emits nothing of its own; what it gives back carries whatever
+    # charged it. So price the charging hours — the ones the run actually
+    # contains — and let the discharge supply the system at that intensity.
+    # Without this an hour supplied out of the battery has nothing generating in
+    # it, and everything drawn in that hour comes out free: a solar plant that
+    # runs its furnace through the night reports about a third light.
+    generation_intensity = carried / generated.where(generated > 0)
+    home_storage = n.storage_units.index[n.storage_units.bus.isin(home_buses)]
+    charged = -storage_p[home_storage].clip(upper=0.0).sum(axis=1)
+    discharged = storage_p[home_storage].clip(lower=0.0).sum(axis=1)
+    stored_intensity = (
+        float((charged * generation_intensity.fillna(0.0)).sum() / charged.sum())
+        if float(charged.sum()) > 0 else 0.0
+    )
     supplied = generated + discharged
-    home_intensity = ((carried + discharged * mean_intensity)
+    home_intensity = ((carried + discharged * stored_intensity)
                       / supplied.where(supplied > 0)).fillna(0.0)
 
     # Which links draw electricity is read off the network — on bus0 as their
@@ -239,25 +244,26 @@ def _emissions_breakdown(
         freight_t += emissions[link]
 
     # Round-trip and line losses are electricity nobody consumed, so they belong
-    # to no step. Valued at the mean intensity rather than hour by hour: a loss
-    # is incurred across the charge and the discharge, and splitting it between
-    # them would be a guess dressed up as arithmetic. That is also the intensity
-    # the discharge itself carries above, so the books close: what the users are
-    # charged plus what the losses are charged is what the generation carried.
+    # to no step. The battery's is what it took and did not give back, at the
+    # intensity it took it at — the same one its discharge carries above, so the
+    # books close: what the users are charged plus what the losses are charged
+    # is what the generation carried. A line's is hour by hour, on the system
+    # that fed it that hour.
     losses_mwh = 0.0
-    if "battery" in n.storage_units.index:
-        lost = -float(storage_p["battery"].sum()) * annual
-        emissions["battery_losses"] = lost * mean_intensity
+    if len(home_storage):
+        lost = float((charged - discharged).sum()) * annual
+        emissions["battery_losses"] = lost * stored_intensity
         electricity_t += emissions["battery_losses"]
         losses_mwh += lost
     hvdc = list(n.links.index[n.links.carrier == "HVDC"])
     if hvdc:
         link_p1 = n.links_t.p1.reindex(columns=n.links.index, fill_value=0.0)
-        lost = float((link_p0[hvdc].sum(axis=1)
-                      + link_p1[hvdc].sum(axis=1)).sum()) * annual
-        emissions["transmission_losses"] = lost * mean_intensity
+        lost_hourly = link_p0[hvdc].sum(axis=1) + link_p1[hvdc].sum(axis=1)
+        emissions["transmission_losses"] = (
+            float((lost_hourly * home_intensity).sum()) * annual
+        )
         electricity_t += emissions["transmission_losses"]
-        losses_mwh += lost
+        losses_mwh += float(lost_hourly.sum()) * annual
 
     return {
         "by_step": emissions,
