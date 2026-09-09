@@ -11,6 +11,8 @@ instead of the hour's mean.
 Synthetic raw caches, so no ENTSO-E credentials and no NEMOSIS download.
 """
 
+from types import SimpleNamespace
+
 import pandas as pd
 import pytest
 
@@ -115,17 +117,74 @@ def test_the_variant_is_held_to_the_strict_hourly_check():
         assert_window_complete(complete.drop(hours[5]), "20250101", "20250101", "emissions")
 
 
-def test_a_hole_inside_a_carrier_column_does_not_pass_the_guard():
-    """A carrier the zone never reported all window is filled with zeros before
-    the guard sees it — it has no plants of that kind. A hole *inside* a column
-    is a truncated fetch, and an hour where nothing was burned is not the same
-    statement."""
+def test_nothing_unresolved_gets_past_the_guard():
+    """`retrieve` resolves every absence itself and says so in the log — a
+    carrier's to zero, a short price gap by carrying the reading beside it. So a
+    NaN still here is one nobody accounted for, and it stops the window rather
+    than reaching a report as an hour that emitted nothing."""
     hours = pd.date_range("2025-01-01", "2025-01-01 23:00", freq="h")
-    truncated = pd.DataFrame({"price": 50.0, "hard_coal": 100.0}, index=hours)
-    truncated.loc[hours[7:12], "hard_coal"] = pd.NA
+    unresolved = pd.DataFrame({"price": 50.0, "hard_coal": 100.0}, index=hours)
+    unresolved.loc[hours[7:12], "hard_coal"] = pd.NA
 
     with pytest.raises(ValueError, match="rows are NaN"):
-        assert_window_complete(truncated, "20250101", "20250101", "emissions")
+        assert_window_complete(unresolved, "20250101", "20250101", "emissions")
+
+
+def test_a_carrier_that_stops_reporting_is_none_of_it_running(tmp_path, monkeypatch):
+    """The shape of the real publication, and the reason the whole window builds.
+
+    ENTSO-E drops a carrier's column from the hours nothing of that kind
+    generated: France reported hard coal in 2025 only while a unit was online,
+    leaving blocks as long as 4518 hours, and Spain's battery column simply
+    begins in November. Carrying the last reading across either would assert
+    French coal burning all summer, so an absent carrier is zero — while the
+    price is never invented, because an hour with no price would be a free hour
+    to buy in.
+    """
+    hours = pd.date_range("2025-01-01", "2025-01-02 23:00", freq="h",
+                          tz="Europe/Brussels")
+    month_dir = tmp_path / "data" / "entsoe_cache" / AREA / "2025-01"
+    month_dir.mkdir(parents=True)
+    (tmp_path / "data" / "entsoe_cache" / "entsoe_bidding_zones.csv").write_text(
+        f"area,description\n{AREA},a zone\n"
+    )
+    prices = pd.DataFrame({"price": 50.0}, index=hours)
+    prices.to_parquet(month_dir / "prices.parquet")
+    generation = pd.DataFrame({"gas": 100.0, "hard_coal": 20.0}, index=hours)
+    # The cache is Brussels time and the output is UTC, so the last coal hour
+    # here (13:00 CET) is hour 12 of the frame that comes back.
+    generation.iloc[13:, generation.columns.get_loc("hard_coal")] = None
+    generation.columns = pd.MultiIndex.from_tuples(
+        [(AREA, carrier) for carrier in generation.columns]
+    )
+    generation.to_parquet(month_dir / "generation.parquet")
+    monkeypatch.setattr(_entsoe, "_months_to_process", lambda *_: ["2025-01"])
+    # The cache here is deliberately two days rather than a month, which the
+    # raw-month check would otherwise call truncated and re-fetch for real.
+    monkeypatch.setattr(_entsoe, "_ensure_raw_months", lambda *_, **__: None)
+    monkeypatch.chdir(tmp_path)
+
+    out_path = tmp_path / "out.parquet"
+    snakemake = SimpleNamespace(
+        wildcards=SimpleNamespace(variant="emissions", start_date="20250101",
+                                  end_date="20250101"),
+        output=[str(out_path)],
+    )
+    _entsoe.retrieve(snakemake, AREA)
+    out = pd.read_parquet(out_path)
+
+    # The coal stopped being reported half way through the first day.
+    assert out["hard_coal"].iloc[:12].eq(20.0).all()
+    assert out["hard_coal"].iloc[12:].eq(0.0).all()
+    assert out["price"].eq(50.0).all()
+
+    # And a stretch of unpriced hours still stops the whole thing. A few at
+    # either end of the gap are carried in from the readings around it; the
+    # ones in the middle have nowhere to come from, and are not invented.
+    prices.iloc[3:19, 0] = None
+    prices.to_parquet(month_dir / "prices.parquet")
+    with pytest.raises(ValueError, match="rows are NaN"):
+        _entsoe.retrieve(snakemake, AREA)
 
 
 def test_a_month_the_cache_kept_short_is_fetched_again(tmp_path, monkeypatch):
