@@ -206,14 +206,15 @@ def retrieve(snakemake, area: str) -> None:
     # Cross-month boundary gaps: forward-fill only (bfill would propagate future data backward).
     # Per-month processing already handles within-month gaps including start-of-month.
     out_df = out_df.ffill(limit=3)
-    if variant == "full":
-        out_df = out_df.fillna(0.0)
-    if variant == "emissions":
-        # A carrier that reported nothing generated nothing, so zero is its
-        # value. The price is left alone: a hole there must not become a free
-        # hour, and the completeness guard below is what should catch it.
-        carriers = out_df.columns.difference(["price"])
-        out_df[carriers] = out_df[carriers].fillna(0.0)
+    if variant in ("emissions", "full"):
+        # A carrier this zone never reported over the whole window has no plants
+        # of that kind, so zero is its value. A hole *inside* a column is a
+        # truncated fetch instead, and is left as NaN for the guard below to
+        # catch — the same reason the price is left alone on both variants: an
+        # hour with no price must not become a free hour to buy in.
+        absent = [col for col in out_df.columns
+                  if col != "price" and out_df[col].isna().all()]
+        out_df = out_df.assign(**{col: 0.0 for col in absent})
     out_df.index.name = "time"
 
     assert_window_complete(out_df, start_date, end_date, variant)
