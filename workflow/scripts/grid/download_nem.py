@@ -19,6 +19,36 @@ from nemosis import dynamic_data_compiler
 # Module-level logger only — the rule script (_nem.py) installs handlers.
 log = logging.getLogger(__name__)
 
+# The carrier each AEMO fuel/technology descriptor classifies as, and the whole
+# NEM half of the vocabulary the ENTSO-E downloader shares (its keys are the
+# report's emission factor table's keys — tests/test_grid_carrier_vocabulary.py
+# holds the three to each other).
+#
+# Dict order is load-bearing: first match wins.
+# Ordering rules (each intentional for emissions classification):
+#   - gas and biomass before oil: natural-gas/diesel → gas; bagasse+diesel → biomass
+#   - oil before coal_gas and waste: coal-seam-methane and landfill-methane classify
+#     as oil (the 'ethane' substring of 'methane' matches the oil regex on purpose —
+#     these generators are treated as dirty/leaky for emissions estimation)
+#   - other_re before pumped_storage: sewerage burning sludge wins over pump storage
+#   - wind_onshore before energy_storage: co-located wind+battery treated as wind
+CARRIER_PATTERNS = {
+    'hard_coal'      : 'black coal',
+    'brown_coal'     : 'brown coal',
+    'gas'            : 'natural gas|natrual gas',
+    'biomass'        : 'bagasse|biomass|biogas',
+    'oil'            : 'diesel|ethane|kerosene',
+    'coal_gas'       : 'coal seam methane|coal mine gas',
+    'waste'          : 'methane',
+    'solar'          : 'solar',
+    'other_re'       : 'sewerage',
+    'wind_onshore'   : 'wind - onshore|wind',
+    'energy_storage' : 'battery',
+    'pumped_storage' : 'pump storage|^- -$',
+    'hydro_river'    : 'run of river',
+    'hydro'          : 'hydro',
+}
+
 
 def download_price(start_time: str, end_time: str, cache_dir: Path, rebuild: bool) -> pd.DataFrame:
     """Fetch dispatch prices (AUD) as (region, 'price') columns; rebuild=True forces a re-pull."""
@@ -94,30 +124,7 @@ def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild
         The Excel contains typos in fuel/technology strings, so some patterns
         intentionally cover misspellings (e.g. 'natrual gas').
         """
-        # Dict order is load-bearing: first match wins.
-        # Ordering rules (each intentional for emissions classification):
-        #   - gas and biomass before oil: natural-gas/diesel → gas; bagasse+diesel → biomass
-        #   - oil before coal_gas and waste: coal-seam-methane and landfill-methane classify
-        #     as oil (the 'ethane' substring of 'methane' matches the oil regex on purpose —
-        #     these generators are treated as dirty/leaky for emissions estimation)
-        #   - other_re before pumped_storage: sewerage burning sludge wins over pump storage
-        #   - wind_onshore before energy_storage: co-located wind+battery treated as wind
-        type_regex = {
-            'hard_coal'      : 'black coal',
-            'brown_coal'     : 'brown coal',
-            'gas'            : 'natural gas|natrual gas',
-            'biomass'        : 'bagasse|biomass|biogas',
-            'oil'            : 'diesel|ethane|kerosene',
-            'coal_gas'       : 'coal seam methane|coal mine gas',
-            'waste'          : 'methane',
-            'solar'          : 'solar',
-            'other_re'       : 'sewerage',
-            'wind_onshore'   : 'wind - onshore|wind',
-            'energy_storage' : 'battery',
-            'pumped_storage' : 'pump storage|^- -$',
-            'hydro_river'    : 'run of river',
-            'hydro'          : 'hydro',
-        }
+        type_regex = CARRIER_PATTERNS
         gen_info = df['gen_info']
         gen_type = pd.Series('', index=df.index, dtype=str)
         matched = pd.Series(False, index=df.index)
@@ -159,7 +166,14 @@ def download_generation(start_time: str, end_time: str, cache_dir: Path, rebuild
     # Ensure that there are no nan values in the dict, to catch changes to future versions of the excel.
     # This can happen if a new 'Fuel Source - Descriptor' and 'Technology Type - Descriptor' combination
     # is not covered by the regex in `determine_gen_type`.
-    assert not any(pd.isna(v) for v in nem_gen_names.values()), "NaN values found in nem_gen_names mapping. Please update the regex in 'determine_gen_type'."
+    # Empty as well as NaN: `determine_gen_type` leaves an unmatched descriptor
+    # as "", which would otherwise become a real generation column named "" and
+    # a carrier the emission factor table cannot price.
+    unclassified = [k for k, v in nem_gen_names.items() if pd.isna(v) or not v]
+    assert not unclassified, (
+        f"Unclassified NEM fuel/technology descriptors: {unclassified}. "
+        f"Please update the regex in 'determine_gen_type'."
+    )
 
     # final mapping of generator ID to generator type
     map_df = (generator_info.copy()

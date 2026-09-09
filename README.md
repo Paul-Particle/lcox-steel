@@ -236,11 +236,11 @@ Drop `--profile profiles/default` for the bare invocation.
 ### Targeting one output
 
 ```bash
-# Grid — ENTSO-E day-ahead prices for DEU (bidding zone DE_LU). Cap concurrent API calls:
-snakemake resources/timeseries/DEU_grid_dayahead_20250101_20251231.parquet --cores 4 --resources entsoe_api=4
+# Grid — ENTSO-E prices + generation mix for DEU (bidding zone DE_LU). Cap concurrent API calls:
+snakemake resources/timeseries/DEU_grid_emissions_20250101_20251231.parquet --cores 4 --resources entsoe_api=4
 
-# Grid — NEM day-ahead prices (VIC1, 2025):
-snakemake resources/timeseries/VIC1_grid_dayahead_20250101_20251231.parquet --cores 4
+# Grid — NEM prices + generation mix (VIC1, 2025):
+snakemake resources/timeseries/VIC1_grid_emissions_20250101_20251231.parquet --cores 4
 
 # res_cf — wind-onshore CF for Germany, 2023:
 snakemake resources/timeseries/DEU_wind-onshore_area-average_20250101_20251231.parquet --cores 4
@@ -359,16 +359,29 @@ other — the identity rows at the top say which is which.
 | File | Holds |
 |------|-------|
 | `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (turbines, CF flags, cutout settings), `areas` (the area registry), `demo_scenarios`. |
-| `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and — for the export routes — where the iron is melted (`destination`) and what it costs to ship it there (`transport`). Numbers only — the route is chosen by the CSV, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
+| `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and — for the export routes — where the iron is melted (`destination`) and what it costs to ship it there (`transport`). Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the CSV, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
 | `config/assumptions_{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. It covers every run under that name. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. |
 | `config/scenarios.csv` | Flat table, one row per `(run, tech)` input. Columns: `scenario, route, tech, variant, area, start_date, end_date`. Rows join into a network by `(scenario, area, start_date, end_date)`. `route` holds one route id, several separated by `|`, or `all-routes`; `area` holds one area or `all-areas`. `#` rows are planned scenarios and are not built. **The scenarios shipped are placeholders that exercise the machinery, not a study.** |
 
 ## Data formats
 
-**Grid** (`resources/timeseries/{area}_grid_dayahead_{start}_{end}.parquet`):
-UTC hourly `DatetimeIndex`, single `price` column (EUR/MWh). The `_full` variant
-has MultiIndex `(area, metric)` columns covering all data types at native
-resolution.
+**Grid** (`resources/timeseries/{area}_grid_{variant}_{start}_{end}.parquet`):
+UTC hourly `DatetimeIndex`, leading `price` column (EUR/MWh). Three variants:
+
+| variant | columns | for |
+|---|---|---|
+| `dayahead` | `price` | a solve, and nothing else |
+| `emissions` | `price` + one per carrier, hourly | the default for grid rows — the solve buys at the price, the report weights the mix by `emissions.electricity_t_co2e_per_mwh` |
+| `full` | all data types, native resolution | analysis; adds load, RES forecast and cross-border flows |
+
+The carrier column names are the shared vocabulary both downloaders emit
+(`brown_coal`, `hard_coal`, `gas`, `wind_onshore`, …), which is what lets one
+factor table serve ENTSO-E and NEM alike. A grid run whose series carries no
+mix has no emission intensity, and `compile_report` says so rather than
+substituting a figure — as it does for a carrier the factor table has no entry
+for, rather than renormalising the mix over the rest of it. `full` is not a mix
+source despite carrying the carriers: it is at native resolution, so reading an
+hour off it would take the `:00` instant for the hour's mean.
 
 **Capacity factors** (`resources/timeseries/{area}_{tech}_area-average_{start}_{end}.parquet`):
 hourly parquet, `DatetimeIndex` named `time`, one column whose name *is* the tech

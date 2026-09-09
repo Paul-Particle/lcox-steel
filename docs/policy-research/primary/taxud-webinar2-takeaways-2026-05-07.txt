@@ -1,0 +1,46 @@
+Takeaways of webinar 2: How to make
+decarbonisation efforts pay off
+Methods for the calculation of emissions embedded in goods
+
+   •   Actual values are determined in line with the methods set out in
+       Commission Implementing Regulation (EU) 2025/2547 as regards the methods
+       for the calculation of emissions embedded in goods. Also called “CBAM
+       Methodology for embedded emissions”
+
+   •   The main changes and key topics introduced, compared with the
+       transitional methodology are:
+
+             o The concept of a functional unit, as a reference for calculated
+               embedded emissions. The functional unit is defined as a category of
+               goods that share similar characteristics in terms of function,
+               performance, or quality. By default, the functional unit is the tonnes of
+               goods under the same CN code produced in the installation. For
+               cement and fertilisers, the functional unit is the content of the
+               component directly related to the performance of the goods, clinker
+               and nitrogen.
+
+             o The production processes are defined by the functional unit;
+               therefore, they cannot be split in production routes.
+
+             o There may be multifunctional processes in the installation, meaning
+               production processes that deliver goods under two or more functional
+               units. The methodology sets rules for them, and the Commission also
+               proposes recommendations for defining them on a voluntary basis.
+
+             o The methodology has introduced some changes to the system
+               boundaries of iron and steel products and aluminium products. The
+               idea is to exclude finishing processes that have a limited contribution
+               to embedded emissions.
+o The installation may use precursors from different suppliers and
+  reporting periods. The methodology sets a weighted averaging as
+  default but allows the assignment of certain precursor from specific
+  suppliers or reporting periods to a specific production process, if it
+  can be demonstrated.
+
+o The monitoring plan and emissions report are the documents for
+  translating the methodology’s general rules to the reality of each
+  installation. The monitoring plan also helps the verifier to plan the site
+  visit and the verification. The emissions report provides the results of
+  the monitoring plan and the calculation of emissions in a document,
+  as a basis for verification.
+

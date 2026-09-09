@@ -30,6 +30,35 @@ def get_entsoe_client() -> entsoe.EntsoePandasClient:
     return entsoe.EntsoePandasClient(api_key=api_key)  # pyright: ignore[reportPrivateImportUsage]
 
 
+# The carrier each ENTSO-E generation label maps to, and the ENTSO-E half of the
+# vocabulary the NEM downloader shares. Its values are the keys of the report's
+# emission factor table; tests/test_grid_carrier_vocabulary.py holds the three
+# to each other.
+CARRIER_NAMES = {
+    "Biomass": "biomass",
+    "Energy storage": "energy_storage",
+    "Fossil Brown coal/Lignite": "brown_coal",
+    "Fossil Coal-derived gas": "coal_gas",
+    "Fossil Gas": "gas",
+    "Fossil Hard coal": "hard_coal",
+    "Fossil Oil": "oil",
+    "Fossil Oil shale": "oil_shale",
+    "Fossil Peat": "peat",
+    "Geothermal": "geothermal",
+    "Hydro Pumped Storage": "pumped_storage",
+    "Hydro Run-of-river and poundage": "hydro_river",
+    "Hydro Water Reservoir": "hydro_reservoir",
+    "Marine": "marine",
+    "Nuclear": "nuclear",
+    "Other": "other",
+    "Other renewable": "other_re",
+    "Solar": "solar",
+    "Waste": "waste",
+    "Wind Offshore": "wind_offshore",
+    "Wind Onshore": "wind_onshore",
+}
+
+
 # ── Per-data_type fetchers (return DataFrame or raise) ────────────────────────
 
 def download_prices(client: entsoe.EntsoePandasClient, area: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
@@ -80,31 +109,8 @@ def download_generation(client: entsoe.EntsoePandasClient, area: str, start: pd.
     cons_cols = data.filter(regex="Consumption$", axis=1).columns
     data.loc[:, cons_cols] = data.loc[:, cons_cols] * -1
 
-    gen_names = {
-        "Biomass": "biomass",
-        "Energy storage": "energy_storage",
-        "Fossil Brown coal/Lignite": "brown_coal",
-        "Fossil Coal-derived gas": "coal_gas",
-        "Fossil Gas": "gas",
-        "Fossil Hard coal": "hard_coal",
-        "Fossil Oil": "oil",
-        "Fossil Oil shale": "oil_shale",
-        "Fossil Peat": "peat",
-        "Geothermal": "geothermal",
-        "Hydro Pumped Storage": "pumped_storage",
-        "Hydro Run-of-river and poundage": "hydro_river",
-        "Hydro Water Reservoir": "hydro_reservoir",
-        "Marine": "marine",
-        "Nuclear": "nuclear",
-        "Other": "other",
-        "Other renewable": "other_re",
-        "Solar": "solar",
-        "Waste": "waste",
-        "Wind Offshore": "wind_offshore",
-        "Wind Onshore": "wind_onshore",
-    }
-    rename_map = {k + "_Actual Aggregated": v for k, v in gen_names.items()}
-    rename_map |= {k + "_Actual Consumption": v + "_cons" for k, v in gen_names.items()}
+    rename_map = {k + "_Actual Aggregated": v for k, v in CARRIER_NAMES.items()}
+    rename_map |= {k + "_Actual Consumption": v + "_cons" for k, v in CARRIER_NAMES.items()}
 
     data.columns = pd.MultiIndex.from_tuples([(area, rename_map[c]) for c in data.columns])
     return data

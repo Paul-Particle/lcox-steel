@@ -63,11 +63,11 @@ def assert_window_complete(
     only surfaces far downstream as NaN after a reindex (e.g. a solve aligning
     prices to a full CF year). This guard catches them at the source.
 
-    dayahead is resampled to a clean hourly grid, so every hour of the window must
-    be present and non-null. full spans a mixed resolution (ENTSO-E switched DE_LU
-    day-ahead to 15-min in Oct 2025; NEM tables are 5-min), so a fixed hourly grid
-    would false-positive; instead we flag any gap larger than `full_gap_tolerance`,
-    which only occurs on truncated months.
+    dayahead and emissions are resampled to a clean hourly grid, so every hour of
+    the window must be present and non-null. full spans a mixed resolution
+    (ENTSO-E switched DE_LU day-ahead to 15-min in Oct 2025; NEM tables are
+    5-min), so a fixed hourly grid would false-positive; instead we flag any gap
+    larger than `full_gap_tolerance`, which only occurs on truncated months.
     """
     idx = out_df.index
     want_start = pd.Timestamp(iso(start_date))
@@ -81,7 +81,7 @@ def assert_window_complete(
     if idx.max() < want_end:
         problems.append(f"ends at {idx.max()}, before {want_end}")
 
-    if variant == "dayahead":
+    if variant in ("dayahead", "emissions"):
         expected = pd.date_range(want_start, want_end, freq="h")
         missing = expected.difference(idx)
         if len(missing):

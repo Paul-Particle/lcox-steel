@@ -73,6 +73,23 @@ COST_GROUPS = ("res", "battery", "grid", "gas", "electrolyser", "h2_buffer",
                "process", "ore_consumables", "iron_store", "steel_store",
                "transmission", "transport", "destination_power")
 
+# The links that draw electricity, by the id `build_network` gives them. Each
+# takes it either on bus0 (electricity in, product out) or on bus2 (a by-draw
+# alongside its main conversion); which one is read off the network rather than
+# listed here, so a link that moves between the two needs no change up here.
+# This is the list the report has columns for; `compile_report` reads the
+# drawing links off the network and refuses to report a run that has one this
+# list does not name, rather than leaving its draw out of the total.
+ELECTRICITY_USERS = (*PROCESS_LINKS, "electrolyser", "reductant-h2")
+
+# Everything a run can emit through, in the order `compile_report`'s breakdown
+# builds them: the electricity users, the one link that burns gas and no power,
+# the freight legs, and the two losses that belong to no step in particular.
+# Together they are the run's total, so the shares stack to 100 %.
+EMISSION_STEPS = (*ELECTRICITY_USERS, "reductant-ng",
+                  "iron_transport", "steel_transport",
+                  "battery_losses", "transmission_losses")
+
 REPORT_FIELDS = {
     # What this run is a result for.
     "scenario": UNDEFINED,
@@ -152,6 +169,43 @@ REPORT_FIELDS = {
     "battery_mwh_opt": ZERO,
     "transmission_total_annual_cost_meur": ZERO,
 
+    # Emissions from the run's energy and freight. Accounting only — none of it
+    # reaches the objective, so these never move a cost. And only the energy and
+    # the freight: the process steps' own direct emissions (electrodes, carbon
+    # injection, pellet carbon, carbonate fluxes) sit outside the model boundary,
+    # which is why a figure here is not a CBAM or an ETS number. `emissions_basis`
+    # says which of the three factor bases produced them, so no number here can be
+    # read on the wrong footing; a grid run's intensity always comes from its own
+    # `variant: emissions` generation series, never from a stand-in.
+    #
+    # In kg rather than t throughout: the report rounds to two decimals, and a
+    # clean route's tonne of steel lands near a thousandth of a tonne of CO2e.
+    "emissions_basis": UNDEFINED,
+    "emissions_kt_co2e_per_year": ZERO,
+    # Blank rather than zero on a run that makes no steel, the same way
+    # `lcos_eur_per_t` is: the per-step fields below are shares of a tonne and
+    # stack, but this is the ratio they are shares of, and a route with no
+    # denominator has no such tonne. `h2-only` is in every `all-routes`
+    # scenario, and a 0.00 here would read as the cleanest steel in the table.
+    "emissions_kg_co2e_per_t_steel": UNDEFINED,
+    "emissions_kg_co2e_per_kg_h2": UNDEFINED,
+    # The three things that emit, as annual totals.
+    "emissions_electricity_kt_co2e_per_year": ZERO,
+    "emissions_gas_kt_co2e_per_year": ZERO,
+    "emissions_freight_kt_co2e_per_year": ZERO,
+    # Per step: what it added to a tonne of steel, and what share of the tonne
+    # that was. The shares stack to 100 %.
+    **{f"emissions_{field_stem(step)}_kg_co2e_per_t_steel": ZERO
+       for step in EMISSION_STEPS},
+    **{f"emissions_{field_stem(step)}_pct": UNDEFINED for step in EMISSION_STEPS},
+    # Electricity by who drew it, and how dirty their own hours were. The system
+    # average is what a MWh cost the run on average; a user above it bought the
+    # dirty hours, one below it chased the clean ones.
+    "emissions_kg_co2e_per_mwh_el": UNDEFINED,
+    **{f"el_{field_stem(user)}_gwh": ZERO for user in ELECTRICITY_USERS},
+    **{f"emissions_{field_stem(user)}_kg_co2e_per_mwh_el": UNDEFINED
+       for user in ELECTRICITY_USERS},
+
     # Which inputs produced the run (see common/_provenance.py).
     "inputs_hash": UNDEFINED,
 }
@@ -162,7 +216,8 @@ ZERO_FILLED = tuple(field for field, fill in REPORT_FIELDS.items() if fill == ZE
 # file, so everything below them is numbers and a reader can skip straight to it.
 IDENTITY_FIELDS = ("scenario", "area", "country", "route", "start_date", "end_date",
                    *(f"{field_stem(tech)}_variant" for tech in INPUT_TECHS),
-                   "best_in_country", "lco_output_unit", "inputs_hash")
+                   "best_in_country", "lco_output_unit",
+                   "emissions_basis", "inputs_hash")
 
 # Fields only the diagnostic carries: the report has already acted on the flag,
 # so a frame without it is not missing anything.
