@@ -131,6 +131,9 @@ REPORT_FIELDS = {
     "grid_price_eur_per_mwh": UNDEFINED,
     "grid_fee_eur_per_mwh": UNDEFINED,
     "grid_connection_eur_per_mwh_imported": UNDEFINED,
+    # Blank on every route that melts its iron where it made it: there is no
+    # furnace in another market, so there is no price it paid there.
+    "destination_price_eur_per_mwh": UNDEFINED,
 
     # Hydrogen: the levelised cost, its parts, and the plant behind them.
     "lcoh_eur_per_mwh_lhv": UNDEFINED,

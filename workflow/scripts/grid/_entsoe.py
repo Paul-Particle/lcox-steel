@@ -11,7 +11,8 @@ skips this work on a re-run.
 Variants
 --------
 dayahead   prices data_type only → single "price" column, hourly UTC-naive
-emissions  prices + generation → "price" and one column per carrier, hourly
+emissions  prices + generation → "price" and one column per generating carrier,
+           hourly (a carrier's own consumption is not a source; `full` has it)
 full       all six data_types → wide frame with derived residual-load columns
 """
 
@@ -21,7 +22,13 @@ from pathlib import Path
 import pandas as pd
 
 from _helpers_grid import assert_window_complete, iso, to_utc_naive
-from download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client, iter_months
+from download_entsoe import (
+    CONSUMPTION_SUFFIX,
+    DOWNLOADERS,
+    download_with_retry,
+    get_entsoe_client,
+    iter_months,
+)
 
 # Module-level logger only — retrieve_grid_data.py installs the handlers.
 log = logging.getLogger(__name__)
@@ -61,18 +68,33 @@ def _months_to_process(start_date: str, end_date: str) -> list[str]:
 def _ensure_raw_months(
     area: str, months: list[str], data_types: list[str], raw_cache_dir: Path
 ) -> None:
-    """Download any (month, data_type) pairs absent from the raw monthly cache."""
+    """Download any (month, data_type) pair the raw monthly cache is missing or short.
+
+    Short counts as missing. ENTSO-E used to answer an over-long generation
+    request by returning what fitted its P1M cap rather than erroring, so the
+    cache holds months that stop a day early — DE_LU's October 2024 and 2025 both
+    end on the 30th — and file existence alone would keep them forever. A month
+    still running is exempt: `_months_to_process` pads by one, so the pad month
+    is sometimes the current one and is short for an honest reason.
+    """
     area_cache_dir = raw_cache_dir / area
     client = None  # lazily instantiated — warm cache = no API call
     for ym in months:
+        month_start = pd.Timestamp(ym + "-01", tz="Europe/Brussels")
+        next_month = month_start + pd.offsets.MonthBegin(1)
+        still_running = next_month > pd.Timestamp.now(tz="Europe/Brussels")
         for dt in data_types:
             cache_path = area_cache_dir / ym / f"{dt}.parquet"
             if cache_path.exists():
-                continue
+                last_reading = pd.read_parquet(cache_path).index[-1]
+                if still_running or last_reading >= next_month - pd.Timedelta(hours=1):
+                    continue
+                log.warning(
+                    f"{area}/{ym}/{dt}: cached copy stops at {last_reading} instead of "
+                    f"{next_month} — a truncated fetch, re-fetching it"
+                )
             if client is None:
                 client = get_entsoe_client()
-            month_start = pd.Timestamp(ym + "-01", tz="Europe/Brussels")
-            next_month = month_start + pd.offsets.MonthBegin(1)
             log.info(f"{area}/{ym}/{dt}: fetching")
             df = download_with_retry(DOWNLOADERS[dt], client, area, month_start, next_month)
             cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -106,6 +128,15 @@ def _process_emissions_month(area: str, ym: str, raw_cache_dir: Path) -> pd.Data
     price = raw_price.ffill(limit=3).bfill(limit=3).resample("1h").mean().rename("price")
     generation = to_utc_naive(pd.read_parquet(month_dir / "generation.parquet").copy())
     generation.columns = generation.columns.droplevel(0)
+    # A carrier's own consumption is not part of a mix, so this variant carries
+    # only what it is for. Germany began reporting one for solar and onshore wind
+    # partway through 2025, and keeping the columns would have the completeness
+    # guard refuse the year over half a column nothing reads. The raw month keeps
+    # them and `full` still carries them, so nothing is lost here.
+    generation = generation.drop(
+        columns=[col for col in generation.columns
+                 if col.endswith(CONSUMPTION_SUFFIX)]
+    )
     return pd.concat([price, generation.resample("1h").mean()], axis=1, sort=False)
 
 
@@ -203,18 +234,48 @@ def retrieve(snakemake, area: str) -> None:
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:00")
     out_df = assembled.loc[window]
-    # Cross-month boundary gaps: forward-fill only (bfill would propagate future data backward).
-    # Per-month processing already handles within-month gaps including start-of-month.
-    out_df = out_df.ffill(limit=3)
-    if variant in ("emissions", "full"):
-        # A carrier this zone never reported over the whole window has no plants
-        # of that kind, so zero is its value. A hole *inside* a column is a
-        # truncated fetch instead, and is left as NaN for the guard below to
-        # catch — the same reason the price is left alone on both variants: an
-        # hour with no price must not become a free hour to buy in.
-        absent = [col for col in out_df.columns
-                  if col != "price" and out_df[col].isna().all()]
-        out_df = out_df.assign(**{col: 0.0 for col in absent})
+    if variant == "emissions":
+        # Every column but the price is a carrier, and a carrier is absent from
+        # an hour when nothing of that kind generated in it. That is how the
+        # publication works rather than a defect in it: France reports hard coal
+        # only while a unit is online, so 2025 is missing 7705 hours of it in
+        # blocks as long as 4518; Spain's battery column simply begins in
+        # November, when the first battery was reported. Carrying the last
+        # reading across either would assert French coal burning all summer.
+        #
+        # An hour where *every* carrier is absent — Spain had one 35-hour stretch
+        # in 2025 — reads as a zone that generated nothing, and `_grid_intensity`
+        # already carries the neighbouring hours' intensity for such an hour
+        # rather than reading a fabricated zero.
+        #
+        # None of this is how a truncated fetch looks: that loses whole rows, and
+        # both `_ensure_raw_months` and the guard below still refuse one.
+        carriers = [col for col in out_df.columns if col != "price"]
+        unreported = out_df[carriers].isna().sum()
+        if unreported.any():
+            log.info(
+                f"{area} {variant} {start_date}-{end_date}: hours with no "
+                f"generation reported, taken as none generated — "
+                f"{dict(unreported[unreported > 0])}"
+            )
+        out_df[carriers] = out_df[carriers].fillna(0.0)
+        # The price is never invented: an hour with no price must not become a
+        # free hour to buy in. A short gap where two months meet is carried
+        # forward (bfill would propagate future data backward); anything longer
+        # is left for the guard.
+        out_df["price"] = out_df["price"].ffill(limit=3)
+    else:
+        # Cross-month boundary gaps: forward-fill only. Per-month processing
+        # already handles within-month gaps including start-of-month.
+        out_df = out_df.ffill(limit=3)
+        if variant == "full":
+            # This variant carries load and flows beside the carriers, so it
+            # cannot read an absence as a zero the way `emissions` does. A column
+            # absent for the whole window is the exception: the zone has no
+            # plants of that kind.
+            absent = [col for col in out_df.columns
+                      if col != "price" and out_df[col].isna().all()]
+            out_df = out_df.assign(**{col: 0.0 for col in absent})
     out_df.index.name = "time"
 
     assert_window_complete(out_df, start_date, end_date, variant)

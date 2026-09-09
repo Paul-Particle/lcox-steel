@@ -235,14 +235,22 @@ grid:
   fee_eur_per_mwh: 10.0               # volumetric charge (Arbeitspreis)
 
 destination:
-  # Where an `-export` route melts its iron. German prices, as a placeholder
-  # while the choice of destination is still open. A flat price rather than an
-  # hourly series on purpose: the destination furnace is fed from a stockpile,
-  # so it has no reason to chase the hourly market, and an average is the
-  # honest resolution for a number this provisional. Connection charges come
-  # from the `grid` block, which is already German HV level.
-  country: DEU
-  price_eur_per_mwh: 85         # day-ahead average; the grid block adds the fee
+  # Where an `-export` route melts its iron: an area from config.yaml's `areas`
+  # registry that trades in a wholesale market. The furnace there is priced and
+  # counted against that market's own hourly series — the same download every
+  # grid run uses, at `variant: emissions`, so its price and its generation mix
+  # come from one file. Nothing about the destination is a hand-set number any
+  # more; changing this line changes both the bill and the carbon.
+  #
+  # Connection charges still come from the `grid` block, which is German HV
+  # level, and so are only right for a German-sized destination.
+  #
+  # `transport.distance_km` below is keyed by the *producing* country and its
+  # legs are drawn to a north-west European port, so moving this away from a
+  # Rotterdam-ish destination would price power in one place and ship to
+  # another. Re-keying the legs by (origin, destination) is the change that
+  # would fix that.
+  area: DEU
 
 transport:
   # Freight, charged per t and km with no capacity decision and no capex,
@@ -398,28 +406,13 @@ emissions:
     wind_offshore:  { combustion: 0,        delegated_act: 0,      lifecycle: 0.012 }   # * AR5
     wind_onshore:   { combustion: 0,        delegated_act: 0,      lifecycle: 0.011 }   # * AR5
 
-  # There is deliberately no per-area annual figure here. An area's grid
-  # intensity comes from its own generation series — `variant: emissions`, which
-  # every grid row in config/scenarios.csv asks for — weighted by the table
-  # above. A grid run whose series carries no mix is a mistake in the scenario
-  # table, not a case to paper over, so the report says so and stops.
-
-  # Where an `-export` route's furnace draws its power. Flat, and the one figure
-  # here that is not derived from a series: the destination is a placeholder
-  # rather than a modelled place, which is why its price is flat too (see the
-  # `destination` block). Wiring it to its own country's series is the obvious
-  # next step, and would retire these numbers along with the flat price.
-  #
-  # Keyed by basis like everything else, because the destination furnace is
-  # usually the largest single draw on an `-export` route: a combustion-grade
-  # figure here on a `lifecycle` run would understate exactly the export-vs-home
-  # comparison the routes exist to make. All three are the table above weighted
-  # by one declared German mix — wind 30 %, solar 14, biomass 8, hydro 4,
-  # lignite 17, hard coal 7, gas 15, other 5 — so they differ only by basis.
-  destination_t_co2e_per_mwh:
-    combustion:    0.383
-    delegated_act: 0.417
-    lifecycle:     0.382
+  # There is deliberately no per-area annual figure here, and none for the
+  # destination either. Every intensity in the model comes from a generation
+  # series — `variant: emissions`, which every grid row in config/scenarios.csv
+  # asks for, and which an `-export` route also pulls for the market its furnace
+  # stands in — weighted by the table above. A run whose series carries no mix
+  # is a mistake in the scenario table, not a case to paper over, so the report
+  # says so and stops.
 
   # Natural gas burned in a shaft, per MWh LHV. The combustion figure is
   # `natural_gas.co2_t_per_mwh`, which the optional carbon price also uses, so

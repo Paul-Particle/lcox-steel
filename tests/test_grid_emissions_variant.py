@@ -11,10 +11,13 @@ instead of the hour's mean.
 Synthetic raw caches, so no ENTSO-E credentials and no NEMOSIS download.
 """
 
+from types import SimpleNamespace
+
 import pandas as pd
 import pytest
 
 import _entsoe  # sys.path set by conftest
+import download_entsoe
 from _helpers_grid import assert_window_complete
 from common._report_schema import field_stem
 
@@ -56,6 +59,30 @@ def test_the_carriers_come_through_named_as_the_factor_table_keys(raw_cache):
     assert all(field_stem(col) == col for col in out.columns)
 
 
+def test_a_carrier_s_consumption_column_does_not_reach_the_variant(tmp_path):
+    """ENTSO-E reports what a carrier's own plants drew beside what they made, and
+    Germany began doing so for solar and onshore wind partway through 2025. Not a
+    source, so not in a mix — and keeping the column would leave the completeness
+    guard refusing a year over the half of it that predates the reporting."""
+    month_dir = tmp_path / AREA / "2025-01"
+    month_dir.mkdir(parents=True)
+    pd.DataFrame({"price": 50.0}, index=INDEX).to_parquet(month_dir / "prices.parquet")
+    generation = pd.DataFrame(
+        {"solar": 100.0, "solar_cons": None, "pumped_storage_cons": -5.0}, index=INDEX
+    )
+    # Reported for the second half of the window only, as the real series is.
+    generation.iloc[len(INDEX) // 2:, generation.columns.get_loc("solar_cons")] = -2.0
+    generation.columns = pd.MultiIndex.from_tuples(
+        [(AREA, carrier) for carrier in generation.columns]
+    )
+    generation.to_parquet(month_dir / "generation.parquet")
+
+    out = _entsoe._process_emissions_month(AREA, "2025-01", tmp_path)
+
+    assert set(out.columns) == {"price", "solar"}
+    assert not out.isna().any().any()
+
+
 def test_a_sub_hourly_month_is_resampled_to_hourly_means(raw_cache):
     """Both consumers are hourly, so the resolution is settled here rather than
     reindexed away twice, differently."""
@@ -90,14 +117,132 @@ def test_the_variant_is_held_to_the_strict_hourly_check():
         assert_window_complete(complete.drop(hours[5]), "20250101", "20250101", "emissions")
 
 
-def test_a_hole_inside_a_carrier_column_does_not_pass_the_guard():
-    """A carrier the zone never reported all window is filled with zeros before
-    the guard sees it — it has no plants of that kind. A hole *inside* a column
-    is a truncated fetch, and an hour where nothing was burned is not the same
-    statement."""
+def test_nothing_unresolved_gets_past_the_guard():
+    """`retrieve` resolves every absence itself and says so in the log — a
+    carrier's to zero, a short price gap by carrying the reading beside it. So a
+    NaN still here is one nobody accounted for, and it stops the window rather
+    than reaching a report as an hour that emitted nothing."""
     hours = pd.date_range("2025-01-01", "2025-01-01 23:00", freq="h")
-    truncated = pd.DataFrame({"price": 50.0, "hard_coal": 100.0}, index=hours)
-    truncated.loc[hours[7:12], "hard_coal"] = pd.NA
+    unresolved = pd.DataFrame({"price": 50.0, "hard_coal": 100.0}, index=hours)
+    unresolved.loc[hours[7:12], "hard_coal"] = pd.NA
 
     with pytest.raises(ValueError, match="rows are NaN"):
-        assert_window_complete(truncated, "20250101", "20250101", "emissions")
+        assert_window_complete(unresolved, "20250101", "20250101", "emissions")
+
+
+def test_a_carrier_that_stops_reporting_is_none_of_it_running(tmp_path, monkeypatch):
+    """The shape of the real publication, and the reason the whole window builds.
+
+    ENTSO-E drops a carrier's column from the hours nothing of that kind
+    generated: France reported hard coal in 2025 only while a unit was online,
+    leaving blocks as long as 4518 hours, and Spain's battery column simply
+    begins in November. Carrying the last reading across either would assert
+    French coal burning all summer, so an absent carrier is zero — while the
+    price is never invented, because an hour with no price would be a free hour
+    to buy in.
+    """
+    hours = pd.date_range("2025-01-01", "2025-01-02 23:00", freq="h",
+                          tz="Europe/Brussels")
+    month_dir = tmp_path / "data" / "entsoe_cache" / AREA / "2025-01"
+    month_dir.mkdir(parents=True)
+    (tmp_path / "data" / "entsoe_cache" / "entsoe_bidding_zones.csv").write_text(
+        f"area,description\n{AREA},a zone\n"
+    )
+    prices = pd.DataFrame({"price": 50.0}, index=hours)
+    prices.to_parquet(month_dir / "prices.parquet")
+    generation = pd.DataFrame({"gas": 100.0, "hard_coal": 20.0}, index=hours)
+    # The cache is Brussels time and the output is UTC, so the last coal hour
+    # here (13:00 CET) is hour 12 of the frame that comes back.
+    generation.iloc[13:, generation.columns.get_loc("hard_coal")] = None
+    generation.columns = pd.MultiIndex.from_tuples(
+        [(AREA, carrier) for carrier in generation.columns]
+    )
+    generation.to_parquet(month_dir / "generation.parquet")
+    monkeypatch.setattr(_entsoe, "_months_to_process", lambda *_: ["2025-01"])
+    # The cache here is deliberately two days rather than a month, which the
+    # raw-month check would otherwise call truncated and re-fetch for real.
+    monkeypatch.setattr(_entsoe, "_ensure_raw_months", lambda *_, **__: None)
+    monkeypatch.chdir(tmp_path)
+
+    out_path = tmp_path / "out.parquet"
+    snakemake = SimpleNamespace(
+        wildcards=SimpleNamespace(variant="emissions", start_date="20250101",
+                                  end_date="20250101"),
+        output=[str(out_path)],
+    )
+    _entsoe.retrieve(snakemake, AREA)
+    out = pd.read_parquet(out_path)
+
+    # The coal stopped being reported half way through the first day.
+    assert out["hard_coal"].iloc[:12].eq(20.0).all()
+    assert out["hard_coal"].iloc[12:].eq(0.0).all()
+    assert out["price"].eq(50.0).all()
+
+    # And a stretch of unpriced hours still stops the whole thing. A few at
+    # either end of the gap are carried in from the readings around it; the
+    # ones in the middle have nowhere to come from, and are not invented.
+    prices.iloc[3:19, 0] = None
+    prices.to_parquet(month_dir / "prices.parquet")
+    with pytest.raises(ValueError, match="rows are NaN"):
+        _entsoe.retrieve(snakemake, AREA)
+
+
+def test_a_month_the_cache_kept_short_is_fetched_again(tmp_path, monkeypatch):
+    """The same cap used to be answered by truncating rather than refusing, so the
+    raw cache holds months that stop a day early — DE_LU's October 2024 and 2025
+    both end on the 30th. Existence alone would keep them forever, and the window
+    guard would refuse every year that touches one with no way to fix it."""
+    month_dir = tmp_path / AREA / "2025-01"
+    month_dir.mkdir(parents=True)
+    short = pd.date_range("2025-01-01", "2025-01-30 23:45", freq="15min",
+                          tz="Europe/Brussels")
+    pd.DataFrame({"gas": 1.0}, index=short).to_parquet(month_dir / "generation.parquet")
+
+    whole = pd.date_range("2025-01-01", "2025-02-01", freq="15min",
+                          tz="Europe/Brussels")
+    fetched = []
+
+    def _download(client, area, start, end):
+        fetched.append((start, end))
+        return pd.DataFrame({"gas": 1.0}, index=whole)
+
+    monkeypatch.setattr(_entsoe, "get_entsoe_client", lambda: object())
+    monkeypatch.setattr(_entsoe, "DOWNLOADERS", {"generation": _download})
+
+    _entsoe._ensure_raw_months(AREA, ["2025-01"], ["generation"], tmp_path)
+    assert len(fetched) == 1
+    assert pd.read_parquet(month_dir / "generation.parquet").index[-1] == whole[-1]
+
+    # And once it reaches the end of the month, it is left alone.
+    _entsoe._ensure_raw_months(AREA, ["2025-01"], ["generation"], tmp_path)
+    assert len(fetched) == 1
+
+
+def test_a_month_of_generation_is_fetched_in_two_halves():
+    """ENTSO-E caps this one document at P1M measured from the query's own start,
+    and a Brussels month starts on the last day of the month before — so March,
+    counted from a 28-day February, asks for more than the cap allows and comes
+    back 400. Whole months worked for seven of 2025's twelve, which is how this
+    went unnoticed until a run needed a full year of the mix."""
+    calls = []
+
+    class _Client:
+        def query_generation(self, area, start, end):
+            calls.append((start, end))
+            # ENTSO-E's end is inclusive, which is why the halves share a row.
+            return pd.DataFrame(
+                {"Fossil Gas": 1.0}, index=pd.date_range(start, end, freq="h")
+            )
+
+    march = pd.Timestamp("2025-03-01", tz="Europe/Brussels")
+    april = march + pd.offsets.MonthBegin(1)
+    data = download_entsoe.download_generation(_Client(), AREA, march, april)
+
+    assert len(calls) == 2
+    # Each half has to sit inside the cap the whole month broke.
+    for half_start, half_end in calls:
+        assert half_end - half_start < pd.Timedelta(days=28)
+    # And the halves rejoin into one unbroken month, read once per hour.
+    assert data.index[0] == march and data.index[-1] == april
+    assert not data.index.duplicated().any()
+    assert data.index.is_monotonic_increasing
