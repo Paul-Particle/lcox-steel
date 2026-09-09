@@ -394,10 +394,12 @@ def alternative_lcos_bands(row: pd.Series, assumptions: dict,
     charge_state, _ = EAF_CHARGE[row["route"]]
     eaf_mwh_per_t = (assumptions["eaf"]["charge"][charge_state]["el_mwh_per_t"]
                      if eaf_built else 0.0)
-    # An export route's furnace melts on bought power at the destination, so
-    # its band is priced there rather than at the origin's levelised cost.
+    # An export route's furnace melts on bought power at the destination, so its
+    # band is priced there rather than at the origin's levelised cost — at what
+    # the furnace actually paid in the hours it ran, which is what the report
+    # carries, plus the volumetric fee on top of it.
     if str(row["route"]).endswith("-export"):
-        eaf_lcoe = (assumptions["destination"]["price_eur_per_mwh"]
+        eaf_lcoe = ((_value(row, "destination_price_eur_per_mwh") or 0.0)
                     + assumptions["grid"]["fee_eur_per_mwh"])
     else:
         eaf_lcoe = lcoe
@@ -583,8 +585,7 @@ def spec(assumptions: dict) -> list:
     add("transmission", "Transmission (HVDC)", "electricity", "#83D1DD")
     destination = assumptions["destination"]
     add("destination_power", "Destination power", "electricity", "#0293D2",
-        [("country", f"{destination['country']}"),
-         ("flat price", f"{destination['price_eur_per_mwh']:,.0f} €/MWh")])
+        [("market", f"{destination['area']}, hourly day-ahead")])
     freight = assumptions["transport"]
     add("transport", "Freight", "storage", "#BDCCD9",
         [(f"{mode}, {commodity}",

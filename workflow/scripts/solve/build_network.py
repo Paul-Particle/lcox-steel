@@ -117,6 +117,7 @@ def build_network(
     sites: pd.DataFrame | None = None,
     demand_site: str | None = None,
     transport_legs: dict | None = None,
+    destination_price: pd.Series | None = None,
 ) -> pypsa.Network:
     """Build (but do not solve) the PyPSA network for one scenario.
 
@@ -139,6 +140,10 @@ def build_network(
     `transport_legs` maps freight mode to km between the producing area and the
     destination (`{"sea": 9500}`). An `-export` route needs it to ship its iron;
     every steel route needs it when assumptions turn finished-steel delivery on.
+
+    `destination_price` is the hourly €/MWh of the market named by
+    `assumptions["destination"]["area"]`, on the same index. An `-export` route
+    needs it — its furnace stands in that market and buys there.
     """
     if route not in ROUTES:
         raise ValueError(f"unknown route '{route}' — expected one of {ROUTES}")
@@ -239,14 +244,20 @@ def build_network(
                 raise ValueError(f"route '{route}' needs transport_legs")
             _add_iron_transport(n, transport_cfg, transport_legs, bus0=cold_iron_bus)
             # The destination EAF buys its power where it stands, not where the
-            # iron was made. A flat price, because a furnace fed from a
-            # stockpile has no reason to chase the hourly market — and because
-            # which country this is remains an open question.
-            dest_cfg = assumptions["destination"]
+            # iron was made: the hourly market of `destination.area`, on the
+            # same connection charges as any other grid import. Hourly and not
+            # an average because the furnace can time its melt — it is fed
+            # across a freight link with no capacity limit and it can bank
+            # finished steel — so an average would hand it hours it would never
+            # have bought.
+            if destination_price is None:
+                raise ValueError(
+                    f"route '{route}' melts its iron in "
+                    f"{assumptions['destination']['area']} and needs that market's "
+                    f"hourly price series"
+                )
             _add_grid_import(
-                n,
-                pd.Series(dest_cfg["price_eur_per_mwh"], index=n.snapshots),
-                assumptions["grid"], wacc,
+                n, destination_price, assumptions["grid"], wacc,
                 bus=DESTINATION_ELEC_BUS, name="destination_supply",
             )
             eaf_elec_bus, eaf_iron_bus = DESTINATION_ELEC_BUS, DESTINATION_IRON_BUS

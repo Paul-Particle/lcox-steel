@@ -176,6 +176,7 @@ def _storage_carbon(
 def _emissions_breakdown(
     n: pypsa.Network, emissions_cfg: dict, natural_gas_cfg: dict,
     area: str, transport_legs: dict | None, grid_mix: pd.DataFrame | None,
+    destination_area: str, destination_mix: pd.DataFrame | None,
 ) -> dict[str, object]:
     """What the run emitted in a year, and who to charge it to.
 
@@ -222,7 +223,20 @@ def _emissions_breakdown(
     # can be renamed in build_network without breaking the report.
     destination_bus = (n.generators.at["destination_supply", "bus"]
                        if "destination_supply" in n.generators.index else None)
-    destination_intensity = emissions_cfg["destination_t_co2e_per_mwh"][basis]
+    if destination_bus is not None and destination_mix is None:
+        raise ValueError(
+            f"this run melts its iron in {destination_area}, but no market series for "
+            f"{destination_area} over the run's own window reached the report, so what "
+            f"its furnace emitted is unknown. `destination_input` in rule "
+            f"compile_report is what carries it (workflow/rules/viz.smk)."
+        )
+    # Its furnace carries the destination market's own hours, read the same way
+    # as any other grid's — so an export route's melt is as clean as the country
+    # it melts in was in the hours it ran, and no differently.
+    destination_intensity = (
+        _grid_intensity(destination_area, destination_mix, factors, n.snapshots)
+        if destination_bus is not None else None
+    )
 
     # What a MWh on the producing area's electricity buses carried, hour by hour:
     # its own generation at the carriers' factors, its imports at the grid's.
@@ -519,6 +533,7 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
 def extract_summary(
     n: pypsa.Network, scenario_name: str, run: dict, assumptions: dict,
     transport_legs: dict | None = None, grid_mix: pd.DataFrame | None = None,
+    destination_mix: pd.DataFrame | None = None,
 ) -> dict:
     """Key sizing, cost and emission metrics as a flat dict (one row of the CSV).
 
@@ -534,7 +549,9 @@ def extract_summary(
     `transport_legs` and `grid_mix` are the run's own freight legs and the
     generation mix behind its imports; both only feed the emission fields, and
     both may be absent — a route that ships nothing has no legs, and a grid
-    series solved on `dayahead` has no mix.
+    series solved on `dayahead` has no mix. `destination_mix` is the same thing
+    for the market an `-export` route melts in, and is absent for every route
+    that melts its iron at home.
     """
     breakdown = _cost_breakdown(n)
     summary = {
@@ -666,6 +683,25 @@ def extract_summary(
                 summary["grid_fee_eur_per_mwh"] = fee
             if grid_conn > 0:
                 summary["grid_connection_eur_per_mwh_imported"] = grid_conn / grid_mwh
+
+    # What the destination furnace paid for its power, market price only and on
+    # the same footing as `grid_price_eur_per_mwh`: its bill over the MWh it
+    # drew, less the volumetric fee. Draw-weighted rather than the year's mean,
+    # because the furnace picks its hours — which is the whole reason its series
+    # is hourly. Not floored at zero: a furnace that ran in the hours the price
+    # was negative really was paid to melt, and rounding that up to nothing
+    # would report a bill it never had.
+    if "destination_supply" in n.generators.index:
+        destination_mwh = float(n.generators_t.p["destination_supply"].sum())
+        if destination_mwh > 0:
+            destination_energy = _marginal_costs(
+                n.generators.loc[["destination_supply"]],
+                n.generators_t.p, n.generators_t.marginal_cost,
+            )
+            summary["destination_price_eur_per_mwh"] = (
+                destination_energy / destination_mwh
+                - float(assumptions["grid"]["fee_eur_per_mwh"])
+            )
 
     if "electrolyser" in n.links.index and "steel_load" in n.loads.index:
         el_mwh = float(n.links_t.p0["electrolyser"].sum()) * annual_scale
@@ -822,6 +858,7 @@ def extract_summary(
     emitted = _emissions_breakdown(
         n, assumptions["emissions"], assumptions["natural_gas"],
         run["area"], transport_legs, grid_mix,
+        assumptions["destination"]["area"], destination_mix,
     )
     emissions = emitted["by_step"]
     electricity_mwh = emitted["electricity_mwh"]
@@ -910,6 +947,17 @@ def main() -> None:
         grid_area = area_tech_variant.rsplit("_", 2)[0]
         grid_series[(grid_area, grid_start, grid_end)] = pd.read_parquet(grid_path)
 
+    # And the series of the market an `-export` route melts in, kept apart from
+    # the map above rather than filed under its area: the destination is always
+    # a `variant: emissions` series, while a run's own grid row need not be, and
+    # one key per area would let one stand in for the other when a scenario
+    # produces in the same country it exports to. Every export run in the
+    # scenario names the same file, so the paths are deduplicated.
+    destination_series = {}
+    for grid_path in dict.fromkeys(snakemake.input.destination_input):
+        _, grid_start, grid_end = Path(grid_path).stem.rsplit("_", 2)
+        destination_series[(grid_start, grid_end)] = pd.read_parquet(grid_path)
+
     rows = []
     network_paths = list(dict.fromkeys(snakemake.input.networks))
     log.info(f"compiling report for scenario={scenario_name} ({len(network_paths)} runs)")
@@ -924,7 +972,10 @@ def main() -> None:
         # from Australia. Same resolution as solve_network's.
         legs = assumptions["transport"]["distance_km"].get(parents.get(area, area))
         grid_mix = grid_series.get((area, start_date, end_date))
-        summary = extract_summary(n, scenario_name, run, assumptions, legs, grid_mix)
+        destination_mix = destination_series.get((start_date, end_date))
+        summary = extract_summary(
+            n, scenario_name, run, assumptions, legs, grid_mix, destination_mix
+        )
         # Trailing the row, because it identifies the inputs rather than
         # describing them: the per-file map it stands for is in the network.
         summary["inputs_hash"] = n.meta["inputs_hash"]

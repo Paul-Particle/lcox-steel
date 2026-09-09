@@ -15,14 +15,16 @@ import pandas as pd
 
 # An `-export` route builds the same chain as the route it is named after and
 # then ships the iron to a furnace somewhere else.
+EXPORT_SUFFIX = "-export"
 _DOMESTIC_ROUTES = ("h2-only", "h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf",
                     "moe-eaf", "ew-eaf")
 ROUTES = (*_DOMESTIC_ROUTES,
-          *(f"{route}-export" for route in _DOMESTIC_ROUTES if route != "h2-only"))
+          *(f"{route}{EXPORT_SUFFIX}" for route in _DOMESTIC_ROUTES
+            if route != "h2-only"))
 
 def route_stem(route: str) -> str:
     """The domestic route an `-export` route is built from."""
-    return route.removesuffix("-export")
+    return route.removesuffix(EXPORT_SUFFIX)
 
 
 # How the iron reaches the furnace, and which step made it. The first decides
@@ -40,7 +42,7 @@ _IRON_SOURCE = {
 _CHARGE_STATE = {"h2-dri-eaf": "hot", "ng-dri-eaf": "hot", "mix-dri-eaf": "hot",
                  "moe-eaf": "liquid", "ew-eaf": "cold"}
 EAF_CHARGE = {
-    route: ("cold" if route.endswith("-export") else _CHARGE_STATE[route_stem(route)],
+    route: ("cold" if route.endswith(EXPORT_SUFFIX) else _CHARGE_STATE[route_stem(route)],
             _IRON_SOURCE[route_stem(route)])
     for route in ROUTES if route != "h2-only"
 }
@@ -171,6 +173,37 @@ def build_runs_frame(scenarios: pd.DataFrame, areas: dict) -> pd.DataFrame:
         )
     runs = pd.concat(frames)[RUN_KEY + ["route"]]
     return runs.sort_values(RUN_KEY + ["route"]).reset_index(drop=True)
+
+
+def build_destination_frame(
+    runs: pd.DataFrame, destination_area: str, areas: dict
+) -> pd.DataFrame:
+    """(scenario, start_date, end_date, route, destination) — one row per export run.
+
+    An `-export` route melts its iron in another market, and pays and counts its
+    furnace against that market's own hourly series, so the DAG has to know
+    which series that is before it can solve one. A domestic route gets no row
+    and asks for nothing, which is what keeps a scenario that builds none of the
+    export twins free of a market download.
+
+    The producing area is dropped: where the iron came from does not change
+    where it is melted, and one row per (scenario, window, route) is what the
+    solve rule's lookup joins on.
+    """
+    if not areas.get(destination_area, {}).get("market"):
+        raise ValueError(
+            f"`destination.area` in config/assumptions.yaml names {destination_area!r}, "
+            f"which is not an area that trades in a wholesale market. An `-export` "
+            f"route prices its furnace against a market's hourly series, so this has "
+            f"to be one of {sorted(a for a, cfg in areas.items() if cfg.get('market'))}."
+        )
+    exports = runs[runs["route"].str.endswith(EXPORT_SUFFIX)]
+    return (
+        exports.drop(columns="area")
+        .drop_duplicates()
+        .assign(destination=destination_area)
+        .reset_index(drop=True)
+    )
 
 
 def expand_scenario_rows(scenarios: pd.DataFrame, areas: dict) -> pd.DataFrame:

@@ -20,6 +20,17 @@ rule compile_report:
                 within=scenarios_df,
             ),
         ),
+        # And the destination market's series, for the same reason at the other
+        # end of an `-export` route: the furnace there carries its own market's
+        # mix, not the one that made the iron. Empty for a scenario that builds
+        # no export twin.
+        destination_input=collect(
+            "resources/timeseries/{item.destination}_grid_emissions_{item.start_date}_{item.end_date}.parquet",
+            item=lookup(
+                query="scenario == '{scenario}'",
+                within=destinations_df,
+            ),
+        ),
     output:
         # The report stands on its own: one row per reported place, the zone
         # ranking already resolved. The diagnostic keeps every zone and the
