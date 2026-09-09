@@ -30,6 +30,12 @@ def get_entsoe_client() -> entsoe.EntsoePandasClient:
     return entsoe.EntsoePandasClient(api_key=api_key)  # pyright: ignore[reportPrivateImportUsage]
 
 
+# What a carrier's own consumption column is called once renamed. ENTSO-E reports
+# one beside the generation of any production type that has one — Germany does so
+# for solar and onshore wind as well as for its storage — and it is a plant's own
+# draw rather than a source.
+CONSUMPTION_SUFFIX = "_cons"
+
 # The carrier each ENTSO-E generation label maps to, and the ENTSO-E half of the
 # vocabulary the NEM downloader shares. Its values are the keys of the report's
 # emission factor table; tests/test_grid_carrier_vocabulary.py holds the three
@@ -127,7 +133,8 @@ def download_generation(client: entsoe.EntsoePandasClient, area: str, start: pd.
     data.loc[:, cons_cols] = data.loc[:, cons_cols] * -1
 
     rename_map = {k + "_Actual Aggregated": v for k, v in CARRIER_NAMES.items()}
-    rename_map |= {k + "_Actual Consumption": v + "_cons" for k, v in CARRIER_NAMES.items()}
+    rename_map |= {k + "_Actual Consumption": v + CONSUMPTION_SUFFIX
+                   for k, v in CARRIER_NAMES.items()}
 
     data.columns = pd.MultiIndex.from_tuples([(area, rename_map[c]) for c in data.columns])
     return data
