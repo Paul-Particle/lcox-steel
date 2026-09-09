@@ -51,6 +51,15 @@ def _dispatch(n: pypsa.Network, component: str, attr: str, values: dict) -> None
     getattr(n, component + "_t")[attr] = frame
 
 
+def _grid_mix(n: pypsa.Network) -> pd.DataFrame:
+    """A `variant: emissions` series that works out to 0.8 t/MWh: four parts coal
+    to one part wind, and the price column that rides along with it."""
+    return pd.DataFrame(
+        {"hard_coal": [40.0] * 4, "wind_onshore": [10.0] * 4, "price": [50.0] * 4},
+        index=n.snapshots,
+    )
+
+
 def test_a_bus0_draw_and_a_bus2_draw_are_both_charged():
     """An electrolyser takes power as its input, a furnace as a by-draw. Both count."""
     n = _network()
@@ -63,7 +72,7 @@ def test_a_bus0_draw_and_a_bus2_draw_are_both_charged():
     _dispatch(n, "links", "p2", {"electrolyser": [0.0] * 4, "eaf": [20.0] * 4})
 
     emitted = compile_report._emissions_breakdown(
-        n, EMISSIONS, NATURAL_GAS, "VIC1", None, None
+        n, EMISSIONS, NATURAL_GAS, "VIC1", None, _grid_mix(n)
     )
 
     assert emitted["electricity_mwh"]["electrolyser"] == pytest.approx(10.0 * 4 * SCALE)
@@ -89,7 +98,7 @@ def test_a_flat_user_and_a_flexible_one_carry_different_intensities():
     _dispatch(n, "links", "p2", {"electrolyser": [0.0] * 4, "eaf": [5.0] * 4})
 
     emitted = compile_report._emissions_breakdown(
-        n, EMISSIONS, NATURAL_GAS, "VIC1", None, None
+        n, EMISSIONS, NATURAL_GAS, "VIC1", None, _grid_mix(n)
     )
 
     # The electrolyser drew only in free hours; the furnace drew half and half.
@@ -109,7 +118,7 @@ def test_a_gas_shaft_carries_its_combustion_but_not_in_its_power_intensity():
     _dispatch(n, "links", "p2", {"dri-ng": [2.0] * 4})
 
     emitted = compile_report._emissions_breakdown(
-        n, EMISSIONS, NATURAL_GAS, "VIC1", None, None
+        n, EMISSIONS, NATURAL_GAS, "VIC1", None, _grid_mix(n)
     )
 
     gas_t = 10.0 * 4 * SCALE * (0.2 + 0.1)
@@ -159,8 +168,9 @@ def test_freight_is_charged_per_tonne_over_the_run_s_own_legs():
     assert emitted["sources"]["freight"] == pytest.approx(emitted["by_step"]["iron_transport"])
 
 
-def test_a_generation_mix_beats_the_area_default_and_says_so():
-    """Given a mix, the table is applied to it; given prices only, the default stands."""
+def test_the_grid_s_intensity_comes_from_its_own_generation_mix():
+    """The carrier columns of a `variant: emissions` series, weighted by the table.
+    A price column rides along in that series and must not be mistaken for one."""
     n = _network()
     n.add("Generator", "grid_import", bus="electricity", carrier="AC")
     n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
@@ -168,22 +178,51 @@ def test_a_generation_mix_beats_the_area_default_and_says_so():
     _dispatch(n, "links", "p0", {"eaf": [5.0] * 4})
     _dispatch(n, "links", "p2", {"eaf": [10.0] * 4})
 
-    without_mix = compile_report._emissions_breakdown(
-        n, EMISSIONS, NATURAL_GAS, "VIC1", None, None
-    )
-    assert without_mix["grid_source"] == "area_default"
-    assert without_mix["by_step"]["eaf"] == pytest.approx(10.0 * 4 * SCALE * 0.8)
-
-    # Three quarters coal, one quarter wind, plus a price column to be ignored.
+    # Three quarters coal, one quarter wind, plus the price column to ignore.
     mix = pd.DataFrame(
         {"hard_coal": [30.0] * 4, "wind_onshore": [10.0] * 4, "price": [50.0] * 4},
         index=n.snapshots,
     )
-    with_mix = compile_report._emissions_breakdown(
+    emitted = compile_report._emissions_breakdown(
         n, EMISSIONS, NATURAL_GAS, "VIC1", None, mix
     )
-    assert with_mix["grid_source"] == "mix"
-    assert with_mix["by_step"]["eaf"] == pytest.approx(10.0 * 4 * SCALE * 0.75)
+    assert emitted["by_step"]["eaf"] == pytest.approx(10.0 * 4 * SCALE * 0.75)
+
+
+def test_a_grid_run_without_a_mix_is_an_error_not_a_default():
+    """There is nothing to stand in for a missing mix, so say so and stop. The
+    message has to name the fix, because the fix is one cell of scenarios.csv."""
+    n = _network()
+    n.add("Generator", "grid_import", bus="electricity", carrier="AC")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    _dispatch(n, "generators", "p", {"grid_import": [10.0] * 4})
+    _dispatch(n, "links", "p0", {"eaf": [5.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [10.0] * 4})
+
+    with pytest.raises(ValueError, match="variant: emissions"):
+        compile_report._emissions_breakdown(n, EMISSIONS, NATURAL_GAS, "VIC1", None, None)
+
+    # A price-only series is the same case: no carrier columns, no intensity.
+    prices_only = pd.DataFrame({"price": [50.0] * 4}, index=n.snapshots)
+    with pytest.raises(ValueError, match="no generation mix"):
+        compile_report._emissions_breakdown(
+            n, EMISSIONS, NATURAL_GAS, "VIC1", None, prices_only
+        )
+
+
+def test_an_islanded_run_needs_no_mix_at_all():
+    """It imports nothing, so there is no grid intensity to be missing."""
+    n = _network()
+    n.add("Generator", "wind-onshore", bus="electricity", carrier="wind-onshore")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    _dispatch(n, "generators", "p", {"wind-onshore": [10.0] * 4})
+    _dispatch(n, "links", "p0", {"eaf": [5.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [10.0] * 4})
+
+    emitted = compile_report._emissions_breakdown(
+        n, EMISSIONS, NATURAL_GAS, "VIC1", None, None
+    )
+    assert emitted["by_step"]["eaf"] == pytest.approx(0.0)
 
 
 def test_the_steps_stack_to_the_total():
@@ -208,7 +247,7 @@ def test_the_steps_stack_to_the_total():
     _dispatch(n, "storage_units", "p", {"battery": [-2.0, -2.0, 1.0, 1.0]})
 
     emitted = compile_report._emissions_breakdown(
-        n, EMISSIONS, NATURAL_GAS, "VIC1", None, None
+        n, EMISSIONS, NATURAL_GAS, "VIC1", None, _grid_mix(n)
     )
 
     assert set(emitted["by_step"]) <= set(EMISSION_STEPS)

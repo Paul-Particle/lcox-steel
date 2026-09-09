@@ -7,8 +7,9 @@ whole run in its name, so Snakemake skips this work on a re-run.
 
 Variants
 --------
-dayahead  price table only → single "price" column, hourly UTC-naive, EUR/MWh
-full      all four tables → wide per-area frame with derived wind/residual columns
+dayahead   price table only → single "price" column, hourly UTC-naive, EUR/MWh
+emissions  price + generation → "price" and one column per carrier, hourly
+full       all four tables → wide per-area frame with derived wind/residual columns
 """
 
 import logging
@@ -51,6 +52,24 @@ def _process_dayahead_month(
     return price.to_frame()
 
 
+def _process_emissions_month(
+    area: str, ym: str, cache_dir: Path, eur_per_aud: float
+) -> pd.DataFrame:
+    """One month of prices and per-carrier generation, hourly and UTC-naive.
+
+    The two tables the report's emission intensity needs; see
+    `_entsoe._process_emissions_month` for why these two and why hourly.
+    `price` leads the columns and the generation follows it.
+    """
+    start_str, end_str = _month_range_str(ym)
+    raw_price = to_utc_naive(DOWNLOADERS["price"](start_str, end_str, cache_dir, rebuild=False))
+    price = (raw_price[(area, "price")].resample("1h").mean() * eur_per_aud).rename("price")
+    raw_gen = to_utc_naive(
+        DOWNLOADERS["generation"](start_str, end_str, cache_dir, rebuild=False)
+    )
+    return pd.concat([price, raw_gen[area].resample("1h").mean()], axis=1, sort=False)
+
+
 def _process_full_month(
     area: str, ym: str, cache_dir: Path, eur_per_aud: float
 ) -> pd.DataFrame:
@@ -75,6 +94,17 @@ def _process_full_month(
     return area_df
 
 
+# ── Variants ──────────────────────────────────────────────────────────────────
+
+# How one month of each variant is assembled. NEMOSIS manages its own raw
+# download cache, so which tables a variant reads is decided inside these.
+VARIANTS = {
+    "dayahead":  _process_dayahead_month,
+    "emissions": _process_emissions_month,
+    "full":      _process_full_month,
+}
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def retrieve(snakemake, area: str) -> None:
@@ -93,8 +123,8 @@ def retrieve(snakemake, area: str) -> None:
 
     cache_dir = Path("data/nem_cache")
 
-    if variant not in ("dayahead", "full"):
-        raise ValueError(f"Unknown variant {variant!r}. Expected 'dayahead' or 'full'.")
+    if variant not in VARIANTS:
+        raise ValueError(f"Unknown variant {variant!r}. Expected one of {sorted(VARIANTS)}.")
 
     months = iter_months_str(start_date, end_date)
     # NEM data is downloaded in market time (AEST, UTC+10) and converted to UTC,
@@ -105,7 +135,7 @@ def retrieve(snakemake, area: str) -> None:
     if pad_month not in months:
         months = [*months, pad_month]
 
-    process_month = _process_dayahead_month if variant == "dayahead" else _process_full_month
+    process_month = VARIANTS[variant]
 
     monthly_frames = []
     for ym in months:
@@ -120,6 +150,12 @@ def retrieve(snakemake, area: str) -> None:
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:59")
     out_df = assembled.loc[window]
+    if variant == "emissions":
+        # A carrier that reported nothing generated nothing, so zero is its
+        # value. The price is left alone: a hole there must not become a free
+        # hour, and the completeness guard below is what should catch it.
+        carriers = out_df.columns.difference(["price"])
+        out_df[carriers] = out_df[carriers].fillna(0.0)
     out_df.index.name = "time"
 
     assert_window_complete(out_df, start_date, end_date, variant)

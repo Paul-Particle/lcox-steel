@@ -43,32 +43,37 @@ def _carrier_key(carrier: str) -> str:
 
 
 def _grid_intensity(
-    emissions_cfg: dict, area: str, grid_mix: pd.DataFrame | None,
+    area: str, grid_mix: pd.DataFrame | None,
     factors: dict[str, float], snapshots: pd.Index,
-) -> tuple[pd.Series, str]:
-    """t CO2e per MWh imported, hour by hour, and where the figure came from.
+) -> pd.Series:
+    """t CO2e per MWh imported, hour by hour, from the area's own generation mix.
 
-    A grid series solved on `variant: full` carries the area's generation by
-    carrier, so the intensity is that mix weighted by the factor table — which
-    is the whole point of keying the table to the shared carrier vocabulary. A
-    series solved on `dayahead` carries prices only and has no mix in it at all,
-    so the area's annual figure stands in and the report says so.
+    A grid series solved on `variant: emissions` (or `full`) carries the area's
+    generation by carrier, and those column names are the factor table's keys —
+    which is what the two downloaders' shared vocabulary was for. A series
+    solved on `dayahead` carries prices only, and there is nothing to stand in
+    for a mix, so that is an error in the scenario table rather than a number to
+    invent.
 
-    Production-based either way: a zone that imports coal power from next door
-    reads as clean as its own plants. The cross-border columns are in the `full`
-    series if that is ever worth fixing.
+    Production-based: a zone importing coal power from next door reads as clean
+    as its own plants. The cross-border columns are in the series if that is
+    ever worth fixing.
     """
-    if grid_mix is not None:
-        carriers = [col for col in grid_mix.columns if col in factors]
-        if carriers:
-            # ENTSO-E publishes the odd negative generation hour; a negative
-            # would otherwise pull the weighted mean the wrong way.
-            generation = grid_mix[carriers].clip(lower=0.0)
-            generated = generation.sum(axis=1)
-            carried = sum(generation[carrier] * factors[carrier] for carrier in carriers)
-            hourly = (carried / generated.where(generated > 0)).reindex(snapshots)
-            return hourly.ffill().bfill(), "mix"
-    return pd.Series(emissions_cfg["grid_t_co2e_per_mwh"][area], index=snapshots), "area_default"
+    carriers = [col for col in (grid_mix.columns if grid_mix is not None else [])
+                if col in factors]
+    if not carriers:
+        raise ValueError(
+            f"{area}: this run imports from the grid, but its grid series carries no "
+            f"generation mix, so its emission intensity is unknown. Set the area's "
+            f"grid row in config/scenarios.csv to `variant: emissions`."
+        )
+    # ENTSO-E publishes the odd negative generation hour; a negative would
+    # otherwise pull the weighted mean the wrong way.
+    generation = grid_mix[carriers].clip(lower=0.0)
+    generated = generation.sum(axis=1)
+    carried = sum(generation[carrier] * factors[carrier] for carrier in carriers)
+    hourly = (carried / generated.where(generated > 0)).reindex(snapshots)
+    return hourly.ffill().bfill()
 
 
 def _electricity_draw(n: pypsa.Network, link: str) -> tuple[pd.Series, str]:
@@ -96,7 +101,7 @@ def _emissions_breakdown(
     — kept apart from `by_step` because a gas-fired shaft's step total carries its
     combustion too, and dividing that by its MWh would report a furnace as
     buying impossibly dirty power. `sources` splits the total into electricity,
-    gas and freight; `grid_source` says where the grid intensity came from.
+    gas and freight.
 
     Accounting only: none of this reaches the objective, so nothing here can
     move a solve. And it covers the run's energy and freight alone — the process
@@ -123,13 +128,9 @@ def _emissions_breakdown(
         emissions_cfg["destination_t_co2e_per_mwh"], index=n.snapshots
     )
 
-    grid_source = "none"
-    if "grid_import" in n.generators.index:
-        grid_hourly, grid_source = _grid_intensity(
-            emissions_cfg, area, grid_mix, factors, n.snapshots
-        )
-    else:
-        grid_hourly = pd.Series(0.0, index=n.snapshots)
+    grid_hourly = (_grid_intensity(area, grid_mix, factors, n.snapshots)
+                   if "grid_import" in n.generators.index
+                   else pd.Series(0.0, index=n.snapshots))
 
     # What a MWh on the producing area's electricity buses carried, hour by hour:
     # its own generation at the carriers' factors, its imports at the grid's.
@@ -198,7 +199,6 @@ def _emissions_breakdown(
         "electricity_mwh": electricity_mwh,
         "electricity_t": electricity_by_user,
         "sources": {"electricity": electricity_t, "gas": gas_t, "freight": freight_t},
-        "grid_source": grid_source,
     }
 
 
@@ -693,7 +693,6 @@ def extract_summary(
     electricity_mwh = emitted["electricity_mwh"]
     sources = emitted["sources"]
     summary["emissions_basis"] = assumptions["emissions"]["basis"]
-    summary["emissions_grid_source"] = emitted["grid_source"]
     emissions_t = sum(emissions.values())
     summary["emissions_kt_co2e_per_year"] = emissions_t / 1e3
     for source, value in sources.items():

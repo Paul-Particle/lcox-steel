@@ -142,7 +142,10 @@ def main() -> None:
     if len(grid_paths) > 1:
         raise ValueError(f"{run}: multiple grid inputs: {grid_paths}")
     grid_path = grid_paths[0] if grid_paths else None
-    price_series = pd.read_parquet(grid_path).iloc[:, 0] if grid_path is not None else None
+    # By name, not by position: every variant carries a `price` column, but only
+    # `dayahead` carries nothing else, and `emissions` puts the generation mix
+    # alongside it.
+    price_series = pd.read_parquet(grid_path)["price"] if grid_path is not None else None
 
     # Multi-site mode (one electricity bus per candidate site, distance-costed
     # HVDC links to the demand site) is triggered by the CF data itself: the

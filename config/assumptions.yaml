@@ -335,14 +335,16 @@ emissions:
   #                  statement about the world.
   #
   # Pick one. Reports carry the name of the basis they used so a number cannot
-  # be read on the wrong one.
-  basis: delegated_act
+  # be read on the wrong one. `combustion` is the default because it is the
+  # column whose provenance we actually know.
+  basis: combustion
 
   # t CO2e per MWh of electricity generated, by the carrier names the grid
   # pipeline uses (see grid/download_entsoe.py and grid/download_nem.py, which
   # were deliberately given one shared vocabulary — the same keys serve both
-  # markets). A carrier appearing in a generation series but missing here is an
-  # error, not a zero.
+  # markets). These keys are what a `variant: emissions` grid series has columns
+  # for, which is how the two meet. A carrier appearing in a generation series
+  # but missing here is an error, not a zero.
   #
   # combustion:    Agora Energiewende's Agorameter factors, recovered from this
   #                repo's own history (scripts/optimize_grid_capacity_factor.py,
@@ -395,30 +397,17 @@ emissions:
     wind_offshore:  { combustion: 0,        delegated_act: 0,      lifecycle: 0.012 }   # * AR5
     wind_onshore:   { combustion: 0,        delegated_act: 0,      lifecycle: 0.011 }   # * AR5
 
-  # Fallback annual grid intensity per area, t CO2e/MWh, used when the run's
-  # grid series carries prices only. Every live scenario is on `variant:
-  # dayahead`, which has no generation mix in it, so today this is the number
-  # that gets used and the table above only takes over once a scenario asks for
-  # `variant: full`. Reports say which of the two produced the figure.
-  #
-  # These are eyeballed against published 2024 annual averages and are NOT the
-  # table above applied to a real mix. They are on the `combustion` basis, so
-  # selecting another basis does not move them — a known inconsistency, and the
-  # reason to move scenarios onto `full`.
-  grid_t_co2e_per_mwh:
-    DEU:  0.363
-    FRA:  0.056
-    ESP:  0.150
-    NSW1: 0.680
-    QLD1: 0.730
-    SA1:  0.240
-    TAS1: 0.030
-    VIC1: 0.770
-    BRA:  0.100
+  # There is deliberately no per-area annual figure here. An area's grid
+  # intensity comes from its own generation series — `variant: emissions`, which
+  # every grid row in config/scenarios.csv asks for — weighted by the table
+  # above. A grid run whose series carries no mix is a mistake in the scenario
+  # table, not a case to paper over, so the report says so and stops.
 
-  # Where an `-export` route's furnace draws its power. Follows the same
-  # fallback logic and the same caveat as the grid figures above; the
-  # destination has no generation series of its own at all.
+  # Where an `-export` route's furnace draws its power. Flat, and the one figure
+  # here that is not derived from a series: the destination is a placeholder
+  # rather than a modelled place, which is why its price is flat too (see the
+  # `destination` block). Wiring it to its own country's series is the obvious
+  # next step, and would retire this number along with the flat price.
   destination_t_co2e_per_mwh: 0.363    # DEU, matching the destination block
 
   # Natural gas burned in a shaft, per MWh LHV. The combustion figure is
