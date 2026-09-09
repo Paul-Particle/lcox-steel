@@ -77,8 +77,10 @@ COST_GROUPS = ("res", "battery", "grid", "gas", "electrolyser", "h2_buffer",
 # takes it either on bus0 (electricity in, product out) or on bus2 (a by-draw
 # alongside its main conversion); which one is read off the network rather than
 # listed here, so a link that moves between the two needs no change up here.
-ELECTRICITY_USERS = ("electrolyser", "dri-h2", "dri-ng", "dri-mix",
-                     "reductant-h2", "moe", "ew", "eaf", "briquetting")
+# This is the list the report has columns for; `compile_report` reads the
+# drawing links off the network and refuses to report a run that has one this
+# list does not name, rather than leaving its draw out of the total.
+ELECTRICITY_USERS = (*PROCESS_LINKS, "electrolyser", "reductant-h2")
 
 # Everything a run can emit through, in the order `compile_report`'s breakdown
 # builds them: the electricity users, the one link that burns gas and no power,
@@ -180,7 +182,12 @@ REPORT_FIELDS = {
     # clean route's tonne of steel lands near a thousandth of a tonne of CO2e.
     "emissions_basis": UNDEFINED,
     "emissions_kt_co2e_per_year": ZERO,
-    "emissions_kg_co2e_per_t_steel": ZERO,
+    # Blank rather than zero on a run that makes no steel, the same way
+    # `lcos_eur_per_t` is: the per-step fields below are shares of a tonne and
+    # stack, but this is the ratio they are shares of, and a route with no
+    # denominator has no such tonne. `h2-only` is in every `all-routes`
+    # scenario, and a 0.00 here would read as the cleanest steel in the table.
+    "emissions_kg_co2e_per_t_steel": UNDEFINED,
     "emissions_kg_co2e_per_kg_h2": UNDEFINED,
     # The three things that emit, as annual totals.
     "emissions_electricity_kt_co2e_per_year": ZERO,

@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 import _entsoe  # sys.path set by conftest
+from _helpers_grid import assert_window_complete
 from common._report_schema import field_stem
 
 AREA = "DE_LU"
@@ -41,8 +42,8 @@ def raw_cache(tmp_path):
 
 
 def test_price_leads_the_columns(raw_cache):
-    """The solve reads the price by name now, but a leading `price` keeps the
-    frame readable and keeps any positional reader honest."""
+    """The solve reads the price by name, but a leading `price` keeps the frame
+    readable and keeps any positional reader honest."""
     out = _entsoe._process_emissions_month(AREA, "2025-01", raw_cache)
     assert out.columns[0] == "price"
 
@@ -67,7 +68,7 @@ def test_a_sub_hourly_month_is_resampled_to_hourly_means(raw_cache):
     assert out["hard_coal"].iloc[0] == pytest.approx(100.0)
 
 
-def test_the_variant_registry_names_only_what_it_fetches(raw_cache):
+def test_the_variant_registry_names_only_what_it_fetches():
     """`emissions` is two data types, not `full`'s six — that is its reason to
     exist beside `full`, which would answer the same question at three times
     the download."""
@@ -75,3 +76,28 @@ def test_the_variant_registry_names_only_what_it_fetches(raw_cache):
     assert data_types == ["prices", "generation"]
     assert processor is _entsoe._process_emissions_month
     assert set(data_types) < set(_entsoe.FULL_DATA_TYPES)
+
+
+def test_the_variant_is_held_to_the_strict_hourly_check():
+    """It is resampled to a clean hourly grid like `dayahead`, so it wants that
+    guard rather than `full`'s gap tolerance — under which a month truncated by
+    two hours passes."""
+    hours = pd.date_range("2025-01-01", "2025-01-01 23:00", freq="h")
+    complete = pd.DataFrame({"price": 50.0, "hard_coal": 100.0}, index=hours)
+    assert_window_complete(complete, "20250101", "20250101", "emissions")
+
+    with pytest.raises(ValueError, match="missing hours"):
+        assert_window_complete(complete.drop(hours[5]), "20250101", "20250101", "emissions")
+
+
+def test_a_hole_inside_a_carrier_column_does_not_pass_the_guard():
+    """A carrier the zone never reported all window is filled with zeros before
+    the guard sees it — it has no plants of that kind. A hole *inside* a column
+    is a truncated fetch, and an hour where nothing was burned is not the same
+    statement."""
+    hours = pd.date_range("2025-01-01", "2025-01-01 23:00", freq="h")
+    truncated = pd.DataFrame({"price": 50.0, "hard_coal": 100.0}, index=hours)
+    truncated.loc[hours[7:12], "hard_coal"] = pd.NA
+
+    with pytest.raises(ValueError, match="rows are NaN"):
+        assert_window_complete(truncated, "20250101", "20250101", "emissions")

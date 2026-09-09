@@ -25,10 +25,9 @@ EMISSIONS = {
         "wind_onshore": {"test": 0.0},
         "solar":        {"test": 0.2},
     },
-    "grid_t_co2e_per_mwh": {"VIC1": 0.8},
-    "destination_t_co2e_per_mwh": 0.4,
+    "destination_t_co2e_per_mwh": {"test": 0.4},
     "gas_upstream_t_co2e_per_mwh": {"test": 0.1},
-    "freight_kg_co2e_per_t_km": {"sea": 0.004, "rail": 0.01},
+    "freight_kg_co2e_per_t_km": {"sea": {"test": 0.004}, "rail": {"test": 0.01}},
 }
 NATURAL_GAS = {"co2_t_per_mwh": 0.2}
 # Four snapshots stand for the year, so an hourly MW is 2190 MWh annualised.
@@ -223,6 +222,129 @@ def test_an_islanded_run_needs_no_mix_at_all():
         n, EMISSIONS, NATURAL_GAS, "VIC1", None, None
     )
     assert emitted["by_step"]["eaf"] == pytest.approx(0.0)
+
+
+def test_what_comes_out_of_storage_is_not_free():
+    """An hour supplied out of the battery has nothing generating in it, so the
+    draw in that hour would otherwise be charged at nothing. The run's total has
+    to come to what its generation carried, whichever hour it was used in."""
+    n = _network()
+    n.add("Generator", "solar", bus="electricity", carrier="solar")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    n.add("StorageUnit", "battery", bus="electricity", carrier="battery")
+    # Sun in the odd hours only; the furnace runs through the dark ones on the
+    # battery, which gives back 4 of every 5 MWh it takes.
+    _dispatch(n, "generators", "p", {"solar": [10.0, 0.0, 10.0, 0.0]})
+    _dispatch(n, "links", "p0", {"eaf": [1.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [5.0, 4.0, 5.0, 4.0]})
+    _dispatch(n, "storage_units", "p", {"battery": [-5.0, 4.0, -5.0, 4.0]})
+
+    emitted = compile_report._emissions_breakdown(
+        n, EMISSIONS, NATURAL_GAS, "VIC1", None, None
+    )
+
+    # 20 MWh of solar at 0.2 is all this system ever emitted, however it moved.
+    assert sum(emitted["by_step"].values()) == pytest.approx(20.0 * SCALE * 0.2)
+    assert emitted["by_step"]["eaf"] == pytest.approx(18.0 * SCALE * 0.2)
+    assert emitted["by_step"]["battery_losses"] == pytest.approx(2.0 * SCALE * 0.2)
+    assert emitted["losses_mwh"] == pytest.approx(2.0 * SCALE)
+
+
+def test_a_battery_that_never_ran_is_not_a_missing_column():
+    """PyPSA's netCDF export drops an all-zero dispatch column, so a run that
+    built no battery comes back with one in the index and none in the frame. An
+    optimum like that is ordinary, and used to take the whole report down."""
+    n = _network()
+    n.add("Generator", "solar", bus="electricity", carrier="solar")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    n.add("StorageUnit", "battery", bus="electricity", carrier="battery")
+    _dispatch(n, "generators", "p", {"solar": [10.0] * 4})
+    _dispatch(n, "links", "p0", {"eaf": [1.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [5.0] * 4})
+    # No storage_units_t.p at all — the shape the round trip leaves behind.
+    assert list(n.storage_units_t.p.columns) == []
+
+    emitted = compile_report._emissions_breakdown(
+        n, EMISSIONS, NATURAL_GAS, "VIC1", None, None
+    )
+    assert emitted["by_step"]["battery_losses"] == pytest.approx(0.0)
+    assert emitted["by_step"]["eaf"] == pytest.approx(5.0 * 4 * SCALE * 0.2)
+
+
+def test_a_mix_from_another_window_is_an_error_not_a_clean_hour():
+    """Reindexing a series onto snapshots it does not cover gives NaN, and a NaN
+    intensity used to become a zero one — a provenance error reading as
+    zero-carbon electricity."""
+    n = _network()
+    n.add("Generator", "grid_import", bus="electricity", carrier="AC")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    _dispatch(n, "generators", "p", {"grid_import": [10.0] * 4})
+    _dispatch(n, "links", "p0", {"eaf": [5.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [10.0] * 4})
+
+    other_year = pd.DataFrame(
+        {"hard_coal": [40.0] * 4, "wind_onshore": [10.0] * 4, "price": [50.0] * 4},
+        index=range(100, 104),
+    )
+    with pytest.raises(ValueError, match="different windows"):
+        compile_report._emissions_breakdown(
+            n, EMISSIONS, NATURAL_GAS, "VIC1", None, other_year
+        )
+
+
+def test_a_carrier_the_factor_table_does_not_know_is_an_error():
+    """Dropping it would renormalise the mix over the rest and read as though the
+    unknown carrier generated nothing — the config says it is an error."""
+    n = _network()
+    n.add("Generator", "grid_import", bus="electricity", carrier="AC")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    _dispatch(n, "generators", "p", {"grid_import": [10.0] * 4})
+    _dispatch(n, "links", "p0", {"eaf": [5.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [10.0] * 4})
+
+    mix = _grid_mix(n).assign(fusion=[100.0] * 4)
+    with pytest.raises(ValueError, match="no entry for"):
+        compile_report._emissions_breakdown(n, EMISSIONS, NATURAL_GAS, "VIC1", None, mix)
+
+
+def test_storage_is_left_out_of_the_grid_mix_rather_than_counted_at_zero():
+    """What a reservoir gives back was generated in some earlier hour that is
+    already in the mix, so counting it at a factor of zero would dilute it."""
+    n = _network()
+    n.add("Generator", "grid_import", bus="electricity", carrier="AC")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    _dispatch(n, "generators", "p", {"grid_import": [10.0] * 4})
+    _dispatch(n, "links", "p0", {"eaf": [5.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [10.0] * 4})
+
+    # All the generation is coal; a third of what leaves the zone came out of
+    # pumped storage, and its charging reads as negative generation.
+    mix = pd.DataFrame(
+        {"hard_coal": [30.0] * 4, "pumped_storage": [10.0] * 4,
+         "pumped_storage_cons": [-12.0] * 4, "price": [50.0] * 4},
+        index=n.snapshots,
+    )
+    emitted = compile_report._emissions_breakdown(
+        n, EMISSIONS, NATURAL_GAS, "VIC1", None, mix
+    )
+    assert emitted["by_step"]["eaf"] == pytest.approx(10.0 * 4 * SCALE * 1.0)
+
+
+def test_a_link_drawing_power_the_report_cannot_name_is_an_error():
+    """The report has one column per declared user, and the run's total is the sum
+    over them — so an undeclared drawing link would go missing from the total
+    while every share still stacked to a tidy 100 %."""
+    n = _network()
+    n.add("Bus", "hydrogen", carrier="H2")
+    n.add("Generator", "solar", bus="electricity", carrier="solar")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    n.add("Link", "compressor", bus0="electricity", bus1="hydrogen")
+    _dispatch(n, "generators", "p", {"solar": [10.0] * 4})
+    _dispatch(n, "links", "p0", {"eaf": [1.0] * 4, "compressor": [2.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [5.0] * 4, "compressor": [0.0] * 4})
+
+    with pytest.raises(ValueError, match="ELECTRICITY_USERS"):
+        compile_report._emissions_breakdown(n, EMISSIONS, NATURAL_GAS, "VIC1", None, None)
 
 
 def test_the_steps_stack_to_the_total():

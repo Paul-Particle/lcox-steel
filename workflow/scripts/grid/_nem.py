@@ -85,6 +85,9 @@ def _process_full_month(
     }
     df = pd.concat(list(tables.values()), axis=1, sort=False)
     area_df = df[area].copy()
+    # AEMO settles in AUD; every variant's `price` column is EUR/MWh, and the
+    # solve now reads that column by name on any variant it is given.
+    area_df["price"] = area_df["price"] * eur_per_aud
 
     wind  = area_df.get("wind_onshore", pd.Series(0, index=area_df.index))
     solar = area_df.get("solar",        pd.Series(0, index=area_df.index))
@@ -151,11 +154,14 @@ def retrieve(snakemake, area: str) -> None:
     window = slice(iso(start_date), f"{iso(end_date)} 23:59")
     out_df = assembled.loc[window]
     if variant == "emissions":
-        # A carrier that reported nothing generated nothing, so zero is its
-        # value. The price is left alone: a hole there must not become a free
-        # hour, and the completeness guard below is what should catch it.
-        carriers = out_df.columns.difference(["price"])
-        out_df[carriers] = out_df[carriers].fillna(0.0)
+        # A carrier this region never reported over the whole window has no
+        # plants of that kind, so zero is its value. A hole *inside* a column is
+        # a truncated fetch instead, and is left as NaN for the guard below to
+        # catch — as is the price, since an hour with no price must not become a
+        # free hour to buy in.
+        absent = [col for col in out_df.columns
+                  if col != "price" and out_df[col].isna().all()]
+        out_df = out_df.assign(**{col: 0.0 for col in absent})
     out_df.index.name = "time"
 
     assert_window_complete(out_df, start_date, end_date, variant)
