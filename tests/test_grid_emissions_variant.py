@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 import _entsoe  # sys.path set by conftest
+import download_entsoe
 from _helpers_grid import assert_window_complete
 from common._report_schema import field_stem
 
@@ -101,3 +102,33 @@ def test_a_hole_inside_a_carrier_column_does_not_pass_the_guard():
 
     with pytest.raises(ValueError, match="rows are NaN"):
         assert_window_complete(truncated, "20250101", "20250101", "emissions")
+
+
+def test_a_month_of_generation_is_fetched_in_two_halves():
+    """ENTSO-E caps this one document at P1M measured from the query's own start,
+    and a Brussels month starts on the last day of the month before — so March,
+    counted from a 28-day February, asks for more than the cap allows and comes
+    back 400. Whole months worked for seven of 2025's twelve, which is how this
+    went unnoticed until a run needed a full year of the mix."""
+    calls = []
+
+    class _Client:
+        def query_generation(self, area, start, end):
+            calls.append((start, end))
+            # ENTSO-E's end is inclusive, which is why the halves share a row.
+            return pd.DataFrame(
+                {"Fossil Gas": 1.0}, index=pd.date_range(start, end, freq="h")
+            )
+
+    march = pd.Timestamp("2025-03-01", tz="Europe/Brussels")
+    april = march + pd.offsets.MonthBegin(1)
+    data = download_entsoe.download_generation(_Client(), AREA, march, april)
+
+    assert len(calls) == 2
+    # Each half has to sit inside the cap the whole month broke.
+    for half_start, half_end in calls:
+        assert half_end - half_start < pd.Timedelta(days=28)
+    # And the halves rejoin into one unbroken month, read once per hour.
+    assert data.index[0] == march and data.index[-1] == april
+    assert not data.index.duplicated().any()
+    assert data.index.is_monotonic_increasing
