@@ -3,9 +3,22 @@ rule compile_report:
         # The scenario table, for the variant each tech was solved with: the
         # solve reads the parquet, not its name, so this is where that survives.
         scenarios="config/scenarios.csv",
+        # Emission factors, freight legs and the grid fee. The base file only —
+        # a per-scenario overlay is not merged in here yet.
+        assumptions="config/assumptions.yaml",
         networks=collect(
             "results/{item.scenario}/{item.area}_{item.route}_{item.start_date}_{item.end_date}.nc",
             item=lookup(query="scenario == '{scenario}'", within=runs_df),
+        ),
+        # The same grid series the solve priced its imports against, for the
+        # generation mix behind them. Empty for an islanded scenario, and
+        # carrying prices only unless the row asks for `variant: full`.
+        grid_input=collect(
+            "resources/timeseries/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}.parquet",
+            item=lookup(
+                query="scenario == '{scenario}' and tech == 'grid'",
+                within=scenarios_df,
+            ),
         ),
     output:
         # The report stands on its own: one row per reported place, the zone
