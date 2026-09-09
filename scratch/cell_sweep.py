@@ -7,9 +7,10 @@ the solved networks back into one table.
 
 Not a Snakemake script: it runs standalone, from the repo root.
 
-    python scratch/cell_sweep.py emit --area VIC1
+    python scratch/cell_sweep.py emit --area VIC1 --stride 1
     snakemake --jobs 6 -- $(python scratch/cell_sweep.py targets --area VIC1)
     python scratch/cell_sweep.py collect --area VIC1
+    python scratch/cell_sweep.py compare --area VIC1
     python scratch/cell_sweep.py clean
 """
 
@@ -30,7 +31,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "workflow"))
 
 from common._paths import CUTOUTS, REPO_ROOT, RESULTS, SHAPES_RES, TIMESERIES
 from common._runs import build_runs_frame, load_scenarios
-from scripts.res_cf._helpers_res_cf import eligibility_mask_2d
+from scripts.res_cf._helpers_res_cf import (
+    eligibility_mask_2d,
+    eligibility_weights,
+    pick_p95_cell,
+)
 
 # Both onshore techs sit in the same cell — that is the whole point of the
 # "everything colocated" arm. Offshore wind is excluded: it cannot share a
@@ -48,6 +53,15 @@ SWEEP_DIR = RESULTS / "cell_sweep"
 # recovered from the suffix when the results are collected.
 MODE_SUFFIXES = {"islanded": "isl", "grid": "grid"}
 
+# The pre-selection arms the sweep is benchmarked against. These are ordinary
+# pipeline runs named in config/scenarios.csv, not emitted here: one solved
+# network per (mode, route) each. `compare` reads them alongside the swept
+# cells so all arms are scored by the same `extract_summary`.
+REFERENCE_ARMS = {
+    "colo-ref": "anchor-colo-n3 (multi-site)",
+    "p95-ref": "bestsite-p95 (single site)",
+}
+
 log = logging.getLogger("cell_sweep")
 
 
@@ -63,7 +77,8 @@ def load_area_config(area: str) -> tuple[dict, str]:
 
 
 def emit_sweep_inputs(
-    area: str, start_date: str, end_date: str, routes: str, modes: list[str], limit: int
+    area: str, start_date: str, end_date: str, routes: str, modes: list[str],
+    stride: int, limit: int,
 ) -> None:
     """Write one CF file per eligible cell and append the scenario rows for them."""
     if SCENARIO_TABLE_BACKUP.exists():
@@ -96,11 +111,8 @@ def emit_sweep_inputs(
         float(res_cf_config["min_land_fraction"]),
         res_cf_config["eligibility_source"],
     )
-    eligible_cells = [(int(y), int(x)) for y, x in zip(*np.where(eligible_mask))]
-    if limit:
-        eligible_cells = eligible_cells[:limit]
     log.info(
-        f"{area} {start_date}-{end_date}: {len(eligible_cells)} eligible cells "
+        f"{area} {start_date}-{end_date}: {int(eligible_mask.sum())} eligible cells "
         f"of {eligible_mask.size} in the cutout grid"
     )
 
@@ -122,6 +134,53 @@ def emit_sweep_inputs(
     timestamps = pd.DatetimeIndex(cf_grids["solar"].coords["time"].values, name="time")
     latitudes = cutout.data.coords["y"].values
     longitudes = cutout.data.coords["x"].values
+
+    # Which eligible cells actually get solved. `stride` thins the lattice to
+    # fit a run budget, but a regular lattice samples the *maximum* badly: in
+    # Spain the best-resource cell sits in the Galician northwest, and a stride
+    # of 3 picks a best cell ~800 km away and ~14% worse on blended CF. That
+    # bias flatters the pre-selection method under test, so three cells are
+    # always solved on top of the lattice — the best cell by blended CF, and
+    # each tech's P95 anchor, which is the cell d3_anchor_colo fixes its
+    # co-location search on. `sampling` in the manifest records why each cell
+    # is in, so the unbiased lattice subset stays separable from the forced
+    # ones when the results are read.
+    lattice_mask = np.zeros_like(eligible_mask)
+    lattice_mask[::stride, ::stride] = True
+    lattice_cells = eligible_mask & lattice_mask
+    sampling_reasons = {
+        (int(y), int(x)): ["lattice"] for y, x in zip(*np.where(lattice_cells))
+    }
+
+    blended_cf_mean = np.where(
+        eligible_mask,
+        0.5 * cf_grids["wind-onshore"].values.mean(axis=0)
+        + 0.5 * cf_grids["solar"].values.mean(axis=0),
+        -np.inf,
+    )
+    best_y, best_x = np.unravel_index(int(np.argmax(blended_cf_mean)), eligible_mask.shape)
+    forced_cells = {(int(best_y), int(best_x)): "proxy-best"}
+    anchor_weights = eligibility_weights(
+        cutout,
+        land_geometry,
+        float(res_cf_config["min_land_fraction"]),
+        res_cf_config["eligibility_source"],
+    )
+    for tech, cf_grid in cf_grids.items():
+        anchor_y, anchor_x = pick_p95_cell(cf_grid.mean("time"), anchor_weights)
+        forced_cells.setdefault((int(anchor_y), int(anchor_x)), f"p95-anchor-{tech}")
+    for cell, reason in forced_cells.items():
+        sampling_reasons.setdefault(cell, []).append(reason)
+
+    eligible_cells = sorted(sampling_reasons)
+    if limit:
+        eligible_cells = eligible_cells[:limit]
+        sampling_reasons = {cell: sampling_reasons[cell] for cell in eligible_cells}
+    log.info(
+        f"stride {stride}: {int(lattice_cells.sum())} lattice cells + "
+        f"{len(forced_cells)} forced diagnostic cells "
+        f"(overlaps merged) = {len(eligible_cells)} to solve"
+    )
 
     TIMESERIES.mkdir(parents=True, exist_ok=True)
     scenario_rows = []
@@ -159,6 +218,7 @@ def emit_sweep_inputs(
                 "longitude": float(longitudes[x]),
                 "wind_onshore_cf_mean": cell_means["wind-onshore"],
                 "solar_cf_mean": cell_means["solar"],
+                "sampling": "+".join(sampling_reasons[(y, x)]),
             }
         )
 
@@ -275,6 +335,102 @@ def collect_sweep_results(area: str, start_date: str, end_date: str) -> None:
     log.info(f"cheapest cell per (mode, route):\n{best_per_arm.to_string(index=False)}")
 
 
+def compare_arms(area: str, start_date: str, end_date: str) -> None:
+    """Score the pre-selection arms against the swept per-cell distribution."""
+    sys.path.insert(0, str(REPO_ROOT / "workflow" / "scripts" / "viz"))
+    import compile_report
+
+    summary_path = SWEEP_DIR / f"sweep_{area}_{start_date}_{end_date}.csv"
+    if not summary_path.exists():
+        raise FileNotFoundError(
+            f"{summary_path.relative_to(REPO_ROOT)} is missing — run `collect` first."
+        )
+    swept = pd.read_csv(summary_path)
+
+    config, _ = load_area_config(area)
+    scenarios = load_scenarios(SCENARIO_TABLE, config["areas"])
+
+    reference_rows = []
+    for prefix, arm_label in REFERENCE_ARMS.items():
+        for mode, suffix in MODE_SUFFIXES.items():
+            scenario = f"{prefix}-{suffix}"
+            for nc_path in sorted(
+                RESULTS.glob(f"{scenario}/{area}_*_{start_date}_{end_date}.nc")
+            ):
+                network_area, route, network_start, network_end = nc_path.stem.split("_")
+                network = pypsa.Network()
+                network.import_from_netcdf(nc_path)
+                run = {
+                    "area": network_area,
+                    "route": route,
+                    "start_date": network_start,
+                    "end_date": network_end,
+                }
+                run.update(compile_report.input_variants(scenarios, scenario, run))
+                summary = compile_report.extract_summary(network, scenario, run)
+                summary["arm"] = arm_label
+                summary["mode"] = mode
+                reference_rows.append(summary)
+    if not reference_rows:
+        raise FileNotFoundError(
+            f"no reference-arm networks under {RESULTS.relative_to(REPO_ROOT)}/"
+            f"{{{','.join(REFERENCE_ARMS)}}}-* for {area} {start_date}-{end_date}"
+        )
+    reference = pd.DataFrame(reference_rows)
+    reference.to_csv(
+        SWEEP_DIR / f"reference_{area}_{start_date}_{end_date}.csv", index=False
+    )
+
+    # The lattice-only best is the honest like-for-like number when the sweep was
+    # strided: the forced diagnostic cells were chosen using resource knowledge,
+    # which is exactly what the pre-selection arms are allowed to use too.
+    comparison_rows = []
+    for (mode, route), cells in swept.groupby(["mode", "route"]):
+        mode_name = {v: k for k, v in MODE_SUFFIXES.items()}[mode]
+        lattice = cells.loc[cells["sampling"] == "lattice", "lcos_eur_per_t"]
+        best_overall = cells["lcos_eur_per_t"].min()
+        best_cell = cells.loc[cells["lcos_eur_per_t"].idxmin()]
+        for _, arm in reference.loc[reference["route"] == route].iterrows():
+            if arm["mode"] != mode_name:
+                continue
+            arm_lcos = arm["lcos_eur_per_t"]
+            comparison_rows.append(
+                {
+                    "mode": mode_name,
+                    "route": route,
+                    "arm": arm["arm"],
+                    "arm_lcos_eur_per_t": arm_lcos,
+                    "sweep_best_eur_per_t": best_overall,
+                    "sweep_best_cell": best_cell["cell_tag"],
+                    "sweep_best_lat": best_cell["latitude"],
+                    "sweep_best_lon": best_cell["longitude"],
+                    "lattice_best_eur_per_t": lattice.min(),
+                    "lattice_median_eur_per_t": lattice.median(),
+                    "arm_premium_vs_sweep_pct": 100.0 * (arm_lcos - best_overall) / best_overall,
+                    "arm_premium_vs_lattice_pct": 100.0 * (arm_lcos - lattice.min()) / lattice.min(),
+                    "arm_percentile_in_lattice": 100.0 * (lattice < arm_lcos).mean(),
+                    "cells_swept": len(cells),
+                }
+            )
+
+    comparison = (
+        pd.DataFrame(comparison_rows)
+        .sort_values(["mode", "route", "arm"])
+        .reset_index(drop=True)
+    )
+    comparison_path = SWEEP_DIR / f"comparison_{area}_{start_date}_{end_date}.csv"
+    comparison.to_csv(comparison_path, index=False)
+    log.info(f"wrote {comparison_path.relative_to(REPO_ROOT)}")
+    log.info(
+        "pre-selection premium over the brute-force optimum:\n"
+        + comparison.loc[
+            :,
+            ["mode", "route", "arm", "arm_lcos_eur_per_t", "sweep_best_eur_per_t",
+             "arm_premium_vs_sweep_pct", "arm_percentile_in_lattice"],
+        ].to_string(index=False)
+    )
+
+
 def clean_sweep_artifacts(area: str, start_date: str, end_date: str, purge: bool) -> None:
     """Restore the scenario table and delete the per-cell inputs and networks."""
     if SCENARIO_TABLE_BACKUP.exists():
@@ -302,7 +458,7 @@ def main() -> None:
     """Parse the subcommand and run it."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "command", choices=["emit", "targets", "collect", "clean"]
+        "command", choices=["emit", "targets", "collect", "compare", "clean"]
     )
     parser.add_argument("--area", default="VIC1")
     parser.add_argument("--start-date", default="20250101")
@@ -318,10 +474,16 @@ def main() -> None:
         help="comma-separated subset of islanded,grid",
     )
     parser.add_argument(
+        "--stride",
+        type=int,
+        default=1,
+        help="solve every Nth eligible cell in y and x; 1 sweeps all of them",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=0,
-        help="emit only the first N eligible cells, for a smoke run",
+        help="truncate to the first N selected cells, for a smoke run",
     )
     parser.add_argument(
         "--purge",
@@ -339,13 +501,18 @@ def main() -> None:
         raise ValueError(f"unknown modes {sorted(unknown_modes)}")
 
     if args.command == "emit":
+        if args.stride < 1:
+            raise ValueError(f"--stride must be >= 1, got {args.stride}")
         emit_sweep_inputs(
-            args.area, args.start_date, args.end_date, args.routes, modes, args.limit
+            args.area, args.start_date, args.end_date, args.routes, modes,
+            args.stride, args.limit,
         )
     elif args.command == "targets":
         print_sweep_targets(args.area, args.start_date, args.end_date)
     elif args.command == "collect":
         collect_sweep_results(args.area, args.start_date, args.end_date)
+    elif args.command == "compare":
+        compare_arms(args.area, args.start_date, args.end_date)
     else:
         clean_sweep_artifacts(args.area, args.start_date, args.end_date, args.purge)
 
