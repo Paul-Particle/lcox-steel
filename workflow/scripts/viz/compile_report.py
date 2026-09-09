@@ -11,6 +11,7 @@ import logging
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pypsa
 import yaml
@@ -110,6 +111,68 @@ def _grid_intensity(
     return hourly.ffill().bfill()
 
 
+def _storage_carbon(
+    n: pypsa.Network, units: list[str], storage_p: pd.DataFrame,
+    soc: pd.DataFrame, generation_intensity: pd.Series,
+) -> tuple[pd.Series, float]:
+    """What storage gave back each hour, in t CO2e, and what it lost over the year.
+
+    A battery emits nothing of its own: what comes out carries what went in,
+    mixed with whatever was in the tank already. So the tank is followed hour by
+    hour — charging adds that hour's carbon and dilutes what was there,
+    discharging draws at the blend. The state of charge is the memory, which is
+    why there is no averaging window to pick: a tank that turns over daily
+    forgets in a day, a seasonal one carries the winter into the spring.
+
+    Both round-trip losses are charged where they happen, at the intensity of
+    the energy that suffered them — the charging loss at the hour's generation,
+    the discharge loss at the tank's blend — so what the users are charged plus
+    what the losses are charged is what the charging drew.
+
+    Two passes, because the state of charge is cyclic: the carbon in the tank at
+    the start of the year is whatever the year ends with. The tank mixes, so by
+    the second pass it has forgotten where the first one started.
+    """
+    delivered = pd.Series(0.0, index=n.snapshots)
+    lost_t = 0.0
+    hourly_intensity = generation_intensity.to_numpy()
+    for unit in units:
+        eta_in = float(n.storage_units.at[unit, "efficiency_store"])
+        eta_out = float(n.storage_units.at[unit, "efficiency_dispatch"])
+        flow = storage_p[unit].to_numpy()
+        cyclic_level = float(soc[unit].iloc[-1])
+        carbon = 0.0
+        for pass_number in (1, 2):
+            opening = carbon
+            level = cyclic_level
+            given_back = np.zeros(len(flow))
+            lost = 0.0
+            for hour in range(len(flow)):
+                drawn = max(-flow[hour], 0.0)
+                if drawn:
+                    carbon += drawn * eta_in * hourly_intensity[hour]
+                    lost += drawn * (1.0 - eta_in) * hourly_intensity[hour]
+                    level += drawn * eta_in
+                injected = max(flow[hour], 0.0)
+                if injected:
+                    taken = injected / eta_out
+                    blend = carbon / level if level > 0 else 0.0
+                    carbon -= taken * blend
+                    level -= taken
+                    given_back[hour] = injected * blend
+                    lost += (taken - injected) * blend
+            if pass_number == 1:
+                # Open the year at the intensity it closed at — the fixed point
+                # when the state of charge is cyclic, which is how it is solved.
+                carbon = carbon / level * cyclic_level if level > 0 else 0.0
+        delivered += given_back
+        # Carbon the tank still holds over what it opened with was paid for and
+        # never used, so it is a loss like the others. Nil on a cyclic year,
+        # which is what the model solves.
+        lost_t += lost + (carbon - opening)
+    return delivered, lost_t
+
+
 def _emissions_breakdown(
     n: pypsa.Network, emissions_cfg: dict, natural_gas_cfg: dict,
     area: str, transport_legs: dict | None, grid_mix: pd.DataFrame | None,
@@ -173,22 +236,23 @@ def _emissions_breakdown(
                   else factors[_carrier_key(n.generators.at[gen, "carrier"])])
         carried += generator_p[gen] * factor
 
-    # A battery emits nothing of its own; what it gives back carries whatever
-    # charged it. So price the charging hours — the ones the run actually
-    # contains — and let the discharge supply the system at that intensity.
-    # Without this an hour supplied out of the battery has nothing generating in
-    # it, and everything drawn in that hour comes out free: a solar plant that
-    # runs its furnace through the night reports about a third light.
-    generation_intensity = carried / generated.where(generated > 0)
-    home_storage = n.storage_units.index[n.storage_units.bus.isin(home_buses)]
+    # Storage supplies the system like anything else, carrying what charged it
+    # (see `_storage_carbon`). Without it an hour supplied out of the battery
+    # has nothing generating in it, and everything drawn in that hour comes out
+    # free: a solar plant that runs its furnace through the night reports about
+    # a third light.
+    generation_intensity = (carried / generated.where(generated > 0)).fillna(0.0)
+    home_storage = list(n.storage_units.index[n.storage_units.bus.isin(home_buses)])
     charged = -storage_p[home_storage].clip(upper=0.0).sum(axis=1)
     discharged = storage_p[home_storage].clip(lower=0.0).sum(axis=1)
-    stored_intensity = (
-        float((charged * generation_intensity.fillna(0.0)).sum() / charged.sum())
-        if float(charged.sum()) > 0 else 0.0
+    soc = n.storage_units_t["state_of_charge"].reindex(
+        columns=n.storage_units.index, fill_value=0.0
+    ) if "state_of_charge" in n.storage_units_t else storage_p * 0.0
+    stored_carried, storage_lost_t = _storage_carbon(
+        n, home_storage, storage_p, soc, generation_intensity
     )
     supplied = generated + discharged
-    home_intensity = ((carried + discharged * stored_intensity)
+    home_intensity = ((carried + stored_carried)
                       / supplied.where(supplied > 0)).fillna(0.0)
 
     # Which links draw electricity is read off the network — on bus0 as their
@@ -244,17 +308,15 @@ def _emissions_breakdown(
         freight_t += emissions[link]
 
     # Round-trip and line losses are electricity nobody consumed, so they belong
-    # to no step. The battery's is what it took and did not give back, at the
-    # intensity it took it at — the same one its discharge carries above, so the
-    # books close: what the users are charged plus what the losses are charged
-    # is what the generation carried. A line's is hour by hour, on the system
-    # that fed it that hour.
+    # to no step. The battery's is charged inside the tank, where the intensity
+    # of what suffered it is known; a line's is hour by hour, on the system that
+    # fed it that hour. Between them and the storage tank, what the users are
+    # charged plus what the losses are charged is what the generation carried.
     losses_mwh = 0.0
     if len(home_storage):
-        lost = float((charged - discharged).sum()) * annual
-        emissions["battery_losses"] = lost * stored_intensity
+        emissions["battery_losses"] = storage_lost_t * annual
         electricity_t += emissions["battery_losses"]
-        losses_mwh += lost
+        losses_mwh += float((charged - discharged).sum()) * annual
     hvdc = list(n.links.index[n.links.carrier == "HVDC"])
     if hvdc:
         link_p1 = n.links_t.p1.reindex(columns=n.links.index, fill_value=0.0)

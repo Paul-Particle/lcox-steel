@@ -250,6 +250,40 @@ def test_what_comes_out_of_storage_is_not_free():
     assert emitted["losses_mwh"] == pytest.approx(2.0 * SCALE)
 
 
+def test_charging_clean_dilutes_what_the_battery_gives_back():
+    """The tank mixes, so its intensity moves as it is charged: coal in the
+    morning comes back out as coal, and wind on top of it dilutes what is left.
+    One average over the year would split this the wrong way between the two
+    users — same total, different tonnes each."""
+    n = _network()
+    n.add("Bus", "hydrogen", carrier="H2")
+    n.add("Generator", "coal", bus="electricity", carrier="hard_coal")
+    n.add("Generator", "wind-onshore", bus="electricity", carrier="wind-onshore")
+    n.add("Link", "electrolyser", bus0="electricity", bus1="hydrogen")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    n.add("StorageUnit", "battery", bus="electricity", carrier="battery")
+    # Fill on coal, give a third of it back, top up on wind, empty the rest.
+    _dispatch(n, "generators", "p", {
+        "coal":         [10.0, 0.0, 0.0, 0.0],
+        "wind-onshore": [0.0, 0.0, 10.0, 0.0],
+    })
+    _dispatch(n, "storage_units", "p", {"battery": [-10.0, 5.0, -10.0, 15.0]})
+    _dispatch(n, "links", "p0", {"electrolyser": [0.0, 5.0, 0.0, 0.0], "eaf": [1.0] * 4})
+    _dispatch(n, "links", "p2", {"electrolyser": [0.0] * 4, "eaf": [0.0, 0.0, 0.0, 15.0]})
+
+    emitted = compile_report._emissions_breakdown(
+        n, EMISSIONS, NATURAL_GAS, "VIC1", None, None
+    )
+
+    # The electrolyser drew before the wind arrived, so it got undiluted coal;
+    # the furnace drew from a tank that was two thirds wind by then. A single
+    # charge-weighted average would have said 2.5 and 7.5.
+    assert emitted["by_step"]["electrolyser"] == pytest.approx(5.0 * SCALE)
+    assert emitted["by_step"]["eaf"] == pytest.approx(5.0 * SCALE)
+    assert emitted["by_step"].get("battery_losses", 0.0) == pytest.approx(0.0)
+    assert sum(emitted["by_step"].values()) == pytest.approx(10.0 * SCALE)
+
+
 def test_stored_energy_carries_the_hours_it_charged_in():
     """Not the year's average, which is a number the run does not contain. A
     battery filled on wind gives back wind, however dirty the rest of the year
