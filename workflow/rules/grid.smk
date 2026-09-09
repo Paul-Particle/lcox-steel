@@ -1,7 +1,7 @@
 wildcard_constraints:
     start_date=r"\d{8}",
     end_date=r"\d{8}",
-    variant=r"dayahead|full",
+    variant=r"dayahead|emissions|full",
 
 
 rule retrieve_grid_data:
