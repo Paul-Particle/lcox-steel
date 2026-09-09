@@ -23,6 +23,7 @@ from build_network import build_network, load_assumptions
 
 from common._logging import configure_logging
 from common._provenance import input_manifest
+from common._runs import zone_parents
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -198,9 +199,14 @@ def main() -> None:
         f"building {mode} network for scenario={scenario} area={area} route={route} "
         f"techs={list(cf_timeseries.columns)} (overlay={overlay_name})"
     )
+    # Freight legs are the producing country's, not the zone's: every NEM
+    # region is the same ocean away from Europe.
+    country = zone_parents(snakemake.config["areas"]).get(area, area)
+    transport_legs = assumptions["transport"]["distance_km"].get(country)
+
     n = build_network(
         route, assumptions, cf_timeseries, price_series,
-        sites=sites, demand_site=demand_site,
+        sites=sites, demand_site=demand_site, transport_legs=transport_legs,
     )
     log.info(f"optimising with HiGHS (snapshots={len(n.snapshots)})")
     # HiGHS parallelises across cores by default (not governed by OMP_NUM_THREADS).

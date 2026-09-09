@@ -10,29 +10,55 @@ from the assumptions, which only carry the numbers):
   h2-only:     electricity → electrolyser → H2 → flat H2 load (LCOH model)
   h2-dri-eaf:  electricity → electrolyser → H2 → DRI shaft → iron → EAF → steel
   ng-dri-eaf:  fossil benchmark — gas supply → NG-DRI shaft → iron → EAF → steel
-  mix-dri-eaf: H2 and NG DRI shafts side by side on one iron bus; the
-               optimiser picks the production split (each shaft pays its own
-               capex — a greenfield fuel choice, not co-firing in one shaft)
+  mix-dri-eaf: one shaft reducing with a blend — H2 and gas both feed a
+               reductant bus and the optimiser picks the mix, paying for one
+               furnace rather than two (see `_add_mix_dri_links`)
   moe-eaf:     electricity → molten oxide electrolysis → iron → EAF → steel
   ew-eaf:      electricity → iron electrowinning → iron → EAF → steel
+
+Every steel route also has an `-export` twin, which makes iron in the
+scenario's area and melts it somewhere else: the same chain up to the iron,
+then a stockpile, a freight leg, and an EAF at the destination running on
+destination electricity. What survives a ship is cold solid iron, so the DRI
+routes press their sponge iron into briquettes first, while moe-eaf-export and
+ew-eaf-export need no such step — the MOE cell simply lets its iron go cold
+instead of pouring it into the furnace. Either way the iron arrives cold and
+the export route pays the full melt, which is what the domestic twin saves.
 
 Bus unit convention:
   electricity buses: MW AC
   hydrogen bus:      MW H2 LHV  (1 MWh H2 LHV ≈ 30 kg H2 at LHV ≈ 33.33 kWh/kg)
   gas bus:           MW CH4 LHV (supplied at a flat price incl. optional CO2 cost)
-  iron bus:          t/h  (sponge iron / HBI for the DRI routes, electrolytic
-                     iron plates for ew-eaf, hot metal for moe-eaf — all
-                     treated as freely storable, which hot metal is not; the
-                     no-store topology moe-eaf really wants is a separate fix)
+  reductant bus:     MW LHV on an H2-equivalent basis, for mix-dri-eaf — gas
+                     enters derated by what reforming costs (see below)
+  iron bus:          t/h  (sponge iron for the DRI routes, hot metal for
+                     moe-eaf, electrolytic iron plates for ew-eaf)
+  hbi bus:           t/h  (briquettes, on a DRI export route only)
+  destination buses: the far side of the freight leg — iron, and its own AC
   steel bus:         t/h  (liquid steel)
+
+These units are not a solver lever: the LP's wide coefficient range is capex
+in EUR/MW against energy in EUR/MWh, and moving t/h to kt/h would widen it.
+
+What the steel bus carries is liquid steel at the furnace, alloyed and ready
+to tap. Casting, rolling and finishing are not in the model, on either side of
+a comparison — so an LCOS here is not a mill's selling cost, and the routes are
+only comparable to each other. Alloys, electrodes, fluxes and carbon *are* in,
+inside the EAF's consumables, and cost the same on every route.
+
+The iron is drawn the same way, one step earlier: a levelised cost of iron is
+the cost of iron delivered and ready to be made into steel — everything up to
+and including whatever it took to get it to the furnace's own bus, freight and
+briquetting included on an export route. It stops where the EAF starts, so the
+melt, the alloying and the yield loss are LCOS and not LCOI.
 
 Process steps that consume electricity alongside their bus0 feed (DRI shaft,
 EAF) are PyPSA multi-links: bus2 is an electricity bus and efficiency2 is
 negative, so p2 = -efficiency2 * p0 is the electricity withdrawal.
 
-Electrolyser efficiency is:
-  efficiency = h2_lhv_kwh_per_kg / efficiency_kwh_per_kg
-             = 33.33 / 55 ≈ 0.606 (MW H2 LHV per MW electricity)
+Electrolyser efficiency, in MW H2 LHV per MW electricity, is
+h2_lhv_kwh_per_kg / electrolyser.efficiency_kwh_per_kg. The denominator lives
+in config/assumptions.yaml and is deliberately not repeated here.
 """
 
 import re
@@ -42,33 +68,33 @@ import pandas as pd
 import pypsa
 import yaml
 
-from _helpers_solve import annuity_factor, dri_to_el_mw, haversine_km
+from _helpers_solve import annuity_factor, deep_merge, dri_to_el_mw, haversine_km
 
 from common._constants import H2_LHV_KWH_PER_KG
-from common._runs import ROUTES
+from common._runs import EAF_CHARGE, ROUTES, route_stem
 
 HOURS_PER_YEAR = 8760.0
 
 # Route groups used when wiring buses/components. Every steel route reaches
 # the steel bus through the iron bus and the shared EAF link.
+#
+# These are tested against the route *stem*, because an `-export` route builds
+# the same chain as the route it is named after and then adds a tail. So the
+# groups say what makes iron, and `is_export` says what happens to it after.
 _H2_ROUTES  = ("h2-only", "h2-dri-eaf", "mix-dri-eaf")   # electrolyser + H2 buffer
 _GAS_ROUTES = ("ng-dri-eaf", "mix-dri-eaf")              # gas bus + NG-DRI shaft
-_H2_DRI_ROUTES = ("h2-dri-eaf", "mix-dri-eaf")           # H2 DRI shaft
-_IRON_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf")
+_H2_DRI_ROUTES = ("h2-dri-eaf",)                         # single-fuel H2 shaft
+_MIX_ROUTES = ("mix-dri-eaf",)                           # one shaft, blended feed
+_DRI_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf")
+_IRON_ROUTES = (*_DRI_ROUTES, "moe-eaf", "ew-eaf")
 
+# Bus names for iron that has been made storable, and for the far side of the sea.
+HBI_BUS = "hbi"
+DESTINATION_IRON_BUS = "iron_destination"
+DESTINATION_ELEC_BUS = "electricity_destination"
 
-def _deep_merge(base: dict, overlay: dict) -> dict:
-    """Recursively merge `overlay` into `base` (neither input mutated).
-
-    Overlay leaves replace base leaves; dict branches are merged key-by-key.
-    """
-    out = dict(base)
-    for k, v in overlay.items():
-        if isinstance(v, dict) and isinstance(out.get(k), dict):
-            out[k] = _deep_merge(out[k], v)
-        else:
-            out[k] = v
-    return out
+# Where finished steel is wanted, when the model is set to deliver it.
+DELIVERED_STEEL_BUS = "steel_delivered"
 
 
 def load_assumptions(base_path: Path, overlay_path: Path | None) -> dict:
@@ -80,7 +106,7 @@ def load_assumptions(base_path: Path, overlay_path: Path | None) -> dict:
     if overlay_path is None or Path(overlay_path) == Path(base_path):
         return base
     overlay = yaml.safe_load(Path(overlay_path).read_text()) or {}
-    return _deep_merge(base, overlay)
+    return deep_merge(base, overlay)
 
 
 def build_network(
@@ -90,6 +116,7 @@ def build_network(
     price_series: pd.Series | None = None,
     sites: pd.DataFrame | None = None,
     demand_site: str | None = None,
+    transport_legs: dict | None = None,
 ) -> pypsa.Network:
     """Build (but do not solve) the PyPSA network for one scenario.
 
@@ -108,11 +135,23 @@ def build_network(
     generators, and an extendable HVDC link connects every site to the demand site
     (`demand_site`), which hosts the process chain, storage and any grid import.
     `sites` is indexed by site_id with columns `x` (lon), `y` (lat).
+
+    `transport_legs` maps freight mode to km between the producing area and the
+    destination (`{"sea": 9500}`). An `-export` route needs it to ship its iron;
+    every steel route needs it when assumptions turn finished-steel delivery on.
     """
     if route not in ROUTES:
         raise ValueError(f"unknown route '{route}' — expected one of {ROUTES}")
     wacc = assumptions["finance"]["default_wacc"]
     plant = assumptions["plant"]
+    transport_cfg = assumptions["transport"]
+    stem = route_stem(route)
+    is_export = route != stem
+    # An export route's steel is made at the destination, so it is already
+    # where it is wanted and only the iron pays freight. h2-only makes none.
+    deliver_steel = (transport_cfg["deliver_finished_steel"]
+                     and not is_export
+                     and route != "h2-only")
 
     multisite = sites is not None
 
@@ -126,15 +165,17 @@ def build_network(
         res_techs = list(cf_timeseries.columns)
         elec_bus = "electricity"
 
-    _add_carriers(n, res_techs=res_techs, route=route, multisite=multisite)
+    _add_carriers(n, res_techs=res_techs, route=route, multisite=multisite,
+                  deliver_steel=deliver_steel)
     if multisite:
-        _add_buses_multisite(n, sites, demand_site, route)
+        _add_buses_multisite(n, sites, demand_site, route, deliver_steel)
     else:
-        _add_buses(n, route)
+        _add_buses(n, route, deliver_steel)
+
     _add_generators(n, cf_timeseries, assumptions["res"], wacc, multisite=multisite)
     _add_battery(n, assumptions["battery"], wacc, bus=elec_bus)
 
-    if route in _H2_ROUTES:
+    if stem in _H2_ROUTES:
         el_cfg = assumptions["electrolyser"]
         el_efficiency = H2_LHV_KWH_PER_KG / el_cfg["efficiency_kwh_per_kg"]
         if route == "h2-only":
@@ -156,19 +197,67 @@ def build_network(
         _add_dri_load(n, el_mw, el_efficiency, plant["availability_target"])
     else:
         steel_t_per_h = plant["steel_mt_per_year"] * 1e6 / HOURS_PER_YEAR
-        _add_steel_load(n, steel_t_per_h)
+        _add_steel_load(n, steel_t_per_h,
+                        bus=DELIVERED_STEEL_BUS if deliver_steel else "steel")
         _add_steel_store(n, assumptions["steel_store"], wacc, steel_t_per_h)
-        if route in _H2_DRI_ROUTES:
+        if stem in _H2_DRI_ROUTES:
             _add_dri_link(n, plant, assumptions["dri-h2"], wacc, elec_bus)
-        if route in _GAS_ROUTES:
+        if stem in _GAS_ROUTES:
             _add_gas_supply(n, assumptions["natural_gas"])
+        if stem == "ng-dri-eaf":
             _add_ng_dri_link(n, assumptions["dri-ng"], wacc, elec_bus)
-        if route == "moe-eaf":
+        if stem in _MIX_ROUTES:
+            _add_mix_dri_links(
+                n, plant, assumptions["dri-mix"], assumptions["dri-ng"], wacc, elec_bus,
+                steel_t_per_h=steel_t_per_h,
+            )
+        if stem == "moe-eaf":
             _add_moe_link(n, assumptions["moe"], wacc, elec_bus)
-        if route == "ew-eaf":
+        if stem == "ew-eaf":
             _add_ew_link(n, assumptions["ew"], wacc, elec_bus)
-        _add_iron_store(n, assumptions["iron_store"], wacc)
-        _add_eaf_link(n, assumptions["eaf"], wacc, elec_bus)
+
+        # Where this route's iron waits, if it is in a state that can wait at
+        # all. Sponge iron has to be briquetted first; hot metal never can.
+        if is_export and stem in _DRI_ROUTES:
+            _add_briquetting_link(n, assumptions["briquetting"], wacc, elec_bus)
+            cold_iron_bus = HBI_BUS
+        elif is_export or stem == "ew-eaf":
+            cold_iron_bus = "iron"
+        else:
+            cold_iron_bus = None
+        if cold_iron_bus:
+            _add_iron_store(n, assumptions["iron_store"], wacc, bus=cold_iron_bus)
+
+        # How hot the iron arrives, and what made it: the first sets the
+        # furnace's electricity, the second how much iron a t of steel takes.
+        charge_state, iron_source = EAF_CHARGE[route]
+
+        if deliver_steel:
+            _add_steel_transport(n, transport_cfg, transport_legs)
+        if is_export:
+            if transport_legs is None:
+                raise ValueError(f"route '{route}' needs transport_legs")
+            _add_iron_transport(n, transport_cfg, transport_legs, bus0=cold_iron_bus)
+            # The destination EAF buys its power where it stands, not where the
+            # iron was made. A flat price, because a furnace fed from a
+            # stockpile has no reason to chase the hourly market — and because
+            # which country this is remains an open question.
+            dest_cfg = assumptions["destination"]
+            _add_grid_import(
+                n,
+                pd.Series(dest_cfg["price_eur_per_mwh"], index=n.snapshots),
+                assumptions["grid"], wacc,
+                bus=DESTINATION_ELEC_BUS, name="destination_supply",
+            )
+            eaf_elec_bus, eaf_iron_bus = DESTINATION_ELEC_BUS, DESTINATION_IRON_BUS
+        else:
+            eaf_elec_bus, eaf_iron_bus = elec_bus, "iron"
+        _add_eaf_link(
+            n, assumptions["eaf"], wacc, eaf_elec_bus,
+            el_mwh_per_t=assumptions["eaf"]["charge"][charge_state]["el_mwh_per_t"],
+            iron_t_per_t_steel=assumptions[iron_source]["iron_t_per_t_steel"],
+            bus0=eaf_iron_bus,
+        )
 
     if multisite:
         _add_transmission(n, sites, demand_site, assumptions["transmission"], wacc)
@@ -180,7 +269,8 @@ def build_network(
 
 
 def _add_carriers(
-    n: pypsa.Network, res_techs: list[str], route: str, multisite: bool = False
+    n: pypsa.Network, res_techs: list[str], route: str, multisite: bool = False,
+    deliver_steel: bool = False,
 ) -> None:
     """Register every carrier referenced by a component, before those components are added.
 
@@ -189,56 +279,76 @@ def _add_carriers(
     constraints, grouped stats). Only the carriers the chosen route actually
     uses are added; the HVDC carrier is only added in multi-site mode.
     """
+    stem = route_stem(route)
+    is_export = route != stem
     base = ["AC", "battery"]
-    if route in _H2_ROUTES:
+    if stem in _H2_ROUTES:
         base += ["H2", "electrolyser"]
-    if route in _GAS_ROUTES:
+    if stem in _GAS_ROUTES:
         base += ["gas", "dri-ng"]
-    if route in _IRON_ROUTES:
+    if stem in _IRON_ROUTES:
         base += ["iron", "eaf"]
     if route != "h2-only":
         base += ["steel"]
-    if route in _H2_DRI_ROUTES:
+    if stem in _H2_DRI_ROUTES:
         base += ["dri-h2"]
-    if route == "ew-eaf":
+    if stem in _MIX_ROUTES:
+        base += ["reductant", "dri-mix"]
+    if stem == "ew-eaf":
         base += ["ew"]
-    if route == "moe-eaf":
+    if stem == "moe-eaf":
         base += ["moe"]
+    if is_export and stem in _DRI_ROUTES:
+        base += ["briquetting"]
+    if is_export or deliver_steel:
+        base += ["transport"]
     if multisite:
         base.append("HVDC")
     carriers = list(dict.fromkeys([*base, *res_techs]))
     n.add("Carrier", carriers)
 
 
-def _route_process_buses(route: str) -> list[tuple[str, str]]:
+def _route_process_buses(route: str, deliver_steel: bool = False) -> list[tuple[str, str]]:
     """(bus name, carrier) pairs for the process buses the route needs."""
+    stem = route_stem(route)
+    is_export = route != stem
     buses = []
-    if route in _H2_ROUTES:
+    if stem in _H2_ROUTES:
         buses.append(("hydrogen", "H2"))
-    if route in _GAS_ROUTES:
+    if stem in _GAS_ROUTES:
         buses.append(("gas", "gas"))
-    if route in _IRON_ROUTES:
+    if stem in _MIX_ROUTES:
+        buses.append(("reductant", "reductant"))
+    if stem in _IRON_ROUTES:
         buses.append(("iron", "iron"))
+    if is_export and stem in _DRI_ROUTES:
+        buses.append((HBI_BUS, "iron"))
+    if is_export:
+        buses.append((DESTINATION_IRON_BUS, "iron"))
+        buses.append((DESTINATION_ELEC_BUS, "AC"))
     if route != "h2-only":
         buses.append(("steel", "steel"))
+    if deliver_steel:
+        buses.append((DELIVERED_STEEL_BUS, "steel"))
     return buses
 
 
-def _add_buses(n: pypsa.Network, route: str) -> None:
+def _add_buses(n: pypsa.Network, route: str, deliver_steel: bool = False) -> None:
     """Add the electricity (AC) bus plus the route's process buses."""
     n.add("Bus", "electricity", carrier="AC")
-    for name, carrier in _route_process_buses(route):
+    for name, carrier in _route_process_buses(route, deliver_steel):
         n.add("Bus", name, carrier=carrier)
 
 
 def _add_buses_multisite(
-    n: pypsa.Network, sites: pd.DataFrame, demand_site: str, route: str
+    n: pypsa.Network, sites: pd.DataFrame, demand_site: str, route: str,
+    deliver_steel: bool = False,
 ) -> None:
     """Add one AC bus per site (with lon/lat coords) plus the demand-site process buses."""
     for site_id, row in sites.iterrows():
         n.add("Bus", f"electricity_{site_id}", carrier="AC", x=row["x"], y=row["y"])
     dem = sites.loc[demand_site]
-    for name, carrier in _route_process_buses(route):
+    for name, carrier in _route_process_buses(route, deliver_steel):
         n.add("Bus", name, carrier=carrier, x=dem["x"], y=dem["y"])
 
 
@@ -376,9 +486,9 @@ def _add_dri_load(
     n.add("Load", "dri_load", bus="hydrogen", carrier="H2", p_set=h2_demand_mw_lhv)
 
 
-def _add_steel_load(n: pypsa.Network, steel_t_per_h: float) -> None:
-    """Add the flat steel demand (t/h) on the steel bus."""
-    n.add("Load", "steel_load", bus="steel", carrier="steel", p_set=steel_t_per_h)
+def _add_steel_load(n: pypsa.Network, steel_t_per_h: float, bus: str = "steel") -> None:
+    """Add the flat steel demand (t/h), at the plant gate or at the destination."""
+    n.add("Load", "steel_load", bus=bus, carrier="steel", p_set=steel_t_per_h)
 
 
 def _process_capital_cost(cfg: dict, wacc: float, output_t_per_p0_unit: float) -> float:
@@ -422,6 +532,61 @@ def _add_dri_link(
         p_min_pu=dri_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(dri_cfg, wacc, t_iron_per_mwh_h2),
         marginal_cost=dri_cfg["ore_eur_per_t"] * t_iron_per_mwh_h2,
+    )
+
+
+def _add_mix_dri_links(
+    n: pypsa.Network, plant: dict, mix_cfg: dict, dri_ng_cfg: dict,
+    wacc: float, elec_bus: str, steel_t_per_h: float,
+) -> None:
+    """One shaft on a blended reductant: H2 and gas both feed it, it makes iron.
+
+    The reductant bus is MW LHV on an H2-equivalent basis. Hydrogen enters
+    one-for-one and carries the preheat electricity the gas feed does not need;
+    natural gas enters derated by the ratio of the two single-fuel shafts' own
+    intensities, which is what reforming costs. Both corners therefore land on
+    the routes either side: all-H2 reproduces h2-dri-eaf, all-gas ng-dri-eaf.
+
+    What makes the blend worth having is that there is one furnace to pay for,
+    not two. The small fixed store is a smoothing buffer on top of that.
+    """
+    reductant_mwh_per_t = plant["h2_intensity_kg_per_t_dri"] * H2_LHV_KWH_PER_KG / 1000.0
+    t_iron_per_mwh = 1.0 / reductant_mwh_per_t
+
+    n.add(
+        "Link", "reductant-h2",
+        bus0="hydrogen", bus1="reductant", bus2=elec_bus,
+        carrier="reductant",
+        p_nom_extendable=True,
+        efficiency=1.0,
+        efficiency2=-mix_cfg["h2_preheat_el_mwh_per_t"] * t_iron_per_mwh,
+    )
+    n.add(
+        "Link", "reductant-ng",
+        bus0="gas", bus1="reductant",
+        carrier="reductant",
+        p_nom_extendable=True,
+        efficiency=reductant_mwh_per_t / dri_ng_cfg["gas_mwh_per_t"],
+    )
+    n.add(
+        "Link", "dri-mix",
+        bus0="reductant", bus1="iron", bus2=elec_bus,
+        carrier="dri-mix",
+        p_nom_extendable=True,
+        efficiency=t_iron_per_mwh,
+        efficiency2=-mix_cfg["el_mwh_per_t"] * t_iron_per_mwh,
+        p_min_pu=mix_cfg["p_min_pu"],
+        capital_cost=_process_capital_cost(mix_cfg, wacc, t_iron_per_mwh),
+        marginal_cost=mix_cfg["ore_eur_per_t"] * t_iron_per_mwh,
+    )
+    nominal_mwh_per_h = (
+        steel_t_per_h * mix_cfg["iron_t_per_t_steel"] * reductant_mwh_per_t
+    )
+    n.add(
+        "Store", "reductant_store",
+        bus="reductant", carrier="reductant",
+        e_nom=mix_cfg["reductant_store_hours"] * nominal_mwh_per_h,
+        e_cyclic=True,
     )
 
 
@@ -473,23 +638,27 @@ def _add_ng_dri_link(
     )
 
 
-def _add_eaf_link(n: pypsa.Network, eaf_cfg: dict, wacc: float, elec_bus: str) -> None:
+def _add_eaf_link(
+    n: pypsa.Network, eaf_cfg: dict, wacc: float, elec_bus: str,
+    el_mwh_per_t: float, iron_t_per_t_steel: float, bus0: str = "iron",
+) -> None:
     """EAF: iron (t/h) → steel (t/h), drawing melting electricity.
 
-    Per-t-steel quotes (electricity, consumables, capex) are scaled by the
-    iron→steel yield onto the link's p0 side (t/h iron).
+    Electricity and yield come from the caller because both depend on the iron
+    the route delivers, not on the furnace. Per-t-steel quotes (electricity,
+    consumables, capex) are scaled by the yield onto the link's p0 side.
     """
-    t_steel_per_t_iron = 1.0 / eaf_cfg["iron_t_per_t_steel"]
+    t_steel_per_t_iron = 1.0 / iron_t_per_t_steel
     n.add(
         "Link",
         "eaf",
-        bus0="iron",
+        bus0=bus0,
         bus1="steel",
         bus2=elec_bus,
         carrier="eaf",
         p_nom_extendable=True,
         efficiency=t_steel_per_t_iron,
-        efficiency2=-eaf_cfg["el_mwh_per_t"] * t_steel_per_t_iron,
+        efficiency2=-el_mwh_per_t * t_steel_per_t_iron,
         p_min_pu=eaf_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(eaf_cfg, wacc, t_steel_per_t_iron),
         marginal_cost=eaf_cfg["consumables_eur_per_t"] * t_steel_per_t_iron,
@@ -534,8 +703,35 @@ def _add_ew_link(n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str) -> 
     )
 
 
-def _add_iron_store(n: pypsa.Network, store_cfg: dict, wacc: float) -> None:
-    """Add the extendable, cyclic iron stockpile (t) on the iron bus.
+def _add_briquetting_link(
+    n: pypsa.Network, briq_cfg: dict, wacc: float, elec_bus: str
+) -> None:
+    """Hot briquetting: sponge iron (t/h) → HBI (t/h), drawing press electricity.
+
+    Sponge iron off the shaft re-oxidises and will not travel; pressed into
+    briquettes it keeps, which is what lets an export route stockpile and ship
+    it. The heat it carries out of the shaft is lost here — the route pays for
+    that at the far end, where the furnace charges cold.
+    """
+    n.add(
+        "Link",
+        "briquetting",
+        bus0="iron",
+        bus1=HBI_BUS,
+        bus2=elec_bus,
+        carrier="briquetting",
+        p_nom_extendable=True,
+        efficiency=briq_cfg["yield_t_per_t"],
+        efficiency2=-briq_cfg["el_mwh_per_t"] * briq_cfg["yield_t_per_t"],
+        capital_cost=_process_capital_cost(briq_cfg, wacc, briq_cfg["yield_t_per_t"]),
+    )
+
+
+def _add_iron_store(
+    n: pypsa.Network, store_cfg: dict, wacc: float, bus: str = "iron"
+) -> None:
+    """Add the extendable, cyclic iron stockpile (t), on whichever bus holds
+    iron this route can actually stack — see `build_network`.
 
     Deliberately cheap-but-not-free (see assumptions) so the optimal stockpile
     size is unique and meaningful in reports.
@@ -544,12 +740,67 @@ def _add_iron_store(n: pypsa.Network, store_cfg: dict, wacc: float) -> None:
     n.add(
         "Store",
         "iron_store",
-        bus="iron",
+        bus=bus,
         carrier="iron",
         e_nom_extendable=True,
         e_cyclic=True,
         capital_cost=cap_cost,
         marginal_cost=0.0,
+    )
+
+
+def _freight_eur_per_t(transport_cfg: dict, legs: dict, commodity: str) -> float:
+    """What one t of `commodity` costs to move over the run's legs.
+
+    Each leg pays a charge that does not depend on distance and one that does,
+    so a short haul stays dear per km the way real freight is.
+    """
+    rates = {mode: transport_cfg[mode][commodity] for mode in legs}
+    return sum(rates[mode]["eur_per_t"] + km * rates[mode]["eur_per_t_km"]
+               for mode, km in legs.items())
+
+
+def _add_iron_transport(
+    n: pypsa.Network, transport_cfg: dict, legs: dict, bus0: str = "iron"
+) -> None:
+    """Carry iron (t/h) from the producing area to the destination bus.
+
+    Cost is per t and km with no capacity decision and no capex: ships and
+    wagons are chartered, not built. Nor is there a transit time — iron arrives
+    the hour it leaves, so the weeks of stock floating on the ocean are free,
+    which understates the inventory the chain really needs.
+    """
+    n.add(
+        "Link",
+        "iron_transport",
+        bus0=bus0,
+        bus1=DESTINATION_IRON_BUS,
+        carrier="transport",
+        p_nom_extendable=True,
+        length=sum(legs.values()),
+        efficiency=1.0,
+        capital_cost=0.0,
+        marginal_cost=_freight_eur_per_t(transport_cfg, legs, "iron"),
+    )
+
+
+def _add_steel_transport(n: pypsa.Network, transport_cfg: dict, legs: dict) -> None:
+    """Carry finished steel (t/h) from the plant gate to the destination.
+
+    The other half of the question the export routes ask: 1.1 t of iron over
+    these legs, or 1 t of steel over the same ones.
+    """
+    n.add(
+        "Link",
+        "steel_transport",
+        bus0="steel",
+        bus1=DELIVERED_STEEL_BUS,
+        carrier="transport",
+        p_nom_extendable=True,
+        length=sum(legs.values()),
+        efficiency=1.0,
+        capital_cost=0.0,
+        marginal_cost=_freight_eur_per_t(transport_cfg, legs, "steel"),
     )
 
 
@@ -586,6 +837,7 @@ def _add_grid_import(
     grid_cfg: dict,
     wacc: float,
     bus: str = "electricity",
+    name: str = "grid_import",
 ) -> None:
     """Add an extendable grid-import generator with connection charges.
 
@@ -601,7 +853,7 @@ def _add_grid_import(
     )
     n.add(
         "Generator",
-        "grid_import",
+        name,
         bus=bus,
         carrier="AC",
         p_nom_extendable=True,

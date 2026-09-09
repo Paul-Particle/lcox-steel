@@ -74,38 +74,82 @@ dri-h2:
   el_mwh_per_t: 0.35                  # shaft auxiliaries + electric H2 preheat
   # DR-grade pellets: ~1.45 t pellets per t DRI at ~140 €/t incl. premium.
   ore_eur_per_t: 200
+  iron_t_per_t_steel: 1.10            # DR pellets: gangue plus metallisation loss
   p_min_pu: 0.5
 
+dri-mix:
+  # One shaft reducing with whatever blend of H2 and natural gas it is fed —
+  # not two furnaces side by side. A Midrex-type shaft takes a blended
+  # reductant gas, so the route buys one furnace and the optimiser picks the
+  # mix, instead of paying capex twice for the option to switch.
+  #
+  # Both single-fuel shafts are quoted at the same 230 €/(t/yr), so a
+  # dual-capable one is taken at that level too.
+  capex_per_t_per_year_eur: 230
+  opex_per_t_per_year_eur: 7          # ≈3 % of capex
+  lifetime_years: 20
+  # Shaft auxiliaries alone, as the NG shaft. The H2 feed's preheat is charged
+  # where it belongs, on the H2 side: 0.10 + 0.25 is the single-fuel H2 shaft's
+  # 0.35, so the blend's corners meet the routes it sits between.
+  el_mwh_per_t: 0.10
+  h2_preheat_el_mwh_per_t: 0.25
+  ore_eur_per_t: 200                  # DR-grade pellets, as the other shafts
+  iron_t_per_t_steel: 1.10
+  p_min_pu: 0.5
+  # A small buffer on the reductant bus, fixed rather than sized by the
+  # optimiser, so the shaft draws from a mixed volume instead of straight off
+  # whichever feed is cheapest that hour. Measured in hours of the plant's
+  # nominal reductant draw. It is not what makes the blend worth having — the
+  # shared furnace is — so keep it small enough to stay a smoothing buffer.
+  reductant_store_hours: 4
+
 eaf:
-  # Shared by every route that melts iron: h2-dri-eaf and ng-dri-eaf (HBI),
-  # ew-eaf (electrolytic iron plates) and moe-eaf (hot metal). Ladle
-  # metallurgy for moe-eaf is this same link made cheap by a scenario
-  # overlay rather than a component of its own, e.g.
-  #   eaf: {capex_per_t_per_year_eur: 50, opex_per_t_per_year_eur: 1.5,
-  #         el_mwh_per_t: 0.1}
+  # Shared by every route that melts iron. Capex is the same furnace whatever
+  # arrives in it — a full EAF, including for moe-eaf: the cell pours iron, not
+  # steel, and the refining, alloying and superheating still have to happen
+  # somewhere. Hannah's cheap-ladle case is that same furnace with the capex
+  # written down by a scenario overlay, e.g.
+  #   eaf: {capex_per_t_per_year_eur: 50, opex_per_t_per_year_eur: 1.5}
   # Capex from Vogl et al. (2018), 184 €/(t/yr).
   capex_per_t_per_year_eur: 184
   opex_per_t_per_year_eur: 6          # ≈3 % of capex
   lifetime_years: 20
-  el_mwh_per_t: 0.65                  # per t liquid steel, cold charge
-  iron_t_per_t_steel: 1.1             # yield: gangue/losses in DRI melting
   consumables_eur_per_t: 40           # electrodes, fluxes, alloys, carbon; per t steel
   p_min_pu: 0.4
+
+  # Electricity by how hot the iron arrives (common._runs.EAF_CHARGE says which
+  # state a route delivers). Melting is nearly all of an EAF's electricity, so
+  # iron that shows up hot has had part of that bill paid upstream.
+  charge:
+    cold:
+      # 25 °C: HBI or plates off a stockpile, and anything that crossed an
+      # ocean. The textbook cold-charge figure and the basis for the others.
+      el_mwh_per_t: 0.65
+    hot:
+      # ~650 °C: sponge iron walked straight from the shaft to the furnace.
+      # Hot charging is worth ~130 kWh/t in practice.
+      el_mwh_per_t: 0.52
+    liquid:
+      # ~1550 °C from the MOE cell, so the melt is already done. Deliberately
+      # not the full thermodynamic credit: this also has to cover getting the
+      # metal across to the furnace, the heat it loses on the way, holding the
+      # bath, and superheating to tapping temperature. Superheat is small, the
+      # handling is not.
+      el_mwh_per_t: 0.20
 
 moe:
   # Molten oxide electrolysis (Boston Metal type), electricity → liquid iron.
   # ~4 MWh/t and ~$1000/(t/yr) per Boston Metal's public estimates; capex
   # highly uncertain (pre-commercial). The cell can barely turn down (freeze
-  # risk), hence p_min_pu near 1. Output goes to the iron bus and on through
-  # the EAF — note the iron store then buffers hot metal, which is not
-  # physical and is the reason this route wants its own no-store topology
-  # (tracked separately from this naming pass).
+  # risk), hence p_min_pu near 1. Output is hot metal, so there is no store on
+  # the iron bus: the cell feeds the EAF directly, hour for hour.
   capex_per_t_per_year_eur: 900
   opex_per_t_per_year_eur: 27         # ≈3 % of capex
   lifetime_years: 20
   el_mwh_per_t: 4.0                   # per t liquid iron
   # Non-DR-grade fines/concentrate: ~1.6 t per t iron at ~100 €/t.
   ore_eur_per_t: 160
+  iron_t_per_t_steel: 1.04            # hot metal, near gangue-free; refining loss only
   p_min_pu: 0.95
 
 ew:
@@ -118,6 +162,7 @@ ew:
   el_mwh_per_t: 2.5                   # per t iron
   # Tolerates lower-grade ore than DR pellets — part of the route's pitch.
   ore_eur_per_t: 150
+  iron_t_per_t_steel: 1.05            # high-purity plates; little gangue to slag off
   p_min_pu: 0.2                       # marketed as load-following
 
 natural_gas:
@@ -143,11 +188,26 @@ dri-ng:
   gas_mwh_per_t: 2.75                 # LHV, per t DRI
   el_mwh_per_t: 0.1
   ore_eur_per_t: 200                  # DR-grade pellets, same as H2 DRI
+  iron_t_per_t_steel: 1.10            # same pellets as the H2 shaft, same yield
   p_min_pu: 0.5
 
+briquetting:
+  # Hot briquetting presses sponge iron leaving the shaft at ~700 °C into dense
+  # briquettes (HBI) that will keep. Un-briquetted DRI re-oxidises and will not
+  # travel, which is why only the export routes build one. The press itself is
+  # mechanical and cheap to run; what the route really pays for this step is
+  # downstream, where the briquettes reach the furnace cold.
+  capex_per_t_per_year_eur: 40
+  opex_per_t_per_year_eur: 1.2        # ≈3 % of capex
+  lifetime_years: 20
+  el_mwh_per_t: 0.025                 # press, screening and handling
+  yield_t_per_t: 0.98                 # fines lost on screening
+
 iron_store:
-  # HBI / iron-plate stockpile on the iron bus (shed + handling). Cheap but
-  # deliberately non-zero so the optimal store size is unique and reportable.
+  # Stockpile of cold solid iron — electrowon plates for ew-eaf, briquettes for
+  # an export route waiting on a ship (shed + handling). Routes that hand the
+  # furnace hot metal or hot sponge iron have nowhere to put it and get none.
+  # Cheap but deliberately non-zero so the optimal size is unique and reportable.
   capex_per_t_eur: 20
   lifetime_years: 25
 
@@ -173,6 +233,63 @@ grid:
   connection_lifetime_years: 40
   fee_eur_per_mw_per_year: 60_000     # capacity charge (Leistungspreis)
   fee_eur_per_mwh: 10.0               # volumetric charge (Arbeitspreis)
+
+destination:
+  # Where an `-export` route melts its iron. German prices, as a placeholder
+  # while the choice of destination is still open. A flat price rather than an
+  # hourly series on purpose: the destination furnace is fed from a stockpile,
+  # so it has no reason to chase the hourly market, and an average is the
+  # honest resolution for a number this provisional. Connection charges come
+  # from the `grid` block, which is already German HV level.
+  country: DEU
+  price_eur_per_mwh: 85         # day-ahead average; the grid block adds the fee
+
+transport:
+  # Freight, charged per t and km with no capacity decision and no capex,
+  # because ships and wagons are chartered rather than built.
+  #
+  # Distances are an assumption and not geography, which is why they live here
+  # and not in the area registry — they depend on the destination port and on
+  # the routing (Suez or the Cape), and we expect to vary both.
+  #
+  # deliver_finished_steel decides where the model stops. Off (the default) it
+  # stops at the plant gate, and only an export route pays freight — it has to,
+  # because its furnace is somewhere else. On, every route also delivers its
+  # steel to the destination over the same legs, which is the comparison the
+  # export routes exist for: ship 1.1 t of iron, or ship 1 t of steel. An
+  # export route pays no steel freight either way; its steel is already there.
+  deliver_finished_steel: false
+
+  # Two parts per leg: a charge per t that does not care how far the cargo
+  # goes (port dues, loading, discharge) and a charge per t and km that does.
+  # Published ore rates only make sense that way — Western Australia to
+  # Qingdao is a third of the distance of Tubarao to Qingdao but costs almost
+  # half as much, which no single per-km rate reproduces. Fitting the two
+  # gives about $4/t plus $0.0010/t·km, and that is what the sea numbers are
+  # anchored on.
+  #
+  # Iron carries a premium over ore for handling: DRI and HBI re-oxidise, so
+  # they travel in fitted holds under inert gas. Steel is dearer again — coil
+  # and plate go breakbulk, which stows worse and handles slower than bulk.
+  # Rail is an order of magnitude dearer per t·km than sea, which is the whole
+  # reason iron moves between continents by ship and barely moves overland;
+  # its per-t part is zero because the European rates we anchor on are already
+  # quoted all-in.
+  sea:
+    iron:  { eur_per_t: 5,  eur_per_t_km: 0.0015 }
+    steel: { eur_per_t: 12, eur_per_t_km: 0.0033 }
+  rail:
+    iron:  { eur_per_t: 0,  eur_per_t_km: 0.035 }
+    steel: { eur_per_t: 0,  eur_per_t_km: 0.045 }
+
+  # Legs from the producing country to the destination, by mode. An EU producer
+  # has no sea leg, only a token overland run to the furnace.
+  distance_km:
+    DEU: { rail: 300 }
+    FRA: { rail: 800 }
+    ESP: { rail: 1_500 }
+    BRA: { sea: 9_500 }         # Tubarao -> Rotterdam
+    AUS: { sea: 19_500 }        # Port Hedland -> Rotterdam via Suez
 
 transmission:
   # HVDC link connecting a candidate RES site to the electrolyser/demand site.

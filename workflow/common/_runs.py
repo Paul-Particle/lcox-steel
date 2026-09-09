@@ -13,13 +13,37 @@ Deliberately free of heavy imports: the Snakefile reads this on every DAG build.
 
 import pandas as pd
 
-ROUTES = ("h2-only", "h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf")
+# An `-export` route builds the same chain as the route it is named after and
+# then ships the iron to a furnace somewhere else.
+_DOMESTIC_ROUTES = ("h2-only", "h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf",
+                    "moe-eaf", "ew-eaf")
+ROUTES = (*_DOMESTIC_ROUTES,
+          *(f"{route}-export" for route in _DOMESTIC_ROUTES if route != "h2-only"))
 
-# Reserved for the trade scenarios (produce abroad, ship the product to the EU).
-# Not implemented: `*-export` appears in config/scenarios.csv as commented rows
-# only, and is excluded from ROUTES until a route actually builds a network.
-PLANNED_ROUTES = ("h2-dri-eaf-export", "ng-dri-eaf-export", "mix-dri-eaf-export",
-                  "moe-eaf-export", "ew-eaf-export")
+def route_stem(route: str) -> str:
+    """The domestic route an `-export` route is built from."""
+    return route.removesuffix("-export")
+
+
+# How the iron reaches the furnace, and which step made it. The first decides
+# how much electricity the EAF needs — melting from cold is most of an EAF's
+# bill, and iron that arrives hot or liquid has already been paid for upstream.
+# The second decides how much iron a t of steel takes, which is gangue: DR
+# pellets bring some, and the electrolytic routes almost none.
+#
+# An export route always charges cold. Its iron went across an ocean.
+_IRON_SOURCE = {
+    "h2-dri-eaf": "dri-h2", "ng-dri-eaf": "dri-ng",
+    "mix-dri-eaf": "dri-mix",
+    "moe-eaf": "moe", "ew-eaf": "ew",
+}
+_CHARGE_STATE = {"h2-dri-eaf": "hot", "ng-dri-eaf": "hot", "mix-dri-eaf": "hot",
+                 "moe-eaf": "liquid", "ew-eaf": "cold"}
+EAF_CHARGE = {
+    route: ("cold" if route.endswith("-export") else _CHARGE_STATE[route_stem(route)],
+            _IRON_SOURCE[route_stem(route)])
+    for route in ROUTES if route != "h2-only"
+}
 
 ALL_ROUTES = "all-routes"
 ALL_AREAS = "all-areas"
@@ -27,7 +51,9 @@ ALL_AREAS = "all-areas"
 # Several routes in one cell are separated by this.
 ROUTE_SEPARATOR = "|"
 
-ROUTE_PATTERN = "|".join(ROUTES)
+# Longest first: `moe-eaf` is a prefix of `moe-eaf-export`, and a regex
+# alternation takes the first branch that matches.
+ROUTE_PATTERN = "|".join(sorted(ROUTES, key=len, reverse=True))
 
 # The columns that, with the scenario, identify one network.
 RUN_KEY = ["scenario", "area", "start_date", "end_date"]
@@ -40,10 +66,8 @@ def expand_route_cell(cell: str) -> list[str]:
     routes = cell.split(ROUTE_SEPARATOR)
     unknown = set(routes) - set(ROUTES)
     if unknown:
-        planned = unknown & set(PLANNED_ROUTES)
-        hint = " (reserved but not implemented yet)" if planned else ""
         raise ValueError(
-            f"config/scenarios.csv names unknown route(s) {sorted(unknown)}{hint} — "
+            f"config/scenarios.csv names unknown route(s) {sorted(unknown)} — "
             f"expected {ALL_ROUTES!r} or one of {ROUTES}"
         )
     return routes

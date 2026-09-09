@@ -65,13 +65,13 @@ INPUT_TECHS = ("solar", "wind-onshore", "wind-offshore", "grid")
 RES_TECHS = ("solar", "wind-onshore", "wind-offshore")
 
 # The steel chain's links, by the id `build_network` gives them.
-PROCESS_LINKS = ("dri-h2", "dri-ng", "eaf", "moe", "ew")
+PROCESS_LINKS = ("dri-h2", "dri-ng", "dri-mix", "eaf", "moe", "ew", "briquetting")
 
 # Annualised cost groups, in the order `compile_report._cost_breakdown` builds
 # them. Together they are the total annual cost.
 COST_GROUPS = ("res", "battery", "grid", "gas", "electrolyser", "h2_buffer",
                "process", "ore_consumables", "iron_store", "steel_store",
-               "transmission")
+               "transmission", "transport", "destination_power")
 
 REPORT_FIELDS = {
     # What this run is a result for.
@@ -136,6 +136,11 @@ REPORT_FIELDS = {
     "iron_from_h2_share": UNDEFINED,
     "iron_store_kt": ZERO,
     "iron_store_hours_steel": UNDEFINED,
+    # Zero on a route that melts its iron where it made it and stops at the
+    # plant gate. Only one of the two commodities is ever shipped.
+    "transport_km": ZERO,
+    "iron_shipped_kt": ZERO,
+    "steel_shipped_kt": ZERO,
     "steel_store_kt": ZERO,
     "steel_store_hours_steel": UNDEFINED,
 
