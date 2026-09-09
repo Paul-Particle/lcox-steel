@@ -29,6 +29,7 @@ import os
 import shutil
 from pathlib import Path
 
+from common._cutout_qc import validate_grid_matches_request
 from common._paths import CUTOUTS
 
 log = logging.getLogger(__name__)
@@ -132,7 +133,16 @@ def warn_if_low_disk(min_free_gb: float, where: Path = CACHE_DIR) -> None:
 
 
 def store_in_cache(source: Path, cf_area: str, params: dict, warn_size_gb: float = 0.0) -> Path:
-    """Add a freshly downloaded cutout to the cache; return the cache path."""
+    """Add a cutout to the cache under `params`; return the cache path.
+
+    Refuses a file that is not the cutout `params` describes. Every route that
+    fills the cache passes through here, and one of them — the `_backup.nc`
+    fallback — files whatever the backup happened to contain under the params of
+    the request it was standing in for. That reopens the stale-bounds hole this
+    cache exists to close, and outlives the backup: once the entry is written,
+    later runs take the cache-hit branch and never reach CDS.
+    """
+    validate_grid_matches_request(source, params)
     cutout_path, params_path = cache_paths(cf_area, params)
     link_or_copy(source, cutout_path)
     params_path.write_text(json.dumps(params, indent=2, sort_keys=True))
