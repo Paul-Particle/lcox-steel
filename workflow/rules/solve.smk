@@ -33,6 +33,19 @@ rule solve_network:
                 within=scenarios_df,
             ),
         ),
+        # An `-export` route melts its iron in another market and buys the power
+        # for it there, so it needs that market's own hourly series — `emissions`
+        # because the same file has to carry both the price the furnace pays and
+        # the mix behind it. Empty for every domestic route, whatever the
+        # scenario asked for at home.
+        destination_input=collect(
+            "resources/timeseries/{item.destination}_grid_emissions_{item.start_date}_{item.end_date}.parquet",
+            item=lookup(
+                query="scenario == '{scenario}' and route == '{route}' "
+                      "and start_date == '{start_date}' and end_date == '{end_date}'",
+                within=destinations_df,
+            ),
+        ),
     output:
         network="results/{scenario}/{area}_{route}_{start_date}_{end_date}.nc",
     log:
