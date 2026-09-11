@@ -6,7 +6,8 @@ connection, or both. It couples three data pipelines and an optimisation model
 into one Snakemake workflow:
 
 - **`res_cf`** — hourly renewable capacity factors from ERA5 reanalysis (via atlite).
-- **`grid`** — hourly electricity market data from ENTSO-E (Europe) and NEM (Australia).
+- **`grid`** — hourly electricity market data from ENTSO-E (Europe), NEM (Australia)
+  and ONS (Brazil).
 - **`h2_dri`** — a PyPSA investment model that sizes generation, storage, and the
   electrolyser to meet a constant hydrogen demand at least cost.
 - **`viz`** — a per-project LCOH report plus Plotly figures.
@@ -19,7 +20,7 @@ row, so **adding a project or scenario is a CSV edit, not a Snakefile edit**.
 
 ```
 config/projects.csv ─┬─► res_cf  ──►  resources/res_cf/*.parquet   (hourly CF)   ─┐
-                     └─► grid    ──►  resources/{entsoe,nem}/*.parquet (€/MWh)   ─┤
+                     └─► grid    ──►  resources/{entsoe,nem,ons}/*.parquet (€/MWh) ─┤
                                                                                   ▼
                                                         h2_dri (PyPSA optimise) ──► results/{project}/{scenario}.nc
                                                                                   │
@@ -39,17 +40,19 @@ lcox-steel/
 │   ├── Snakefile                   # configfile + sys.path + includes + rule all
 │   ├── rules/
 │   │   ├── _optional_shim.smk      # local stand-in for Snakemake's optional() (not shipped yet)
-│   │   ├── grid.smk                # ENTSO-E + NEM retrieval rules
+│   │   ├── grid.smk                # ENTSO-E + NEM + ONS retrieval rules
 │   │   ├── res_cf.smk              # atlite CF pipeline (shapes → cutout → CF series)
 │   │   ├── h2_dri.smk              # PyPSA optimisation rule
 │   │   └── viz.smk                 # compile_report + plot rules
 │   ├── scripts/
-│   │   ├── grid/                   # ENTSO-E + NEM download/process
+│   │   ├── grid/                   # ENTSO-E + NEM + ONS download/process
 │   │   │   ├── retrieve_entsoe.py  # rule entrypoint: warm-cache slice + on-miss download
 │   │   │   ├── download_entsoe.py  # ENTSO-E per-month raw-cache primitives
 │   │   │   ├── retrieve_nem.py     # rule entrypoint (NEM)
 │   │   │   ├── download_nem.py     # NEMOSIS download primitives
 │   │   │   ├── _nemosis_patches.py # AEMO User-Agent / URL-encoding workarounds
+│   │   │   ├── retrieve_ons.py     # rule entrypoint (ONS / Brazil)
+│   │   │   ├── download_ons.py     # ONS per-year S3 parquet primitives
 │   │   │   └── _helpers.py         # month iteration, UTC-naive coercion, cache checks
 │   │   ├── res_cf/                 # atlite capacity-factor pipeline (numbered by stage)
 │   │   │   ├── 01_build_regions.py            # onshore country geometry (GeoParquet)
@@ -89,6 +92,7 @@ lcox-steel/
 ├── data/                           # raw / external / expensive (not produced here)
 │   ├── entsoe_cache/               # ENTSO-E monthly raw cache (+ committed bidding-zone CSV)
 │   ├── nem_cache/                  # NEMOSIS cache (+ committed AEMO registration list)
+│   ├── ons_cache/                  # ONS per-year raw parquets (CMO, subsystem balance)
 │   └── shapes/                     # raw shapefiles: Natural Earth, EEZ (see Setup)
 ├── resources/                      # derived, Snakemake-tracked outputs (reproducible)
 ├── cutouts/                        # atlite ERA5 cutouts (gitignored; see caching note)
@@ -162,6 +166,12 @@ else is gitignored):
   https://www.aemo.com.au/-/media/Files/Electricity/NEM/Participant_Information/NEM-Registration-and-Exemption-List.xls
   (served as XLSX despite the extension) and drop it into `data/nem_cache/` as
   `.xls` or `.xlsx`.
+- **ONS open data (Brazil)** — no registry file and no API key. ONS publishes one
+  parquet per dataset per calendar year on a public S3 bucket, which
+  `download_ons.py` mirrors into `data/ons_cache/`. Areas are the four SIN
+  submarkets (`SE`, `S`, `NE`, `N`); the balance dataset's `SIN` national total
+  is not a market area and is rejected. See **ONS caveats** below — the price
+  column is a reconstruction, not a settled market price.
 
 ### 3. API keys
 
@@ -218,6 +228,9 @@ snakemake resources/entsoe/DE_LU_grid_dayahead_20230101_20231231.parquet --cores
 # Grid — NEM day-ahead prices (VIC1, 2025):
 snakemake resources/nem/VIC1_grid_dayahead_20250101_20251231.parquet --cores 4
 
+# Grid — ONS full variant (Brazil Southeast/Centre-West, 2025):
+snakemake resources/ons/SE_grid_full_20250101_20251231.parquet --cores 4
+
 # res_cf — wind-onshore CF for Germany, 2023:
 snakemake resources/res_cf/de_wind-onshore_country-average_20230101_20231231.parquet --cores 4
 
@@ -264,17 +277,20 @@ keeps underscores, because official bidding-zone codes use them (`DE_LU`).
 
 | File | Holds |
 |------|-------|
-| `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (per-country metadata, turbines, CF flags, cutout settings). |
+| `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `ons` (`eur_per_brl` FX, ANEEL `pld_limits` by year), `res_cf` (per-country metadata, turbines, CF flags, cutout settings). |
 | `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing. Loaded by `h2_dri_optimize` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
 | `config/assumptions_{project}_{scenario}.yaml` | *Optional* per-scenario overlay. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. |
 | `config/projects.csv` | Flat table, one row per `(project, scenario, tech)` input. Columns: `project, scenario, tech, variant, pipeline, area, start_date, end_date`. |
 
 ## Data formats
 
-**Grid** (`resources/{entsoe,nem}/{area}_grid_dayahead_{start}_{end}.parquet`):
+**Grid** (`resources/{entsoe,nem,ons}/{area}_grid_dayahead_{start}_{end}.parquet`):
 UTC hourly `DatetimeIndex`, single `price` column (EUR/MWh). The `_full` variant
 has MultiIndex `(area, metric)` columns covering all data types at native
-resolution.
+resolution — except ONS, whose sources are hourly (balance) and semi-hourly
+(CMO) and are emitted at a common hourly resolution. ONS `_full` columns:
+`price`, `cmo_brl`, `load`, `hydro`, `thermal`, `wind`, `solar`, `intercambio`,
+`res`, `residual` (generation and load in MWmed).
 
 **Capacity factors** (`resources/res_cf/{area}_{tech}_country-average_{start}_{end}.parquet`):
 hourly parquet, `DatetimeIndex` named `time`, one column whose name *is* the tech
@@ -288,6 +304,74 @@ multi-tech frame.
 **Results**: `results/<project>/<scenario>.nc` is the full solved PyPSA network;
 `results/report_<project>.csv` (from `compile_report`) carries LCOH and optimal
 capacities for every scenario in the project.
+
+### ONS caveats (Brazil)
+
+Four things about the ONS pipeline differ from ENTSO-E and NEM and matter before
+anyone uses the numbers.
+
+**1. `price` is reconstructed, not observed.** ENTSO-E and NEM publish a settled
+market price. ONS publishes the *Marginal Operating Cost* (CMO) — the shadow
+price from the DESSEM dispatch model. Brazil's settled price is CCEE's PLD,
+which is the hourly CMO clipped to an annual floor and cap set by ANEEL.
+`retrieve_ons` applies those limits (`ons.pld_limits`) to reconstruct PLD.
+
+The clip is not cosmetic. In 2025, raw SE CMO ran from −0.08 to 2151.70 R$/MWh
+against a band of 58.60–1542.23, and **22.5% of SE hours (45.6% of NE hours) sat
+below the floor** — in January 2025, 726 of 744 hours did. Using raw CMO as a
+price would be materially wrong. Raw CMO is kept as `cmo_brl` so the clip is
+never lossy.
+
+**2. The reconstruction is only spot-checked.** The one published figure it has
+been compared against — CCEE's weekly PLD for the week ending 2026-01-02, SE —
+reconstructs to 149.14 against a published 150.38 R$/MWh (0.8% off). That is
+encouraging and it is *not* validation. A proper check needs CCEE's own PLD
+series, and `dadosabertos.ccee.org.br` returns HTTP 403 to this host (whole
+domain, browser User-Agent included; the block page reports the source IP, so it
+is an IP/geo rule, not a header problem). Options are a Brazilian egress or a
+manual download. Two known methodological gaps remain unmodelled either way: PLD
+is set from an *ex-ante* DESSEM run whereas ONS publishes verified CMO, and the
+structural cap (`max_structural`) binds the *weekly average*, which this code
+does not enforce.
+
+**3. The CMO series has whole-day holes; the balance series does not.** Missing
+half-hour slots, identical across all four submarkets (so these are publication
+outages, not per-area gaps):
+
+| year | missing days | note |
+|------|--------------|------|
+| 2023 | 14 | 3.8% of the year |
+| 2024 | 4  | |
+| 2025 | 1  | 2025-05-16 local |
+| 2026 | 5  | year to date |
+
+The hourly balance dataset (load, generation, interchange) is **complete** for
+2023–2025 — zero missing hours in every submarket. So a full-year `dayahead`
+pull fails `assert_window_complete` for every year so far, correctly; a `full`
+pull succeeds with NaN prices on the gap days and logs a warning naming them.
+**No gap-filling policy has been chosen** — ffill across a 24-hour hole is a
+modelling decision, not a plumbing one.
+
+**4. Source dtypes drift between years.** `val_cmo` arrives as `float64` in the
+2025 file and as `str` in the 2026 file, with no change to the published data
+dictionary. `read_area_year` coerces the `val_*` columns to float; do not remove
+that cast.
+
+Two smaller notes. ONS stamps `din_instante` in Brasília time, so the UTC output
+window needs the *previous* local month — the mirror of the forward pad NEM needs
+for AEST; windows reaching before 2019 are refused outright because Brazil
+observed DST until then.
+
+Finally, **do not read these columns as a national generation mix.** Their scope
+is narrower: `val_gersolar` covers ONS-dispatched solar only (Brazil's large
+distributed-generation fleet is netted out of `load` instead), and `thermal`
+aggregates fossil, nuclear and biomass into one column. Summing the four
+submarkets for 2025 gives hydro 57.7% / thermal 12.8% / wind 16.5% / solar 13.1%
+against Ember's 51.8% / ~11% fossil / 15.7% / 11.8% for the same year. Every ONS
+share sits above its published counterpart, which cannot be explained by
+denominators alone — the discrepancy is **unreconciled**. The columns are sound
+for residual-load and price work, which is what the pipeline uses them for; they
+are not a substitute for a published national mix.
 
 ### Cutout caching
 

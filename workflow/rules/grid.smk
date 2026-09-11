@@ -24,3 +24,15 @@ rule retrieve_nem:
         eur_per_aud=config["nem"]["eur_per_aud"],
     script:
         "../scripts/grid/retrieve_nem.py"
+
+
+rule retrieve_ons:
+    output:
+        temp("resources/ons/{area}_grid_{variant}_{start_date}_{end_date}.parquet"),
+    log:
+        "logs/retrieve_ons/{area}_{variant}_{start_date}_{end_date}.log",
+    params:
+        eur_per_brl=config["ons"]["eur_per_brl"],
+        pld_limits=config["ons"]["pld_limits"],
+    script:
+        "../scripts/grid/retrieve_ons.py"

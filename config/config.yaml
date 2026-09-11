@@ -19,6 +19,22 @@ nem:
   # assumptions live in config/assumptions*.yaml.
   eur_per_aud: 0.61
 
+ons:
+  # Brazil (SIN). Areas are the four submarkets: SE, S, NE, N.
+  # FX rate for converting BRL-denominated prices to EUR, as for nem above.
+  eur_per_brl: 0.167
+
+  # ANEEL sets a PLD floor and cap each year (IPCA-indexed); retrieve_ons uses
+  # them to reconstruct PLD from the CMO that ONS publishes. `max_hourly` is the
+  # cap that binds an hourly price — `max_structural` caps the *weekly average*
+  # and is recorded here for reference only, not applied.
+  # Sources: ANEEL Despacho 3.850/2025 (2026) and the equivalent year-end
+  # despachos for 2024 and 2025. Add a year here before requesting it.
+  pld_limits:
+    2024: { min:  61.07, max_hourly: 1470.57, max_structural: 716.80 }
+    2025: { min:  58.60, max_hourly: 1542.23, max_structural: 751.73 }
+    2026: { min:  57.31, max_hourly: 1611.04, max_structural: 785.27 }
+
 res_cf:
   # Per-country metadata for the atlite + capacity factor pipeline.
   # Lowercase key = ISO-2 (used in cutout filenames and CF output filenames).
