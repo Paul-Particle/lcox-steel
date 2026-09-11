@@ -415,25 +415,45 @@ def _add_generators(
 def _add_battery(
     n: pypsa.Network, bat_cfg: dict, wacc: float, bus: str = "electricity"
 ) -> None:
-    """Add an extendable battery; energy CAPEX is folded into the per-MW cost at fixed duration."""
+    """Add an extendable battery whose energy and power capacities size separately.
+
+    A Store holds the energy and a charger/discharger pair carries the power, so
+    the optimiser picks the duration instead of being handed one. The inverter is
+    a single bidirectional unit rated in MW: it is priced once, on the charger,
+    and solve_network ties the two ratings together so it cannot be bought twice.
+    """
     eta = bat_cfg["efficiency_roundtrip"] ** 0.5
-    max_hours = bat_cfg["max_hours"]
-    # Fold energy capex into per-MW capital cost (assumes fixed duration = max_hours)
-    cap_cost = annuity_factor(wacc, bat_cfg["lifetime_years"]) * (
-        bat_cfg["capex_per_mw_eur"] + bat_cfg["capex_per_mwh_eur"] * max_hours
+    annuity = annuity_factor(wacc, bat_cfg["lifetime_years"])
+    store_bus = f"{bus}_battery"
+    n.add("Bus", store_bus, carrier="battery")
+    n.add(
+        "Store",
+        "battery",
+        bus=store_bus,
+        carrier="battery",
+        e_nom_extendable=True,
+        e_cyclic=True,
+        capital_cost=annuity * bat_cfg["capex_per_mwh_eur"],
+        marginal_cost=0.0,
     )
     n.add(
-        "StorageUnit",
-        "battery",
-        bus=bus,
+        "Link",
+        "battery_charger",
+        bus0=bus,
+        bus1=store_bus,
         carrier="battery",
         p_nom_extendable=True,
-        capital_cost=cap_cost,
-        marginal_cost=0.0,
-        efficiency_store=eta,
-        efficiency_dispatch=eta,
-        max_hours=max_hours,
-        cyclic_state_of_charge=True,
+        efficiency=eta,
+        capital_cost=annuity * bat_cfg["capex_per_mw_eur"],
+    )
+    n.add(
+        "Link",
+        "battery_discharger",
+        bus0=store_bus,
+        bus1=bus,
+        carrier="battery",
+        p_nom_extendable=True,
+        efficiency=eta,
     )
 
 

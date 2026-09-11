@@ -44,9 +44,38 @@ def _network() -> pypsa.Network:
 
 
 def _dispatch(n: pypsa.Network, component: str, attr: str, values: dict) -> None:
-    """Write a solved dispatch straight onto the network, no optimiser involved."""
-    frame = pd.DataFrame(values, index=n.snapshots)
+    """Write a solved dispatch straight onto the network, no optimiser involved.
+
+    Merges, so the battery's links and a route's own links can be written
+    separately without one erasing the other.
+    """
+    frame = getattr(n, component + "_t")[attr].copy()
+    for name, series in values.items():
+        frame[name] = pd.Series(list(series), index=n.snapshots)
     getattr(n, component + "_t")[attr] = frame
+
+
+def _battery(n: pypsa.Network, flow: list[float] | None = None) -> None:
+    """Add the battery the way build_network does, dispatched from a bus-side flow.
+
+    `flow` is signed as the electricity bus sees it — positive when the battery
+    supplies it, negative when it charges. Pass None to leave the dispatch
+    frames empty, which is the shape a battery that never ran comes back as.
+    """
+    n.add("Bus", "electricity_battery", carrier="battery")
+    n.add("Store", "battery", bus="electricity_battery", carrier="battery")
+    n.add("Link", "battery_charger", bus0="electricity", bus1="electricity_battery",
+          carrier="battery")
+    n.add("Link", "battery_discharger", bus0="electricity_battery", bus1="electricity",
+          carrier="battery")
+    if flow is None:
+        return
+    signed = pd.Series(flow, index=n.snapshots)
+    _dispatch(n, "links", "p0", {
+        "battery_charger": (-signed).clip(lower=0.0),
+        "battery_discharger": signed.clip(lower=0.0),
+    })
+    _dispatch(n, "links", "p1", {"battery_discharger": -signed.clip(lower=0.0)})
 
 
 def _grid_mix(n: pypsa.Network) -> pd.DataFrame:
@@ -275,13 +304,12 @@ def test_what_comes_out_of_storage_is_not_free():
     n = _network()
     n.add("Generator", "solar", bus="electricity", carrier="solar")
     n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
-    n.add("StorageUnit", "battery", bus="electricity", carrier="battery")
     # Sun in the odd hours only; the furnace runs through the dark ones on the
     # battery, which gives back 4 of every 5 MWh it takes.
+    _battery(n, [-5.0, 4.0, -5.0, 4.0])
     _dispatch(n, "generators", "p", {"solar": [10.0, 0.0, 10.0, 0.0]})
     _dispatch(n, "links", "p0", {"eaf": [1.0] * 4})
     _dispatch(n, "links", "p2", {"eaf": [5.0, 4.0, 5.0, 4.0]})
-    _dispatch(n, "storage_units", "p", {"battery": [-5.0, 4.0, -5.0, 4.0]})
 
     emitted = _breakdown(n)
 
@@ -303,13 +331,12 @@ def test_charging_clean_dilutes_what_the_battery_gives_back():
     n.add("Generator", "wind-onshore", bus="electricity", carrier="wind-onshore")
     n.add("Link", "electrolyser", bus0="electricity", bus1="hydrogen")
     n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
-    n.add("StorageUnit", "battery", bus="electricity", carrier="battery")
     # Fill on coal, give a third of it back, top up on wind, empty the rest.
+    _battery(n, [-10.0, 5.0, -10.0, 15.0])
     _dispatch(n, "generators", "p", {
         "coal":         [10.0, 0.0, 0.0, 0.0],
         "wind-onshore": [0.0, 0.0, 10.0, 0.0],
     })
-    _dispatch(n, "storage_units", "p", {"battery": [-10.0, 5.0, -10.0, 15.0]})
     _dispatch(n, "links", "p0", {"electrolyser": [0.0, 5.0, 0.0, 0.0], "eaf": [1.0] * 4})
     _dispatch(n, "links", "p2", {"electrolyser": [0.0] * 4, "eaf": [0.0, 0.0, 0.0, 15.0]})
 
@@ -332,16 +359,15 @@ def test_stored_energy_carries_the_hours_it_charged_in():
     n.add("Generator", "wind-onshore", bus="electricity", carrier="wind-onshore")
     n.add("Generator", "solar", bus="electricity", carrier="solar")
     n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
-    n.add("StorageUnit", "battery", bus="electricity", carrier="battery")
     # Hour 1 is all wind and fills the battery; hour 2 runs off it; hour 3 is
     # all solar. The year's mean intensity would be 0.1, halfway between them.
+    _battery(n, [-5.0, 4.0, 0.0, 0.0])
     _dispatch(n, "generators", "p", {
         "wind-onshore": [10.0, 0.0, 0.0, 0.0],
         "solar":        [0.0, 0.0, 10.0, 0.0],
     })
     _dispatch(n, "links", "p0", {"eaf": [1.0] * 4})
     _dispatch(n, "links", "p2", {"eaf": [5.0, 4.0, 10.0, 0.0]})
-    _dispatch(n, "storage_units", "p", {"battery": [-5.0, 4.0, 0.0, 0.0]})
 
     emitted = _breakdown(n)
 
@@ -359,12 +385,13 @@ def test_a_battery_that_never_ran_is_not_a_missing_column():
     n = _network()
     n.add("Generator", "solar", bus="electricity", carrier="solar")
     n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
-    n.add("StorageUnit", "battery", bus="electricity", carrier="battery")
+    _battery(n)
     _dispatch(n, "generators", "p", {"solar": [10.0] * 4})
     _dispatch(n, "links", "p0", {"eaf": [1.0] * 4})
     _dispatch(n, "links", "p2", {"eaf": [5.0] * 4})
-    # No storage_units_t.p at all — the shape the round trip leaves behind.
-    assert list(n.storage_units_t.p.columns) == []
+    # Neither link appears in the dispatch — the shape the round trip leaves behind.
+    assert "battery_charger" not in n.links_t.p0.columns
+    assert "battery_discharger" not in n.links_t.p1.columns
 
     emitted = _breakdown(n)
     assert emitted["by_step"]["battery_losses"] == pytest.approx(0.0)
@@ -476,7 +503,7 @@ def test_the_steps_stack_to_the_total():
     n.add("Link", "electrolyser", bus0="electricity", bus1="hydrogen")
     n.add("Link", "dri-ng", bus0="gas", bus1="iron", bus2="electricity")
     n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
-    n.add("StorageUnit", "battery", bus="electricity", carrier="battery")
+    _battery(n, [-2.0, -2.0, 1.0, 1.0])
     _dispatch(n, "generators", "p", {"grid_import": [40.0] * 4})
     _dispatch(n, "links", "p0", {
         "electrolyser": [10.0] * 4, "dri-ng": [8.0] * 4, "eaf": [5.0] * 4,
@@ -485,7 +512,6 @@ def test_the_steps_stack_to_the_total():
         "electrolyser": [0.0] * 4, "dri-ng": [3.0] * 4, "eaf": [12.0] * 4,
     })
     # Charges twice as hard as it discharges: the difference is the round-trip loss.
-    _dispatch(n, "storage_units", "p", {"battery": [-2.0, -2.0, 1.0, 1.0]})
 
     emitted = _breakdown(n, grid_mix=_grid_mix(n))
 

@@ -45,11 +45,13 @@ electrolyser:
   varopex_eur_per_mwh_el: 1.0
 
 battery:
+  # Duration is not set here: energy and power capacity are priced separately
+  # and sized separately, so the optimiser picks the hours. capex_per_mw_eur
+  # buys one bidirectional inverter, charging and discharging at that rating.
   capex_per_mw_eur: 200_000   # power capacity cost
   capex_per_mwh_eur: 150_000  # energy capacity cost
   lifetime_years: 15
   efficiency_roundtrip: 0.90
-  max_hours: 6                # cap on energy/power ratio
 
 h2_buffer:
   capex_per_mwh_eur: 10_000   # compressed H2 tank, ~€10/kWh
