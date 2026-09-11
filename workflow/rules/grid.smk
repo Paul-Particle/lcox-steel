@@ -18,6 +18,7 @@ rule retrieve_grid_data:
         market=lookup(dpath="areas/{area}/market", within=config, default=""),
         market_area=lookup(dpath="areas/{area}/market_area", within=config, default=""),
         eur_per_aud=config["nem"]["eur_per_aud"],
+        eur_per_cad=config["canada"]["eur_per_cad"],
     resources:
         # ENTSO-E rate limit; harmless for NEM areas, which make no API calls.
         entsoe_api=2,

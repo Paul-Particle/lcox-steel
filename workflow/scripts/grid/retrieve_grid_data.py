@@ -21,13 +21,22 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
+import _canada
 import _entsoe
 import _nem
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
-SOURCES = {"entsoe": _entsoe.retrieve, "nem": _nem.retrieve}
+# Alberta and Ontario are separate markets rather than one "canada" source: they
+# are different operators with different time conventions and unrelated report
+# formats, and each carries exactly one area's prices.
+SOURCES = {
+    "aeso": _canada.retrieve_aeso,
+    "entsoe": _entsoe.retrieve,
+    "ieso": _canada.retrieve_ieso,
+    "nem": _nem.retrieve,
+}
 
 
 def main() -> None:
