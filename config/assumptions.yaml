@@ -129,9 +129,12 @@ eaf:
   # somewhere. Hannah's cheap-ladle case is that same furnace with the capex
   # written down by a scenario overlay, e.g.
   #   eaf: {capex_per_t_per_year_eur: 50, opex_per_t_per_year_eur: 1.5}
-  # Capex from Vogl et al. (2018), 184 €/(t/yr).
-  capex_per_t_per_year_eur: 184
-  opex_per_t_per_year_eur: 6          # ≈3 % of capex
+  # Fischedick et al. (2014) quote 184 €/(t/yr), which reaches 2011 euros by the
+  # same route as the shaft's 230 — see dri-h2. Hüttel & Lehner (DIW DP 2082,
+  # 2024) put the inflation-adjusted EAF at 259 €2022. No basis conversion here:
+  # an EAF's output is steel, which is what the source quotes it against.
+  capex_per_t_per_year_eur: 259
+  opex_per_t_per_year_eur: 8          # ≈3 % of capex
   lifetime_years: 20
   consumables_eur_per_t: 40           # electrodes, fluxes, alloys, carbon; per t steel
   p_min_pu: 0.4
