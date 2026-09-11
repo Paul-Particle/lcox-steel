@@ -18,6 +18,7 @@ pd.options.mode.string_storage = "python"
 
 import geopandas as gpd
 import pyarrow.parquet as pq
+import pypsa
 
 from build_network import build_network, load_assumptions
 
@@ -119,6 +120,20 @@ def _assemble_multisite_cf(
         }
     )
     return cf_timeseries, sites, demand_site
+
+
+def _tie_battery_inverter(n: pypsa.Network, snapshots) -> None:
+    """Charge and discharge share one inverter rating, so its capex is paid once.
+
+    A grid battery's power electronics are bidirectional and rated in MW, which
+    is what `battery.capex_per_mw_eur` prices. Without this the two links size
+    independently and only the charger is priced, leaving free discharge power.
+    """
+    p_nom = n.model.variables["Link-p_nom"]
+    n.model.add_constraints(
+        p_nom.loc["battery_charger"] - p_nom.loc["battery_discharger"] == 0,
+        name="battery_inverter_rating",
+    )
 
 
 def main() -> None:
@@ -264,7 +279,8 @@ def main() -> None:
         solver_options["solver"] = highs_solver
         if highs_solver == "ipm":
             solver_options["run_crossover"] = os.environ.get("HIGHS_CROSSOVER", "off")
-    n.optimize(solver_name="highs", solver_options=solver_options)
+    n.optimize(solver_name="highs", solver_options=solver_options,
+               extra_functionality=_tie_battery_inverter)
 
     # Every file the rule declared, fingerprinted into the network so the result
     # stays tied to what produced it. compile_report lifts `inputs_hash` into a
