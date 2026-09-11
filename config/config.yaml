@@ -109,7 +109,10 @@ res_cf:
     min_free_disk_gb: 20
 
   # atlite technology settings (passed to cutout.wind / cutout.pv).
-  wind_onshore_turbine:  Vestas_V112_3MW
+  # Onshore is a placeholder until the turbine work lands — moved off a 2010
+  # 3 MW model so test runs are not built on fifteen-year-old wind. `oedb:`
+  # reads the Open Energy Database at build time, so this one needs the network.
+  wind_onshore_turbine:  "oedb:E-141/4200"
   wind_offshore_turbine: NREL_ReferenceTurbine_5MW_offshore
   pv_panel:              CSi
   pv_orientation:        latitude_optimal
