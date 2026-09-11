@@ -45,11 +45,13 @@ electrolyser:
   varopex_eur_per_mwh_el: 1.0
 
 battery:
+  # Duration is not set here: energy and power capacity are priced separately
+  # and sized separately, so the optimiser picks the hours. capex_per_mw_eur
+  # buys one bidirectional inverter, charging and discharging at that rating.
   capex_per_mw_eur: 200_000   # power capacity cost
   capex_per_mwh_eur: 150_000  # energy capacity cost
   lifetime_years: 15
   efficiency_roundtrip: 0.90
-  max_hours: 6                # cap on energy/power ratio
 
 h2_buffer:
   capex_per_mwh_eur: 10_000   # compressed H2 tank, ~€10/kWh
@@ -67,9 +69,25 @@ h2_buffer:
 # ---------------------------------------------------------------------------
 
 dri-h2:
-  # H2 DRI shaft furnace. Capex from Vogl, Åhman & Nilsson (2018), 230 €/(t/yr).
-  capex_per_t_per_year_eur: 230
-  opex_per_t_per_year_eur: 7          # ≈3 % of capex
+  # H2 DRI shaft furnace. Vogl, Åhman & Nilsson (2018) quote 230 €/(t/yr), which
+  # Hüttel & Lehner (DIW DP 2082, 2024) trace back through Wörtler et al. (2013)
+  # to 2011 cost estimates — so the familiar figure is in 2011 euros. They put
+  # the inflation-adjusted shaft at 324 €2022 per tonne of annual *steelmaking*
+  # capacity.
+  #
+  # That basis is not this one. Capex here is per tonne of annual *output*, and
+  # a shaft's output is DRI, of which a tonne of steel takes
+  # `iron_t_per_t_steel`. So 324 / 1.10 = 295 €2022 per (t DRI/yr).
+  #
+  # This is still a greenfield, equipment-level figure. DIW's own reading of
+  # built and announced projects is that ~750 €/(t steel/yr) for the whole
+  # DR-EAF route is closer to what these cost — roughly 417 here and 333 on the
+  # EAF — with the caveat that publicised project values may be inflated to
+  # attract subsidy. Thyssenkrupp's 2.5 Mt/yr Duisburg plant at ~€2 bn is
+  # ~800 €/(t/yr) including its melters, which is consistent with that.
+  # Agora apply a further 1.8x for brownfield integration.
+  capex_per_t_per_year_eur: 295
+  opex_per_t_per_year_eur: 9          # ≈3 % of capex
   lifetime_years: 20
   el_mwh_per_t: 0.35                  # shaft auxiliaries + electric H2 preheat
   # DR-grade pellets: ~1.45 t pellets per t DRI at ~140 €/t incl. premium.
@@ -83,10 +101,11 @@ dri-mix:
   # reductant gas, so the route buys one furnace and the optimiser picks the
   # mix, instead of paying capex twice for the option to switch.
   #
-  # Both single-fuel shafts are quoted at the same 230 €/(t/yr), so a
-  # dual-capable one is taken at that level too.
-  capex_per_t_per_year_eur: 230
-  opex_per_t_per_year_eur: 7          # ≈3 % of capex
+  # Both single-fuel shafts sit at the same 295 €2022/(t DRI/yr), so a
+  # dual-capable one is taken at that level too. See dri-h2 for where the
+  # figure comes from and why it is not the familiar 230.
+  capex_per_t_per_year_eur: 295
+  opex_per_t_per_year_eur: 9          # ≈3 % of capex
   lifetime_years: 20
   # Shaft auxiliaries alone, as the NG shaft. The H2 feed's preheat is charged
   # where it belongs, on the H2 side: 0.10 + 0.25 is the single-fuel H2 shaft's
@@ -110,9 +129,12 @@ eaf:
   # somewhere. Hannah's cheap-ladle case is that same furnace with the capex
   # written down by a scenario overlay, e.g.
   #   eaf: {capex_per_t_per_year_eur: 50, opex_per_t_per_year_eur: 1.5}
-  # Capex from Vogl et al. (2018), 184 €/(t/yr).
-  capex_per_t_per_year_eur: 184
-  opex_per_t_per_year_eur: 6          # ≈3 % of capex
+  # Fischedick et al. (2014) quote 184 €/(t/yr), which reaches 2011 euros by the
+  # same route as the shaft's 230 — see dri-h2. Hüttel & Lehner (DIW DP 2082,
+  # 2024) put the inflation-adjusted EAF at 259 €2022. No basis conversion here:
+  # an EAF's output is steel, which is what the source quotes it against.
+  capex_per_t_per_year_eur: 259
+  opex_per_t_per_year_eur: 8          # ≈3 % of capex
   lifetime_years: 20
   consumables_eur_per_t: 40           # electrodes, fluxes, alloys, carbon; per t steel
   p_min_pu: 0.4
@@ -180,10 +202,10 @@ natural_gas:
 
 dri-ng:
   # Natural-gas DRI shaft (Midrex/HYL type) — the mature fossil benchmark.
-  # Same shaft capex level as the H2 shaft (Vogl et al. 2018); gas use
+  # Same shaft capex level as the H2 shaft (see dri-h2 for the source); gas use
   # ~10 GJ/t DRI. Electricity is lower than the H2 shaft (no H2 preheat).
-  capex_per_t_per_year_eur: 230
-  opex_per_t_per_year_eur: 7          # ≈3 % of capex
+  capex_per_t_per_year_eur: 295
+  opex_per_t_per_year_eur: 9          # ≈3 % of capex
   lifetime_years: 20
   gas_mwh_per_t: 2.75                 # LHV, per t DRI
   el_mwh_per_t: 0.1
