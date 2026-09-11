@@ -27,6 +27,12 @@ nem:
   # assumptions live in config/assumptions*.yaml.
   eur_per_aud: 0.61
 
+canada:
+  # FX rate for converting CAD-denominated AESO and IESO prices to EUR (used by
+  # grid.smk → retrieve_grid_data). Same standing as eur_per_aud above: an
+  # infra-level constant, not a researched figure.
+  eur_per_cad: 0.64
+
 # Reporting. best_zone_by names the field that decides which of a country's
 # zones represents it — a country supplying its market through zones is run once
 # per zone, and only the cheapest reaches results/report_{scenario}.csv. The
@@ -77,6 +83,17 @@ areas:
   AUS:   { iso3: AUS, region: AUS, coarse: false, zones: [NSW1, QLD1, SA1, TAS1, VIC1] }
   # Neither a market nor zones — islanded only until Brazil's subsystems are added.
   BRA:   { iso3: BRA, region: BRA, coarse: false }
+  # No market of its own: a grid scenario naming CAN runs its two priced provinces
+  # instead. The other provinces are regulated cost-of-service utilities with no
+  # hourly price to retrieve, so they are not zones here.
+  CAN:   { iso3: CAN, region: CAN, coarse: false, zones: [AB, ONT] }
+  # Only the grid path is wired for these two: no cutout ships and their region
+  # shapes are unverified, so res_cf for them is untested. Ontario is ONT, not the
+  # province's usual ON, because YAML 1.1 reads a bare ON as boolean true — as the
+  # key it would become True, and as a market_area it would reach a filename as
+  # "True" without erroring.
+  AB:    { iso3: CAN, region: AB,  coarse: false, market: aeso, market_area: AB }
+  ONT:   { iso3: CAN, region: "ON", coarse: false, market: ieso, market_area: ONT }
   # The NEM regions. AEMO serves prices for all five; only VIC1 ships a cutout,
   # so the other four cost a CDS download the first time they are solved.
   # Victoria also ships its offshore parquet, which is why the default
