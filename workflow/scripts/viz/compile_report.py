@@ -122,10 +122,14 @@ def _grid_intensity(
 
 
 def _storage_carbon(
-    n: pypsa.Network, units: list[str], storage_p: pd.DataFrame,
-    soc: pd.DataFrame, generation_intensity: pd.Series,
+    storage_flow: pd.Series, closing_level: float, eta_in: float, eta_out: float,
+    generation_intensity: pd.Series,
 ) -> tuple[pd.Series, float]:
     """What storage gave back each hour, in t CO2e, and what it lost over the year.
+
+    `storage_flow` is signed as seen from the electricity bus — positive when the
+    battery supplies it, negative when it charges — and `closing_level` is the
+    energy left in the store at the final snapshot.
 
     A battery emits nothing of its own: what comes out carries what went in,
     mixed with whatever was in the tank already. So the tank is followed hour by
@@ -143,44 +147,36 @@ def _storage_carbon(
     the start of the year is whatever the year ends with. The tank mixes, so by
     the second pass it has forgotten where the first one started.
     """
-    delivered = pd.Series(0.0, index=n.snapshots)
-    lost_t = 0.0
     hourly_intensity = generation_intensity.to_numpy()
-    for unit in units:
-        eta_in = float(n.storage_units.at[unit, "efficiency_store"])
-        eta_out = float(n.storage_units.at[unit, "efficiency_dispatch"])
-        flow = storage_p[unit].to_numpy()
-        cyclic_level = float(soc[unit].iloc[-1])
-        carbon = 0.0
-        for pass_number in (1, 2):
-            opening = carbon
-            level = cyclic_level
-            given_back = np.zeros(len(flow))
-            lost = 0.0
-            for hour in range(len(flow)):
-                drawn = max(-flow[hour], 0.0)
-                if drawn:
-                    carbon += drawn * eta_in * hourly_intensity[hour]
-                    lost += drawn * (1.0 - eta_in) * hourly_intensity[hour]
-                    level += drawn * eta_in
-                injected = max(flow[hour], 0.0)
-                if injected:
-                    taken = injected / eta_out
-                    blend = carbon / level if level > 0 else 0.0
-                    carbon -= taken * blend
-                    level -= taken
-                    given_back[hour] = injected * blend
-                    lost += (taken - injected) * blend
-            if pass_number == 1:
-                # Open the year at the intensity it closed at — the fixed point
-                # when the state of charge is cyclic, which is how it is solved.
-                carbon = carbon / level * cyclic_level if level > 0 else 0.0
-        delivered += given_back
-        # Carbon the tank still holds over what it opened with was paid for and
-        # never used, so it is a loss like the others. Nil on a cyclic year,
-        # which is what the model solves.
-        lost_t += lost + (carbon - opening)
-    return delivered, lost_t
+    flow = storage_flow.to_numpy()
+    carbon = 0.0
+    for pass_number in (1, 2):
+        opening = carbon
+        level = closing_level
+        given_back = np.zeros(len(flow))
+        lost = 0.0
+        for hour in range(len(flow)):
+            drawn = max(-flow[hour], 0.0)
+            if drawn:
+                carbon += drawn * eta_in * hourly_intensity[hour]
+                lost += drawn * (1.0 - eta_in) * hourly_intensity[hour]
+                level += drawn * eta_in
+            injected = max(flow[hour], 0.0)
+            if injected:
+                taken = injected / eta_out
+                blend = carbon / level if level > 0 else 0.0
+                carbon -= taken * blend
+                level -= taken
+                given_back[hour] = injected * blend
+                lost += (taken - injected) * blend
+        if pass_number == 1:
+            # Open the year at the intensity it closed at — the fixed point
+            # when the state of charge is cyclic, which is how it is solved.
+            carbon = carbon / level * closing_level if level > 0 else 0.0
+    # Carbon the tank still holds over what it opened with was paid for and
+    # never used, so it is a loss like the others. Nil on a cyclic year,
+    # which is what the model solves.
+    return pd.Series(given_back, index=storage_flow.index), lost + (carbon - opening)
 
 
 def _emissions_breakdown(
@@ -219,9 +215,11 @@ def _emissions_breakdown(
     # default, so a component that never ran comes back missing from the
     # dispatch frame rather than zero — an optimum that builds no battery is an
     # ordinary outcome, not a reason for the whole report to fail.
+    zero_series = pd.Series(0.0, index=n.snapshots)
     generator_p = n.generators_t.p.reindex(columns=n.generators.index, fill_value=0.0)
-    storage_p = n.storage_units_t.p.reindex(columns=n.storage_units.index, fill_value=0.0)
     link_p0 = n.links_t.p0.reindex(columns=n.links.index, fill_value=0.0)
+    link_p1 = n.links_t.p1.reindex(columns=n.links.index, fill_value=0.0)
+    store_e = n.stores_t.e.reindex(columns=n.stores.index, fill_value=0.0)
     # bus2 is optional, so a route whose links all take their electricity on
     # bus0 has neither the column nor the frame.
     link_p2 = (n.links_t["p2"].reindex(columns=n.links.index, fill_value=0.0)
@@ -266,14 +264,18 @@ def _emissions_breakdown(
     # free: a solar plant that runs its furnace through the night reports about
     # a third light.
     generation_intensity = (carried / generated.where(generated > 0)).fillna(0.0)
-    home_storage = list(n.storage_units.index[n.storage_units.bus.isin(home_buses)])
-    charged = -storage_p[home_storage].clip(upper=0.0).sum(axis=1)
-    discharged = storage_p[home_storage].clip(lower=0.0).sum(axis=1)
-    soc = n.storage_units_t["state_of_charge"].reindex(
-        columns=n.storage_units.index, fill_value=0.0
-    ) if "state_of_charge" in n.storage_units_t else storage_p * 0.0
+    # Signed as the electricity bus sees it: the charger's p0 is a withdrawal,
+    # and the discharger's p1 is already negative leaving the link, so negating
+    # it lands positive. A network built without a battery has neither link.
+    has_battery = "battery_charger" in n.links.index
+    charged = link_p0["battery_charger"] if has_battery else zero_series
+    discharged = -link_p1["battery_discharger"] if has_battery else zero_series
     stored_carried, storage_lost_t = _storage_carbon(
-        n, home_storage, storage_p, soc, generation_intensity
+        discharged - charged,
+        float(store_e.at[n.snapshots[-1], "battery"]) if has_battery else 0.0,
+        float(n.links.at["battery_charger", "efficiency"]) if has_battery else 1.0,
+        float(n.links.at["battery_discharger", "efficiency"]) if has_battery else 1.0,
+        generation_intensity,
     )
     supplied = generated + discharged
     home_intensity = ((carried + stored_carried)
@@ -291,6 +293,9 @@ def _emissions_breakdown(
     for link in n.links.index:
         if n.links.at[link, "carrier"] == "HVDC":
             continue    # a line rather than a user; its loss is charged below
+        if n.links.at[link, "carrier"] == "battery":
+            continue    # storage moves a draw between hours rather than making
+            # one; what it keeps is charged as battery_losses
         on_bus0 = n.buses.at[n.links.at[link, "bus0"], "carrier"] == "AC"
         bus2 = link_bus2[link]
         if not on_bus0 and not (bus2 and n.buses.at[bus2, "carrier"] == "AC"):
@@ -337,13 +342,12 @@ def _emissions_breakdown(
     # fed it that hour. Between them and the storage tank, what the users are
     # charged plus what the losses are charged is what the generation carried.
     losses_mwh = 0.0
-    if len(home_storage):
+    if has_battery:
         emissions["battery_losses"] = storage_lost_t * annual
         electricity_t += emissions["battery_losses"]
         losses_mwh += float((charged - discharged).sum()) * annual
     hvdc = list(n.links.index[n.links.carrier == "HVDC"])
     if hvdc:
-        link_p1 = n.links_t.p1.reindex(columns=n.links.index, fill_value=0.0)
         lost_hourly = link_p0[hvdc].sum(axis=1) + link_p1[hvdc].sum(axis=1)
         emissions["transmission_losses"] = (
             float((lost_hourly * home_intensity).sum()) * annual
@@ -505,11 +509,9 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
 
     return {
         "res": float((gens.loc[res_idx, "capital_cost"] * gens.loc[res_idx, "p_nom_opt"]).sum()),
-        "battery": float(
-            (n.storage_units.capital_cost * n.storage_units.p_nom_opt)[
-                n.storage_units.p_nom_extendable
-            ].sum()
-        ),
+        # Energy on the store, power on the charger — the discharger carries no
+        # capex, since the pair shares one inverter rating (see solve_network).
+        "battery": store_capital("battery") + link_capital(["battery_charger"]),
         # Generator marginal costs are zero except grid imports (energy price
         # + volumetric fee) and gas, which gets its own group below — so the
         # generic sum minus gas lands in the grid bucket.
@@ -812,10 +814,11 @@ def extract_summary(
     for gen in n.generators.index[n.generators.p_nom_extendable]:
         summary[f"{field_stem(gen)}_gw_opt"] = n.generators.at[gen, "p_nom_opt"] / 1e3
 
-    if "battery" in n.storage_units.index:
-        p_opt = n.storage_units.at["battery", "p_nom_opt"]
-        summary["battery_gw_opt"] = p_opt / 1e3
-        summary["battery_mwh_opt"] = p_opt * n.storage_units.at["battery", "max_hours"]
+    if "battery" in n.stores.index:
+        # Power is the shared inverter rating, energy is the store — now two
+        # separate answers from the solve rather than one and a fixed ratio.
+        summary["battery_gw_opt"] = n.links.at["battery_charger", "p_nom_opt"] / 1e3
+        summary["battery_mwh_opt"] = n.stores.at["battery", "e_nom_opt"]
 
     if "h2_buffer" in n.stores.index:
         buffer_mwh = n.stores.at["h2_buffer", "e_nom_opt"]
