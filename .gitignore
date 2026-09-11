@@ -23,6 +23,7 @@ data/nem_cache/*
 !data/nem_cache/NEM Registration and Exemption List.xlsx
 data/entsoe_cache/*
 !data/entsoe_cache/entsoe_bidding_zones.csv
+data/canada_cache/*
 
 # Derived workflow outputs (rebuilt by snakemake)
 resources/*.parquet
