@@ -82,7 +82,7 @@ lcox-steel/
 │       ├── _paths.py               # repo-relative path roots
 │       └── _stubs.py               # snakemake object stub for linters/IDEs
 ├── config/
-│   ├── config.yaml                 # pipeline knobs (logging, entsoe, nem, res_cf)
+│   ├── config.yaml                 # pipeline knobs (logging, entsoe, nem, ons, res_cf)
 │   ├── assumptions.yaml            # base techno-economics (CAPEX, OPEX, WACC, lifetimes)
 │   ├── assumptions_{project}_{scenario}.yaml   # optional per-scenario overlay (presence = on)
 │   └── projects.csv                # one row per (project, scenario, tech)
@@ -346,11 +346,34 @@ outages, not per-area gaps):
 | 2026 | 5  | year to date |
 
 The hourly balance dataset (load, generation, interchange) is **complete** for
-2023–2025 — zero missing hours in every submarket. So a full-year `dayahead`
-pull fails `assert_window_complete` for every year so far, correctly; a `full`
-pull succeeds with NaN prices on the gap days and logs a warning naming them.
-**No gap-filling policy has been chosen** — ffill across a 24-hour hole is a
-modelling decision, not a plumbing one.
+2023–2025 — zero missing hours in every submarket.
+
+Missing rows are filled from **the same hour one week earlier, else one week
+later**, following PyPSA-Brazil's treatment of the ONS load and cross-border
+series. A same-hour-of-week donor preserves the diurnal and weekday shape that
+an ffill across a 24-hour hole destroys. The counts land in the rule log:
+
+```
+gap fill over SE coverage: 48 rows missing → 48 from the previous week, 0 from the next, 0 left NaN
+```
+
+The fill is applied to the output slice, not to the processed cache —
+`resources/ons/{variant}.parquet` stays as ONS published it, so borrowed values
+exist only in the rule output. It is applied over the area's whole cached span
+rather than the requested window, so a gap in the window's first or last week
+can still reach a donor outside it.
+
+There is deliberately **no ffill fallback**. If both weekly donors are missing
+the outage spans three aligned weeks, and those rows stay NaN so
+`assert_window_complete` fails loudly. (PyPSA-Brazil does fall back to ffill;
+their own audit report shows 4752 of 5895 fills went that way, nearly all of it
+ffill across multi-hundred-hour outages — the case this refuses to paper over.)
+
+For 2025 the fill touches 24 hours, 0.27% of the year. The candidate donors for
+that day disagree by ~140 R$/MWh per hour, 76% of the May mean, so the choice
+matters considerably *for that day* and almost not at all annually — the 2025 SE
+mean is 37.71 EUR/MWh either way. At 14 missing days, 2023 would not support
+that reasoning.
 
 **4. Source dtypes drift between years.** `val_cmo` arrives as `float64` in the
 2025 file and as `str` in the 2026 file, with no change to the published data
