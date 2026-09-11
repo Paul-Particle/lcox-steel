@@ -110,9 +110,8 @@ res_cf:
 
   # atlite technology settings (passed to cutout.wind / cutout.pv).
   # Onshore is a placeholder until the turbine work lands — moved off a 2010
-  # 3 MW model so test runs are not built on fifteen-year-old wind. `oedb:`
-  # reads the Open Energy Database at build time, so this one needs the network.
-  wind_onshore_turbine:  "oedb:E-141/4200"
+  # 3 MW model so test runs are not built on fifteen-year-old wind.
+  wind_onshore_turbine:  NREL_ReferenceTurbine_2020ATB_4MW
   wind_offshore_turbine: NREL_ReferenceTurbine_5MW_offshore
   pv_panel:              CSi
   pv_orientation:        latitude_optimal
