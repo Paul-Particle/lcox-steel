@@ -6,21 +6,47 @@ Desk research for the WP4 grid-cost component. Two questions:
 2. Is there a defensible way to separate policy effects from technological/physical
    effects in what a plant actually pays?
 
-Status: literature/desk survey. Nothing here is wired into `assumptions.yaml` yet.
+Status: literature/desk survey. The grid-charge *machinery* already exists on the
+working branch (§0); what this memo addresses is what the numbers in it should
+mean.
 
 ---
 
 ## 0. Where this model stands today
 
-`build_network._add_grid_import()` adds an unconstrained generator at
-`marginal_cost = price_series`, where `price_series` is the raw ENTSO-E day-ahead
-or NEM spot price. That is the **wholesale energy component only**. A real
-grid-connected plant pays wholesale + network charges + taxes/levies, minus
-whatever exemptions it qualifies for.
+The two branches differ, and the working branch is the one that counts.
 
-So the current grid pathway is not "the grid pathway" — it is "the grid pathway
-for a consumer facing zero network charges and zero levies", which is one specific
-(and in Germany, briefly real — see §118(6) EnWG below) policy corner.
+On `main`, `_add_grid_import()` adds an unconstrained generator (`p_nom=1e6`,
+`capital_cost=0`) at `marginal_cost = price_series` — wholesale only, no network
+charge, no connection sizing.
+
+On **`worktree-steel-routes` (PR #43, the working branch)** the structure is
+already right:
+
+```python
+cap_cost = (annuity_factor(wacc, grid_cfg["connection_lifetime_years"])
+            * grid_cfg["connection_capex_eur_per_mw"]
+            + grid_cfg["fee_eur_per_mw_per_year"])
+n.add("Generator", "grid_import", p_nom_extendable=True,
+      capital_cost=cap_cost,
+      marginal_cost=price_series + grid_cfg["fee_eur_per_mwh"])
+```
+
+with `connection_capex_eur_per_mw: 150_000` over 40 years,
+`fee_eur_per_mw_per_year: 60_000` (Leistungspreis) and `fee_eur_per_mwh: 10.0`
+(Arbeitspreis), self-described in the config as "German HV-level
+order-of-magnitude eyeballs". The connection is extendable, so the optimiser sizes
+it, and the tariff is two-part — capacity plus volumetric. That is the correct
+*shape* (see §2.2: network cost is peak-driven, so a capacity term is what carries
+the flexibility signal).
+
+What remains open is therefore **not the structure but the interpretation of the
+four numbers**: which part of `fee_eur_per_mw_per_year` is cost-reflective and
+which is residual recovery, how the capacity/volumetric split is set (it drives
+behaviour, not just level), whether the plant pays the fee at all under a given
+exemption regime, and that the block is German-labelled while also being applied
+to VIC. Export is deliberately out of scope — the docstring says so — which
+truncates the grid pathway's benefit (§3).
 
 ---
 
@@ -70,8 +96,10 @@ grid-connected alkaline electrolysis, and the same 29.3 EUR/MWh on top of a
 60 EUR/MWh PPA when the PPA is wheeled over the grid. Direct coupling avoids the
 adder entirely, which is quoted as worth 10-30% of production cost.
 
-This is the pattern our model would follow. The honest framing is that the adder
-is a **scenario lever**, not a datum.
+Our model sits in this class but is already a step ahead of the flat-adder
+convention: PR #43 carries a two-part tariff with an extendable, capacity-costed
+connection (§0). The honest framing for those numbers is still that they are a
+**scenario lever**, not a datum.
 
 ### 1.3 The transmission-cost number itself is contested
 
@@ -253,20 +281,43 @@ policy-regime contrast sitting inside the same EUR/MWh number.
 
 ## 3. What I'd propose for the model
 
-1. **Split the grid-import price into named terms** rather than one adder:
-   `wholesale (from ENTSO-E/NEM) + network_lrmc + network_residual + levies_and_taxes`,
-   each defaulting to a documented source, each sweepable. The sum is what enters
-   `marginal_cost`; the split is what makes the sensitivity interpretable.
-2. **Make the exemption regime an explicit scenario dimension**, not a value baked
-   into the network term. At minimum three points: full published tariff /
+The container exists (PR #43, §0). These are about what goes in it.
+
+1. **Split `fee_eur_per_mw_per_year` into `lrmc` and `residual` terms.** Same sum,
+   but only the LRMC part is a cost the connection actually causes; the residual is
+   an allocation choice. Sweeping the residual then answers a real question
+   ("how much of the grid pathway's disadvantage is cost causation?") instead of an
+   opaque one. This is the one change that turns the research into a result.
+2. **Sanity-check the capacity/volumetric split against a real price sheet, not
+   just the total.** German HV tariffs switch at 2500 full-load hours to a
+   high-utilisation branch with a *high* Leistungspreis and *low* Arbeitspreis; at
+   >8300 FLH this plant is deep in that branch, so `fee_eur_per_mwh: 10.0` looks
+   high relative to `fee_eur_per_mw_per_year: 60_000`. The split governs whether
+   the model has any incentive to shape its draw, so getting it wrong distorts
+   behaviour even when the €/MWh total is right. (At 8300 h the current numbers
+   imply ~7 EUR/MWh capacity + 10 EUR/MWh volumetric + ~1.4 EUR/MWh connection
+   annuity ≈ 19 EUR/MWh, against Hydrogen Europe's 29.3 EUR/MWh EU average — a
+   plausible HV band-load position, so the *level* is defensible.)
+3. **Make the exemption regime an explicit scenario dimension**, not a value baked
+   into the fee. At minimum three points: full published tariff /
    Bandlast-privileged / §118(6)-exempt. These are discrete legal states, so a
    discrete scenario axis is the honest representation; a continuous sweep over
-   EUR/MWh hides the fact that the intermediate values do not exist.
-3. **Keep `transmission.cost_per_mw_per_km_eur` explicitly labelled as an
+   EUR/MWh hides the fact that the intermediate values do not exist. Note
+   `plant.availability_target: 0.95` already puts the plant past the 7000-hour
+   threshold.
+4. **Give the grid block a per-region variant.** The values are German HV; VIC runs
+   use the same block. TUOS + negotiated connection assets is a different stack
+   with a different capacity/volumetric balance.
+5. **Reconsider import-only.** The docstring makes it a deliberate scope choice,
+   which is fine, but it is not cost-neutral: an islanded plant curtails surplus
+   RES while a grid-connected one sells it, so import-only systematically
+   understates the grid pathway's value. It also interacts with the capacity
+   charge — one connection, used in both directions.
+6. **Keep `transmission.cost_per_mw_per_km_eur` explicitly labelled as an
    engineering cost**, and add a policy-premium multiplier (1.0 for the CIGRE/
    PyPSA-Eur view, ~3 for the NEP view) rather than silently picking one. The
    issue #125 table is the citation.
-4. **Report the decomposition in the outputs.** If the grid pathway's LCOS is
+7. **Report the decomposition in the outputs.** If the grid pathway's LCOS is
    quoted, quote it with the component stack visible, because the headline number
    is dominated by which policy corner was assumed.
 
