@@ -53,13 +53,31 @@ CF_NAMES = {
 # blend), so it is a transitional route, not clean; NG-DRI is the fossil benchmark.
 # Route ids as common/_runs.py spells them. h2-only is absent on purpose: it
 # makes hydrogen, so it has no cost of steel to compare.
-CLEAN_ROUTES = ["h2-dri-eaf", "moe-eaf", "ew-eaf"]
-ROUTE_ORDER = ["h2-dri-eaf", "moe-eaf", "ew-eaf", "mix-dri-eaf", "ng-dri-eaf"]
+CLEAN_ROUTES = ["h2-dri-eaf", "h2-dri-eaf-export",
+                "moe-eaf", "moe-eaf-export",
+                "ew-eaf", "ew-eaf-export"]
+# Each `-export` twin sits beside the route it is built from: the comparison that
+# earns its place is a route against its own twin — make the iron here and melt it
+# here, or make it here and melt it at the destination.
+ROUTE_ORDER = ["h2-dri-eaf", "h2-dri-eaf-export",
+               "moe-eaf", "moe-eaf-export",
+               "ew-eaf", "ew-eaf-export",
+               "mix-dri-eaf", "mix-dri-eaf-export",
+               "ng-dri-eaf", "ng-dri-eaf-export"]
 ROUTE_LABEL = {"h2-dri-eaf": "H2-DRI-EAF", "moe-eaf": "MOE", "ew-eaf": "Electrowinning",
-               "mix-dri-eaf": "NG-H2-DRI-EAF", "ng-dri-eaf": "NG-DRI-EAF"}
-# Blues = clean; sand = transitional (partial gas); red = fossil.
+               "mix-dri-eaf": "NG-H2-DRI-EAF", "ng-dri-eaf": "NG-DRI-EAF",
+               "h2-dri-eaf-export": "H2-DRI-EAF · export",
+               "moe-eaf-export": "MOE · export",
+               "ew-eaf-export": "Electrowinning · export",
+               "mix-dri-eaf-export": "NG-H2-DRI-EAF · export",
+               "ng-dri-eaf-export": "NG-DRI-EAF · export"}
+# Blues = clean; sand = transitional (partial gas); red = fossil. An export twin
+# takes its domestic route's hue, lightened, so a pair reads as a pair.
 ROUTE_COLOR = {"h2-dri-eaf": "#0A5680", "moe-eaf": "#0293D2", "ew-eaf": "#83D1DD",
-               "mix-dri-eaf": "#E2B681", "ng-dri-eaf": "#D75674"}
+               "mix-dri-eaf": "#E2B681", "ng-dri-eaf": "#D75674",
+               "h2-dri-eaf-export": "#5E90AE", "moe-eaf-export": "#6FC0E6",
+               "ew-eaf-export": "#B6E4EB", "mix-dri-eaf-export": "#EFD5B6",
+               "ng-dri-eaf-export": "#E79AAB"}
 CO2_T_PER_MWH = 0.20
 # Below this iron-from-H2 share the "MIX" route has effectively rejected hydrogen
 # and is economically the fossil NG-DRI route — flagged as such in the UI.
@@ -316,7 +334,11 @@ def _default_view(cases, baseline, cf_options):
     opened on an "unavailable" notice whenever that one run had not been solved.
     B differs from A by route alone; a null axis means B tracks A.
     """
-    project = sorted(cases)[0]
+    # The first project that has a route worth opening on. Sorting alone can land
+    # on one whose runs are all still solving, which has nothing to show.
+    project = next((p for p in sorted(cases)
+                    if any(route in cases[p] for route in ROUTE_ORDER)),
+                   sorted(cases)[0])
     geo, year, grid = project.rsplit("-", 2)
     routes = [route for route in ROUTE_ORDER if route in cases[project]]
     primary = "h2-dri-eaf" if "h2-dri-eaf" in routes else routes[0]
