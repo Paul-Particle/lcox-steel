@@ -227,7 +227,9 @@ ZERO_FILLED = tuple(field for field, fill in REPORT_FIELDS.items() if fill == ZE
 IDENTITY_FIELDS = ("scenario", "area", "country", "route", "start_date", "end_date",
                    *(f"{field_stem(tech)}_variant" for tech in INPUT_TECHS),
                    "best_in_country", "lco_output_unit",
-                   "emissions_basis", "inputs_hash")
+                   # Prose, not a measurement: everything outside this tuple is
+                   # coerced to a number when a report is read back.
+                   "emissions_basis", "emissions_unavailable_reason", "inputs_hash")
 
 # Fields only the diagnostic carries: the report has already acted on the flag,
 # so a frame without it is not missing anything.
