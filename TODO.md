@@ -322,3 +322,26 @@ a renderer is available) in the viz scripts.
 - VIC test run finding: offshore-anchored scenario finds 0 candidates for both wind_onshore and solar within max_radius_km=100 — the offshore anchor's file has no co-located land options at all. Likely the offshore P95 cell sits >100km from any valid land cell for this region. Investigate: increase radius for offshore-anchor scenarios specifically, or revisit offshore P95 cell selection. Related to the broader anchor-selection review (BRA P95 issue).
 
 - Dead spatial_matching_res_mix config, but still wired into Snakemake rules: Script 07's code no longer reads spatial_matching_res_mix (the old anchor co-location logic that used it — MAX_RADIUS_KM/QUALITY_FLOOR_FRAC — was deleted when we moved anchor co-location to 07b). However, res_cf.smk still passes spatial_matching_res_mix as a params: lookup to both build_bestsite_p95 and build_anchored_res_mix_cfs rules (lines ~124-125, ~148-149), and the config value itself still exists in config/config.yaml (~line 76). Since Snakemake params: values don't need to be consumed by the script to avoid erroring, this isn't currently broken — just stale plumbing. Needs someone to remove the spatial_matching_res_mix params from both rules in res_cf.smk, then remove the config section, in one coordinated edit (removing config first would break the rules' lookup). Low priority, not urgent.
+## `link_or_copy` removes a good output before it replaces it
+
+`common/_cutout_cache.py`'s `link_or_copy` does `if dst.exists(): dst.unlink()`
+and then `os.link`, so a present and correct cutout is destroyed before anything
+takes its place. Nothing is lost when it works — the cache entry is a separate
+directory entry to the same inode and stays authoritative — but on 2026-09-13 an
+AB cutout vanished in exactly that window and the rule failed with
+`FileNotFoundError` on its own output.
+
+Two changes belong together:
+
+1. Link to a temporary name in the same directory and `os.replace` it over the
+   destination, so the output is never absent.
+2. Narrow the `except OSError` around `os.link`. It currently also catches
+   `FileExistsError`, which would log "could not hardlink — copying instead" and
+   then copy a multi-gigabyte file for no reason. It should catch the
+   cross-device and not-supported cases its warning actually describes.
+
+Not urgent: with the mtime inversion fixed (the materialised file is now touched,
+so it is newer than its inputs) the rule stops re-running on every DAG build, and
+the exposure window closes with it. Narrowing the except is also the wrong change
+to make while a run is in flight — it converts a currently-caught error into a
+crash.
