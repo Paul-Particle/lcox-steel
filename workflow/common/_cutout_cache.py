@@ -101,6 +101,13 @@ def link_or_copy(src: Path, dst: Path) -> None:
             f"(uses extra disk). src={src}"
         )
         shutil.copyfile(src, dst)
+    # A hardlink shares its target's mtime, so a cutout materialised from the
+    # cache can be older than the geometry the rule read to ask for it. Snakemake
+    # would then call the output stale and rebuild it on every DAG build. The
+    # touch moves the cache entry's mtime as well, since it is the same inode —
+    # which costs nothing: the cache is keyed on the request parameters, and no
+    # timestamp decides whether an entry is valid.
+    dst.touch()
 
 
 def cache_size_bytes() -> int:
