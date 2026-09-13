@@ -14,6 +14,13 @@ dayahead  CMO only → single "price" column, hourly UTC-naive, EUR/MWh
 full      CMO + subsystem energy balance → wide per-area frame with derived
           res/residual columns, hourly UTC-naive
 
+Gap filling
+-----------
+ONS drops whole days from the CMO series (the hourly balance series is complete
+for 2023-2025). Missing rows are filled from the same hour one week earlier,
+else one week later, and the counts are logged. There is no ffill fallback — see
+_fill_from_adjacent_week.
+
 Price caveat
 ------------
 ONS publishes the Marginal Operating Cost (CMO) — the DESSEM model's shadow
@@ -138,6 +145,58 @@ def _process_full_month(
     return balance.sort_index(axis=1)
 
 
+# ── Processed cache ───────────────────────────────────────────────────────────
+
+def _merge_into_cache(cached: pd.DataFrame | None, new_frames: list) -> pd.DataFrame:
+    """Merge freshly processed months into the shared per-variant cache.
+
+    Merges on both axes rather than concatenating and de-duplicating. Areas share
+    timestamps but occupy different columns, so concatenating them produces one
+    duplicate row per area (NaN elsewhere), and dropping duplicates keeps only the
+    area written most recently — silently blanking the others. With four Brazilian
+    submarkets that fires on the second area. combine_first unions index and
+    columns instead, letting the fresh block win wherever the two overlap.
+    """
+    new_block = pd.concat(new_frames)
+    new_block = new_block[~new_block.index.duplicated(keep="last")]
+    merged = new_block if cached is None else new_block.combine_first(cached)
+    return merged.sort_index()
+
+
+# ── Gap filling ───────────────────────────────────────────────────────────────
+
+def _fill_from_adjacent_week(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Fill NaNs from the same hour one week earlier, else one week later.
+
+    ONS drops whole days from the CMO series (the hourly balance series is
+    unaffected), so the hole to cover is 24 h wide. A same-hour-of-week donor
+    keeps the diurnal and weekday shape that a plain ffill across a whole day
+    destroys. Returns the filled frame and an audit dict of what each step
+    touched — the caller logs it.
+
+    Deliberately no ffill fallback: if both weekly donors are missing, the outage
+    spans three aligned weeks and no cheap fill is defensible. Leaving those NaN
+    lets assert_window_complete fail loudly instead. (PyPSA-Brazil does fall back
+    to ffill, and their own audit shows 4752 of 5895 fills went that way — almost
+    all of it ffill across multi-hundred-hour outages, which is the case this
+    refuses to paper over.)
+    """
+    audit = {"missing": int(frame.isna().any(axis=1).sum())}
+    if not audit["missing"]:
+        return frame, audit
+
+    filled = frame
+    for label, offset in (("prev_week", "7D"), ("next_week", "-7D")):
+        before = filled.isna().any(axis=1)
+        # shift(freq=+7D) relabels t -> t+7d, so at t it carries the value from t-7d.
+        donor = filled.shift(freq=offset).reindex(filled.index)
+        filled = filled.fillna(donor)
+        audit[label] = int((before & ~filled.isna().any(axis=1)).sum())
+
+    audit["unfilled"] = int(filled.isna().any(axis=1).sum())
+    return filled, audit
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def retrieve(snakemake) -> None:
@@ -199,25 +258,39 @@ def retrieve(snakemake) -> None:
         new_frames.append(frame)
 
     if new_frames:
-        all_frames = ([cached] if cached is not None else []) + new_frames
-        cached = pd.concat(all_frames)
-        cached = cached[~cached.index.duplicated(keep="last")].sort_index()
+        cached = _merge_into_cache(cached, new_frames)
         processed_cache_dir.mkdir(parents=True, exist_ok=True)
         cached.to_parquet(processed_cache_path, index=True)
         log.info(f"updated processed cache: {processed_cache_path} ({len(cached)} rows)")
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:00")
-    out_df = cached[area].loc[window]
+
+    # Fill before slicing, on a complete hourly index spanning the area's own
+    # coverage: a gap in the window's first or last week needs a donor that sits
+    # outside the window, and reindexing turns a dropped day into fillable NaN
+    # rows. Bounding by this area's observed span keeps other areas' months —
+    # which share the cache index — from looking like gaps in this one.
+    observed = cached[area].dropna(how="all").index
+    area_df = cached[area].reindex(pd.date_range(observed.min(), observed.max(), freq="h"))
+
+    area_df, audit = _fill_from_adjacent_week(area_df)
+    if audit["missing"]:
+        log.info(
+            f"gap fill over {area} coverage: {audit['missing']} rows missing → "
+            f"{audit['prev_week']} from the previous week, "
+            f"{audit['next_week']} from the next, {audit['unfilled']} left NaN"
+        )
+
+    out_df = area_df.loc[window]
     out_df.index.name = "time"
 
-    # assert_window_complete only checks `full` for index gaps, and ONS's CMO
-    # series has whole-day holes that the hourly balance series does not — so a
-    # `full` slice can carry NaN prices on an otherwise complete index. Say so
-    # rather than let it through silently.
+    # assert_window_complete only checks `full` for index gaps, so a `full` slice
+    # could otherwise carry NaN on a complete index. Anything still NaN here
+    # survived both weekly donors.
     nan_times = out_df.index[out_df.isna().any(axis=1)]
     if variant == "full" and len(nan_times):
         log.warning(
-            f"{len(nan_times)} rows carry NaN from CMO gaps: "
+            f"{len(nan_times)} rows still NaN after gap fill: "
             f"{summarise_runs(nan_times, pd.Timedelta('1h'))}"
         )
 
