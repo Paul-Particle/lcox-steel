@@ -13,9 +13,9 @@ the second area. Synthetic frames, no download.
 import numpy as np
 import pandas as pd
 
-import retrieve_ons  # sys.path set by conftest
+import _ons  # sys.path set by conftest
 
-_merge_into_cache = retrieve_ons._merge_into_cache
+_merge_into_cache = _ons._merge_into_cache
 
 HOURS = pd.date_range("2025-01-01", "2025-01-07 23:00", freq="h")
 

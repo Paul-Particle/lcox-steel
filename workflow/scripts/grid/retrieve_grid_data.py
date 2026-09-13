@@ -24,6 +24,7 @@ from common._logging import configure_logging
 import _canada
 import _entsoe
 import _nem
+import _ons
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ SOURCES = {
     "entsoe": _entsoe.retrieve,
     "ieso": _canada.retrieve_ieso,
     "nem": _nem.retrieve,
+    "ons": _ons.retrieve,
 }
 
 

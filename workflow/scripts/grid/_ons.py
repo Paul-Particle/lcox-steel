@@ -1,4 +1,4 @@
-"""Retrieve ONS (Brazil) grid data for a (area, variant, date-range) slice.
+"""ONS (Brazil) source implementation, called by retrieve_grid_data.py.
 
 Maintains a persistent second-level processed cache at
   resources/ons/{variant}.parquet
@@ -38,11 +38,7 @@ from pathlib import Path
 
 import pandas as pd
 
-if "snakemake" not in globals():
-    from common._stubs import snakemake
-
-from common._logging import configure_logging
-from _helpers import (
+from _helpers_grid import (
     ONS_MARKET_TZ,
     area_month_in_cache,
     assert_window_complete,
@@ -52,7 +48,7 @@ from _helpers import (
 )
 from download_ons import SUBSYSTEMS, read_area_year
 
-configure_logging(snakemake)
+# Module-level logger only — retrieve_grid_data.py installs the handlers.
 log = logging.getLogger(__name__)
 
 # Brazil abolished daylight saving from 2019; earlier years carry DST transitions
@@ -199,14 +195,14 @@ def _fill_from_adjacent_week(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def retrieve(snakemake) -> None:
+def retrieve(snakemake, market_area: str) -> None:
     """Slice the requested (area, variant, date range) out of the processed cache.
 
     Downloads any absent dataset-years into the raw cache, processes the local
     months missing from the shared per-variant processed cache, appends them,
     then writes the requested UTC window to the rule output.
     """
-    area = snakemake.wildcards.area
+    area = market_area
     variant = snakemake.wildcards.variant
     start_date = snakemake.wildcards.start_date
     end_date = snakemake.wildcards.end_date
@@ -301,6 +297,3 @@ def retrieve(snakemake) -> None:
     out_df.to_parquet(out_path, index=True)
     log.info(f"wrote {out_path} ({len(out_df)} rows × {out_df.shape[1]} cols)")
 
-
-if __name__ == "__main__":
-    retrieve(snakemake)
