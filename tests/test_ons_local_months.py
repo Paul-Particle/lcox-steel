@@ -9,11 +9,11 @@ boundary it reads from the wrong raw file entirely. Synthetic only, no download.
 
 import pandas as pd
 
-import _helpers  # sys.path set by conftest
-import retrieve_ons
+import _helpers_grid  # sys.path set by conftest
+import _ons
 
-_local_months = retrieve_ons._local_months
-ONS_MARKET_TZ = _helpers.ONS_MARKET_TZ
+_local_months = _ons._local_months
+ONS_MARKET_TZ = _helpers_grid.ONS_MARKET_TZ
 
 
 def test_window_reaches_back_into_the_previous_local_month():
@@ -46,4 +46,4 @@ def test_local_months_cover_the_whole_requested_utc_window():
 def test_pre_dst_abolition_window_is_refused():
     """Brazil observed DST until 2019; localising those timestamps is ambiguous."""
     months = _local_months("20180601", "20180630")
-    assert int(months[0][:4]) < retrieve_ons.FIRST_DST_FREE_YEAR
+    assert int(months[0][:4]) < _ons.FIRST_DST_FREE_YEAR

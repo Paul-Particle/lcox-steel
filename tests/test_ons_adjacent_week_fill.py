@@ -11,9 +11,9 @@ fill itself. Synthetic frames, no download.
 import numpy as np
 import pandas as pd
 
-import retrieve_ons  # sys.path set by conftest
+import _ons  # sys.path set by conftest
 
-_fill_from_adjacent_week = retrieve_ons._fill_from_adjacent_week
+_fill_from_adjacent_week = _ons._fill_from_adjacent_week
 
 HOURS = pd.date_range("2025-05-01", "2025-06-15 23:00", freq="h")
 
