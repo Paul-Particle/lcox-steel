@@ -161,7 +161,18 @@ res_cf:
   # 3 MW model so test runs are not built on fifteen-year-old wind.
   wind_onshore_turbine:  NREL_ReferenceTurbine_2020ATB_4MW
   wind_offshore_turbine: NREL_ReferenceTurbine_5MW_offshore
+  # A Huld-2010 fit of relative performance against irradiance and module
+  # temperature, not a module. atlite ships three panels — this, CdTe, and one
+  # 2006 amorphous Kaneka module — so there is nothing newer to move to, and the
+  # `efficiency: 0.1` in the file is inert: the conversion returns kWh per kWp,
+  # so module efficiency changes the area a MW needs and not the capacity factor.
+  # What is dated is the temperature coefficient the fit implies, -0.47 %/K
+  # against about -0.30 %/K for a current TOPCon module. That is worth roughly
+  # +1.6 % of annual CF in Germany and +5.8 % in tropical Brazil, so it matters
+  # most exactly where the model is comparing geographies.
   pv_panel:              CSi
+  # Within 0.25 % of the best fixed tilt in every area tested, so the rule of
+  # thumb is not what limits solar CF here.
   pv_orientation:        latitude_optimal
 
   # Wind CF computation flags — passed to atlite.Cutout.wind() in

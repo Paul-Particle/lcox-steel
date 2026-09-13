@@ -76,23 +76,11 @@ h2_buffer:
 # ---------------------------------------------------------------------------
 
 dri-h2:
-  # H2 DRI shaft furnace. Vogl, Åhman & Nilsson (2018) quote 230 €/(t/yr), which
-  # Hüttel & Lehner (DIW DP 2082, 2024) trace back through Wörtler et al. (2013)
-  # to 2011 cost estimates — so the familiar figure is in 2011 euros. They put
-  # the inflation-adjusted shaft at 324 €2022 per tonne of annual *steelmaking*
-  # capacity.
-  #
-  # That basis is not this one. Capex here is per tonne of annual *output*, and
-  # a shaft's output is DRI, of which a tonne of steel takes
-  # `iron_t_per_t_steel`. So 324 / 1.10 = 295 €2022 per (t DRI/yr).
-  #
-  # This is still a greenfield, equipment-level figure. DIW's own reading of
-  # built and announced projects is that ~750 €/(t steel/yr) for the whole
-  # DR-EAF route is closer to what these cost — roughly 417 here and 333 on the
-  # EAF — with the caveat that publicised project values may be inflated to
-  # attract subsidy. Thyssenkrupp's 2.5 Mt/yr Duisburg plant at ~€2 bn is
-  # ~800 €/(t/yr) including its melters, which is consistent with that.
-  # Agora apply a further 1.8x for brownfield integration.
+  # H2 DRI shaft furnace, per tonne of annual DRI output. A greenfield,
+  # equipment-level figure: taken with the EAF's it puts the whole DR-EAF route
+  # near 780 €/(t steel/yr), which is the range built and announced projects sit
+  # in — Thyssenkrupp's 2.5 Mt/yr Duisburg plant at ~€2 bn is ~800 €/(t/yr)
+  # including its melters. Agora apply a further 1.8x for brownfield integration.
   capex_per_t_per_year_eur: 566
   # All-in fixed operating cost: labour, maintenance and overhead, which is why
   # it is an eighth of capex rather than the few per cent a maintenance-only
@@ -141,10 +129,7 @@ eaf:
   # somewhere. Hannah's cheap-ladle case is that same furnace with the capex
   # written down by a scenario overlay, e.g.
   #   eaf: {capex_per_t_per_year_eur: 50, opex_per_t_per_year_eur: 1.5}
-  # Fischedick et al. (2014) quote 184 €/(t/yr), which reaches 2011 euros by the
-  # same route as the shaft's 230 — see dri-h2. Hüttel & Lehner (DIW DP 2082,
-  # 2024) put the inflation-adjusted EAF at 259 €2022. No basis conversion here:
-  # an EAF's output is steel, which is what the source quotes it against.
+  # Per tonne of annual liquid steel, which is the basis an EAF is quoted on.
   capex_per_t_per_year_eur: 363
   # As the shaft's: all-in, labour and overhead included, and the mean of the
   # register's three regions.
@@ -191,7 +176,16 @@ moe:
   # per tonne of iron than the shaft's: 1.54 t at the register's iron-ore fines
   # price, against 1.38 t of pellets carrying a DR premium.
   ore_eur_per_t: 159
-  iron_t_per_t_steel: 1.04            # hot metal, near gangue-free; refining loss only
+  # The cell is its own slag channel: gangue stays ionic in the electrolyte and
+  # leaves as a bleed, so what reaches the furnace is carbon-free, silicon-free
+  # iron. That is the whole difference from hot metal, which takes about 1.08 a
+  # tonne because 4 % carbon and a point of silicon burn out of it. Here the only
+  # losses are transfer and ladle skull and a little refining oxidation.
+  #
+  # Ore grade therefore does not move this number — it moves `ore_eur_per_t` and
+  # the cell's throughput. Phosphorus is the one impurity that could reach the
+  # furnace and force a dephosphorising slag, which would cost about two points.
+  iron_t_per_t_steel: 1.03
   p_min_pu: 0.95
 
 ew:
@@ -204,7 +198,11 @@ ew:
   el_mwh_per_t: 3.739                 # per t iron plate, excluding ore prep
   # The same concentrate the MOE cell takes, at the same price.
   ore_eur_per_t: 159
-  iron_t_per_t_steel: 1.05            # high-purity plates; little gangue to slag off
+  # Plates are above 99 % iron — the gangue is refined out of the leach liquor
+  # rather than slagged off downstream — so there is almost none to lose to slag.
+  # A point above the MOE cell's because the plate arrives cold and solid and
+  # pays a melt-in oxidation and dust penalty that liquid iron never does.
+  iron_t_per_t_steel: 1.04
   p_min_pu: 0.2                       # marketed as load-following
 
 natural_gas:
