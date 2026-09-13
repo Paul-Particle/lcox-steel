@@ -1009,7 +1009,10 @@ def main() -> None:
     log.info(f"compiling report for scenario={scenario_name} ({len(network_paths)} runs)")
     for nc_path in network_paths:
         nc_path = Path(nc_path)
-        area, route, start_date, end_date = nc_path.stem.split("_")
+        # {area}_{route}_{start}_{end}. A route never contains an underscore;
+        # an area can — the ONS submarkets are BR_SE and friends — so split
+        # from the right, where the field count is known.
+        area, route, start_date, end_date = nc_path.stem.rsplit("_", 3)
         n = pypsa.Network()
         n.import_from_netcdf(nc_path)
         run = {"area": area, "route": route, "start_date": start_date, "end_date": end_date}
