@@ -213,8 +213,22 @@ def retrieve(snakemake, market_area: str) -> None:
     processed_cache_dir = Path("resources/ons")
     processed_cache_path = processed_cache_dir / f"{variant}.parquet"
 
-    if variant not in ("dayahead", "full"):
-        raise ValueError(f"Unknown variant {variant!r}. Expected 'dayahead' or 'full'.")
+    if variant not in ("dayahead", "emissions", "full"):
+        raise ValueError(
+            f"Unknown variant {variant!r}. Expected 'dayahead', 'emissions' or 'full'."
+        )
+    if variant == "emissions":
+        # The subsystem balance carries four generation categories, but one of
+        # them is an undivided "thermal" spanning gas, coal, oil, biomass and
+        # nuclear, and there is no defensible single emission factor for that
+        # mixture. So this serves the price and no mix, and the report says the
+        # intensity is unknown rather than quoting a made-up one.
+        log.info(
+            f"{area}: ONS publishes no per-carrier generation, only an undivided "
+            f"thermal aggregate — serving prices alone for the emissions variant"
+        )
+        variant = "dayahead"
+        processed_cache_path = processed_cache_dir / f"{variant}.parquet"
     if area not in SUBSYSTEMS:
         raise ValueError(f"{area!r} is not an ONS subsystem. Expected one of {SUBSYSTEMS}.")
 

@@ -61,13 +61,13 @@ def _grid_intensity(
 ) -> pd.Series:
     """t CO2e per MWh imported, hour by hour, from the area's own generation mix.
 
-    A grid series solved on `variant: emissions` carries the area's generation
-    by carrier, and those column names are the factor table's keys — which is
-    what the two downloaders' shared vocabulary was for. A series solved on
-    `dayahead` carries prices only, and there is nothing to stand in for a mix,
-    so that is an error in the scenario table rather than a number to invent. A
-    `full` series carries the carriers too, but at native resolution and beside
-    load and flow columns, so it is not a mix source either.
+    Returns None when the series carries no mix at all. A grid series solved on
+    `variant: emissions` carries the area's generation by carrier, and those
+    column names are the factor table's keys — which is what the downloaders'
+    shared vocabulary was for. Not every market publishes one, and nothing stands
+    in for it: the report says the intensity is unknown rather than inventing a
+    number. A `full` series carries the carriers too, but at native resolution
+    and beside load and flow columns, so it is not a mix source either.
 
     Storage carriers are left out of the mix altogether rather than counted at
     zero: what a reservoir gives back was generated in some earlier hour that is
@@ -88,11 +88,11 @@ def _grid_intensity(
                and not col.endswith(CONSUMPTION_SUFFIX)
                and col not in STORAGE_CARRIERS]
     if not columns:
-        raise ValueError(
-            f"{area}: this run imports from the grid, but its grid series carries no "
-            f"generation mix, so its emission intensity is unknown. Set the area's "
-            f"grid row in config/scenarios.csv to `variant: emissions`."
-        )
+        # No mix to read, which is the source's limit rather than a mistake in the
+        # scenario table: ONS publishes an undivided thermal aggregate that no
+        # single factor describes, and AESO and IESO publish no generation at all.
+        # The caller substitutes NaN and states the reason in the report.
+        return None
     unknown = [col for col in columns if col not in factors]
     if unknown:
         raise ValueError(
@@ -241,10 +241,30 @@ def _emissions_breakdown(
     # Its furnace carries the destination market's own hours, read the same way
     # as any other grid's — so an export route's melt is as clean as the country
     # it melts in was in the hours it ran, and no differently.
+    # An intensity that cannot be read becomes NaN rather than an exception, so
+    # everything downstream of it lands blank while the MWh either side of it
+    # stay real. `unavailable` carries the reason into the report.
+    unavailable = None
     destination_intensity = (
         _grid_intensity(destination_area, destination_mix, factors, n.snapshots)
         if destination_bus is not None else None
     )
+    if destination_bus is not None and destination_intensity is None:
+        unavailable = (
+            f"{destination_area} publishes no generation mix, so what this route's "
+            f"furnace emitted melting its iron there is unknown"
+        )
+        destination_intensity = float("nan")
+
+    home_intensity_series = None
+    if "grid_import" in n.generators.index:
+        home_intensity_series = _grid_intensity(area, grid_mix, factors, n.snapshots)
+        if home_intensity_series is None:
+            unavailable = unavailable or (
+                f"{area} publishes prices but no generation mix, so the emission "
+                f"intensity of this run's imported electricity is unknown"
+            )
+            home_intensity_series = float("nan")
 
     # What a MWh on the producing area's electricity buses carried, hour by hour:
     # its own generation at the carriers' factors, its imports at the grid's.
@@ -253,8 +273,7 @@ def _emissions_breakdown(
     generated = generator_p[home_gens].sum(axis=1)
     carried = pd.Series(0.0, index=n.snapshots)
     for gen in home_gens:
-        factor = (_grid_intensity(area, grid_mix, factors, n.snapshots)
-                  if gen == "grid_import"
+        factor = (home_intensity_series if gen == "grid_import"
                   else factors[_carrier_key(n.generators.at[gen, "carrier"])])
         carried += generator_p[gen] * factor
 
@@ -355,12 +374,24 @@ def _emissions_breakdown(
         electricity_t += emissions["transmission_losses"]
         losses_mwh += float(lost_hourly.sum()) * annual
 
+    if unavailable:
+        # What each user drew, and what the losses took, are known whatever the
+        # mix was — only what it emitted is not. So the MWh stay and every t of
+        # CO2e goes blank, including the gas and the freight: they stack into one
+        # total with the electricity, and a total that is part known and part not
+        # is the number most likely to be quoted as if it were whole.
+        nan = float("nan")
+        emissions = {step: nan for step in emissions}
+        electricity_by_user = {user: nan for user in electricity_by_user}
+        electricity_t = gas_t = freight_t = nan
+
     return {
         "by_step": emissions,
         "electricity_mwh": electricity_mwh,
         "electricity_t": electricity_by_user,
         "losses_mwh": losses_mwh,
         "sources": {"electricity": electricity_t, "gas": gas_t, "freight": freight_t},
+        "unavailable": unavailable,
     }
 
 
@@ -877,6 +908,8 @@ def extract_summary(
     electricity_mwh = emitted["electricity_mwh"]
     sources = emitted["sources"]
     summary["emissions_basis"] = assumptions["emissions"]["basis"]
+    if emitted["unavailable"]:
+        summary["emissions_unavailable_reason"] = emitted["unavailable"]
     emissions_t = sum(emissions.values())
     summary["emissions_kt_co2e_per_year"] = emissions_t / 1e3
     for source, value in sources.items():

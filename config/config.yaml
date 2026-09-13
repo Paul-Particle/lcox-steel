@@ -97,17 +97,32 @@ areas:
   ESP:   { iso3: ESP, region: ES,  coarse: false, market: entsoe, market_area: ES }
   # No market of its own: a grid scenario naming AUS runs its zones instead.
   AUS:   { iso3: AUS, region: AUS, coarse: false, zones: [NSW1, QLD1, SA1, TAS1, VIC1] }
-  # Neither a market nor zones — islanded only until Brazil's subsystems are added.
-  BRA:   { iso3: BRA, region: BRA, coarse: false }
-  # No market of its own: a grid scenario naming CAN runs its two priced provinces
-  # instead. The other provinces are regulated cost-of-service utilities with no
-  # hourly price to retrieve, so they are not zones here.
-  CAN:   { iso3: CAN, region: CAN, coarse: false, zones: [AB, ONT] }
-  # Only the grid path is wired for these two: no cutout ships and their region
-  # shapes are unverified, so res_cf for them is untested. Ontario is ONT, not the
-  # province's usual ON, because YAML 1.1 reads a bare ON as boolean true — as the
-  # key it would become True, and as a market_area it would reach a filename as
-  # "True" without erroring.
+  # The SIN is one grid split into four price zones, so a grid scenario naming
+  # BRA runs the submarkets and an islanded one keeps the country whole. Their
+  # geometries are cut from Natural Earth Admin 1 by scratch/cut_brazil_submarkets.py
+  # (the mapping is electrical, not geographic — Acre and Rondonia are SE/CO, and
+  # Maranhao is N). Each takes the whole-Brazil cutout rather than a slice: a
+  # submarket's cells are a subset of the national grid, and the CF scripts select
+  # by geometry, not by the cutout's extent.
+  #
+  # Every market_area here is quoted. YAML 1.1 reads a bare N as boolean false,
+  # the same trap that made Ontario's key ONT.
+  BRA:   { iso3: BRA, region: BRA, coarse: false, zones: [BR_SE, BR_S, BR_NE, BR_N] }
+  BR_SE: { iso3: BRA, region: BR_SE, coarse: false, market: ons, market_area: "SE" }
+  BR_S:  { iso3: BRA, region: BR_S,  coarse: false, market: ons, market_area: "S" }
+  BR_NE: { iso3: BRA, region: BR_NE, coarse: false, market: ons, market_area: "NE" }
+  BR_N:  { iso3: BRA, region: BR_N,  coarse: false, market: ons, market_area: "N" }
+  # Alberta and Ontario are the only Canadian provinces with a wholesale market;
+  # the rest are regulated cost-of-service utilities with no hourly price. They
+  # are top-level areas rather than zones of a CAN entry because `all-areas`
+  # starts from the areas that are nobody's zone: under a CAN parent they would be
+  # unreachable islanded, and CAN itself has no cutout — Canada is 63,000 ERA5
+  # cells and a multi-hour download. Nothing ranks the two against each other as a
+  # result, which the NEM zones do get; they are reported side by side.
+  #
+  # Ontario is ONT, not the province's usual ON, because YAML 1.1 reads a bare ON
+  # as boolean true — as the key it would become True, and as a market_area it
+  # would reach a filename as "True" without erroring.
   AB:    { iso3: CAN, region: AB,  coarse: false, market: aeso, market_area: AB }
   ONT:   { iso3: CAN, region: "ON", coarse: false, market: ieso, market_area: ONT }
   # The NEM regions. AEMO serves prices for all five; only VIC1 ships a cutout,

@@ -33,16 +33,24 @@ def route_stem(route: str) -> str:
 # The second decides how much iron a t of steel takes, which is gangue: DR
 # pellets bring some, and the electrolytic routes almost none.
 #
-# An export route always charges cold. Its iron went across an ocean.
+# An export route's iron went across an ocean, so it arrives cold whatever it
+# was. Which cold it is depends on what made it: a shaft's sponge iron has to be
+# briquetted to survive the voyage and brings the gangue the shaft could not take
+# out, while electrowon plates and cast MOE iron already keep and are nearly pure
+# iron. The furnace charges them differently, so they are different states.
 _IRON_SOURCE = {
     "h2-dri-eaf": "dri-h2", "ng-dri-eaf": "dri-ng",
     "mix-dri-eaf": "dri-mix",
     "moe-eaf": "moe", "ew-eaf": "ew",
 }
 _CHARGE_STATE = {"h2-dri-eaf": "hot", "ng-dri-eaf": "hot", "mix-dri-eaf": "hot",
-                 "moe-eaf": "liquid", "ew-eaf": "cold"}
+                 "moe-eaf": "liquid", "ew-eaf": "plates"}
+_EXPORT_CHARGE_STATE = {"h2-dri-eaf": "briquettes", "ng-dri-eaf": "briquettes",
+                        "mix-dri-eaf": "briquettes",
+                        "moe-eaf": "plates", "ew-eaf": "plates"}
 EAF_CHARGE = {
-    route: ("cold" if route.endswith(EXPORT_SUFFIX) else _CHARGE_STATE[route_stem(route)],
+    route: ((_EXPORT_CHARGE_STATE if route.endswith(EXPORT_SUFFIX) else _CHARGE_STATE)
+            [route_stem(route)],
             _IRON_SOURCE[route_stem(route)])
     for route in ROUTES if route != "h2-only"
 }

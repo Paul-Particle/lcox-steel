@@ -209,6 +209,13 @@ REPORT_FIELDS = {
     **{f"emissions_{field_stem(user)}_kg_co2e_per_mwh_el": UNDEFINED
        for user in ELECTRICITY_USERS},
 
+    # Why the emission fields above are blank, when they are. A market that
+    # publishes prices but no per-carrier generation leaves a run that imports
+    # from it with no intensity to report, which is neither zero nor undefined —
+    # it is unknown, and the schema had no other way to say so. Blank here means
+    # the emission fields mean what they usually mean.
+    "emissions_unavailable_reason": UNDEFINED,
+
     # Which inputs produced the run (see common/_provenance.py).
     "inputs_hash": UNDEFINED,
 }
@@ -246,7 +253,17 @@ def apply_schema(frame: pd.DataFrame) -> pd.DataFrame:
     declared = [field for field in FIELD_ORDER
                 if field in frame.columns or field not in DIAGNOSTIC_FIELDS]
     on_schema = frame.reindex(columns=declared + extra)
-    on_schema[list(ZERO_FILLED)] = on_schema[list(ZERO_FILLED)].fillna(0.0)
+    # A run whose emission intensity is unknown keeps its emission fields blank.
+    # Zero-filling them would say the run emitted nothing, which is the one
+    # reading that is certainly wrong. Every other field fills as it always did,
+    # including the MWh each user drew — that is known whatever the mix was.
+    unknown = on_schema["emissions_unavailable_reason"].notna()
+    emission_fields = [field for field in ZERO_FILLED if field.startswith("emissions_")]
+    other_fields = [field for field in ZERO_FILLED if not field.startswith("emissions_")]
+    on_schema[other_fields] = on_schema[other_fields].fillna(0.0)
+    on_schema.loc[~unknown, emission_fields] = (
+        on_schema.loc[~unknown, emission_fields].fillna(0.0)
+    )
     return on_schema
 
 
