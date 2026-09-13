@@ -1,10 +1,17 @@
-"""Shared helpers for _entsoe.py and _nem.py."""
+"""Shared helpers for _entsoe.py, _nem.py, _canada.py and _ons.py."""
 
 import pandas as pd
 
 # NEM market time is AEST (UTC+10, no daylight saving). "Australia/Brisbane" is
 # the fixed-offset zone that models it, used to convert raw downloads to UTC.
 NEM_MARKET_TZ = "Australia/Brisbane"
+
+# ONS stamps din_instante in Brasilia time. Brazil abolished daylight saving in
+# 2019, so from 2019-01-01 onward this is a fixed UTC-3 offset and behaves like
+# NEM_MARKET_TZ. Earlier years contain DST transitions: tz_localize then raises
+# on the ambiguous/nonexistent hours rather than silently misaligning them, which
+# is why retrieve_ons refuses pre-2019 windows outright.
+ONS_MARKET_TZ = "America/Sao_Paulo"
 
 
 def iso(yyyymmdd: str) -> str:
@@ -21,12 +28,12 @@ def iter_months_str(start_date: str, end_date: str) -> list[str]:
     return [ts.strftime("%Y-%m") for ts in pd.date_range(start=start, end=end, freq="MS")]
 
 
-def to_utc_naive(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert a tz-aware or fixed-offset-naive (AEST = UTC+10) index to UTC-naive."""
+def to_utc_naive(df: pd.DataFrame, naive_tz: str = NEM_MARKET_TZ) -> pd.DataFrame:
+    """Convert a tz-aware index, or a naive one stamped in `naive_tz`, to UTC-naive."""
     if df.index.tz is not None:
         df.index = df.index.tz_convert("UTC").tz_localize(None)
     else:
-        df.index = df.index.tz_localize(NEM_MARKET_TZ).tz_convert("UTC").tz_localize(None)
+        df.index = df.index.tz_localize(naive_tz).tz_convert("UTC").tz_localize(None)
     return df.sort_index()
 
 
@@ -88,9 +95,11 @@ def assert_window_complete(
             problems.append(
                 f"{len(missing)} missing hours: {summarise_runs(missing, pd.Timedelta('1h'))}"
             )
-        n_nan = int(out_df.isna().any(axis=1).sum())
-        if n_nan:
-            problems.append(f"{n_nan} rows are NaN")
+        nan_times = idx[out_df.isna().any(axis=1)]
+        if len(nan_times):
+            problems.append(
+                f"{len(nan_times)} rows are NaN: {summarise_runs(nan_times, pd.Timedelta('1h'))}"
+            )
     else:
         gaps = idx.to_series().diff()
         if gaps.max() > full_gap_tolerance:

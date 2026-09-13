@@ -33,6 +33,22 @@ canada:
   # infra-level constant, not a researched figure.
   eur_per_cad: 0.64
 
+ons:
+  # Brazil (SIN). Areas are the four submarkets: SE, S, NE, N.
+  # FX rate for converting BRL-denominated prices to EUR, as for nem above.
+  eur_per_brl: 0.167
+
+  # ANEEL sets a PLD floor and cap each year (IPCA-indexed); retrieve_ons uses
+  # them to reconstruct PLD from the CMO that ONS publishes. `max_hourly` is the
+  # cap that binds an hourly price — `max_structural` caps the *weekly average*
+  # and is recorded here for reference only, not applied.
+  # Sources: ANEEL Despacho 3.850/2025 (2026) and the equivalent year-end
+  # despachos for 2024 and 2025. Add a year here before requesting it.
+  pld_limits:
+    2024: { min:  61.07, max_hourly: 1470.57, max_structural: 716.80 }
+    2025: { min:  58.60, max_hourly: 1542.23, max_structural: 751.73 }
+    2026: { min:  57.31, max_hourly: 1611.04, max_structural: 785.27 }
+
 # Reporting. best_zone_by names the field that decides which of a country's
 # zones represents it — a country supplying its market through zones is run once
 # per zone, and only the cheapest reaches results/report_{scenario}.csv. The
