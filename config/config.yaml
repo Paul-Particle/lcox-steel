@@ -124,7 +124,12 @@ areas:
   # as boolean true — as the key it would become True, and as a market_area it
   # would reach a filename as "True" without erroring.
   AB:    { iso3: CAN, region: AB,  coarse: false, market: aeso, market_area: AB }
-  ONT:   { iso3: CAN, region: "ON", coarse: false, market: ieso, market_area: ONT }
+  # Ontario carries no `market` and so appears islanded only. IESO's yearly HOEP
+  # report ends at 2025-04-30 23:00: the Market Renewal Program went live on
+  # 1 May 2025 and replaced HOEP with locational marginal prices, which nothing
+  # here reads yet. Restore `market: ieso, market_area: ONT` once it does, or to
+  # run Ontario grid-connected for a year before 2025.
+  ONT:   { iso3: CAN, region: "ON", coarse: false }
   # The NEM regions. AEMO serves prices for all five; only VIC1 ships a cutout,
   # so the other four cost a CDS download the first time they are solved.
   # Victoria also ships its offshore parquet, which is why the default
