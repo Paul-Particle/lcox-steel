@@ -106,7 +106,7 @@ Wind-specific post-processing:
 
 3. **Technology assumptions**
    - **Onshore wind:** single representative turbine  
-     (`Vestas_V112_3MW`)
+     (`NREL_ReferenceTurbine_2020ATB_4MW`)
    - **Solar PV:** crystalline silicon (`CSi`), latitude-optimal tilt
    - Same technology assumptions used across countries for comparability
 
