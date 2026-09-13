@@ -522,9 +522,15 @@ def spec(assumptions: dict) -> list:
           f"{assumptions['eaf']['consumables_eur_per_t']:,.0f} €/t steel")])
 
     # Process plants: two leaves each, capital then fixed O&M.
+    # One entry per PROCESS_PLANTS link: capital first, then its fixed O&M a shade
+    # lighter. The blended shaft sits between the two single-fuel ones, as it does
+    # everywhere else.
     shades = {"dri-h2": ("#33434D", "#5A6B77"), "dri-ng": ("#3D4E59", "#687985"),
+              "dri-mix": ("#374852", "#63747F"),
               "moe": ("#2B3A44", "#54656F"),
-              "ew": ("#25333B", "#4C5D66"), "eaf": ("#3A4A54", "#6E7F89")}
+              "ew": ("#25333B", "#4C5D66"),
+              "briquetting": ("#44555F", "#77888F"),
+              "eaf": ("#3A4A54", "#6E7F89")}
     for link, label in PROCESS_PLANTS:
         plant = assumptions[link]
         stem = field_stem(link)
