@@ -109,10 +109,12 @@ def test_ieso_keeps_24_hours_across_dst_dates(tmp_path, date):
 
 # ── Variant support ───────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("variant", ["emissions", "full"])
-def test_unsupported_variant_names_what_is_missing(variant, tmp_path):
+def test_unsupported_variant_names_what_is_missing(tmp_path):
+    """`full` carries load and flow columns these markets do not serve. An
+    `emissions` request is answered with the price alone instead of refused —
+    see test_emissions for what the report then does with it."""
     class _Stub:
-        wildcards = type("W", (), {"variant": variant, "start_date": "20230101",
+        wildcards = type("W", (), {"variant": "full", "start_date": "20230101",
                                    "end_date": "20231231"})()
         params = type("P", (), {"eur_per_cad": 0.64})()
         output = [str(tmp_path / "out.parquet")]
