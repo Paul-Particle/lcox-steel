@@ -333,3 +333,36 @@ Left as-is deliberately on 2026-09-13: narrowing it converts a currently-caught
 error into a crash, which is the wrong change to make while a run is in flight. The
 window that made this urgent is gone — the function now stages beside the
 destination and renames over it, so the destination is never absent.
+
+## `d2_bestsite_p95` cannot handle an area with no coastline
+
+The script computes all three technologies on every call, whichever one the rule
+asked for. A landlocked area has an empty offshore geometry — correctly so — and
+offshore wind then has no eligible cell, so `pick_p95_cell` gets an all-NaN
+distance array and raises `ValueError: All-NaN slice encountered`. That takes the
+onshore and solar outputs down with it, though both are perfectly well defined.
+
+Alberta hit this on 2026-09-13. The tell is that the log's last line is the
+*previous* technology succeeding (`AB | wind_onshore: national_mean=0.200
+best_mean=0.304`), which makes it read as a solar failure when it is an offshore
+one — the failing technology never gets far enough to log anything.
+
+The fix is for the per-technology loop to skip a technology whose weights are
+everywhere zero and record its absence, the way `d3_anchor_colo` already omits a
+technology with no candidate in range. `pick_p95_cell` should also raise something
+that names the area and the technology rather than surfacing numpy's message.
+
+Word that guard as "this technology has no eligible cell", not "this area has no
+data". Reading `pick_p95_cell`'s `valid = w.ravel() > 0` and concluding the *area*
+had no weights is the wrong turning here, and two readers took it on the night —
+the weights that are empty belong to the technology, not to the place.
+
+Alberta is the only landlocked area in the registry; every other area's offshore
+geometry covers between 48,056 km2 (DEU) and 3,103,546 km2 (AUS), so nothing else
+reaches this today.
+
+Worked around for that run by `scratch/cf_for_landlocked_area.py`, which writes the
+two real outputs directly. Not done inline because `d2_bestsite_p95.py` is the
+script every capacity-factor output depends on: changing it re-runs all of them,
+and the rewritten parquets then look newer than the networks solved from them, so
+every solve would be re-run too.
