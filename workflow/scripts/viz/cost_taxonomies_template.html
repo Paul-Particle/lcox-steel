@@ -78,6 +78,12 @@
 
   .ct-pair{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;padding:8px 18px 18px;}
   @media (max-width:1040px){.ct-pair{grid-template-columns:1fr;}}
+  /* The single-taxonomy build keeps the alternative column and drops the other,
+     so the remaining chart takes the full width rather than half of it. */
+  .ct-wrap.alt-only .ct-pair{grid-template-columns:1fr;}
+  .ct-wrap.alt-only .ct-col.dash,
+  .ct-wrap.alt-only .ct-key.dash,
+  .ct-wrap.alt-only .ct-col-h{display:none;}
   .ct-col{min-width:0;}
   .ct-col-h{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:8px 0 2px;
     border-bottom:1px solid var(--hair);margin-bottom:6px;}
@@ -97,7 +103,7 @@
 </style>
 
 <div class="ct-root">
- <div class="ct-wrap">
+ <div class="ct-wrap /*ALT_ONLY_CLASS*/">
   <header class="ct-head">
     <div>
       <div class="ct-brand"><span class="ct-dot"></span><span>Cost breakdown · two taxonomies</span></div>
@@ -221,7 +227,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     cap_panels:CAP_PANELS, variant_routes:VARIANT_ROUTES, variant_label:VLAB,
     leaf_specs:LEAF_SPECS, leaf_groups:LEAF_GROUPS, alt_lcos_bands:ALT_LCOS,
     alt_lcoe_bands:ALT_LCOE, dash_lcoe_bands:DASH_LCOE, alt_lcoh_bands:ALT_LCOH,
-    dash_lcoh_bands:DASH_LCOH, h2_lhv_kwh_per_kg:H2LHV} = PAYLOAD;
+    dash_lcoh_bands:DASH_LCOH, h2_lhv_kwh_per_kg:H2LHV,
+    base_variant:BASE, cf_options:CF_OPTS, default_view:DEFAULT} = PAYLOAD;
+  // Hidden by the single-taxonomy build, which shows the alternative alone.
+  const ALT_ONLY = /*ALT_ONLY*/false;
 
   const CONF = {responsive:true, displaylogo:false,
     modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
@@ -244,20 +253,23 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     geo:  GEOS.map(g=>[g, GN[g]||g]),
     year: YEARS.map(y=>[String(y), String(y)]),
     grid: [["grid","Grid"],["nogrid","Islanded"]],
-    cf:   [["avg","Average CF"],["p95","Best-site P95"]],
+    cf:   CF_OPTS,
     variant: Object.keys(VLAB).map(v=>[v, VLAB[v]]),
   };
-  const S = {geo:"DE", year:"2023", grid:"grid", cf:"avg", variant:"base"};
+  const CFLAB = Object.fromEntries(CF_OPTS);
+  // The payload picks the opening view from runs that were actually solved.
+  const S = {geo:DEFAULT.a.geo, year:DEFAULT.a.year, grid:DEFAULT.a.grid,
+             cf:DEFAULT.a.cf, variant:DEFAULT.a.variant};
 
   const proj = s => `${s.geo}-${s.year}-${s.grid}`;
   const projectHas = s => !!CASES[proj(s)];
   const geoName = g => GN[g]||g;
-  const variantOk = (route,v) => v==="base" || (VARIANT_ROUTES[v]||[]).includes(route);
+  const variantOk = (route,v) => v===BASE || (VARIANT_ROUTES[v]||[]).includes(route);
   // ng-dri-eaf has no renewables, so it carries no capacity-factor variants.
   const cfKey = (s,route) => route==="ng-dri-eaf" ? "na" : s.cf;
   function recFor(s, route){
     const rc = CASES[proj(s)]?.[route]; if(!rc) return null;
-    const v = rc[variantOk(route,s.variant) ? s.variant : "base"] || rc["base"];
+    const v = rc[variantOk(route,s.variant) ? s.variant : BASE] || rc[BASE];
     return v ? (v[cfKey(s,route)] || null) : null;
   }
   // The routes this scenario can actually plot, in the canonical order.
@@ -479,7 +491,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       if(g==="iron_store" || g==="steel_store") return storeLines(rec, g);
       return [];
     };
-    stacked(document.getElementById("plot-lcos-dash"), routes,
+    if(!ALT_ONLY) stacked(document.getElementById("plot-lcos-dash"), routes,
       COST_GROUPS.map(([g,lab,col])=>[g,lab,col]),
       (g,r)=>(recs[r].costs||{})[g], dashLines, totals,
       {unit:"€/t", fmt:",.0f", basis:"LCOS", height:PAIR_H, yTitle:"LCOS  (€ / t steel)",
@@ -547,7 +559,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     stacked(document.getElementById(`plot-${metric}-alt`), routes, altBands,
       (k,r)=>((isLcoe?recs[r].alt_lcoe:recs[r].alt_lcoh)||{})[k]*(isLcoe?1:scale),
       (k,r)=>detail(k,r,true), totals, common);
-    stacked(document.getElementById(`plot-${metric}-dash`), routes, dashBands,
+    if(!ALT_ONLY) stacked(document.getElementById(`plot-${metric}-dash`), routes, dashBands,
       (k,r)=>((isLcoe?recs[r].lcoe_parts:recs[r].lcoh_parts)||{})[k]*(isLcoe?1:scale),
       (k,r)=>detail(k,r,false), totals, common);
   }
@@ -711,17 +723,17 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const routes = routesAt(S);
     document.getElementById("ct-meta").innerHTML =
       `${geoName(S.geo)} · ${S.year} · ${S.grid==="grid"?"grid-connected":"islanded"}<br>`
-      + `${S.cf==="avg"?"mean-CF site":"best-site P95"}`
-      + (S.variant!=="base" ? ` · ${VLAB[S.variant]}` : "")
+      + `${CFLAB[S.cf]||S.cf}`
+      + (S.variant!==BASE ? ` · ${VLAB[S.variant]}` : "")
       + `<br>${routes.length} route${routes.length===1?"":"s"} solved`;
     // Say plainly where a selection could not be honoured for every route.
     const notes = [];
-    if(S.variant!=="base"){
+    if(S.variant!==BASE){
       const off = routes.filter(r=>!variantOk(r,S.variant)).map(r=>RLAB[r]||r);
       if(off.length) notes.push(`${VLAB[S.variant]} does not apply to ${off.join(", ")} — shown at baseline.`);
     }
     const na = routes.filter(r=>r==="ng-dri-eaf");
-    if(na.length && S.cf!=="avg") notes.push("NG-DRI-EAF has no renewables, so the capacity-factor basis does not apply to it.");
+    if(na.length) notes.push("NG-DRI-EAF has no renewables, so the capacity-factor basis does not apply to it.");
     document.getElementById("ct-clamp").textContent = notes.join("  ");
     document.getElementById("ct-foot").innerHTML =
       "Cross-chart logic, shared by both taxonomies: the electricity segment in LCOS/LCOH is priced "
