@@ -1,4 +1,4 @@
-"""ONS download primitives — imported by retrieve_ons.py.
+"""ONS download primitives — imported by _ons.py.
 
 ONS publishes one parquet per dataset per calendar year on a public S3 bucket
 (no API key, no rate limit, no pagination), so the raw cache here is a plain
@@ -6,7 +6,7 @@ per-(dataset, year) file rather than the per-month fetches ENTSO-E and NEM need.
 
 Both datasets come in long format keyed on (id_subsistema, din_instante); the
 pivot to the (area, metric) wide shape used by the rest of the grid pipeline
-happens in retrieve_ons.py.
+happens in _ons.py.
 """
 
 import logging
@@ -15,7 +15,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-# Module-level logger only — the rule script (retrieve_ons.py) installs handlers.
+# Module-level logger only — the rule script (_ons.py) installs handlers.
 log = logging.getLogger(__name__)
 
 S3_ROOT = "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset"

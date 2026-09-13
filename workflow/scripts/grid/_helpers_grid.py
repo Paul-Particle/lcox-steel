@@ -10,7 +10,7 @@ NEM_MARKET_TZ = "Australia/Brisbane"
 # 2019, so from 2019-01-01 onward this is a fixed UTC-3 offset and behaves like
 # NEM_MARKET_TZ. Earlier years contain DST transitions: tz_localize then raises
 # on the ambiguous/nonexistent hours rather than silently misaligning them, which
-# is why retrieve_ons refuses pre-2019 windows outright.
+# is why _ons refuses pre-2019 windows outright.
 ONS_MARKET_TZ = "America/Sao_Paulo"
 
 
@@ -35,6 +35,25 @@ def to_utc_naive(df: pd.DataFrame, naive_tz: str = NEM_MARKET_TZ) -> pd.DataFram
     else:
         df.index = df.index.tz_localize(naive_tz).tz_convert("UTC").tz_localize(None)
     return df.sort_index()
+
+
+def area_month_in_cache(
+    cached: pd.DataFrame | None, area: str, ym: str, tz: str | None = None
+) -> bool:
+    """Return True if `cached` already holds data for (area, calendar month `ym`).
+
+    By default the cached (UTC-naive) index is matched against `ym` directly. Pass
+    `tz` to interpret the index in that timezone first: a source that downloads by
+    *market* month stores hours that spill across two UTC months, so a plain UTC
+    match reports a month as cached on a neighbour's spillover and it never gets
+    downloaded.
+    """
+    if cached is None or area not in cached.columns.get_level_values(0):
+        return False
+    index = cached[area].dropna(how="all").index
+    if tz is not None:
+        index = index.tz_localize("UTC").tz_convert(tz).tz_localize(None)
+    return bool((index.to_period("M") == pd.Period(ym, freq="M")).any())
 
 
 def summarise_runs(times: pd.DatetimeIndex, step: pd.Timedelta, limit: int = 3) -> str:
