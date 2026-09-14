@@ -263,11 +263,20 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // routes a sensitivity solved anywhere; only CASES says which it solved here.
   const variantOk = (s,v) => !!CASES[proj(s)]?.[s.route]?.[v];
   const effVariant = s => variantOk(s, s.variant) ? s.variant : BASE;
-  const cfKey = s => s.route==="ng-dri-eaf" ? "na" : s.cf;
+  // A route that builds no renewables — ng-dri-eaf — is filed under whatever
+  // capacity-factor method its scenario carried: "na" when the scenario named
+  // none, and the same one as every other route when its tech rows cover all
+  // routes, as they do here. Take the selected method, else the only entry there;
+  // demanding "na" outright loses the route.
+  function cfRec(byCf, s){
+    if(!byCf) return null;
+    if(byCf[s.cf]) return byCf[s.cf];
+    const keys = Object.keys(byCf);
+    return keys.length === 1 ? byCf[keys[0]] : null;
+  }
   function recFor(s){
     const rc = CASES[proj(s)]?.[s.route]; if(!rc) return null;
-    const v = rc[effVariant(s)] || rc[BASE]; if(!v) return null;
-    return v[cfKey(s)] || null;
+    return cfRec(rc[effVariant(s)] || rc[BASE], s);
   }
   const mixIsFossil = rec => rec && rec.h2_share!=null && rec.h2_share < H2MIN;
   const co2Int = rec => (rec.ng_gwh*1000*CO2F)/((rec.steel_mt||1)*1e6);   // tCO2 / t steel
