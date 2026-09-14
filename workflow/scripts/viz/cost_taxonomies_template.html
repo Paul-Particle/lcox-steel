@@ -878,7 +878,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       // compete, and these are the ones carrying the meaning.
       const dividers = routes.slice(1).map((_,i)=>({
         type:"line", xref:"x", yref:"paper", x0:i+0.5, x1:i+0.5, y0:0, y1:1,
-        line:{color:PRINT.border, width:1, dash:"dash"}, layer:"below",
+        line:{color:PRINT.border, width:1, dash:"dot"}, layer:"below",
       }));
       Plotly.react(el, traces, base({
         barmode:"group", height:CAP_H, bargap:0.28, bargroupgap:0.08,
