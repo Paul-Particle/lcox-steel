@@ -258,18 +258,6 @@ def main() -> None:
         'specific values are not fixed and tbd.</p>'
         '</div>')
 
-    # ---- how the runs were set up ---------------------------------------
-    years = sorted({str(year)[:4] for year in scenarios["start_date"]})
-    html.append(
-        '<div class="as-sec"><h2>How the runs were set up</h2>'
-        '<p class="lead">Every run solves one route in one place over one year, '
-        'hourly — 8 760 snapshots — with HiGHS. Every capacity is extendable, so '
-        'what is set below is what a MW or a tonne of capacity costs, never how '
-        'much of it there is. The geographies come from the area registry, which '
-        'is what sends a grid run to Brazil\'s four submarkets and Australia\'s '
-        'five NEM regions rather than to the country; an islanded run keeps the '
-        f'country whole. The weather years are {" and ".join(years)}.</p></div>')
-
     # ---- plain sections -------------------------------------------------
     for title, lead, rows_spec in SECTIONS:
         rows = []
