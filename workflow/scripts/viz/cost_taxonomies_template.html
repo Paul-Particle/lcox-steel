@@ -39,6 +39,23 @@
   .ct-title{font-size:clamp(24px,3.2vw,34px);font-weight:700;letter-spacing:-.02em;
     margin:0;text-wrap:balance;line-height:1.06;}
   .ct-sub{color:var(--muted);font-size:14px;margin:9px 0 0;max-width:74ch;}
+  .ct-sub b{color:var(--ink);font-weight:600;}
+  /* Data a reader should not take at face value — the same magenta-red rule the
+     hub's work-in-progress banner uses. */
+  .ct-warn{--warn:#D75674;--warn-bg:rgba(215,86,116,.10);--warn-line:rgba(215,86,116,.32);
+    position:relative;margin:14px 0 0;padding:10px 14px 10px 16px;max-width:74ch;
+    background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:4px;
+    font-size:13px;color:var(--muted);}
+  @media (prefers-color-scheme:dark){
+    .ct-warn{--warn:#E68199;--warn-bg:rgba(215,86,116,.16);--warn-line:rgba(215,86,116,.42);}
+  }
+  :root[data-theme="dark"] .ct-warn{--warn:#E68199;--warn-bg:rgba(215,86,116,.16);
+    --warn-line:rgba(215,86,116,.42);}
+  :root[data-theme="light"] .ct-warn{--warn:#D75674;--warn-bg:rgba(215,86,116,.10);
+    --warn-line:rgba(215,86,116,.32);}
+  .ct-warn::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
+    background:var(--warn);border-radius:4px 0 0 4px;}
+  .ct-warn b{color:var(--warn);font-weight:700;}
   .ct-meta{font-family:var(--mono);font-size:11px;color:var(--faint);
     text-align:right;line-height:1.7;}
 
@@ -47,6 +64,9 @@
     gap:12px 18px;background:var(--panel);border:1px solid var(--border);
     border-radius:12px;box-shadow:var(--shadow);padding:15px 18px;margin-top:20px;}
   .ct-ax{display:flex;flex-direction:column;gap:6px;min-width:0;}
+  /* One pill per zone is more than a shared column can hold without towering over
+     the other axes, so geography takes a row to itself. */
+  .ct-ax-geo{grid-column:1/-1;}
   .mxlab{font-family:var(--mono);font-size:10px;letter-spacing:.13em;
     text-transform:uppercase;color:var(--muted);font-weight:600;}
   .ct-pills{display:flex;gap:3px;background:var(--panel-2);padding:3px;
@@ -106,12 +126,25 @@
  <div class="ct-wrap /*ALT_ONLY_CLASS*/">
   <header class="ct-head">
     <div>
-      <div class="ct-brand"><span class="ct-dot"></span><span>Cost breakdown · two taxonomies</span></div>
-      <h1 class="ct-title">Plotting alternatives</h1>
-      <p class="ct-sub">Two ways to cut the same levelised cost, side by side: the alternative
-        taxonomy next to the one the dashboard already uses. Both are drawn from the same results
-        and both close exactly on the total, so all that differs is where the cuts fall. Hover any
-        segment for the inputs behind it.</p>
+      <div class="ct-brand"><span class="ct-dot"></span><span>Green steel model · cost breakdown</span></div>
+      <h1 class="ct-title">Test run 2 · 2026-09-14</h1>
+      <p class="ct-sub">Every steel route including its export twin, solved over the 2025 weather
+        year across <b>13 grid-connected zones</b> and <b>7 islanded geographies</b> — 234 networks
+        on assumptions moved onto the research workbook's Model Input Register. Renewables are
+        sited best-site&nbsp;P95 (an upper bound on resource quality); hydrogen storage is a salt
+        cavern at 350&nbsp;€/MWh (a lower bound); the grid charge is a single
+        140&nbsp;k€/MW/yr capacity fee with no volumetric part; one gas price everywhere and no
+        carbon price. Iron is exported to Spain, finished steel stays where it was made. Use the
+        <b>Grid</b> control to move between the grid-connected and islanded halves; the
+        <b>Sensitivity</b> control carries the one commissioned variant, MOE turndown at 70%.
+        Hover any segment for the inputs behind it.</p>
+      <p class="ct-warn"><b>Brazilian and Canadian grid data is not reliable yet.</b> The four
+        Brazilian submarkets and Alberta publish a market price but no generation mix, so those
+        runs report their emission intensity as unknown rather than as a number. Ontario has no
+        grid case at all: IESO's HOEP series ends 2025-04-30, when the Market Renewal Program
+        replaced it with locational prices, and HOEP excludes the Global Adjustment — so an
+        earlier year would put a commodity-only price against all-in prices everywhere else.
+        Read those geographies for the shape of the cost stack, not for its level.</p>
     </div>
     <div class="ct-meta" id="ct-meta"></div>
   </header>
@@ -224,7 +257,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
 (function(){
   const {cases:CASES, gas:GAS, template:FCA, geos:GEOS, years:YEARS, geo_names:GN,
     route_order:ROUTE_ORDER, route_label:RLAB, cost_groups:COST_GROUPS,
-    cap_panels:CAP_PANELS, variant_routes:VARIANT_ROUTES, variant_label:VLAB,
+    cap_panels:CAP_PANELS, variant_label:VLAB,
     leaf_specs:LEAF_SPECS, leaf_groups:LEAF_GROUPS, alt_lcos_bands:ALT_LCOS,
     alt_lcoe_bands:ALT_LCOE, dash_lcoe_bands:DASH_LCOE, alt_lcoh_bands:ALT_LCOH,
     dash_lcoh_bands:DASH_LCOH, h2_lhv_kwh_per_kg:H2LHV,
@@ -246,7 +279,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
 
   // ---- scenario state -------------------------------------------------
   // Routes are the bars on every chart, so the matrix moves everything else.
-  const AXES = ["geo","year","grid","cf","variant"];
+  // Grid leads: it is the axis that separates the two halves of the run, and the
+  // one worth reaching for first. Geography trails because it carries a pill per
+  // zone and takes a row of its own (see .ct-ax-geo).
+  const AXES = ["grid","year","cf","variant","geo"];
   const AXLAB = {geo:"Geography", year:"Weather year", grid:"Grid",
                  cf:"Capacity factor", variant:"Sensitivity"};
   const OPTS = {
@@ -264,12 +300,18 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const proj = s => `${s.geo}-${s.year}-${s.grid}`;
   const projectHas = s => !!CASES[proj(s)];
   const geoName = g => GN[g]||g;
-  const variantOk = (route,v) => v===BASE || (VARIANT_ROUTES[v]||[]).includes(route);
   // ng-dri-eaf has no renewables, so it carries no capacity-factor variants.
   const cfKey = (s,route) => route==="ng-dri-eaf" ? "na" : s.cf;
+  // The record stored under exactly the selected sensitivity, with no fall back to
+  // the base case. A sensitivity is solved for the runs it was commissioned for —
+  // MOE turndown only islanded — so asking CASES directly is what tells the page
+  // whether the pill has anything of its own here. VARIANT_ROUTES cannot: it says
+  // which routes a sensitivity solved anywhere, not which it solved in this
+  // geography, so it reads as available on grid geographies that never ran it.
+  const ownRec = (s,route) => CASES[proj(s)]?.[route]?.[s.variant]?.[cfKey(s,route)] || null;
   function recFor(s, route){
     const rc = CASES[proj(s)]?.[route]; if(!rc) return null;
-    const v = rc[variantOk(route,s.variant) ? s.variant : BASE] || rc[BASE];
+    const v = rc[s.variant] || rc[BASE];
     return v ? (v[cfKey(s,route)] || null) : null;
   }
   // The routes this scenario can actually plot, in the canonical order.
@@ -702,13 +744,13 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   function axisDisabled(axis, value){
     const probe = {...S, [axis]:value};
     if(!projectHas(probe)) return true;
-    if(axis==="variant") return !ROUTE_ORDER.some(r=>variantOk(r,value) && recFor(probe,r));
+    if(axis==="variant") return !ROUTE_ORDER.some(r=>ownRec(probe,r));
     return !routesAt(probe).length;
   }
   function buildMatrix(){
     const host = document.getElementById("ct-mx"); host.innerHTML = "";
     AXES.forEach(axis=>{
-      const box = document.createElement("div"); box.className = "ct-ax";
+      const box = document.createElement("div"); box.className = "ct-ax ct-ax-" + axis;
       const lab = document.createElement("div"); lab.className = "mxlab";
       lab.textContent = AXLAB[axis];
       const pills = document.createElement("div"); pills.className = "ct-pills";
@@ -729,7 +771,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     // Say plainly where a selection could not be honoured for every route.
     const notes = [];
     if(S.variant!==BASE){
-      const off = routes.filter(r=>!variantOk(r,S.variant)).map(r=>RLAB[r]||r);
+      const off = routes.filter(r=>!ownRec(S,r)).map(r=>RLAB[r]||r);
       if(off.length) notes.push(`${VLAB[S.variant]} does not apply to ${off.join(", ")} — shown at baseline.`);
     }
     const na = routes.filter(r=>r==="ng-dri-eaf");
@@ -743,7 +785,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       + "the same holds for renewables, the electrolyser, the battery's power and energy, and the grid "
       + "connection's capex and capacity charge. Two rows of the alternative stay empty because "
       + "the model does not carry them — ore/iron freight and scrap or HBI purchase. Regenerate with "
-      + "<code>python workflow/scripts/viz/build_cost_taxonomies.py</code>.";
+      + "<code>build_alt_taxonomy.py</code> for this page or <code>build_cost_taxonomies.py</code> for "
+      + "the two-column comparison, then <code>build_dashboard_hub.py</code>. Set "
+      + "<code>DASHBOARD_ZONES=best</code> to plot one representative zone per country instead of "
+      + "every zone that solved.";
   }
 
   function refresh(){

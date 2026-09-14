@@ -213,7 +213,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const {cases:CASES, gas:GAS, template:FCA, geos:GEOS, years:YEARS, geo_names:GN,
     clean_routes:CLEAN, route_order:ROUTE_ORDER, route_label:RLAB, route_color:RCOL,
     co2_t_per_mwh:CO2F, h2_min:H2MIN, cost_groups:COST_GROUPS, cap_panels:CAP_PANELS,
-    variant_routes:VARIANT_ROUTES, variant_label:VLAB,
+    variant_label:VLAB,
     base_variant:BASE, cf_options:CF_OPTS, default_view:DEFAULT} = PAYLOAD;
 
   const CONF = {responsive:true, displaylogo:false,
@@ -254,10 +254,12 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const gridHas = (geo,year,grid) => !!CASES[`${geo}-${year}-${grid}`];
   const routeHas = (geo,year,grid,route) => !!(CASES[`${geo}-${year}-${grid}`]||{})[route];
   const routesAt = s => ROUTE_ORDER.filter(r => routeHas(s.geo,s.year,s.grid,r));
-  // A scenario covers whichever routes it solved — there is no longer a
-  // sensitivity that leaves the other routes on a baseline run.
-  const variantOk = (route,v) => (VARIANT_ROUTES[v]||[]).includes(route);
-  const effVariant = s => variantOk(s.route, s.variant) ? s.variant : BASE;
+  // A sensitivity covers the runs it was commissioned for — MOE turndown was run
+  // islanded only — so whether it applies is a question about this geography and
+  // route together, not about the sensitivity alone. VARIANT_ROUTES says which
+  // routes a sensitivity solved anywhere; only CASES says which it solved here.
+  const variantOk = (s,v) => !!CASES[proj(s)]?.[s.route]?.[v];
+  const effVariant = s => variantOk(s, s.variant) ? s.variant : BASE;
   const cfKey = s => s.route==="ng-dri-eaf" ? "na" : s.cf;
   function recFor(s){
     const rc = CASES[proj(s)]?.[s.route]; if(!rc) return null;
@@ -288,7 +290,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       const rs = ROUTE_ORDER.filter(r=>routeHas(c.geo,c.year,c.grid,r));
       if(rs.length){ const nr = rs.includes("h2-dri-eaf")?"h2-dri-eaf":rs[0]; notes.push("route → "+RLAB[nr]); c.route=nr; }
     }
-    if(!variantOk(c.route,c.variant)){ if(c.variant!==BASE) notes.push("sensitivity → "+(VLAB[BASE]||BASE)); c.variant=BASE; }
+    if(!variantOk(c,c.variant)){ if(c.variant!==BASE) notes.push("sensitivity → "+(VLAB[BASE]||BASE)); c.variant=BASE; }
     c._notes=notes; c._unavail=null; return c;
   }
   const B = () => clamp(resolveRaw());
@@ -336,7 +338,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     if(axis==="grid")    return !gridHas(A.geo,A.year,val);
     if(axis==="route")   return !routeHas(A.geo,A.year,A.grid,val);
     if(axis==="cf")      return A.route==="ng-dri-eaf";
-    if(axis==="variant") return !variantOk(A.route,val);
+    if(axis==="variant") return !variantOk(A,val);
     return false;
   }
   function buildMatrixB(){
@@ -359,7 +361,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     if(axis==="grid")    return !gridHas(b.geo,b.year,val);
     if(axis==="route")   return !routeHas(b.geo,b.year,b.grid,val);
     if(axis==="cf")      return b.route==="ng-dri-eaf";
-    if(axis==="variant") return !variantOk(b.route,val);
+    if(axis==="variant") return !variantOk(b,val);
     return false;
   }
 

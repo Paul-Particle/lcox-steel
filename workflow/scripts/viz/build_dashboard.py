@@ -5,12 +5,13 @@ data payload (LCOS cost breakdown in €/t and optimised capacities, computed wi
 the exact pipeline reshaping in plot_lcos_bars / plot_capacity_bars) and renders
 the cost-breakdown and capacity charts client-side. That lets the page toggle:
 
-  * sensitivity — which scenario the run belongs to (a scenario is a name plus
-    its optional assumptions overlay), and
+  * sensitivity — which commissioned variant the run belongs to, out of the few
+    DASHBOARD_SCENARIOS declares browsable, and
   * capacity-factor method — the `variant` each RES tech was solved with.
 
 Both axes are report columns, so the page is assembled by grouping rows rather
-than by parsing names.
+than by parsing names. Whether a run bought grid power is its own axis, read off
+the same columns, so the base case needs no pill of its own on either side of it.
 
 The controls drive the charts, the LCOS table and the summary cards; the
 cross-geography LCOS overview stays on the baseline, cheapest-CF numbers.
@@ -18,6 +19,7 @@ Offline, no external hosts — safe to publish as an Artifact.
 """
 import base64
 import json
+import os
 import sys
 import types
 from pathlib import Path
@@ -41,7 +43,31 @@ GEO_NAMES = {
     "AUS": "Australia", "BRA": "Brazil",
     "NSW1": "New South Wales", "QLD1": "Queensland", "SA1": "South Australia",
     "TAS1": "Tasmania", "VIC1": "Victoria",
+    "BR_N": "Brazil · Norte", "BR_NE": "Brazil · Nordeste",
+    "BR_SE": "Brazil · Sudeste/C-Oeste", "BR_S": "Brazil · Sul",
+    "AB": "Alberta", "ONT": "Ontario",
 }
+
+# The report keeps one zone per country — `report.best_zone_by` in
+# config/config.yaml picks it — and the hidden diagnostic beside it keeps every
+# zone that solved, flagged. The pages are built from the diagnostic so each NEM
+# region and Brazilian submarket browses as its own geography rather than one
+# standing in for the country. `DASHBOARD_ZONES=best` builds from the reports.
+ALL_ZONES = os.environ.get("DASHBOARD_ZONES", "all") != "best"
+
+# The scenarios the pages carry, and what the Sensitivity control calls each one.
+# `standard-grid` and `standard-islanded` are the same base case either side of
+# the Grid control, so both collapse onto one pill and the Grid axis alone
+# separates them. A scenario absent from here is not browsable: the EW-capex and
+# gas sweeps each answer a single-input question, which is read off
+# results/report_{scenario}.csv rather than clicked through here.
+SCENARIO_LABEL = {"base": "Base", "moe-turndown-70": "MOE turndown 70%"}
+DASHBOARD_SCENARIOS = {
+    "standard-grid": "base",
+    "standard-islanded": "base",
+    "moe-turndown-70": "moe-turndown-70",
+}
+BASE_SCENARIO = "base"
 
 # Display names for the capacity-factor variants. A variant with no entry shows
 # its own id, so a new CF method reaches the page without a code change.
@@ -174,23 +200,32 @@ def _axes(row):
         "year": str(row["start_date"])[:4],
         "grid": "grid" if "grid" in variants else "nogrid",
         "route": row["route"],
-        "variant": row["scenario"],
+        "variant": DASHBOARD_SCENARIOS[row["scenario"]],
         # A run whose techs were solved with different methods is named by all of
         # them, rather than being filed under whichever came first.
         "cf": "+".join(cf_methods) or "na",
     }
 
 
-def _baseline_scenario(scenarios):
-    """The scenario the overview rests on and the others fall back to.
+def _scenario_of(report_path):
+    """The scenario a file holds runs for, whether it is a report or its diagnostic."""
+    stem = report_path.stem
+    if stem.endswith("_diag"):
+        return stem[len(".report_"):-len("_diag")]
+    return stem[len("report_"):]
 
-    A scenario is a name plus an optional assumptions overlay, so the one with no
-    overlay is the base case. If every scenario overrides something the first by
-    name stands in — the comparison has to be against something.
+
+def scenario_files():
+    """The files the pages are built from, as {scenario: path}.
+
+    One file per browsable scenario, discovered on disk rather than listed
+    anywhere. Every reader goes through here — the taxonomy page walks the same
+    rows a second time to attach its leaf split — so the two cannot end up
+    reading different files.
     """
-    plain = [s for s in scenarios if not (CONFIG_DIR / f"assumptions_{s}.yaml").exists()]
-    baseline = sorted(plain or scenarios)[0]
-    return baseline
+    pattern = ".report_*_diag.csv" if ALL_ZONES else "report_*.csv"
+    found = {_scenario_of(p): p for p in sorted(RESULTS.glob(pattern))}
+    return {s: found[s] for s in DASHBOARD_SCENARIOS if s in found}
 
 
 def _record(row, lcos_row, cap_row):
@@ -374,8 +409,7 @@ def build_payload(report_paths):
     from _run_display import run_label
     from common._report_schema import read_report
 
-    scenarios = sorted(p.stem[len("report_"):] for p in report_paths)
-    baseline = _baseline_scenario(scenarios)
+    baseline = BASE_SCENARIO
 
     cases, synth, gas = {}, {}, {}
     geos, years, cf_methods = set(), set(), set()
@@ -383,6 +417,9 @@ def build_payload(report_paths):
         df = read_report(report_path)
         lcos_df = L.build_plot_data(df)   # €/t cost groups, indexed by run label
         cap_df = C.build_plot_data(df)    # capacities, indexed by run label
+        # One overlay covers a whole scenario, so the gas price is one lookup per
+        # file rather than one per run.
+        gas_price = _gas_price(_scenario_of(report_path))
 
         for _, row in df.iterrows():
             label = run_label(row)
@@ -393,7 +430,7 @@ def build_payload(report_paths):
             geos.add(geo)
             years.add(year)
             cf_methods.add(axes["cf"])
-            gas.setdefault(geo, {}).setdefault(year, {})[grid] = _gas_price(axes["variant"])
+            gas.setdefault(geo, {}).setdefault(year, {})[grid] = gas_price
 
             rec = _record(row, lcos_df.loc[label], cap_df.loc[label])
             project = f"{geo}-{year}-{grid}"
@@ -411,20 +448,19 @@ def build_payload(report_paths):
                         "lcoe": rec["lcoe"], "lcoh": rec["lcoh"],
                     }
 
-    # Which routes a scenario actually solved — the page greys out the rest
-    # rather than offering a combination that has no record behind it.
-    variant_routes = {}
-    for case in cases.values():
-        for route, by_scenario in case.items():
-            for scenario in by_scenario:
-                variant_routes.setdefault(scenario, set()).add(route)
+    # The scenarios something was actually filed under. Which routes each one
+    # covers is not summarised here: a sensitivity is solved for the runs it was
+    # commissioned for, so "does this apply" is a question about a geography and
+    # a route together, and the pages read that off `cases` where it is exact.
+    solved_scenarios = sorted({scenario for case in cases.values()
+                               for by_scenario in case.values()
+                               for scenario in by_scenario})
 
     axis_options = {
         "geos": sorted(geos),
         "years": sorted(years),
         "base_variant": baseline,
-        "variant_label": {s: s for s in scenarios},
-        "variant_routes": {s: sorted(r) for s, r in variant_routes.items()},
+        "variant_label": {s: SCENARIO_LABEL.get(s, s) for s in solved_scenarios},
         "cf_options": [[c, CF_NAMES.get(c, c)] for c in sorted(cf_methods)],
     }
     if not cases:
@@ -463,13 +499,11 @@ def build_html(template_path: Path, augment=None):
     payload add to it before serialisation — the cost-taxonomy page attaches its
     leaf-level split that way, rather than growing every page's payload.
     """
-    # Whatever has been compiled: one report per scenario, discovered on disk
-    # rather than listed anywhere. The hidden `_diag.csv` siblings are not
-    # reports — they hold the zones the report already decided against.
-    report_paths = sorted(RESULTS.glob("report_*.csv"))
+    report_paths = list(scenario_files().values())
     if not report_paths:
         raise FileNotFoundError(
-            f"no scenario reports in {RESULTS} — run `snakemake` to compile some"
+            f"no report in {RESULTS} for any of {sorted(DASHBOARD_SCENARIOS)} "
+            f"— run `snakemake` to compile some"
         )
     cases, synth, gas, axis_options = build_payload(report_paths)
 
