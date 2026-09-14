@@ -361,6 +361,9 @@ def _record(row, lcos_row, cap_row):
         "lcos": round(_num(row["lcos_eur_per_t"]), 0),
         "lcoe": _opt(row["lcoe_eur_per_mwh"]),
         "lcoh": _opt(row["lcoh_eur_per_mwh_lhv"]),
+        # Blank wherever the area publishes prices but no generation mix, which is
+        # most of the grid side; the page says so rather than printing a zero.
+        "emissions": _opt(row["emissions_kg_co2e_per_t_steel"]),
         "steel_mt": round(_num(row["steel_produced_mt"]), 4),
         "ng_gwh": round(_num(row["ng_gwh_lhv"]), 1),
         "h2_share": round(_num(row["iron_from_h2_share"]), 3),
