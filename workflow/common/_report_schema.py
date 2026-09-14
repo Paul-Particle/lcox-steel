@@ -124,6 +124,7 @@ REPORT_FIELDS = {
     "lcoe_grid_connection_eur_per_mwh": ZERO,
     "lcoe_grid_energy_eur_per_mwh": ZERO,
     "lcoe_transmission_eur_per_mwh": ZERO,
+    "lcoe_destination_power_eur_per_mwh": ZERO,
     "lcoe_renewables_own_eur_per_mwh": UNDEFINED,
     **{f"lcoe_{field_stem(tech)}_own_eur_per_mwh": UNDEFINED for tech in RES_TECHS},
     **{f"cf_{field_stem(tech)}": UNDEFINED for tech in RES_TECHS},

@@ -60,19 +60,22 @@ ALT_LCOS_BANDS = [
     ["transport", "Freight",                     "#BDCCD9"],
 ]
 ALT_LCOE_BANDS = [
-    ["res_capex",       "Renewables — capital",     C_ELEC],
-    ["res_fom",         "Renewables — fixed O&M",   "#4B93BF"],
-    ["storage",         "Battery / storage",        C_STORE],
-    ["grid_connection", "Grid connection",          C_GRID_CONN],
-    ["grid_energy",     "Grid energy",              C_GRID_NRG],
-    ["transmission",    "Transmission (HVDC)",      C_TRANSM],
+    ["res_capex",         "Renewables — capital",     C_ELEC],
+    ["res_fom",           "Renewables — fixed O&M",   "#4B93BF"],
+    ["storage",           "Battery / storage",        C_STORE],
+    ["grid_connection",   "Grid connection",          C_GRID_CONN],
+    ["grid_energy",       "Grid energy",              C_GRID_NRG],
+    ["transmission",      "Transmission (HVDC)",      C_TRANSM],
+    # Only an export route has one; on every other it is zero and draws nothing.
+    ["destination_power", "Destination power",        "#0293D2"],
 ]
 DASH_LCOE_BANDS = [
-    ["renewables",      "Renewables (capex+opex)",  C_ELEC],
-    ["storage",         "Battery / storage",        C_STORE],
-    ["grid_connection", "Grid connection",          C_GRID_CONN],
-    ["grid_energy",     "Grid energy",              C_GRID_NRG],
-    ["transmission",    "Transmission (HVDC)",      C_TRANSM],
+    ["renewables",        "Renewables (capex+opex)",  C_ELEC],
+    ["storage",           "Battery / storage",        C_STORE],
+    ["grid_connection",   "Grid connection",          C_GRID_CONN],
+    ["grid_energy",       "Grid energy",              C_GRID_NRG],
+    ["transmission",      "Transmission (HVDC)",      C_TRANSM],
+    ["destination_power", "Destination power",        "#0293D2"],
 ]
 ALT_LCOH_BANDS = [
     ["electrolyser_capex", "Electrolyser — capital",   C_CAPEX],
