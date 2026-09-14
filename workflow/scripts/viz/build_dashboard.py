@@ -286,6 +286,7 @@ def _record(row, lcos_row, cap_row):
         ("lcoe_grid_connection_eur_per_mwh", "grid_connection"),
         ("lcoe_grid_energy_eur_per_mwh", "grid_energy"),
         ("lcoe_transmission_eur_per_mwh", "transmission"),
+        ("lcoe_destination_power_eur_per_mwh", "destination_power"),
     ):
         v = _opt(row[col])
         if v is not None:
