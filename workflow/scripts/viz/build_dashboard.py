@@ -411,7 +411,7 @@ def build_payload(report_paths):
 
     baseline = BASE_SCENARIO
 
-    cases, synth, gas = {}, {}, {}
+    cases, synth, gas, geo_country = {}, {}, {}, {}
     geos, years, cf_methods = set(), set(), set()
     for report_path in sorted(report_paths):
         df = read_report(report_path)
@@ -428,6 +428,7 @@ def build_payload(report_paths):
             axes = _axes(row)
             geo, year, grid = axes["geo"], axes["year"], axes["grid"]
             geos.add(geo)
+            geo_country[geo] = row["country"]
             years.add(year)
             cf_methods.add(axes["cf"])
             gas.setdefault(geo, {}).setdefault(year, {})[grid] = gas_price
@@ -456,8 +457,17 @@ def build_payload(report_paths):
                                for by_scenario in case.values()
                                for scenario in by_scenario})
 
+    # Geography browses by country: the whole-territory run first, then that
+    # country's zones. The report names each area's country, so nothing here has to
+    # know which zones belong together — a new zone sorts beside its siblings on its
+    # own. An area that is its own country (Alberta, Ontario) is a group of one.
+    def geo_sort_key(geo):
+        country = geo_country.get(geo, geo)
+        return (GEO_NAMES.get(country, country), geo != country, GEO_NAMES.get(geo, geo))
+
     axis_options = {
-        "geos": sorted(geos),
+        "geos": sorted(geos, key=geo_sort_key),
+        "geo_country": geo_country,
         "years": sorted(years),
         "base_variant": baseline,
         "variant_label": {s: SCENARIO_LABEL.get(s, s) for s in solved_scenarios},
