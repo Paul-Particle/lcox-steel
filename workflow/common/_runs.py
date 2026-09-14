@@ -117,11 +117,20 @@ def top_level_areas(areas: dict) -> list[str]:
     return sorted(set(areas) - nested)
 
 
-def resolve_market_areas(area: str, areas: dict) -> list[str]:
-    """`area` if it trades in a market itself, else the zones through which it does."""
-    if areas[area].get("market"):
+def resolve_market_areas(area: str, areas: dict, window: tuple = None) -> list[str]:
+    """`area` if it trades in a market itself, else the zones through which it does.
+
+    A market whose published series has ended carries `market_until`, and the area
+    then drops out of a grid scenario reaching past it rather than failing in
+    `assert_window_complete` once the retrieve rule runs.
+    """
+    registry_entry = areas[area]
+    if registry_entry.get("market"):
+        market_until = registry_entry.get("market_until")
+        if window and market_until and window[1] > str(market_until):
+            return []
         return [area]
-    return sorted(areas[area].get("zones", []))
+    return sorted(registry_entry.get("zones", []))
 
 
 def scenario_areas(scenario: str, rows: pd.DataFrame, areas: dict) -> list[str]:
@@ -157,12 +166,17 @@ def scenario_areas(scenario: str, rows: pd.DataFrame, areas: dict) -> list[str]:
     if not (rows["tech"] == "grid").any():
         return sorted(named)
 
-    resolved = sorted({z for area in named for z in resolve_market_areas(area, areas)})
+    # The widest window the scenario asks for, so an area is kept only when its
+    # market covers every date range filed under the scenario.
+    window = (rows["start_date"].min(), rows["end_date"].max())
+    resolved = sorted({z for area in named
+                       for z in resolve_market_areas(area, areas, window)})
     if not resolved:
         raise ValueError(
             f"scenario {scenario!r} has a tech=grid row, but none of {sorted(named)} "
-            f"trades in a wholesale market or names zones that do. Model it islanded, "
-            f"or give the area a `market` or `zones` entry in config.yaml."
+            f"trades in a wholesale market covering {window[0]}-{window[1]}, or names "
+            f"zones that do. Model it islanded, or give the area a `market` or `zones` "
+            f"entry in config.yaml."
         )
     return resolved
 
