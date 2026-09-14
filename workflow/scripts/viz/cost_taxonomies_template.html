@@ -100,18 +100,18 @@
     color:var(--flag);background:var(--flag-bg);
     box-shadow:inset 0 0 0 1px var(--flag-line);}
   .ct-pill.flagged:hover{color:var(--flag);}
-  .ct-pill.flagged[aria-pressed="true"]{background:#C08A3A;color:#22180A;box-shadow:none;}
+  .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#3B2A10;box-shadow:none;}
   @media (prefers-color-scheme:dark){
     .ct-pill.flagged{--flag:#E2B681;--flag-bg:rgba(226,182,129,.16);
       --flag-line:rgba(226,182,129,.42);}
-    .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#22180A;}
+    .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#3B2A10;}
   }
   :root[data-theme="dark"] .ct-pill.flagged{--flag:#E2B681;
     --flag-bg:rgba(226,182,129,.16);--flag-line:rgba(226,182,129,.42);}
-  :root[data-theme="dark"] .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#22180A;}
+  :root[data-theme="dark"] .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#3B2A10;}
   :root[data-theme="light"] .ct-pill.flagged{--flag:#A9741F;
     --flag-bg:rgba(226,182,129,.30);--flag-line:rgba(192,138,58,.55);}
-  :root[data-theme="light"] .ct-pill.flagged[aria-pressed="true"]{background:#C08A3A;color:#22180A;}
+  :root[data-theme="light"] .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#3B2A10;}
   .ct-note{font-size:12px;color:var(--faint);margin:9px 2px 0;font-family:var(--mono);}
 
   .ct-legend{display:flex;gap:26px;flex-wrap:wrap;margin:20px 0 0;}
@@ -185,8 +185,8 @@
         <b>Sensitivity</b> control carries the one commissioned variant, MOE turndown at 70%, now
         run on both halves — worth 55–131&nbsp;€/t islanded and almost nothing on grid.
         Hover any segment for the inputs behind it.</p>
-      <p class="ct-warn"><b>Brazilian and Canadian grid data is not verified and incomplete</b> —
-        their pills carry this colour. The four Brazilian submarkets and both Canadian provinces
+      <p class="ct-warn"><b>Brazilian and Canadian grid data is not verified and incomplete.</b>
+        The four Brazilian submarkets and both Canadian provinces
         publish a market price but no generation mix, so those runs report emission intensity as
         unknown rather than as a number. Ontario runs on <b>2024</b>, its last full year before the
         Market Renewal Program replaced HOEP on 2025-05-01, and HOEP is commodity-only: it leaves
@@ -315,7 +315,7 @@
 const PAYLOAD = /*PAYLOAD_JSON*/;
 (function(){
   const {cases:CASES, gas:GAS, template:FCA, geos:GEOS, years:YEARS, geo_names:GN,
-    geo_country:GEO_COUNTRY,
+    geo_country:GEO_COUNTRY, main_year:MAIN_YEAR,
     route_order:ROUTE_ORDER, route_label:RLAB, cost_groups:COST_GROUPS,
     cap_panels:CAP_PANELS, variant_label:VLAB,
     leaf_specs:LEAF_SPECS, leaf_groups:LEAF_GROUPS, alt_lcos_bands:ALT_LCOS,
@@ -361,12 +361,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // Grid leads: it is the axis that separates the two halves of the run, and the
   // one worth reaching for first. Geography trails because it carries a pill per
   // zone and takes a row of its own (see .ct-ax-geo).
-  const AXES = ["grid","year","cf","variant","geo"];
-  const AXLAB = {geo:"Geography", year:"Weather year", grid:"Grid",
+  // Year is not among them: a geography is browsed on the year it was run for, so
+  // the pill carries it and the readout above states it. Grid leads, and geography
+  // trails because it takes a row of its own (see .ct-ax-geo).
+  const AXES = ["grid","cf","variant","geo"];
+  const AXLAB = {geo:"Geography", grid:"Grid",
                  cf:"Capacity factor", variant:"Sensitivity"};
   const OPTS = {
     geo:  GEOS.map(g=>[g, GN[g]||g]),
-    year: YEARS.map(y=>[String(y), String(y)]),
     grid: [["grid","Grid"],["nogrid","Islanded"]],
     cf:   CF_OPTS,
     variant: Object.keys(VLAB).map(v=>[v, VLAB[v]]),
@@ -378,6 +380,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
 
   // The countries whose grid data the note beside the intro is about. Their pills
   // carry the same sand-yellow, so the caveat travels with the control.
+  // The countries whose *grid* data the note beside the intro is about. Their
+  // grid pills carry the same sand-yellow, so the caveat travels with the control.
   const FLAGGED_COUNTRIES = ["BRA", "CAN"];
 
   const proj = s => `${s.geo}-${s.year}-${s.grid}`;
@@ -870,10 +874,6 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     }
   }
   function axisDisabled(axis, value){
-    // A year is offered if anything ran in it, not only if this geography did —
-    // clicking it moves the geography instead (see landOnSolved).
-    if(axis==="year")
-      return !GEOS.some(g=>["grid","nogrid"].some(gr=>CASES[`${g}-${value}-${gr}`]));
     const probe = {...S, [axis]:value};
     if(!projectHas(probe)) return true;
     if(axis==="variant") return !ROUTE_ORDER.some(r=>ownRec(probe,r));
@@ -904,23 +904,33 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // row a pill is in is the useful thing about it, and clicking one sets the
   // geography and the grid mode together. GEOS arrives sorted by country, so a
   // country's whole-territory run leads its own zones in both rows.
+  // A pill is a geography on the year it was run for. Most of the run is on one
+  // year, so only the others say so — Ontario has no full 2025 and Alberta was run
+  // on both, which is the whole of what the year axis used to be for.
+  const geoPillLabel = (g,y) => geoName(g) + (y===MAIN_YEAR ? "" : " · " + y);
   function buildGeoRows(box){
     [["grid","Grid"],["nogrid","Islanded"]].forEach(([mode,label])=>{
-      const here = GEOS.filter(g=>CASES[`${g}-${S.year}-${mode}`]);
+      const here = [];
+      GEOS.forEach(g=>[MAIN_YEAR, ...YEARS.map(String).filter(y=>y!==MAIN_YEAR)]
+        .forEach(y=>{ if(CASES[`${g}-${y}-${mode}`]) here.push([g,y]); }));
       if(!here.length) return;
       const sub = document.createElement("div");
       sub.className = "ct-sublab"; sub.textContent = label;
       const pills = document.createElement("div"); pills.className = "ct-pills";
       let country = null;
-      here.forEach(g=>{
+      here.forEach(([g,y])=>{
         // GEOS arrives grouped by country, so a change of country starts a line:
         // a zero-height item that fills the row makes the flex container wrap.
         if(country !== null && GEO_COUNTRY[g] !== country)
           pills.appendChild(document.createElement("div")).className = "ct-break";
         country = GEO_COUNTRY[g];
-        const p = pill(geoName(g), S.geo===g && S.grid===mode, false,
-          ()=>{ S.geo=g; S.grid=mode; refresh(); });
-        if(FLAGGED_COUNTRIES.includes(country)) p.classList.add("flagged");
+        const p = pill(geoPillLabel(g,y),
+          S.geo===g && S.year===y && S.grid===mode, false,
+          ()=>{ S.geo=g; S.year=y; S.grid=mode; refresh(); });
+        // Grid only: what the note flags is the price series these countries
+        // publish, and an islanded run buys no grid power at all.
+        if(mode === "grid" && FLAGGED_COUNTRIES.includes(country))
+          p.classList.add("flagged");
         pills.appendChild(p);
       });
       box.appendChild(sub); box.appendChild(pills);
