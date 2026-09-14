@@ -395,6 +395,15 @@ def _co2_t_per_mwh():
     return base.get("natural_gas", {}).get("co2_t_per_mwh", CO2_T_PER_MWH)
 
 
+def _main_year(cases):
+    """The weather year most of the run is on — the others are gap-fillers.
+
+    The page names a geography's year only when it is not this one, so a run on a
+    single year says nothing about years at all.
+    """
+    return Counter(p.rsplit("-", 2)[1] for p in cases).most_common(1)[0][0]
+
+
 def _default_view(cases, baseline, cf_options):
     """The pair of scenarios the page opens on, chosen from what was solved.
 
@@ -407,7 +416,7 @@ def _default_view(cases, baseline, cf_options):
     # the year with the fewest runs, since a gap-filling scenario on an earlier
     # weather year sorts ahead of the main one. Open on the year most of the run is
     # in, so the page starts where the results are.
-    main_year = Counter(p.rsplit("-", 2)[1] for p in cases).most_common(1)[0][0]
+    main_year = _main_year(cases)
     ordered = sorted(cases, key=lambda p: (p.rsplit("-", 2)[1] != main_year, p))
     project = next((p for p in ordered
                     if any(route in cases[p] for route in ROUTE_ORDER)),
@@ -510,6 +519,7 @@ def build_payload(report_paths):
         "geo_names": geo_names,
         "geo_country": geo_country,
         "years": sorted(years),
+        "main_year": _main_year(cases),
         "base_variant": baseline,
         "variant_label": {s: SCENARIO_LABEL.get(s, s) for s in solved_scenarios},
         "cf_options": [[c, CF_NAMES.get(c, c)] for c in sorted(cf_methods)],
