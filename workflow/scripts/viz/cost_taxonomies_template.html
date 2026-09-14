@@ -104,6 +104,14 @@
   .ct-wrap.alt-only .ct-col.dash,
   .ct-wrap.alt-only .ct-key.dash,
   .ct-wrap.alt-only .ct-col-h{display:none;}
+  /* Prose that only makes sense beside the other taxonomy, and the wording that
+     replaces it when this page shows one. Nothing on the single-taxonomy page
+     should name a comparison the reader cannot see. */
+  .ct-wrap.alt-only .pair-only{display:none;}
+  .ct-wrap:not(.alt-only) .solo-only{display:none;}
+  .ct-wrap.alt-only .ct-legend{margin-top:14px;}
+  .ct-wrap.alt-only .ct-key.alt .chip{display:none;}
+  .ct-wrap.alt-only .ct-key.alt{max-width:104ch;}
   .ct-col{min-width:0;}
   .ct-col-h{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:8px 0 2px;
     border-bottom:1px solid var(--hair);margin-bottom:6px;}
@@ -155,7 +163,8 @@
   <div class="ct-legend">
     <div class="ct-key alt"><span class="chip">Alternative</span>
       <p>One hydrogen block, process plant split into capex and O&amp;M, electricity split into an
-        EAF-melt share and the rest. Reconstructed from the model's cost groups.</p></div>
+        EAF-melt share and the rest. Reconstructed from the model's cost groups<span
+        class="solo-only">, so every band closes exactly on the total it belongs to</span>.</p></div>
     <div class="ct-key dash"><span class="chip">Dashboard</span>
       <p>The cost groups the pipeline reports, which the rest of the dashboard already plots.</p></div>
   </div>
@@ -163,9 +172,12 @@
   <section class="ct-panel">
     <div class="ct-panel-h">
       <h2>LCOS — levelised cost of steel <span class="unit">· € / t liquid steel</span></h2>
-      <p>Where the choice between the two actually changes the picture. Both stacks sum to the same
+      <p class="pair-only">Where the choice between the two actually changes the picture. Both stacks sum to the same
         LCOS per route; the alternative folds the electrolyser, the H₂ buffer and the electricity
         that made the hydrogen into a single block, while the dashboard keeps them apart.</p>
+      <p class="solo-only">The whole cost of a tonne of liquid steel, stacked. The electrolyser, the
+        H₂ buffer and the electricity that made the hydrogen are folded into one hydrogen block, so
+        what a route pays for hydrogen reads as a single figure rather than three.</p>
     </div>
     <div class="ct-pair">
       <div class="ct-col alt">
@@ -184,9 +196,12 @@
   <section class="ct-panel">
     <div class="ct-panel-h">
       <h2>LCOE — levelised cost of electricity <span class="unit">· € / MWh delivered</span></h2>
-      <p>Each route sizes its own electricity system, so LCOE is a per-route number. The two
+      <p class="pair-only">Each route sizes its own electricity system, so LCOE is a per-route number. The two
         taxonomies differ only in that the alternative separates renewables capital from its fixed
         O&amp;M — shown side by side anyway, so the pair can be read the same way throughout.</p>
+      <p class="solo-only">Each route sizes its own electricity system, so LCOE is a per-route number
+        rather than one figure for the geography. Renewables carry their capital apart from their
+        fixed O&amp;M.</p>
     </div>
     <div class="ct-pair">
       <div class="ct-col alt">
@@ -205,8 +220,11 @@
   <section class="ct-panel">
     <div class="ct-panel-h">
       <h2>LCOH — levelised cost of hydrogen <span class="unit">· € / kg H₂</span></h2>
-      <p>Only the routes that build an electrolyser have one. The alternative splits the
+      <p class="pair-only">Only the routes that build an electrolyser have one. The alternative splits the
         electrolyser three ways — capital, fixed O&amp;M and the water/variable opex it consumes.</p>
+      <p class="solo-only">Every route is on the axis. A route that builds an electrolyser carries it
+        split three ways — capital, fixed O&amp;M and the water/variable opex it consumes; a route
+        that makes no hydrogen has no levelised cost of it, and stands empty rather than at zero.</p>
     </div>
     <div class="ct-pair">
       <div class="ct-col alt">
@@ -266,7 +284,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const ALT_ONLY = /*ALT_ONLY*/false;
 
   const CONF = {responsive:true, displaylogo:false,
-    modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
+    modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines",
+      // The artifact viewer blocks a page-initiated save, so the camera would be a
+      // button that does nothing for anyone reading this where it is published.
+      "toImage"]};
   // Charts sit on a constant white "print" surface in both themes, the convention the
   // v2 dashboard uses — a screenshot is publication-ready either way.
   const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
@@ -380,7 +401,12 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     // different number of them — summing here would print 108.4 on one side of the
     // pair and 108.5 on the other for the same scenario.
     const sums = X.map((_,i)=>traces.reduce((s,t)=>s+(t.y[i]||0),0));
-    const shown = X.map((_,i)=>totals[i]!=null ? totals[i] : sums[i]);
+    // A route the metric does not exist for keeps its slot on the axis so the panels
+    // share one route order, but prints nothing: a zero there would read as "free"
+    // rather than "this route makes none of it".
+    const absent = opt.absent || (()=>false);
+    const shown = X.map((_,i)=>absent(routes[i]) ? null
+                                                 : (totals[i]!=null ? totals[i] : sums[i]));
     const tTpl=[], tCd=[];
     X.forEach((_,i)=>{
       const detail = (opt.totalLines?opt.totalLines(routes[i]):[])||[];
@@ -389,11 +415,12 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       let t = `${opt.totalLabel}: %{customdata[0]} ${opt.unit}`;
       detail.forEach((d,j)=>{ t += `<br>${d[0]} %{customdata[${j+1}]}`; });
       tTpl.push(t+"<extra></extra>");
-      tCd.push([nf(shown[i], opt.totalDp!=null?opt.totalDp:0), ...detail.map(d=>d[1])]);
+      tCd.push([shown[i]==null ? "n/a" : nf(shown[i], opt.totalDp!=null?opt.totalDp:0),
+                ...detail.map(d=>d[1])]);
     });
     const w = Math.max(1, ...tCd.map(r=>r.length));
     const totalTrace = {type:"scatter", x:X, y:sums, mode:"text",
-      text:shown.map(v=>nf(v, opt.totalDp!=null?opt.totalDp:0)),
+      text:shown.map(v=>v==null ? "" : nf(v, opt.totalDp!=null?opt.totalDp:0)),
       textposition:"top center", cliponaxis:false, showlegend:false,
       textfont:{size:13, color:PRINT.ink}};
     // On a finely split chart most bands are only a pixel or two tall, and the
@@ -556,13 +583,19 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // ---- LCOE / LCOH pairs ----------------------------------------------
   function renderCarrier(metric){
     const isLcoe = metric==="lcoe";
-    const routes = routesAt(S).filter(r=>{
-      const rec = recFor(S,r); return rec && (isLcoe ? rec.lcoe!=null : rec.lcoh!=null); });
+    // LCOH keeps every route that solved, so this panel's bars line up with the LCOS
+    // panel above it and a reader can scan one route down the page. Only the routes
+    // that build an electrolyser have a hydrogen cost; the rest stand empty, which
+    // `absent` below makes explicit rather than printing a zero for them.
+    const routes = isLcoe
+      ? routesAt(S).filter(r=>recFor(S,r)?.lcoe!=null)
+      : routesAt(S).filter(r=>recFor(S,r));
     const recs = {}; routes.forEach(r=>recs[r]=recFor(S,r));
     // LCOH is charted per kg, which is how the mockup quoted it; the reports are per
     // MWh LHV, so scale and restate the LHV figure in the hover.
     const scale = isLcoe ? 1 : H2LHV/1000;
-    const totals = routes.map(r=>(isLcoe?recs[r].lcoe:recs[r].lcoh*scale));
+    const totals = routes.map(r=>(isLcoe ? recs[r].lcoe
+                                         : (recs[r].lcoh!=null ? recs[r].lcoh*scale : null)));
     const unit = isLcoe ? "€/MWh" : "€/kg";
     const fmt = isLcoe ? ",.1f" : ",.2f";
     const basis = isLcoe ? "LCOE" : "LCOH";
@@ -595,6 +628,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       yTitle:isLcoe?"LCOE  (€ / MWh)":"LCOH  (€ / kg H₂)",
       totalLabel:isLcoe?"levelised cost of electricity (LCOE)":"levelised cost of hydrogen (LCOH)",
       totalLines:tLines,
+      absent:isLcoe ? null : (r=>recs[r].lcoh==null),
       empty:isLcoe?"No electricity system in these routes.":"No route here builds an electrolyser."};
     const altBands = isLcoe ? ALT_LCOE : ALT_LCOH;
     const dashBands = isLcoe ? DASH_LCOE : DASH_LCOH;
@@ -778,12 +812,13 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     if(na.length) notes.push("NG-DRI-EAF has no renewables, so the capacity-factor basis does not apply to it.");
     document.getElementById("ct-clamp").textContent = notes.join("  ");
     document.getElementById("ct-foot").innerHTML =
-      "Cross-chart logic, shared by both taxonomies: the electricity segment in LCOS/LCOH is priced "
+      (ALT_ONLY ? "Cross-chart logic: " : "Cross-chart logic, shared by both taxonomies: ")
+      + "the electricity segment in LCOS/LCOH is priced "
       + "at LCOE; the hydrogen segment in LCOS is LCOH × kg&nbsp;H₂/t; LCOI (not shown) is LCOS minus "
       + "the EAF stage. Every split is exact — a plant's annual cost is "
       + "<code>annuity × capex + fixed opex</code>, so capital and O&amp;M separate by a config ratio; "
       + "the same holds for renewables, the electrolyser, the battery's power and energy, and the grid "
-      + "connection's capex and capacity charge. Two rows of the alternative stay empty because "
+      + "connection's capex and capacity charge. Two rows stay empty because "
       + "the model does not carry them — ore/iron freight and scrap or HBI purchase. Regenerate with "
       + "<code>build_alt_taxonomy.py</code> for this page or <code>build_cost_taxonomies.py</code> for "
       + "the two-column comparison, then <code>build_dashboard_hub.py</code>. Set "

@@ -161,7 +161,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     base_variant:BASE, cf_options:CF_OPTS, default_view:DEFAULT} = PAYLOAD;
 
   const CONF = {responsive:true, displaylogo:false,
-    modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
+    modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines",
+      // The artifact viewer blocks a page-initiated save, so the camera would be a
+      // button that does nothing for anyone reading this where it is published.
+      "toImage"]};
   const CFLABEL = {...Object.fromEntries(CF_OPTS), compare:"Compare CF"};
   const CF_KEYS = CF_OPTS.map(([key])=>key);
   const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
