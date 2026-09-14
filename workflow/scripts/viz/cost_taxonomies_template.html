@@ -30,20 +30,27 @@
   .ct-root *{box-sizing:border-box;}
   .ct-wrap{max-width:1480px;margin:0 auto;padding:30px 24px 68px;}
 
-  .ct-head{display:flex;justify-content:space-between;align-items:flex-end;
-    gap:24px;flex-wrap:wrap;padding-bottom:4px;}
+  .ct-head{padding-bottom:4px;}
+  /* The title keeps the scenario readout on its own line; the intro below spans
+     the full width so the summary and the caveat can sit side by side. */
+  .ct-headline{display:flex;justify-content:space-between;align-items:flex-end;
+    gap:24px;flex-wrap:wrap;}
   .ct-brand{display:flex;align-items:center;gap:11px;margin-bottom:10px;}
   .ct-dot{width:12px;height:12px;border-radius:50%;background:var(--accent);flex:none;}
   .ct-brand span{font-family:var(--mono);font-size:11px;letter-spacing:.2em;
     text-transform:uppercase;color:var(--accent-2);font-weight:600;}
   .ct-title{font-size:clamp(24px,3.2vw,34px);font-weight:700;letter-spacing:-.02em;
     margin:0;text-wrap:balance;line-height:1.06;}
-  .ct-sub{color:var(--muted);font-size:14px;margin:9px 0 0;max-width:74ch;}
+  /* The run summary and the caveat about its weakest data sit side by side, so a
+     reader meets both before the first chart. They stack on a narrow screen. */
+  .ct-intro{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin-top:9px;}
+  .ct-intro>*{flex:1 1 360px;min-width:0;margin:0;}
+  .ct-sub{color:var(--muted);font-size:14px;}
   .ct-sub b{color:var(--ink);font-weight:600;}
   /* Data a reader should not take at face value — the same magenta-red rule the
      hub's work-in-progress banner uses. */
   .ct-warn{--warn:#D75674;--warn-bg:rgba(215,86,116,.10);--warn-line:rgba(215,86,116,.32);
-    position:relative;margin:14px 0 0;padding:10px 14px 10px 16px;max-width:74ch;
+    position:relative;padding:10px 14px 10px 16px;
     background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:4px;
     font-size:13px;color:var(--muted);}
   @media (prefers-color-scheme:dark){
@@ -113,9 +120,9 @@
      should name a comparison the reader cannot see. */
   .ct-wrap.alt-only .pair-only{display:none;}
   .ct-wrap:not(.alt-only) .solo-only{display:none;}
-  .ct-wrap.alt-only .ct-legend{margin-top:14px;}
-  .ct-wrap.alt-only .ct-key.alt .chip{display:none;}
-  .ct-wrap.alt-only .ct-key.alt{max-width:104ch;}
+  /* The legend tells the two taxonomies apart, which is not a question this page
+     asks when it shows one — the chart legends already name every band. */
+  .ct-wrap.alt-only .ct-legend{display:none;}
   .ct-col{min-width:0;}
   .ct-col-h{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:8px 0 2px;
     border-bottom:1px solid var(--hair);margin-bottom:6px;}
@@ -137,20 +144,25 @@
 <div class="ct-root">
  <div class="ct-wrap /*ALT_ONLY_CLASS*/">
   <header class="ct-head">
-    <div>
-      <div class="ct-brand"><span class="ct-dot"></span><span>Green steel model · cost breakdown</span></div>
-      <h1 class="ct-title">Test run 2 · 2026-09-14</h1>
+    <div class="ct-headline">
+      <div>
+        <div class="ct-brand"><span class="ct-dot"></span><span>Green steel model · cost breakdown</span></div>
+        <h1 class="ct-title">Test run 2 · 2026-09-14</h1>
+      </div>
+      <div class="ct-meta" id="ct-meta"></div>
+    </div>
+    <div class="ct-intro">
       <p class="ct-sub">Every steel route including its export twin, solved over the 2025 weather
         year across <b>13 grid-connected zones</b> and <b>7 islanded geographies</b> — 234 networks
         on assumptions moved onto the research workbook's Model Input Register. Renewables are
         sited best-site&nbsp;P95 (an upper bound on resource quality); hydrogen storage is a salt
         cavern at 350&nbsp;€/MWh (a lower bound); the grid charge is a single
-        140&nbsp;k€/MW/yr capacity fee with no volumetric part; one gas price everywhere and no
-        carbon price. Iron is exported to Spain, finished steel stays where it was made. Use the
+        140&nbsp;k€/MW/yr capacity fee with no volumetric part; one gas price everywhere.
+        Iron is exported to Spain, finished steel stays where it was made. Use the
         <b>Grid</b> control to move between the grid-connected and islanded halves; the
         <b>Sensitivity</b> control carries the one commissioned variant, MOE turndown at 70%.
         Hover any segment for the inputs behind it.</p>
-      <p class="ct-warn"><b>Brazilian and Canadian grid data is not reliable yet.</b> The four
+      <p class="ct-warn"><b>Brazilian and Canadian grid data is not verified and incomplete.</b> The four
         Brazilian submarkets and Alberta publish a market price but no generation mix, so those
         runs report their emission intensity as unknown rather than as a number. Ontario has no
         grid case at all: IESO's HOEP series ends 2025-04-30, when the Market Renewal Program
@@ -158,7 +170,6 @@
         earlier year would put a commodity-only price against all-in prices everywhere else.
         Read those geographies for the shape of the cost stack, not for its level.</p>
     </div>
-    <div class="ct-meta" id="ct-meta"></div>
   </header>
 
   <div class="ct-mx" id="ct-mx"></div>
@@ -167,8 +178,7 @@
   <div class="ct-legend">
     <div class="ct-key alt"><span class="chip">Alternative</span>
       <p>One hydrogen block, process plant split into capex and O&amp;M, electricity split into an
-        EAF-melt share and the rest. Reconstructed from the model's cost groups<span
-        class="solo-only">, so every band closes exactly on the total it belongs to</span>.</p></div>
+        EAF-melt share and the rest. Reconstructed from the model's cost groups.</p></div>
     <div class="ct-key dash"><span class="chip">Dashboard</span>
       <p>The cost groups the pipeline reports, which the rest of the dashboard already plots.</p></div>
   </div>
@@ -227,8 +237,9 @@
       <p class="pair-only">Only the routes that build an electrolyser have one. The alternative splits the
         electrolyser three ways — capital, fixed O&amp;M and the water/variable opex it consumes.</p>
       <p class="solo-only">Every route is on the axis. A route that builds an electrolyser carries it
-        split three ways — capital, fixed O&amp;M and the water/variable opex it consumes; a route
-        that makes no hydrogen has no levelised cost of it, and stands empty rather than at zero.</p>
+        split three ways — capital, fixed O&amp;M and the water/variable opex it consumes. A route
+        marked <b>no H₂</b> bought none: the blended-reductant route takes that option wherever grid
+        power is available, so on the grid side it is the fossil route under another name.</p>
     </div>
     <div class="ct-pair">
       <div class="ct-col alt">
@@ -246,10 +257,10 @@
 
   <section class="ct-panel">
     <div class="ct-panel-h">
-      <h2>Every part the model actually has
+      <h2>Detailed cost breakdown
         <span class="unit">· € / t liquid steel</span></h2>
       <p>The same LCOS as above, cut as finely as the model allows — each plant's annualised
-        capital apart from its fixed O&amp;M, the gas bill apart from any carbon price, the
+        capital apart from its fixed O&amp;M, the
         electrolyser's water apart from its capital, renewables by technology, the battery's power
         apart from its energy, the grid connection apart from the energy it carries. Hover a
         segment for the quotes and quantities that produce it, its share of the group it belongs
@@ -297,17 +308,23 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
   // The detail chart carries up to ~31 bands, so it is given far more vertical room
   // than the pair charts — the thinnest bands still need to be worth hovering.
-  const PAIR_H = 430, CAP_H = 340;
+  const PAIR_H = 430;
   // The detail chart carries up to ~31 bands, so it is given far more vertical room
-  // than the pair charts — the thinnest bands still need to be worth hovering. Its
-  // bottom margin holds a legend of about 125 px, plus that much again of clear
-  // space above it, so the legend reads as its own block rather than as a second
-  // row of route labels. DETAIL_PLOT_PX is the drawing area the bands get, which
-  // the thin-band threshold below is measured against — derive the height from the
-  // three, so moving the legend cannot silently change what counts as thin.
-  const DETAIL_TOP = 26, DETAIL_PLOT_PX = 954, DETAIL_LEGEND_PX = 125;
-  const DETAIL_BOTTOM = 200 + DETAIL_LEGEND_PX;
+  // than the pair charts — the thinnest bands still need to be worth hovering.
+  // DETAIL_PLOT_PX is the drawing area the bands get, which the thin-band threshold
+  // below is measured against; the height derives from it and the margins, so
+  // changing one cannot silently change what counts as thin.
+  const DETAIL_TOP = 26, DETAIL_PLOT_PX = 954, DETAIL_BOTTOM = 200;
   const DETAIL_H = DETAIL_TOP + DETAIL_PLOT_PX + DETAIL_BOTTOM;
+  // These panels are narrow — several to a row — so the route labels wrap to two
+  // lines and take about CAP_LABEL_PX below the axis. The legend sat 0.2 of the
+  // drawing area under the axis, which is inside that, so it was drawn among the
+  // labels. It now clears them and then drops a further legend height, and the
+  // bottom margin grows to match so the space comes out of the panel rather than
+  // out of the bars. Both measured from the built page: labels 85 px, legend 48.
+  const CAP_TOP = 20, CAP_PLOT_PX = 202, CAP_LABEL_PX = 85, CAP_LEGEND_PX = 48;
+  const CAP_BOTTOM = CAP_LABEL_PX + 2 * CAP_LEGEND_PX + 12;
+  const CAP_H = CAP_TOP + CAP_PLOT_PX + CAP_BOTTOM;
   // Below this many pixels a stacked band is not a usable pointer target, so its
   // hover detail is folded into a neighbour instead (see renderDetail).
   const THIN_PX = 9;
@@ -421,6 +438,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const absent = opt.absent || (()=>false);
     const shown = X.map((_,i)=>absent(routes[i]) ? null
                                                  : (totals[i]!=null ? totals[i] : sums[i]));
+    // What stands where the number would be. Saying the route makes none of this
+    // answers the reader's question in the chart; a gap leaves them wondering
+    // whether the run failed.
+    const absentText = opt.absentText || "";
     const tTpl=[], tCd=[];
     X.forEach((_,i)=>{
       const detail = (opt.totalLines?opt.totalLines(routes[i]):[])||[];
@@ -434,9 +455,12 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     });
     const w = Math.max(1, ...tCd.map(r=>r.length));
     const totalTrace = {type:"scatter", x:X, y:sums, mode:"text",
-      text:shown.map(v=>v==null ? "" : nf(v, opt.totalDp!=null?opt.totalDp:0)),
+      text:shown.map(v=>v==null ? absentText : nf(v, opt.totalDp!=null?opt.totalDp:0)),
       textposition:"top center", cliponaxis:false, showlegend:false,
       textfont:{size:13, color:PRINT.ink}};
+    if(shown.some(v=>v==null))
+      totalTrace.textfont = {size:shown.map(v=>v==null?11:13),
+                             color:shown.map(v=>v==null?PRINT.muted:PRINT.ink)};
     // On a finely split chart most bands are only a pixel or two tall, and the
     // totals annotation sitting on top of the stack wins the "closest point" race
     // for them. There the annotation gives up its own hover so every band stays
@@ -608,8 +632,15 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     // LCOH is charted per kg, which is how the mockup quoted it; the reports are per
     // MWh LHV, so scale and restate the LHV figure in the hover.
     const scale = isLcoe ? 1 : H2LHV/1000;
+    // A route that bought no hydrogen has no levelised cost of it, whatever the
+    // report says. The blended-reductant route rejects hydrogen outright wherever
+    // grid power is available — `iron_from_h2_share` is 0.000 in every grid area —
+    // and the LCOH the run still writes there is a quotient with nothing in its
+    // denominator: Sudeste/C-Oeste reports -366.9 €/MWh, Norte -9.2. Plot a
+    // hydrogen cost only where hydrogen was actually made.
+    const madeH2 = r => recs[r].lcoh!=null && recs[r].lcoh > 0 && recs[r].h2_share > 0;
     const totals = routes.map(r=>(isLcoe ? recs[r].lcoe
-                                         : (recs[r].lcoh!=null ? recs[r].lcoh*scale : null)));
+                                         : (madeH2(r) ? recs[r].lcoh*scale : null)));
     const unit = isLcoe ? "€/MWh" : "€/kg";
     const fmt = isLcoe ? ",.1f" : ",.2f";
     const basis = isLcoe ? "LCOE" : "LCOH";
@@ -642,7 +673,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       yTitle:isLcoe?"LCOE  (€ / MWh)":"LCOH  (€ / kg H₂)",
       totalLabel:isLcoe?"levelised cost of electricity (LCOE)":"levelised cost of hydrogen (LCOH)",
       totalLines:tLines,
-      absent:isLcoe ? null : (r=>recs[r].lcoh==null),
+      absent:isLcoe ? null : (r=>!madeH2(r)), absentText:"no H₂",
       empty:isLcoe?"No electricity system in these routes.":"No route here builds an electrolyser."};
     const altBands = isLcoe ? ALT_LCOE : ALT_LCOH;
     const dashBands = isLcoe ? DASH_LCOE : DASH_LCOH;
@@ -668,7 +699,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const constantsFor = (key, r) =>
       (LEAF_SPECS[recs[r].spec] || LEAF_SPEC).find(e=>e[0]===key)?.[4] || [];
     // Only leaves some route in this scenario actually has — latent ones (offshore
-    // wind, a carbon price, HVDC) would otherwise sit in the legend drawing nothing.
+    // wind, HVDC) would otherwise sit in the legend drawing nothing.
     const bands = LEAF_SPEC.filter(([key])=>routes.some(r=>(recs[r].leaves||{})[key]))
                            .map(([key,label,,colour])=>[key,label,colour]);
     const groupOf = {}, labelOf = {};
@@ -736,10 +767,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     };
     stacked(el, routes, bands, (k,r)=>(recs[r].leaves||{})[k], lines, totals,
       {unit:"€/t", fmt:",.1f", basis:"LCOS", height:DETAIL_H, bargap:0.45,
-       yTitle:"LCOS  (€ / t steel)", bottom:DETAIL_BOTTOM, legendSize:10.5,
-       // Paper units are fractions of the drawing area, so a drop of one legend
-       // height is that many pixels over DETAIL_PLOT_PX, added to where it sat.
-       legendY:-(0.075 + DETAIL_LEGEND_PX / DETAIL_PLOT_PX),
+       yTitle:"LCOS  (€ / t steel)", bottom:DETAIL_BOTTOM, legendY:-0.075, legendSize:10.5,
        totalHover:false, totalLabel:"levelised cost of steel (LCOS)"});
   }
 
@@ -773,8 +801,11 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       // total. Storage hours and process steps would not be additive anyway.
       Plotly.react(el, traces, base({
         barmode:"group", height:CAP_H, bargap:0.28, bargroupgap:0.08,
-        margin:{l:58, r:14, t:20, b:118},
-        legend:{orientation:"h", x:0, y:-0.2, xanchor:"left", yanchor:"top",
+        margin:{l:58, r:14, t:CAP_TOP, b:CAP_BOTTOM},
+        // Paper units are fractions of the drawing area, so the drop below the axis
+        // is those pixels over CAP_PLOT_PX.
+        legend:{orientation:"h", x:0, y:-((CAP_LABEL_PX + CAP_LEGEND_PX) / CAP_PLOT_PX),
+          xanchor:"left", yanchor:"top",
           bgcolor:"rgba(0,0,0,0)", font:{size:10.5, color:PRINT.muted}},
         xaxis:axis({type:"category", automargin:true, tickfont:{size:11, color:PRINT.muted}}),
         yaxis:axis({rangemode:"tozero", title:{text:unit, font:{size:11, color:PRINT.muted}}}),

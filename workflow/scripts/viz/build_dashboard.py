@@ -36,15 +36,19 @@ OUT = HTML_DIR / "dashboard.html"
 TEMPLATE_HTML = Path(__file__).with_name("dashboard_template.html")
 CONFIG_DIR = REPO / "config"
 
-# Display names for the areas the registry can name. An area with no entry shows
-# its own code, which is what a newly added zone should do until it is named.
+# Display names for the areas the registry can name — each area's own name, not
+# its full label. An area with no entry shows its own code, which is what a newly
+# added zone should do until it is named. A zone is shown under its country,
+# "Canada · Alberta", composed in `_geo_label` from the registry's own `iso3`
+# rather than written out per zone: put a new submarket in the registry and it
+# names itself under the right country.
 GEO_NAMES = {
     "DEU": "Germany", "ESP": "Spain", "FRA": "France",
-    "AUS": "Australia", "BRA": "Brazil",
+    "AUS": "Australia", "BRA": "Brazil", "CAN": "Canada",
     "NSW1": "New South Wales", "QLD1": "Queensland", "SA1": "South Australia",
     "TAS1": "Tasmania", "VIC1": "Victoria",
-    "BR_N": "Brazil · Norte", "BR_NE": "Brazil · Nordeste",
-    "BR_SE": "Brazil · Sudeste/C-Oeste", "BR_S": "Brazil · Sul",
+    "BR_N": "Norte", "BR_NE": "Nordeste",
+    "BR_SE": "Sudeste/C-Oeste", "BR_S": "Sul",
     "AB": "Alberta", "ONT": "Ontario",
 }
 
@@ -205,6 +209,26 @@ def _axes(row):
         # them, rather than being filed under whichever came first.
         "cf": "+".join(cf_methods) or "na",
     }
+
+
+def _geo_country(geo):
+    """The country an area sits in, as the area registry's `iso3` declares it.
+
+    An area whose iso3 is its own key is a whole country; anything else is one of
+    that country's market zones. The report's own `country` column cannot answer
+    this — Alberta and Ontario are top-level areas there, so it names each of them
+    as its own country rather than as Canada.
+    """
+    areas = yaml.safe_load((CONFIG_DIR / "config.yaml").read_text())["areas"]
+    return areas.get(geo, {}).get("iso3", geo)
+
+
+def _geo_label(geo, country):
+    """"Germany", or "Canada · Alberta" for an area that is one country's zone."""
+    name = GEO_NAMES.get(geo, geo)
+    if country == geo:
+        return name
+    return f"{GEO_NAMES.get(country, country)} · {name}"
 
 
 def _scenario_of(report_path):
@@ -411,7 +435,7 @@ def build_payload(report_paths):
 
     baseline = BASE_SCENARIO
 
-    cases, synth, gas, geo_country = {}, {}, {}, {}
+    cases, synth, gas = {}, {}, {}
     geos, years, cf_methods = set(), set(), set()
     for report_path in sorted(report_paths):
         df = read_report(report_path)
@@ -428,7 +452,6 @@ def build_payload(report_paths):
             axes = _axes(row)
             geo, year, grid = axes["geo"], axes["year"], axes["grid"]
             geos.add(geo)
-            geo_country[geo] = row["country"]
             years.add(year)
             cf_methods.add(axes["cf"])
             gas.setdefault(geo, {}).setdefault(year, {})[grid] = gas_price
@@ -458,16 +481,19 @@ def build_payload(report_paths):
                                for scenario in by_scenario})
 
     # Geography browses by country: the whole-territory run first, then that
-    # country's zones. The report names each area's country, so nothing here has to
-    # know which zones belong together — a new zone sorts beside its siblings on its
-    # own. An area that is its own country (Alberta, Ontario) is a group of one.
+    # country's zones, countries in name order. The registry says which country an
+    # area is in, so nothing here has to know which zones belong together — a new
+    # submarket sorts beside its siblings and labels itself on its own.
+    geo_country = {geo: _geo_country(geo) for geo in geos}
+    geo_names = {geo: _geo_label(geo, country) for geo, country in geo_country.items()}
+
     def geo_sort_key(geo):
-        country = geo_country.get(geo, geo)
-        return (GEO_NAMES.get(country, country), geo != country, GEO_NAMES.get(geo, geo))
+        country = geo_country[geo]
+        return (GEO_NAMES.get(country, country), geo != country, geo_names[geo])
 
     axis_options = {
         "geos": sorted(geos, key=geo_sort_key),
-        "geo_country": geo_country,
+        "geo_names": geo_names,
         "years": sorted(years),
         "base_variant": baseline,
         "variant_label": {s: SCENARIO_LABEL.get(s, s) for s in solved_scenarios},
@@ -528,12 +554,11 @@ def build_html(template_path: Path, augment=None):
 
     payload = {
         "cases": cases, "synth": synth, "gas": gas, "template": template,
-        "geo_names": GEO_NAMES,
         "clean_routes": CLEAN_ROUTES, "route_order": ROUTE_ORDER,
         "route_label": ROUTE_LABEL, "route_color": ROUTE_COLOR,
         "co2_t_per_mwh": _co2_t_per_mwh(), "h2_min": H2_MIN,
         "cost_groups": COST_GROUPS, "cap_panels": CAP_PANELS,
-        # geos, years, base_variant, variant_label, variant_routes, cf_options —
+        # geos, geo_names, years, base_variant, variant_label, cf_options —
         # every one of them read off the reports rather than declared here, so a
         # new area, year, scenario or CF method reaches the page on its own.
         **axis_options,
