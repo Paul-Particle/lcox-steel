@@ -6,6 +6,36 @@ standard-grid,all-routes,solar,bestsite-p95,all-areas,20250101,20251231
 standard-grid,all-routes,grid,emissions,all-areas,20250101,20251231
 moe-turndown-70,moe-eaf|moe-eaf-export,wind-onshore,bestsite-p95,all-areas,20250101,20251231
 moe-turndown-70,moe-eaf|moe-eaf-export,solar,bestsite-p95,all-areas,20250101,20251231
+ew-capex-500,ew-eaf|moe-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+ew-capex-500,ew-eaf|moe-eaf,solar,bestsite-p95,DEU,20250101,20251231
+ew-capex-500,ew-eaf|moe-eaf,grid,emissions,SA1,20250101,20251231
+ew-capex-900,ew-eaf|moe-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+ew-capex-900,ew-eaf|moe-eaf,solar,bestsite-p95,DEU,20250101,20251231
+ew-capex-900,ew-eaf|moe-eaf,grid,emissions,SA1,20250101,20251231
+ew-capex-1200,ew-eaf|moe-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+ew-capex-1200,ew-eaf|moe-eaf,solar,bestsite-p95,DEU,20250101,20251231
+ew-capex-1200,ew-eaf|moe-eaf,grid,emissions,SA1,20250101,20251231
+ew-capex-1800,ew-eaf|moe-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+ew-capex-1800,ew-eaf|moe-eaf,solar,bestsite-p95,DEU,20250101,20251231
+ew-capex-1800,ew-eaf|moe-eaf,grid,emissions,SA1,20250101,20251231
+ew-capex-3000,ew-eaf|moe-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+ew-capex-3000,ew-eaf|moe-eaf,solar,bestsite-p95,DEU,20250101,20251231
+ew-capex-3000,ew-eaf|moe-eaf,grid,emissions,SA1,20250101,20251231
+gas-30,ng-dri-eaf|h2-dri-eaf,wind-onshore,bestsite-p95,SA1,20250101,20251231
+gas-30,ng-dri-eaf|h2-dri-eaf,solar,bestsite-p95,DEU,20250101,20251231
+gas-30,ng-dri-eaf|h2-dri-eaf,grid,emissions,ESP,20250101,20251231
+gas-40,ng-dri-eaf|h2-dri-eaf,wind-onshore,bestsite-p95,SA1,20250101,20251231
+gas-40,ng-dri-eaf|h2-dri-eaf,solar,bestsite-p95,DEU,20250101,20251231
+gas-40,ng-dri-eaf|h2-dri-eaf,grid,emissions,ESP,20250101,20251231
+gas-50,ng-dri-eaf|h2-dri-eaf,wind-onshore,bestsite-p95,SA1,20250101,20251231
+gas-50,ng-dri-eaf|h2-dri-eaf,solar,bestsite-p95,DEU,20250101,20251231
+gas-50,ng-dri-eaf|h2-dri-eaf,grid,emissions,ESP,20250101,20251231
+gas-60,ng-dri-eaf|h2-dri-eaf,wind-onshore,bestsite-p95,SA1,20250101,20251231
+gas-60,ng-dri-eaf|h2-dri-eaf,solar,bestsite-p95,DEU,20250101,20251231
+gas-60,ng-dri-eaf|h2-dri-eaf,grid,emissions,ESP,20250101,20251231
+gas-70,ng-dri-eaf|h2-dri-eaf,wind-onshore,bestsite-p95,SA1,20250101,20251231
+gas-70,ng-dri-eaf|h2-dri-eaf,solar,bestsite-p95,DEU,20250101,20251231
+gas-70,ng-dri-eaf|h2-dri-eaf,grid,emissions,ESP,20250101,20251231
 # September 2026 test run: 2025 only, every route including the export twins,
 # iron melted in Spain, one uniform gas price and no carbon price.
 #
