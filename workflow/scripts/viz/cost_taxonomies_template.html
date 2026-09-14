@@ -47,19 +47,19 @@
   .ct-intro>*{flex:1 1 360px;min-width:0;margin:0;}
   .ct-sub{color:var(--muted);font-size:14px;}
   .ct-sub b{color:var(--ink);font-weight:600;}
-  /* Data a reader should not take at face value — the same magenta-red rule the
-     hub's work-in-progress banner uses. */
-  .ct-warn{--warn:#D75674;--warn-bg:rgba(215,86,116,.10);--warn-line:rgba(215,86,116,.32);
+  /* House sand-yellow (style.py `sand_yellow`), shared by this note and the
+     geography pills it is about, so the two read as one flag. */
+  .ct-warn{--warn:#A9741F;--warn-bg:rgba(226,182,129,.26);--warn-line:rgba(192,138,58,.50);
     position:relative;padding:10px 14px 10px 16px;
     background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:4px;
     font-size:13px;color:var(--muted);}
   @media (prefers-color-scheme:dark){
-    .ct-warn{--warn:#E68199;--warn-bg:rgba(215,86,116,.16);--warn-line:rgba(215,86,116,.42);}
+    .ct-warn{--warn:#E2B681;--warn-bg:rgba(226,182,129,.14);--warn-line:rgba(226,182,129,.38);}
   }
-  :root[data-theme="dark"] .ct-warn{--warn:#E68199;--warn-bg:rgba(215,86,116,.16);
-    --warn-line:rgba(215,86,116,.42);}
-  :root[data-theme="light"] .ct-warn{--warn:#D75674;--warn-bg:rgba(215,86,116,.10);
-    --warn-line:rgba(215,86,116,.32);}
+  :root[data-theme="dark"] .ct-warn{--warn:#E2B681;--warn-bg:rgba(226,182,129,.14);
+    --warn-line:rgba(226,182,129,.38);}
+  :root[data-theme="light"] .ct-warn{--warn:#A9741F;--warn-bg:rgba(226,182,129,.26);
+    --warn-line:rgba(192,138,58,.50);}
   .ct-warn::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
     background:var(--warn);border-radius:4px 0 0 4px;}
   .ct-warn b{color:var(--warn);font-weight:700;}
@@ -93,6 +93,25 @@
   .ct-pill[aria-pressed="true"]{background:var(--accent);color:#fff;}
   .ct-pill:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;}
   .ct-pill:disabled{opacity:.3;cursor:not-allowed;}
+  /* Canada and Brazil: the grid data the note beside the intro is about, in the
+     same sand-yellow, so a reader meets the caveat on the control as well. */
+  .ct-pill.flagged{--flag:#A9741F;--flag-bg:rgba(226,182,129,.30);
+    --flag-line:rgba(192,138,58,.55);
+    color:var(--flag);background:var(--flag-bg);
+    box-shadow:inset 0 0 0 1px var(--flag-line);}
+  .ct-pill.flagged:hover{color:var(--flag);}
+  .ct-pill.flagged[aria-pressed="true"]{background:#C08A3A;color:#22180A;box-shadow:none;}
+  @media (prefers-color-scheme:dark){
+    .ct-pill.flagged{--flag:#E2B681;--flag-bg:rgba(226,182,129,.16);
+      --flag-line:rgba(226,182,129,.42);}
+    .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#22180A;}
+  }
+  :root[data-theme="dark"] .ct-pill.flagged{--flag:#E2B681;
+    --flag-bg:rgba(226,182,129,.16);--flag-line:rgba(226,182,129,.42);}
+  :root[data-theme="dark"] .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#22180A;}
+  :root[data-theme="light"] .ct-pill.flagged{--flag:#A9741F;
+    --flag-bg:rgba(226,182,129,.30);--flag-line:rgba(192,138,58,.55);}
+  :root[data-theme="light"] .ct-pill.flagged[aria-pressed="true"]{background:#C08A3A;color:#22180A;}
   .ct-note{font-size:12px;color:var(--faint);margin:9px 2px 0;font-family:var(--mono);}
 
   .ct-legend{display:flex;gap:26px;flex-wrap:wrap;margin:20px 0 0;}
@@ -141,8 +160,6 @@
 
   .ct-root code{font-family:var(--mono);font-size:.88em;background:var(--panel-2);
     border:1px solid var(--hair);border-radius:4px;padding:0 4px;}
-  .ct-foot{margin-top:26px;padding-top:14px;border-top:1px solid var(--border);
-    font-size:11.5px;color:var(--faint);line-height:1.6;}
 </style>
 
 <div class="ct-root">
@@ -156,23 +173,26 @@
       <div class="ct-meta" id="ct-meta"></div>
     </div>
     <div class="ct-intro">
-      <p class="ct-sub">Every steel route including its export twin, solved over the 2025 weather
-        year across <b>13 grid-connected zones</b> and <b>7 islanded geographies</b> — 234 networks
+      <p class="ct-sub">Every steel route including its export twin, across <b>13 grid-connected
+        zones</b> and <b>7 islanded geographies</b> on the 2025 weather year, plus <b>Alberta and
+        Ontario on 2024</b> — 282 networks
         on assumptions moved onto the research workbook's Model Input Register. Renewables are
         sited best-site&nbsp;P95 (an upper bound on resource quality); hydrogen storage is a salt
         cavern at 350&nbsp;€/MWh (a lower bound); the grid charge is a single
         140&nbsp;k€/MW/yr capacity fee with no volumetric part; one gas price everywhere.
         Iron is exported to Spain, finished steel stays where it was made. Use the
         <b>Grid</b> control to move between the grid-connected and islanded halves; the
-        <b>Sensitivity</b> control carries the one commissioned variant, MOE turndown at 70%.
+        <b>Sensitivity</b> control carries the one commissioned variant, MOE turndown at 70%, now
+        run on both halves — worth 55–131&nbsp;€/t islanded and almost nothing on grid.
         Hover any segment for the inputs behind it.</p>
-      <p class="ct-warn"><b>Brazilian and Canadian grid data is not verified and incomplete.</b> The four
-        Brazilian submarkets and Alberta publish a market price but no generation mix, so those
-        runs report their emission intensity as unknown rather than as a number. Ontario has no
-        grid case at all: IESO's HOEP series ends 2025-04-30, when the Market Renewal Program
-        replaced it with locational prices, and HOEP excludes the Global Adjustment — so an
-        earlier year would put a commodity-only price against all-in prices everywhere else.
-        Read those geographies for the shape of the cost stack, not for its level.</p>
+      <p class="ct-warn"><b>Brazilian and Canadian grid data is not verified and incomplete</b> —
+        their pills carry this colour. The four Brazilian submarkets and both Canadian provinces
+        publish a market price but no generation mix, so those runs report emission intensity as
+        unknown rather than as a number. Ontario runs on <b>2024</b>, its last full year before the
+        Market Renewal Program replaced HOEP on 2025-05-01, and HOEP is commodity-only: it leaves
+        out the Global Adjustment, which is most of what an Ontario consumer pays. That series
+        averages <b>20.6&nbsp;€/MWh against Germany's 89.3</b>, and the gap is the missing charge
+        rather than cheap power — which is the point worth looking at, not the ranking.</p>
     </div>
   </header>
 
@@ -287,7 +307,6 @@
     <div class="ct-caps" id="ct-caps"></div>
   </section>
 
-  <p class="ct-foot" id="ct-foot"></p>
  </div>
 </div>
 
@@ -356,6 +375,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // The payload picks the opening view from runs that were actually solved.
   const S = {geo:DEFAULT.a.geo, year:DEFAULT.a.year, grid:DEFAULT.a.grid,
              cf:DEFAULT.a.cf, variant:DEFAULT.a.variant};
+
+  // The countries whose grid data the note beside the intro is about. Their pills
+  // carry the same sand-yellow, so the caveat travels with the control.
+  const FLAGGED_COUNTRIES = ["BRA", "CAN"];
 
   const proj = s => `${s.geo}-${s.year}-${s.grid}`;
   const projectHas = s => !!CASES[proj(s)];
@@ -831,7 +854,26 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   }
   // An axis value is offered only when some project/route combination exists for it,
   // so the matrix never lands the page on an unsolved point.
+  // Land on a selection that has runs behind it. Year is the axis this matters
+  // for: only Canada ran 2024, so choosing it from Germany has to move the
+  // geography rather than refuse the click. `fixed` is the axis the user just set,
+  // which stays put while the others give way.
+  function landOnSolved(fixed){
+    if(projectHas(S) && routesAt(S).length) return;
+    const years = fixed==="year" ? [S.year] : YEARS.map(String);
+    const modes = fixed==="grid" ? [S.grid] : ["grid","nogrid"];
+    for(const y of years) for(const g of GEOS) for(const gr of modes){
+      const probe = {...S, geo:g, year:y, grid:gr};
+      if(projectHas(probe) && routesAt(probe).length){
+        S.geo=g; S.year=y; S.grid=gr; return;
+      }
+    }
+  }
   function axisDisabled(axis, value){
+    // A year is offered if anything ran in it, not only if this geography did —
+    // clicking it moves the geography instead (see landOnSolved).
+    if(axis==="year")
+      return !GEOS.some(g=>["grid","nogrid"].some(gr=>CASES[`${g}-${value}-${gr}`]));
     const probe = {...S, [axis]:value};
     if(!projectHas(probe)) return true;
     if(axis==="variant") return !ROUTE_ORDER.some(r=>ownRec(probe,r));
@@ -849,7 +891,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         const pills = document.createElement("div"); pills.className = "ct-pills";
         OPTS[axis].forEach(([value,label])=>{
           pills.appendChild(pill(label, S[axis]===value, axisDisabled(axis,value),
-            ()=>{ S[axis]=value; refresh(); }));
+            ()=>{ S[axis]=value; landOnSolved(axis); refresh(); }));
         });
         box.appendChild(pills);
       }
@@ -876,8 +918,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         if(country !== null && GEO_COUNTRY[g] !== country)
           pills.appendChild(document.createElement("div")).className = "ct-break";
         country = GEO_COUNTRY[g];
-        pills.appendChild(pill(geoName(g), S.geo===g && S.grid===mode, false,
-          ()=>{ S.geo=g; S.grid=mode; refresh(); }));
+        const p = pill(geoName(g), S.geo===g && S.grid===mode, false,
+          ()=>{ S.geo=g; S.grid=mode; refresh(); });
+        if(FLAGGED_COUNTRIES.includes(country)) p.classList.add("flagged");
+        pills.appendChild(p);
       });
       box.appendChild(sub); box.appendChild(pills);
     });
@@ -898,19 +942,6 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const na = routes.filter(r=>r==="ng-dri-eaf");
     if(na.length) notes.push("NG-DRI-EAF has no renewables, so the capacity-factor basis does not apply to it.");
     document.getElementById("ct-clamp").textContent = notes.join("  ");
-    document.getElementById("ct-foot").innerHTML =
-      (ALT_ONLY ? "Cross-chart logic: " : "Cross-chart logic, shared by both taxonomies: ")
-      + "the electricity segment in LCOS/LCOH is priced "
-      + "at LCOE; the hydrogen segment in LCOS is LCOH × kg&nbsp;H₂/t; LCOI (not shown) is LCOS minus "
-      + "the EAF stage. Every split is exact — a plant's annual cost is "
-      + "<code>annuity × capex + fixed opex</code>, so capital and O&amp;M separate by a config ratio; "
-      + "the same holds for renewables, the electrolyser, the battery's power and energy, and the grid "
-      + "connection's capex and capacity charge. Two rows stay empty because "
-      + "the model does not carry them — ore/iron freight and scrap or HBI purchase. Regenerate with "
-      + "<code>build_alt_taxonomy.py</code> for this page or <code>build_cost_taxonomies.py</code> for "
-      + "the two-column comparison, then <code>build_dashboard_hub.py</code>. Set "
-      + "<code>DASHBOARD_ZONES=best</code> to plot one representative zone per country instead of "
-      + "every zone that solved.";
   }
 
   function refresh(){
@@ -940,15 +971,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     }));
   }
 
-  // Land on a selection that actually has results, whatever the default said.
-  if(!projectHas(S) || !routesAt(S).length){
-    outer: for(const g of GEOS) for(const y of YEARS) for(const gr of ["grid","nogrid"]){
-      const probe = {...S, geo:g, year:String(y), grid:gr};
-      if(projectHas(probe) && routesAt(probe).length){
-        S.geo=g; S.year=String(y); S.grid=gr; break outer;
-      }
-    }
-  }
+  landOnSolved(null);   // whatever the default said, open on something solved
   refresh();
   // Plotly sizes to the container, so a theme flip needs no re-render; a resize does.
   let resizeTimer = null;
