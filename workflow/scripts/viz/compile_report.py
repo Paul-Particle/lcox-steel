@@ -636,14 +636,21 @@ def extract_summary(
 
     # Levelised cost of the underlying energy carriers, €/MWh, so LCOS can be read
     # against the electricity and hydrogen that drive it.
-    #   LCOE = electricity-system cost (renewables + battery + grid + transmission)
-    #          per MWh of electricity generated (renewable dispatch + grid import).
+    #   LCOE = electricity-system cost (renewables + battery + grid + transmission
+    #          + the destination furnace's own power on an export route) per MWh of
+    #          electricity generated (renewable dispatch + grid import + that same
+    #          destination supply). Route-wide: every megawatt-hour the route draws
+    #          is in the denominator, so every one of them has to be paid for in the
+    #          numerator. Leaving destination_power out while its generator stayed in
+    #          `elec_gens` put free MWh under the line and read an export route as
+    #          cheaper than its domestic twin on all thirteen grid areas.
     #   LCOH = (electrolyser capex/opex + H2 buffer + the electrolyser's electricity
     #          valued at LCOE) per MWh of H2 produced, LHV.
     annual_scale = 8760.0 / len(n.snapshots)
     elec_gens = [g for g in n.generators.index if g != "gas_supply"]
     elec_mwh = (float(n.generators_t.p[elec_gens].sum().sum()) * annual_scale) if elec_gens else 0.0
-    elec_cost = sum(breakdown[k] for k in ("res", "battery", "grid", "transmission"))
+    elec_cost = sum(breakdown[k]
+                    for k in ("res", "battery", "grid", "transmission", "destination_power"))
     lcoe = elec_cost / elec_mwh if elec_mwh > 0 and elec_cost > 0 else float("nan")
     if lcoe == lcoe:  # not NaN
         summary["lcoe_eur_per_mwh"] = lcoe
@@ -678,6 +685,9 @@ def extract_summary(
             "lcoe_grid_connection": grid_conn,
             "lcoe_grid_energy": grid_energy,
             "lcoe_transmission": breakdown["transmission"],
+            # Zero on a domestic route, which builds no destination supply. It is a
+            # part like the others so the decomposition still closes on LCOE.
+            "lcoe_destination_power": breakdown["destination_power"],
         }
         res_total = sum(components[f"lcoe_{field_stem(tech)}"] for tech in RES_TECHS)
         summary["lcoe_renewables_eur_per_mwh"] = res_total / elec_mwh

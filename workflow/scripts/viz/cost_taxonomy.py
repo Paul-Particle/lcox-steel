@@ -475,7 +475,8 @@ def alternative_carrier_bands(row: pd.Series, assumptions: dict,
     for column, key in (("lcoe_storage_eur_per_mwh", "storage"),
                         ("lcoe_grid_connection_eur_per_mwh", "grid_connection"),
                         ("lcoe_grid_energy_eur_per_mwh", "grid_energy"),
-                        ("lcoe_transmission_eur_per_mwh", "transmission")):
+                        ("lcoe_transmission_eur_per_mwh", "transmission"),
+                        ("lcoe_destination_power_eur_per_mwh", "destination_power")):
         value = _value(row, column)
         if value:
             bands["lcoe"][key] = value
