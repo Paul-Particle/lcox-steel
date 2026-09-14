@@ -494,6 +494,7 @@ def build_payload(report_paths):
     axis_options = {
         "geos": sorted(geos, key=geo_sort_key),
         "geo_names": geo_names,
+        "geo_country": geo_country,
         "years": sorted(years),
         "base_variant": baseline,
         "variant_label": {s: SCENARIO_LABEL.get(s, s) for s in solved_scenarios},

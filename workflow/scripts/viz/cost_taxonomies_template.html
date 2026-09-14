@@ -82,6 +82,8 @@
     text-transform:uppercase;color:var(--faint);font-weight:600;margin-top:3px;}
   .ct-pills{display:flex;gap:3px;background:var(--panel-2);padding:3px;
     border-radius:9px;border:1px solid var(--border);flex-wrap:wrap;}
+  /* Forces the wrap that gives each country its own line of zone pills. */
+  .ct-break{flex-basis:100%;height:0;margin:0;}
   .ct-pill{border:0;background:transparent;color:var(--muted);font-family:var(--tw);
     font-size:13px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer;
     line-height:1.2;}
@@ -289,6 +291,7 @@
 const PAYLOAD = /*PAYLOAD_JSON*/;
 (function(){
   const {cases:CASES, gas:GAS, template:FCA, geos:GEOS, years:YEARS, geo_names:GN,
+    geo_country:GEO_COUNTRY,
     route_order:ROUTE_ORDER, route_label:RLAB, cost_groups:COST_GROUPS,
     cap_panels:CAP_PANELS, variant_label:VLAB,
     leaf_specs:LEAF_SPECS, leaf_groups:LEAF_GROUPS, alt_lcos_bands:ALT_LCOS,
@@ -861,7 +864,13 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       const sub = document.createElement("div");
       sub.className = "ct-sublab"; sub.textContent = label;
       const pills = document.createElement("div"); pills.className = "ct-pills";
+      let country = null;
       here.forEach(g=>{
+        // GEOS arrives grouped by country, so a change of country starts a line:
+        // a zero-height item that fills the row makes the flex container wrap.
+        if(country !== null && GEO_COUNTRY[g] !== country)
+          pills.appendChild(document.createElement("div")).className = "ct-break";
+        country = GEO_COUNTRY[g];
         pills.appendChild(pill(geoName(g), S.geo===g && S.grid===mode, false,
           ()=>{ S.geo=g; S.grid=mode; refresh(); }));
       });
