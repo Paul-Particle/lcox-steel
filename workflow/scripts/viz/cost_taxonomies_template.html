@@ -84,6 +84,11 @@
     text-transform:uppercase;color:var(--faint);font-weight:600;margin-top:3px;}
   .ct-pills{display:flex;gap:3px;background:var(--panel-2);padding:3px;
     border-radius:9px;border:1px solid var(--border);flex-wrap:wrap;}
+  /* A readout, not a control: it shares the matrix row so the number travels with
+     the selection, and carries no border a reader could mistake for a button. */
+  .ct-readout{font-family:var(--tw);font-size:13px;font-weight:600;color:var(--ink);
+    padding:8px 2px;line-height:1.35;}
+  .ct-readout .sub{display:block;font-weight:400;font-size:11.5px;color:var(--faint);}
   /* Forces the wrap that gives each country its own line of zone pills. */
   .ct-break{flex-basis:100%;height:0;margin:0;}
   .ct-pill{border:0;background:transparent;color:var(--muted);font-family:var(--tw);
@@ -412,6 +417,29 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   }
   // The routes this scenario can actually plot, in the canonical order.
   const routesAt = s => ROUTE_ORDER.filter(r => recFor(s,r));
+  // What a tonne of steel put into the air, beside what it cost. The figure is
+  // per route, so a selection covering ten routes has ten of them: the readout
+  // spans them and says how many stand behind it. An area that publishes prices
+  // but no generation mix yields none, and most of the grid side is such an area.
+  function emissionsReadout(){
+    const routes = routesAt(S);
+    const known = routes.filter(r => recFor(S,r).emissions != null);
+    if(!known.length) return {text:"data currently not available", title:""};
+    const values = known.map(r => recFor(S,r).emissions);
+    const low = Math.min(...values), high = Math.max(...values);
+    const span = (low===high ? nf(low,0) : nf(low,0) + "\u2013" + nf(high,0))
+      + " kg CO\u2082e/t steel";
+    // The range says how far apart the routes are; which route sits where is on
+    // hover, in the order the charts draw them.
+    const title = known.map(r => `${RLAB[r]||r}: ${nf(recFor(S,r).emissions,0)}`).join("\n");
+    const missing = routes.filter(r => !known.includes(r)).map(r => RLAB[r]||r);
+    return {
+      text: span + (missing.length
+        ? `<span class="sub">${known.length} of ${routes.length} routes</span>` : ""),
+      title: title + (missing.length
+        ? "\n\nNo published generation mix behind: " + missing.join(", ") : ""),
+    };
+  }
   const gasPrice = s => GAS[s.geo]?.[s.year]?.[s.grid];
 
   // ---- formatting -----------------------------------------------------
@@ -917,6 +945,17 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       }
       host.appendChild(box);
     });
+    // Beside the two axis controls rather than under the geography row, which
+    // spans the full width and would push a one-line readout onto a row of its own.
+    const emis = document.createElement("div"); emis.className = "ct-ax ct-ax-emis";
+    const emisLab = document.createElement("div"); emisLab.className = "mxlab";
+    emisLab.textContent = "Estimated emissions";
+    const emisVal = document.createElement("div"); emisVal.className = "ct-readout";
+    const readout = emissionsReadout();
+    emisVal.innerHTML = readout.text;
+    if(readout.title) emisVal.title = readout.title;
+    emis.appendChild(emisLab); emis.appendChild(emisVal);
+    host.insertBefore(emis, host.querySelector(".ct-ax-geo"));
   }
   // Geography gets a row per grid mode rather than one row with half its pills
   // greyed out. A country's zones sit on one side of the split or the other —
@@ -974,8 +1013,6 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       const off = routes.filter(r=>!ownRec(S,r)).map(r=>RLAB[r]||r);
       if(off.length) notes.push(`${VLAB[S.variant]} does not apply to ${off.join(", ")} — shown at baseline.`);
     }
-    const na = routes.filter(r=>r==="ng-dri-eaf");
-    if(na.length) notes.push("NG-DRI-EAF has no renewables, so the capacity-factor basis does not apply to it.");
     document.getElementById("ct-clamp").textContent = notes.join("  ");
   }
 
