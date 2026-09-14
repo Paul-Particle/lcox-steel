@@ -904,16 +904,21 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // row a pill is in is the useful thing about it, and clicking one sets the
   // geography and the grid mode together. GEOS arrives sorted by country, so a
   // country's whole-territory run leads its own zones in both rows.
-  // A pill is a geography on the year it was run for. Most of the run is on one
-  // year, so only the others say so — Ontario has no full 2025 and Alberta was run
-  // on both, which is the whole of what the year axis used to be for.
-  const geoPillLabel = (g,y) => geoName(g) + (y===MAIN_YEAR ? "" : " · " + y);
+  // A pill is a geography on the year it was run for, and it names that year when
+  // the year is worth knowing: either the geography was run on more than one, or
+  // it is not the year the rest of the run is on. So Alberta's two cases both say
+  // which they are, Ontario says 2024 because it has no full 2025, and a run on a
+  // single year says nothing about years anywhere.
+  const geoPillLabel = (g,y,yearsHere) =>
+    geoName(g) + ((yearsHere > 1 || y !== MAIN_YEAR) ? " · " + y : "");
   function buildGeoRows(box){
     [["grid","Grid"],["nogrid","Islanded"]].forEach(([mode,label])=>{
       const here = [];
       GEOS.forEach(g=>[MAIN_YEAR, ...YEARS.map(String).filter(y=>y!==MAIN_YEAR)]
         .forEach(y=>{ if(CASES[`${g}-${y}-${mode}`]) here.push([g,y]); }));
       if(!here.length) return;
+      const yearsHere = {};
+      here.forEach(([g])=>yearsHere[g] = (yearsHere[g]||0) + 1);
       const sub = document.createElement("div");
       sub.className = "ct-sublab"; sub.textContent = label;
       const pills = document.createElement("div"); pills.className = "ct-pills";
@@ -924,7 +929,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         if(country !== null && GEO_COUNTRY[g] !== country)
           pills.appendChild(document.createElement("div")).className = "ct-break";
         country = GEO_COUNTRY[g];
-        const p = pill(geoPillLabel(g,y),
+        const p = pill(geoPillLabel(g,y,yearsHere[g]),
           S.geo===g && S.year===y && S.grid===mode, false,
           ()=>{ S.geo=g; S.year=y; S.grid=mode; refresh(); });
         // Grid only: what the note flags is the price series these countries
