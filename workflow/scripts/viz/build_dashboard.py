@@ -22,6 +22,7 @@ import json
 import os
 import sys
 import types
+from collections import Counter
 from pathlib import Path
 
 import pandas as pd
@@ -69,7 +70,14 @@ SCENARIO_LABEL = {"base": "Base", "moe-turndown-70": "MOE turndown 70%"}
 DASHBOARD_SCENARIOS = {
     "standard-grid": "base",
     "standard-islanded": "base",
+    # Canada on 2024, because Ontario's price series has no full 2025. It is the
+    # base case on another weather year, not a sensitivity, so it shares the pill
+    # and separates on the year axis instead.
+    "canada-2024-grid": "base",
     "moe-turndown-70": "moe-turndown-70",
+    # The same sensitivity, grid-connected. It was islanded-only until now, which
+    # is why its pill was dead on every grid geography.
+    "moe-turndown-70-grid": "moe-turndown-70",
 }
 BASE_SCENARIO = "base"
 
@@ -395,10 +403,15 @@ def _default_view(cases, baseline, cf_options):
     B differs from A by route alone; a null axis means B tracks A.
     """
     # The first project that has a route worth opening on. Sorting alone can land
-    # on one whose runs are all still solving, which has nothing to show.
-    project = next((p for p in sorted(cases)
+    # on one whose runs are all still solving, which has nothing to show — and on
+    # the year with the fewest runs, since a gap-filling scenario on an earlier
+    # weather year sorts ahead of the main one. Open on the year most of the run is
+    # in, so the page starts where the results are.
+    main_year = Counter(p.rsplit("-", 2)[1] for p in cases).most_common(1)[0][0]
+    ordered = sorted(cases, key=lambda p: (p.rsplit("-", 2)[1] != main_year, p))
+    project = next((p for p in ordered
                     if any(route in cases[p] for route in ROUTE_ORDER)),
-                   sorted(cases)[0])
+                   ordered[0])
     geo, year, grid = project.rsplit("-", 2)
     routes = [route for route in ROUTE_ORDER if route in cases[project]]
     primary = "h2-dri-eaf" if "h2-dri-eaf" in routes else routes[0]
