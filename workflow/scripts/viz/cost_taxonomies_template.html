@@ -69,6 +69,10 @@
   .ct-ax-geo{grid-column:1/-1;}
   .mxlab{font-family:var(--mono);font-size:10px;letter-spacing:.13em;
     text-transform:uppercase;color:var(--muted);font-weight:600;}
+  /* The grid-mode heading over each geography row — quieter than the axis label
+     above it, so the two read as a heading and its subheading. */
+  .ct-sublab{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--faint);font-weight:600;margin-top:3px;}
   .ct-pills{display:flex;gap:3px;background:var(--panel-2);padding:3px;
     border-radius:9px;border:1px solid var(--border);flex-wrap:wrap;}
   .ct-pill{border:0;background:transparent;color:var(--muted);font-family:var(--tw);
@@ -293,7 +297,17 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
   // The detail chart carries up to ~31 bands, so it is given far more vertical room
   // than the pair charts — the thinnest bands still need to be worth hovering.
-  const PAIR_H = 430, DETAIL_H = 1180, CAP_H = 340;
+  const PAIR_H = 430, CAP_H = 340;
+  // The detail chart carries up to ~31 bands, so it is given far more vertical room
+  // than the pair charts — the thinnest bands still need to be worth hovering. Its
+  // bottom margin holds a legend of about 125 px, plus that much again of clear
+  // space above it, so the legend reads as its own block rather than as a second
+  // row of route labels. DETAIL_PLOT_PX is the drawing area the bands get, which
+  // the thin-band threshold below is measured against — derive the height from the
+  // three, so moving the legend cannot silently change what counts as thin.
+  const DETAIL_TOP = 26, DETAIL_PLOT_PX = 954, DETAIL_LEGEND_PX = 125;
+  const DETAIL_BOTTOM = 200 + DETAIL_LEGEND_PX;
+  const DETAIL_H = DETAIL_TOP + DETAIL_PLOT_PX + DETAIL_BOTTOM;
   // Below this many pixels a stacked band is not a usable pointer target, so its
   // hover detail is folded into a neighbour instead (see renderDetail).
   const THIN_PX = 9;
@@ -667,7 +681,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     // pointer can land on it. Each one's detail is therefore folded into a band that
     // *is* hoverable: the largest band of its own group, so it keeps its context, and
     // only failing that the largest band on the bar. Nothing becomes unreachable.
-    const plotPx = DETAIL_H - 26 - 200;                 // minus the top/bottom margins
+    const plotPx = DETAIL_PLOT_PX;                      // the drawing area, margins off
     const thinLimit = THIN_PX * Math.max(...totals) * 1.06 / plotPx;
     const folded = {};
     routes.forEach(r=>{
@@ -722,7 +736,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     };
     stacked(el, routes, bands, (k,r)=>(recs[r].leaves||{})[k], lines, totals,
       {unit:"€/t", fmt:",.1f", basis:"LCOS", height:DETAIL_H, bargap:0.45,
-       yTitle:"LCOS  (€ / t steel)", bottom:200, legendY:-0.075, legendSize:10.5,
+       yTitle:"LCOS  (€ / t steel)", bottom:DETAIL_BOTTOM, legendSize:10.5,
+       // Paper units are fractions of the drawing area, so a drop of one legend
+       // height is that many pixels over DETAIL_PLOT_PX, added to where it sat.
+       legendY:-(0.075 + DETAIL_LEGEND_PX / DETAIL_PLOT_PX),
        totalHover:false, totalLabel:"levelised cost of steel (LCOS)"});
   }
 
@@ -787,12 +804,37 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       const box = document.createElement("div"); box.className = "ct-ax ct-ax-" + axis;
       const lab = document.createElement("div"); lab.className = "mxlab";
       lab.textContent = AXLAB[axis];
+      box.appendChild(lab);
+      if(axis === "geo"){ buildGeoRows(box); }
+      else {
+        const pills = document.createElement("div"); pills.className = "ct-pills";
+        OPTS[axis].forEach(([value,label])=>{
+          pills.appendChild(pill(label, S[axis]===value, axisDisabled(axis,value),
+            ()=>{ S[axis]=value; refresh(); }));
+        });
+        box.appendChild(pills);
+      }
+      host.appendChild(box);
+    });
+  }
+  // Geography gets a row per grid mode rather than one row with half its pills
+  // greyed out. A country's zones sit on one side of the split or the other —
+  // Brazil's submarkets are grid-only, Brazil entire is islanded-only — so which
+  // row a pill is in is the useful thing about it, and clicking one sets the
+  // geography and the grid mode together. GEOS arrives sorted by country, so a
+  // country's whole-territory run leads its own zones in both rows.
+  function buildGeoRows(box){
+    [["grid","Grid"],["nogrid","Islanded"]].forEach(([mode,label])=>{
+      const here = GEOS.filter(g=>CASES[`${g}-${S.year}-${mode}`]);
+      if(!here.length) return;
+      const sub = document.createElement("div");
+      sub.className = "ct-sublab"; sub.textContent = label;
       const pills = document.createElement("div"); pills.className = "ct-pills";
-      OPTS[axis].forEach(([value,label])=>{
-        pills.appendChild(pill(label, S[axis]===value, axisDisabled(axis,value),
-          ()=>{ S[axis]=value; refresh(); }));
+      here.forEach(g=>{
+        pills.appendChild(pill(geoName(g), S.geo===g && S.grid===mode, false,
+          ()=>{ S.geo=g; S.grid=mode; refresh(); }));
       });
-      box.appendChild(lab); box.appendChild(pills); host.appendChild(box);
+      box.appendChild(sub); box.appendChild(pills);
     });
   }
   function renderChrome(){
