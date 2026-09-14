@@ -387,19 +387,28 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const proj = s => `${s.geo}-${s.year}-${s.grid}`;
   const projectHas = s => !!CASES[proj(s)];
   const geoName = g => GN[g]||g;
-  // ng-dri-eaf has no renewables, so it carries no capacity-factor variants.
-  const cfKey = (s,route) => route==="ng-dri-eaf" ? "na" : s.cf;
+  // A record under the selected capacity-factor method, or the only one there.
+  // A route that builds no renewables — ng-dri-eaf — is filed under whatever
+  // method its scenario carried, which is "na" when the scenario named none and
+  // the same bestsite-p95 as everything else when its tech rows covered all
+  // routes, as they do here. Demanding "na" outright dropped the domestic NG-DRI
+  // run off every chart while its export twin, spelled differently, stayed.
+  function cfRec(byCf, s){
+    if(!byCf) return null;
+    if(byCf[s.cf]) return byCf[s.cf];
+    const keys = Object.keys(byCf);
+    return keys.length === 1 ? byCf[keys[0]] : null;
+  }
   // The record stored under exactly the selected sensitivity, with no fall back to
   // the base case. A sensitivity is solved for the runs it was commissioned for —
   // MOE turndown only islanded — so asking CASES directly is what tells the page
   // whether the pill has anything of its own here. VARIANT_ROUTES cannot: it says
   // which routes a sensitivity solved anywhere, not which it solved in this
   // geography, so it reads as available on grid geographies that never ran it.
-  const ownRec = (s,route) => CASES[proj(s)]?.[route]?.[s.variant]?.[cfKey(s,route)] || null;
+  const ownRec = (s,route) => cfRec(CASES[proj(s)]?.[route]?.[s.variant], s);
   function recFor(s, route){
     const rc = CASES[proj(s)]?.[route]; if(!rc) return null;
-    const v = rc[s.variant] || rc[BASE];
-    return v ? (v[cfKey(s,route)] || null) : null;
+    return cfRec(rc[s.variant] || rc[BASE], s);
   }
   // The routes this scenario can actually plot, in the canonical order.
   const routesAt = s => ROUTE_ORDER.filter(r => recFor(s,r));
