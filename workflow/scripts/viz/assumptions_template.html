@@ -1,0 +1,97 @@
+<style>
+/*FONT_CSS*/
+  .as-root{
+    --paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8;
+    --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7;
+    --border:#D6DBDF; --hair:#E4E9ED;
+    --accent:#0A5680; --accent-2:#0293D2;
+    --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);
+    --tw:"Titillium Web",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:"SF Mono",ui-monospace,"Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    .as-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
+      --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
+      --accent:#0293D2; --accent-2:#70D2F0;
+      --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
+  }
+  :root[data-theme="dark"] .as-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
+    --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
+    --accent:#0293D2; --accent-2:#70D2F0;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
+  :root[data-theme="light"] .as-root{--paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8;
+    --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7; --border:#D6DBDF; --hair:#E4E9ED;
+    --accent:#0A5680; --accent-2:#0293D2;
+    --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);}
+
+  .as-root{background:var(--paper);color:var(--ink);font-family:var(--tw);
+    line-height:1.5;min-height:100vh;-webkit-font-smoothing:antialiased;}
+  .as-root *{box-sizing:border-box;}
+  .as-wrap{max-width:1480px;margin:0 auto;padding:30px 24px 68px;}
+
+  .as-brand{display:flex;align-items:center;gap:11px;margin-bottom:10px;}
+  .as-dot{width:12px;height:12px;border-radius:50%;background:var(--accent);flex:none;}
+  .as-brand span{font-family:var(--mono);font-size:11px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--accent-2);font-weight:600;}
+  .as-title{font-size:clamp(24px,3.2vw,34px);font-weight:700;letter-spacing:-.02em;
+    margin:0;text-wrap:balance;line-height:1.06;}
+  /* The summary and the standing caveat about what these numbers are sit side by
+     side, so a reader meets both before the first table. They stack when narrow. */
+  .as-intro{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin-top:9px;}
+  .as-intro>*{flex:1 1 360px;min-width:0;margin:0;}
+  .as-sub{color:var(--muted);font-size:14px;}
+  .as-sub b{color:var(--ink);font-weight:600;}
+  /* House sand-yellow, the same flag the geography pills and the grid-data note
+     on the cost-breakdown page carry. */
+  .as-warn{--warn:#A9741F;--warn-bg:rgba(226,182,129,.26);--warn-line:rgba(192,138,58,.50);
+    padding:10px 14px 10px 16px;background:var(--warn-bg);
+    border:1px solid var(--warn-line);border-radius:4px;font-size:13px;color:var(--muted);}
+  .as-warn b{color:var(--warn);font-weight:600;}
+  @media (prefers-color-scheme:dark){
+    .as-warn{--warn:#E2B681;--warn-bg:rgba(226,182,129,.14);--warn-line:rgba(226,182,129,.38);}
+  }
+  :root[data-theme="dark"] .as-warn{--warn:#E2B681;--warn-bg:rgba(226,182,129,.14);
+    --warn-line:rgba(226,182,129,.38);}
+  :root[data-theme="light"] .as-warn{--warn:#A9741F;--warn-bg:rgba(226,182,129,.26);
+    --warn-line:rgba(192,138,58,.50);}
+
+  .as-sec{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    box-shadow:var(--shadow);padding:18px 20px 8px;margin-top:20px;}
+  .as-sec h2{font-size:17px;font-weight:700;margin:0 0 2px;letter-spacing:-.01em;}
+  .as-sec .lead{color:var(--muted);font-size:13px;margin:0 0 12px;max-width:96ch;}
+  .as-sec .lead code{font-family:var(--mono);font-size:12px;color:var(--ink);}
+
+  /* Tables carry a lot of short numbers, so they are dense on purpose and scroll
+     sideways rather than wrapping a column onto two lines. */
+  .as-scroll{overflow-x:auto;margin-bottom:14px;}
+  table.as-t{border-collapse:collapse;width:100%;font-size:13px;}
+  table.as-t th{text-align:left;font-family:var(--mono);font-size:10px;
+    letter-spacing:.11em;text-transform:uppercase;color:var(--muted);font-weight:600;
+    border-bottom:1px solid var(--border);padding:6px 12px 6px 0;white-space:nowrap;}
+  table.as-t td{border-bottom:1px solid var(--hair);padding:7px 12px 7px 0;
+    vertical-align:top;}
+  table.as-t tr:last-child td{border-bottom:0;}
+  table.as-t td.k{font-family:var(--mono);font-size:12px;color:var(--muted);
+    white-space:nowrap;}
+  table.as-t td.v{font-weight:600;white-space:nowrap;}
+  table.as-t td.u{color:var(--faint);font-size:12px;white-space:nowrap;}
+  table.as-t td.n{color:var(--muted);font-size:12.5px;min-width:22ch;}
+  table.as-t td.num, table.as-t th.num{text-align:right;}
+
+  /* A value an overlay moves: the base number stays put and wears a marker, and
+     the scenarios that move it are named in the overlay table below. */
+  .as-moved{color:var(--warn,#A9741F);font-family:var(--mono);font-size:11px;
+    font-weight:600;margin-left:6px;text-decoration:none;}
+  :root[data-theme="dark"] .as-moved{color:#E2B681;}
+  @media (prefers-color-scheme:dark){.as-moved{color:#E2B681;}}
+  :root[data-theme="light"] .as-moved{color:#A9741F;}
+
+  .as-skip li{color:var(--muted);font-size:13px;margin-bottom:7px;}
+  .as-skip code{font-family:var(--mono);font-size:12px;color:var(--ink);}
+  .as-skip{margin:0 0 14px;padding-left:20px;}
+  .as-foot{color:var(--faint);font-size:12px;margin-top:18px;}
+</style>
+
+<div class="as-root"><div class="as-wrap">
+<!--CONTENT-->
+</div></div>
