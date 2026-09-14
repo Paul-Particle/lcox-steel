@@ -30,23 +30,21 @@ REPO = Path(__file__).resolve().parents[3]
 CONFIG = REPO / "config"
 RESULTS = REPO / "results"
 TEMPLATE_HTML = Path(__file__).with_name("assumptions_template.html")
+# Where the assumptions are actually chosen and checked. The share link only —
+# the Teams client appends the opening user's address and a client fingerprint to
+# it, and neither belongs on a page other people open.
+WORKING_DOC = ("https://futurecleantecharchitects.sharepoint.com/:x:/s/"
+               "FutureCleantechArchitects/"
+               "IQD-pQ-HYO2dS6UmBlA4bIbxAfsv6JAC66F21PJRRPw5v2w?e=b0390D")
 OUT = HTML_DIR / "assumptions.html"
 
-# What the page leaves out, and the reason it gives for leaving it out. Patterns
-# are fnmatch over the dotted path. Every one of these was checked against the
-# run rather than assumed: the scenario table names no offshore tech and no
-# multi-site overlay exists, so neither the offshore costs nor the transmission
-# block can reach a network here.
+# What the page leaves out, and why — a ledger for whoever edits this file, not
+# page copy. Patterns are fnmatch over the dotted path. Every entry was checked
+# against the run rather than assumed.
 SKIPPED = {
-    "res.wind-offshore.*":
-        "No offshore row in <code>config/scenarios.csv</code>, so no offshore "
-        "generator is built anywhere in this run.",
     "anchor.min_capacity_mw":
         "A floor on what the anchor cell must build, and it binds only on a "
         "multi-site run. Every run here is single-site best-site P95.",
-    "transmission.*":
-        "Prices the HVDC link between a remote RES site and the plant. Only a "
-        "multi-site run adds one, and none of these are multi-site.",
     "plant.dri_mt_per_year":
         "Sizes the electrolyser for the hydrogen-only route, which makes no "
         "steel and is not plotted.",
@@ -66,114 +64,90 @@ SKIPPED = {
     "emissions.freight_kg_co2e_per_t_km.*.lifecycle": "As above.",
 }
 
-# Plain rows: (path, label, unit, note). The path is both where the value comes
-# from and what an overlay is matched against.
+# Plain rows: (path, label, unit). The path is both where the value comes from and
+# what an overlay is matched against.
 SECTIONS = [
     ("Money, and how big the plant is",
      "One discount rate annuitises every capital cost in the model, and one flat "
      "steel load sets the size of everything downstream of it.",
-     [("finance.default_wacc", "Discount rate (WACC)", "",
-       "Applied to every capex through the standard annuity over that item's own "
-       "lifetime. One rate for every technology and every country."),
-      ("plant.steel_mt_per_year", "Steel output", "Mt/yr",
-       "A flat hourly load on the steel bus. Demand is not flexible; the steel "
-       "store is what lets production move around it."),
-      ("plant.h2_intensity_kg_per_t_dri", "Hydrogen per tonne of DRI", "kg/t",
-       "Converts hydrogen into iron in both the H2 shaft and the blend shaft.")]),
+     [("finance.default_wacc", "Discount rate (WACC)", ""),
+      ("plant.steel_mt_per_year", "Steel output", "Mt/yr"),
+      ("plant.h2_intensity_kg_per_t_dri", "Hydrogen per tonne of DRI", "kg/t")]),
 
     ("Renewables, electrolyser, battery, hydrogen store",
-     "The supply side. Capacities are all extendable — the optimiser sizes them, "
-     "so what is set here is only what a MW or a MWh costs.",
-     [("res.wind-onshore.capex_per_mw_eur", "Onshore wind capex", "€/MW",
-       "IRENA 2025, one global figure for every geography, as with every other "
-       "cross-country input in the file."),
-      ("res.wind-onshore.opex_per_mw_per_year_eur", "Onshore wind fixed opex", "€/MW/yr", ""),
-      ("res.wind-onshore.lifetime_years", "Onshore wind lifetime", "years", ""),
-      ("res.solar.capex_per_mw_eur", "Solar capex", "€/MW", "IRENA 2025, as above."),
-      ("res.solar.opex_per_mw_per_year_eur", "Solar fixed opex", "€/MW/yr", ""),
-      ("res.solar.lifetime_years", "Solar lifetime", "years", ""),
-      ("electrolyser.capex_per_mw_eur", "Electrolyser capex", "€/MW",
-       "Alkaline. The register carries alkaline and PEM side by side; this run "
-       "is priced on the alkaline column."),
-      ("electrolyser.opex_per_mw_per_year_eur", "Electrolyser fixed opex", "€/MW/yr",
-       "2 % of capex."),
-      ("electrolyser.lifetime_years", "Electrolyser lifetime", "years", ""),
-      ("electrolyser.efficiency_kwh_per_kg", "Electrolyser efficiency", "kWh/kg H2",
-       "Electricity in per kg of hydrogen out."),
-      ("electrolyser.varopex_eur_per_mwh_el", "Electrolyser variable opex", "€/MWh el",
-       "Water and consumables, charged on the electricity drawn."),
-      ("battery.capex_per_mw_eur", "Battery power capex", "€/MW",
-       "One bidirectional inverter, charging and discharging at that rating."),
-      ("battery.capex_per_mwh_eur", "Battery energy capex", "€/MWh",
-       "Priced and sized separately from power, so the optimiser picks the "
-       "duration rather than being handed one."),
-      ("battery.lifetime_years", "Battery lifetime", "years", ""),
-      ("battery.efficiency_roundtrip", "Battery round-trip efficiency", "", ""),
-      ("h2_buffer.capex_per_mwh_eur", "Hydrogen store capex", "€/MWh LHV",
-       "Salt cavern, and deliberately a lower bound — the register's "
-       "tank-with-compressor figure is 60 050 €/MWh. Size is optimised."),
-      ("h2_buffer.lifetime_years", "Hydrogen store lifetime", "years", "")]),
+     "The supply side. Capacities are all extendable — the optimiser sizes them, so "
+     "what is set here is only what a MW or a MWh costs. Offshore wind is priced "
+     "but was not built: no scenario names it as a technology, so no run had the "
+     "option and a coastal geography's best resource is missing from every result.",
+     [("res.wind-onshore.capex_per_mw_eur", "Onshore wind capex", "€/MW"),
+      ("res.wind-onshore.opex_per_mw_per_year_eur", "Onshore wind fixed opex", "€/MW/yr"),
+      ("res.wind-onshore.lifetime_years", "Onshore wind lifetime", "years"),
+      ("res.solar.capex_per_mw_eur", "Solar capex", "€/MW"),
+      ("res.solar.opex_per_mw_per_year_eur", "Solar fixed opex", "€/MW/yr"),
+      ("res.solar.lifetime_years", "Solar lifetime", "years"),
+      ("res.wind-offshore.capex_per_mw_eur", "Offshore wind capex", "€/MW"),
+      ("res.wind-offshore.opex_per_mw_per_year_eur", "Offshore wind fixed opex", "€/MW/yr"),
+      ("res.wind-offshore.lifetime_years", "Offshore wind lifetime", "years"),
+      ("electrolyser.capex_per_mw_eur", "Electrolyser capex", "€/MW"),
+      ("electrolyser.opex_per_mw_per_year_eur", "Electrolyser fixed opex", "€/MW/yr"),
+      ("electrolyser.lifetime_years", "Electrolyser lifetime", "years"),
+      ("electrolyser.efficiency_kwh_per_kg", "Electrolyser efficiency", "kWh/kg H2"),
+      ("electrolyser.varopex_eur_per_mwh_el", "Electrolyser variable opex", "€/MWh el"),
+      ("battery.capex_per_mw_eur", "Battery power capex", "€/MW"),
+      ("battery.capex_per_mwh_eur", "Battery energy capex", "€/MWh"),
+      ("battery.lifetime_years", "Battery lifetime", "years"),
+      ("battery.efficiency_roundtrip", "Battery round-trip efficiency", ""),
+      ("h2_buffer.capex_per_mwh_eur", "Hydrogen store capex", "€/MWh LHV"),
+      ("h2_buffer.lifetime_years", "Hydrogen store lifetime", "years")]),
 
     ("Stores on the iron and steel side",
-     "Both are cheap on purpose: what they are for is letting production move "
-     "away from delivery, not earning their own keep.",
-     [("iron_store.capex_per_t_eur", "Iron stockpile capex", "€/t",
-       "Electrowon plates, or briquettes waiting on a ship. A route that hands "
-       "the furnace hot or liquid iron has nowhere to put it and gets none."),
-      ("iron_store.lifetime_years", "Iron stockpile lifetime", "years", ""),
-      ("steel_store.capex_per_t_eur", "Steel inventory capex", "€/t",
-       "Covered yard and handling. This is the supply-side way of representing "
-       "periodic rather than hour-by-hour delivery."),
-      ("steel_store.lifetime_years", "Steel inventory lifetime", "years", ""),
-      ("steel_store.max_weeks", "Steel inventory cap", "weeks of output",
-       "The binding limit, not the cost — it stops the flexibility degenerating "
-       "into whole-year arbitrage.")]),
+     "Both are cheap on purpose: what they are for is letting production move away "
+     "from delivery, not earning their own keep.",
+     [("iron_store.capex_per_t_eur", "Iron stockpile capex", "€/t"),
+      ("iron_store.lifetime_years", "Iron stockpile lifetime", "years"),
+      ("steel_store.capex_per_t_eur", "Steel inventory capex", "€/t"),
+      ("steel_store.lifetime_years", "Steel inventory lifetime", "years"),
+      ("steel_store.max_weeks", "Steel inventory cap", "weeks of output")]),
+
+    ("Moving power from a remote site",
+     "Carried for the multi-site runs, where the renewables stand somewhere better "
+     "than the plant does and an HVDC link brings their power in. None of the runs "
+     "here is multi-site — every one builds its renewables on the plant site — so "
+     "nothing below priced anything on the other tabs.",
+     [("transmission.cost_per_mw_per_km_eur", "HVDC capex", "€/MW/km"),
+      ("transmission.lifetime_years", "HVDC lifetime", "years"),
+      ("transmission.losses_pct_per_1000km", "HVDC losses", "% per 1000 km"),
+      ("transmission.indirect_route_factor", "Route factor", "")]),
 
     ("Natural gas",
      "One flat price for every geography, which is also what keeps the fossil "
      "benchmark comparable between countries.",
-     [("natural_gas.price_eur_per_mwh", "Gas price", "€/MWh LHV",
-       "Midpoint of the register's low/high benchmark."),
-      ("natural_gas.co2_t_per_mwh", "Gas combustion CO2", "t/MWh LHV",
-       "Accounting only. Nothing in this run puts a price on it.")]),
+     [("natural_gas.price_eur_per_mwh", "Gas price", "€/MWh LHV"),
+      ("natural_gas.co2_t_per_mwh", "Gas combustion CO2", "t/MWh LHV")]),
 
     ("Grid connection",
-     "What a grid-connected run pays to be connected, on top of the hourly "
-     "wholesale price it pays for the energy itself. The connection is sized by "
-     "the optimiser. One set of charges for every area.",
-     [("grid.connection_capex_eur_per_mw", "Connection capex", "€/MW", ""),
-      ("grid.connection_lifetime_years", "Connection lifetime", "years", ""),
-      ("grid.fee_eur_per_mw_per_year", "Capacity fee", "€/MW/yr",
-       "At this plant's roughly 8 000 full-load hours it works out near "
-       "19 €/MWh, between the German HV band-load position and Hydrogen "
-       "Europe's 29.3 €/MWh EU average."),
-      ("grid.fee_eur_per_mwh", "Volumetric fee", "€/MWh",
-       "Zero, so every geography is compared on the single capacity charge.")]),
+     "What a grid-connected run pays to be connected, on top of the hourly wholesale "
+     "price it pays for the energy itself. The connection is sized by the optimiser. "
+     "One set of charges for every area.",
+     [("grid.connection_capex_eur_per_mw", "Connection capex", "€/MW"),
+      ("grid.connection_lifetime_years", "Connection lifetime", "years"),
+      ("grid.fee_eur_per_mw_per_year", "Capacity fee", "€/MW/yr"),
+      ("grid.fee_eur_per_mwh", "Volumetric fee", "€/MWh")]),
 
     ("Where the export routes melt their iron, and what the freight costs",
-     "An <i>export</i> route ships iron and melts it at the destination, whose "
-     "power is bought at that market's own hourly price. Distances are an "
-     "assumption rather than geography — they depend on the port and the routing.",
-     [("destination.area", "Destination", "",
-       "An area from the registry, priced and counted against its own hourly "
-       "series — the same download a grid run uses, so the bill and the carbon "
-       "come from one file."),
-      ("transport.deliver_finished_steel", "Deliver finished steel too", "",
-       "Off: the model stops at the plant gate and only an export route pays "
-       "freight. On, every route would also deliver its steel over the same legs."),
-      ("transport.sea.iron.eur_per_t_km", "Sea freight, iron", "€/t·km",
-       "Iron travels in fitted holds under inert gas, so it carries a premium "
-       "over ore."),
-      ("transport.sea.steel.eur_per_t_km", "Sea freight, steel", "€/t·km", ""),
-      ("transport.sea.iron.eur_per_t", "Sea freight, iron, per tonne", "€/t", ""),
-      ("transport.sea.steel.eur_per_t", "Sea freight, steel, per tonne", "€/t", ""),
-      ("transport.rail.iron.eur_per_t_km", "Rail freight, iron", "€/t·km",
-       "An order of magnitude dearer per t·km than sea, which is why iron moves "
-       "between continents by ship and barely moves overland."),
-      ("transport.rail.steel.eur_per_t_km", "Rail freight, steel", "€/t·km", ""),
-      ("transport.rail.iron.eur_per_t", "Rail freight, iron, per tonne", "€/t",
-       "Zero because the European rates this is anchored on are quoted all-in."),
-      ("transport.rail.steel.eur_per_t", "Rail freight, steel, per tonne", "€/t", "")]),
+     "An <i>export</i> route ships iron and melts it at the destination, whose power "
+     "is bought at that market's own hourly price. Distances are an assumption rather "
+     "than geography — they depend on the port and the routing.",
+     [("destination.area", "Destination", ""),
+      ("transport.deliver_finished_steel", "Deliver finished steel too", ""),
+      ("transport.sea.iron.eur_per_t_km", "Sea freight, iron", "€/t·km"),
+      ("transport.sea.steel.eur_per_t_km", "Sea freight, steel", "€/t·km"),
+      ("transport.sea.iron.eur_per_t", "Sea freight, iron, per tonne", "€/t"),
+      ("transport.sea.steel.eur_per_t", "Sea freight, steel, per tonne", "€/t"),
+      ("transport.rail.iron.eur_per_t_km", "Rail freight, iron", "€/t·km"),
+      ("transport.rail.steel.eur_per_t_km", "Rail freight, steel", "€/t·km"),
+      ("transport.rail.iron.eur_per_t", "Rail freight, iron, per tonne", "€/t"),
+      ("transport.rail.steel.eur_per_t", "Rail freight, steel, per tonne", "€/t")]),
 ]
 
 # The process steps, as a matrix: a column per step, a row per field. Blank where
@@ -200,15 +174,10 @@ PROCESS_FIELDS = [
 # EAF's electricity is the melt, so iron that shows up hot has had part of that
 # bill paid upstream.
 CHARGE_STATES = [
-    ("briquettes", "Briquettes (HBI), 25 °C",
-     "The dearest charge: dense, and carrying the gangue the shaft could not remove."),
-    ("plates", "Electrowon plates or cold MOE iron, 25 °C",
-     "Cold like the briquettes, but nearly gangue-free."),
-    ("hot", "Sponge iron, ~650 °C",
-     "Walked straight from the shaft to the furnace."),
-    ("liquid", "Liquid iron, ~1550 °C",
-     "From the MOE cell, so the melt is already done — what is left is transfer, "
-     "holding and superheat."),
+    ("briquettes", "Briquettes (HBI), 25 °C"),
+    ("plates", "Electrowon plates or cold MOE iron, 25 °C"),
+    ("hot", "Sponge iron, ~650 °C"),
+    ("liquid", "Liquid iron, ~1550 °C"),
 ]
 
 
@@ -249,6 +218,11 @@ def main() -> None:
     assumptions = yaml.safe_load((CONFIG / "assumptions.yaml").read_text())
     config = yaml.safe_load((CONFIG / "config.yaml").read_text())
     scenarios = pd.read_csv(CONFIG / "scenarios.csv", comment="#")
+    # The scenarios the dashboard browses, and only those. The scenario table
+    # also holds the capex and gas-price sweeps, which were solved and reported
+    # but are plotted nowhere — an assumption of theirs on this page would read
+    # as an input behind a chart the reader can reach, and none of them is.
+    scenarios = scenarios[scenarios["scenario"].isin(DASHBOARD_SCENARIOS)]
     run_scenarios = list(dict.fromkeys(scenarios["scenario"]))
 
     # The overlays, which are exactly the deviations: an overlay file holds only
@@ -269,65 +243,47 @@ def main() -> None:
         '<div class="as-brand"><div class="as-dot"></div>'
         '<span>FC Architects · green steel model</span></div>'
         '<h1 class="as-title">What the run was priced on</h1>'
+        f'<a class="as-doc" href="{WORKING_DOC}" target="_blank" rel="noopener">'
+        '<span class="as-doc-mark">Working document</span>'
+        'Assumption selection and validation</a>'
         '<div class="as-intro">'
         '<p class="as-sub">Every input behind the numbers on the other tabs, read '
         'straight out of <b>config/assumptions.yaml</b> at build time. A scenario '
         'can move any of them through an overlay file of its own, deep-merged over '
         'this one; a value that some scenario moves is marked '
-        '<span class="as-moved">moved</span> and collected in <b>Where the '
-        'scenarios differ</b> below. Assumptions that do not reach this run are '
-        'left out, and listed at the end with the reason.</p>'
-        '<p class="as-warn"><b>These are placeholders, not research.</b> Even the '
-        'sourced figures are single points on scales that want a sensitivity run '
-        'of their own, and several — the pre-commercial cell capexes above all — '
-        'are order-of-magnitude eyeballs. Read a level as a starting position, and '
-        'a comparison between routes as the thing the model is actually for.</p>'
+        '<span class="as-moved">moved</span> and collected in <b>What the '
+        'sensitivity moves</b> below. Not all assumptions are listed here.</p>'
+        '<p class="as-warn"><b>This is a mix of validated and roughly estimated '
+        'placeholders.</b> Central values, ranges, sensitivity analysis, country '
+        'specific values are not fixed and tbd.</p>'
         '</div>')
 
-    # ---- what ran -------------------------------------------------------
-    rows = []
-    for scenario in run_scenarios:
-        block = scenarios[scenarios["scenario"] == scenario]
-        routes = " · ".join(dict.fromkeys(block["route"])).replace("|", " · ")
-        areas = " · ".join(dict.fromkeys(block["area"]))
-        period = f"{block['start_date'].iloc[0]}–{block['end_date'].iloc[0]}"
-        overlay = ("<br>".join(f'<code>{path}</code> → {fmt(by[scenario])}'
-                               for path, by in sorted(moved.items())
-                               if scenario in by)
-                   or '<span style="opacity:.5">—</span>')
-        on_dash = "yes" if scenario in DASHBOARD_SCENARIOS else "no"
-        rows.append(f'<tr><td class="k">{scenario}</td><td class="n">{routes}</td>'
-                    f'<td class="n">{areas}</td><td class="u">{period[:4]}</td>'
-                    f'<td class="n">{overlay}</td><td class="u">{on_dash}</td></tr>')
+    # ---- how the runs were set up ---------------------------------------
+    years = sorted({str(year)[:4] for year in scenarios["start_date"]})
     html.append(
-        '<div class="as-sec"><h2>The runs these assumptions were used for</h2>'
-        '<p class="lead">Fifteen scenarios. <code>all-routes</code> is every route '
-        'in the model — five steel routes, their five export twins, and a '
-        'hydrogen-only run that makes no steel and is therefore absent from the '
-        'charts. <code>all-areas</code> resolves through the area registry, which '
+        '<div class="as-sec"><h2>How the runs were set up</h2>'
+        '<p class="lead">Every run solves one route in one place over one year, '
+        'hourly — 8 760 snapshots — with HiGHS. Every capacity is extendable, so '
+        'what is set below is what a MW or a tonne of capacity costs, never how '
+        'much of it there is. The geographies come from the area registry, which '
         'is what sends a grid run to Brazil\'s four submarkets and Australia\'s '
-        'five NEM regions instead of the country. Every run is hourly over the '
-        'whole year — 8 760 snapshots — and solved with HiGHS. Only the five '
-        'scenarios marked below are browsable on the other tabs; the ten sweep '
-        'scenarios were solved and reported but are not plotted there.</p>'
-        '<div class="as-scroll"><table class="as-t"><tr><th>Scenario</th>'
-        '<th>Routes</th><th>Areas</th><th>Year</th><th>Overlay</th>'
-        '<th>On the dashboard</th></tr>' + "".join(rows) + '</table></div></div>')
+        'five NEM regions rather than to the country; an islanded run keeps the '
+        f'country whole. The weather years are {" and ".join(years)}.</p></div>')
 
     # ---- plain sections -------------------------------------------------
     for title, lead, rows_spec in SECTIONS:
         rows = []
-        for path, label, unit, note in rows_spec:
+        for path, label, unit in rows_spec:
             shown.add(path)
             mark = ('<span class="as-moved">moved</span>' if path in moved else "")
             rows.append(f'<tr><td>{label}{mark}</td>'
                         f'<td class="v num">{fmt(read(assumptions, path))}</td>'
-                        f'<td class="u">{unit}</td><td class="n">{note}</td>'
+                        f'<td class="u">{unit}</td>'
                         f'<td class="k">{path}</td></tr>')
         html.append(f'<div class="as-sec"><h2>{title}</h2><p class="lead">{lead}</p>'
                     '<div class="as-scroll"><table class="as-t">'
                     '<tr><th>Assumption</th><th class="num">Value</th><th>Unit</th>'
-                    '<th>Note</th><th>Key</th></tr>'
+                    '<th>Key</th></tr>'
                     + "".join(rows) + '</table></div></div>')
 
     # ---- the process steps, as a matrix ---------------------------------
@@ -359,12 +315,12 @@ def main() -> None:
 
     # ---- the EAF's charge states ----------------------------------------
     rows = []
-    for state, label, note in CHARGE_STATES:
+    for state, label in CHARGE_STATES:
         path = f"eaf.charge.{state}.el_mwh_per_t"
         shown.add(path)
         rows.append(f'<tr><td>{label}</td>'
                     f'<td class="v num">{fmt(read(assumptions, path))}</td>'
-                    f'<td class="u">MWh/t</td><td class="n">{note}</td></tr>')
+                    f'<td class="u">MWh/t</td></tr>')
     html.append(
         '<div class="as-sec"><h2>How the iron reaches the furnace</h2>'
         '<p class="lead">The EAF\'s electricity is set by how hot its charge '
@@ -372,7 +328,7 @@ def main() -> None:
         'iron crossed an ocean, so it always arrives cold — as briquettes if a '
         'shaft made it, as plates if a cell did.</p>'
         '<div class="as-scroll"><table class="as-t"><tr><th>Charge</th>'
-        '<th class="num">Electricity</th><th>Unit</th><th>Note</th></tr>'
+        '<th class="num">Electricity</th><th>Unit</th></tr>'
         + "".join(rows) + '</table></div></div>')
 
     # ---- freight legs ---------------------------------------------------
@@ -460,7 +416,7 @@ def main() -> None:
         'generation mix, which is what the emission factors above are weighted '
         'by. An islanded run buys no grid power and needs neither.</p>'
         '<div class="as-scroll"><table class="as-t"><tr><th>Area</th>'
-        '<th>Country</th><th>Market</th><th>Note</th></tr>'
+        '<th>Country</th><th>Market</th><th>Price series</th></tr>'
         + "".join(rows) + '</table></div></div>')
 
     # ---- where the scenarios differ -------------------------------------
@@ -469,27 +425,26 @@ def main() -> None:
         by_value = {}
         for scenario, value in by_scenario.items():
             by_value.setdefault(value, []).append(scenario)
-        values = " · ".join(
-            f"{fmt(value)} <span style='opacity:.6'>({', '.join(sorted(names))})</span>"
-            for value, names in sorted(by_value.items()))
+        values = " · ".join(fmt(value) for value in sorted(by_value))
         rows.append(f'<tr><td class="k">{path}</td>'
                     f'<td class="v num">{fmt(read(assumptions, path))}</td>'
                     f'<td class="n">{values}</td></tr>')
     html.append(
-        '<div class="as-sec"><h2>Where the scenarios differ</h2>'
-        '<p class="lead">Three values, and nothing else: an overlay file holds '
-        'only what it moves, so this is the whole of the deviation between '
-        'scenarios. Everything not listed here is identical in all fifteen runs. '
-        'Of these, only the MOE turndown is browsable on the cost-breakdown tab, '
-        'as the <i>Sensitivity</i> control; the two sweeps were solved and '
-        'reported but are not plotted.</p>'
+        '<div class="as-sec"><h2>What the sensitivity moves</h2>'
+        f'<p class="lead">{"One value" if len(moved) == 1 else str(len(moved)) + " values"}, '
+        'and nothing else. The cost-breakdown tab\'s <i>Sensitivity</i> control '
+        'is exactly this — the MOE cell\'s minimum load while built, at Boston '
+        'Metal\'s published turndown figure instead of a cell near enough to '
+        'pinned that it cannot follow a price at all. Every other value on this '
+        'page is the same whichever way that control is set.</p>'
         '<div class="as-scroll"><table class="as-t"><tr><th>Assumption</th>'
-        '<th class="num">Base</th><th>Moved to, and by which scenario</th></tr>'
+        '<th class="num">Base</th><th>Moved to</th></tr>'
         + "".join(rows) + '</table></div></div>')
 
-    # ---- what is not on the page ----------------------------------------
-    # Anything neither rendered nor skipped stops the build: an assumption added
-    # later has to be given a reading or a reason, and cannot quietly vanish.
+    # ---- coverage --------------------------------------------------------
+    # The page does not list what it leaves out, but the build still checks that
+    # something decided to leave it out: anything neither rendered nor named in
+    # SKIPPED stops the build, so an assumption added later cannot go unread.
     all_paths = {path for path, _ in leaves(assumptions)}
     accounted = set(shown)
     for pattern in SKIPPED:
@@ -501,22 +456,6 @@ def main() -> None:
             f"Add each to a section in {Path(__file__).name}, or to SKIPPED with "
             f"the reason it does not reach the run."
         )
-    items = "".join(f'<li><code>{pattern}</code> — {reason}</li>'
-                    for pattern, reason in SKIPPED.items())
-    html.append(
-        '<div class="as-sec"><h2>Left out, and why</h2>'
-        '<p class="lead">These are in the assumptions file but do not reach this '
-        'run, so putting them on the page would suggest they priced something '
-        'here. The build fails if an assumption is neither shown above nor listed '
-        'below, so nothing can go missing without someone deciding it should.</p>'
-        f'<ul class="as-skip">{items}</ul>'
-        '<p class="lead">Two things are also out of scope by intent rather than '
-        'by irrelevance. The workflow settings in <code>config/config.yaml</code> '
-        '— cutout caching, download polling, solver threads, file paths — are '
-        'plumbing and change no result. And the weather itself is not an '
-        'assumption but an input: ERA5 for the year named, through the turbine '
-        'and panel models the config selects.</p></div>')
-
     html.append('<p class="as-foot">Generated from config/assumptions.yaml, its '
                 'per-scenario overlays and config/scenarios.csv.</p>')
 
