@@ -55,6 +55,16 @@
   :root[data-theme="light"] .as-warn{--warn:#A9741F;--warn-bg:rgba(226,182,129,.26);
     --warn-line:rgba(192,138,58,.50);}
 
+  /* The working document these numbers are being chosen and checked in. It sits
+     above the intro because it is where a reader goes to change one, not read one. */
+  .as-doc{display:inline-flex;align-items:center;gap:8px;margin:12px 0 2px;
+    padding:7px 13px;background:var(--panel);border:1px solid var(--border);
+    border-radius:999px;box-shadow:var(--shadow);text-decoration:none;
+    font-size:13px;font-weight:600;color:var(--accent);}
+  .as-doc:hover{border-color:var(--accent-2);}
+  .as-doc .as-doc-mark{font-family:var(--mono);font-size:10px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--faint);font-weight:600;}
+
   .as-sec{background:var(--panel);border:1px solid var(--border);border-radius:12px;
     box-shadow:var(--shadow);padding:18px 20px 8px;margin-top:20px;}
   .as-sec h2{font-size:17px;font-weight:700;margin:0 0 2px;letter-spacing:-.01em;}
