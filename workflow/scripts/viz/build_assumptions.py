@@ -64,21 +64,15 @@ SKIPPED = {
     "emissions.freight_kg_co2e_per_t_km.*.lifecycle": "As above.",
 }
 
-# Plain rows: (path, label, unit). The path is both where the value comes from and
-# what an overlay is matched against.
+# Plain rows: (path, label, unit) under a heading. The path is both where the
+# value comes from and what an overlay is matched against.
 SECTIONS = [
-    ("Money, and how big the plant is",
-     "One discount rate annuitises every capital cost in the model, and one flat "
-     "steel load sets the size of everything downstream of it.",
+    ("Finance and plant",
      [("finance.default_wacc", "Discount rate (WACC)", ""),
       ("plant.steel_mt_per_year", "Steel output", "Mt/yr"),
       ("plant.h2_intensity_kg_per_t_dri", "Hydrogen per tonne of DRI", "kg/t")]),
 
-    ("Renewables, electrolyser, battery, hydrogen store",
-     "The supply side. Capacities are all extendable — the optimiser sizes them, so "
-     "what is set here is only what a MW or a MWh costs. Offshore wind is priced "
-     "but was not built: no scenario names it as a technology, so no run had the "
-     "option and a coastal geography's best resource is missing from every result.",
+    ("Renewables, electrolyser, battery, hydrogen storage",
      [("res.wind-onshore.capex_per_mw_eur", "Onshore wind capex", "€/MW"),
       ("res.wind-onshore.opex_per_mw_per_year_eur", "Onshore wind fixed opex", "€/MW/yr"),
       ("res.wind-onshore.lifetime_years", "Onshore wind lifetime", "years"),
@@ -100,44 +94,30 @@ SECTIONS = [
       ("h2_buffer.capex_per_mwh_eur", "Hydrogen store capex", "€/MWh LHV"),
       ("h2_buffer.lifetime_years", "Hydrogen store lifetime", "years")]),
 
-    ("Stores on the iron and steel side",
-     "Both are cheap on purpose: what they are for is letting production move away "
-     "from delivery, not earning their own keep.",
+    ("Iron and steel stores",
      [("iron_store.capex_per_t_eur", "Iron stockpile capex", "€/t"),
       ("iron_store.lifetime_years", "Iron stockpile lifetime", "years"),
       ("steel_store.capex_per_t_eur", "Steel inventory capex", "€/t"),
       ("steel_store.lifetime_years", "Steel inventory lifetime", "years"),
       ("steel_store.max_weeks", "Steel inventory cap", "weeks of output")]),
 
-    ("Moving power from a remote site",
-     "Carried for the multi-site runs, where the renewables stand somewhere better "
-     "than the plant does and an HVDC link brings their power in. None of the runs "
-     "here is multi-site — every one builds its renewables on the plant site — so "
-     "nothing below priced anything on the other tabs.",
+    ("Transmission",
      [("transmission.cost_per_mw_per_km_eur", "HVDC capex", "€/MW/km"),
       ("transmission.lifetime_years", "HVDC lifetime", "years"),
       ("transmission.losses_pct_per_1000km", "HVDC losses", "% per 1000 km"),
       ("transmission.indirect_route_factor", "Route factor", "")]),
 
     ("Natural gas",
-     "One flat price for every geography, which is also what keeps the fossil "
-     "benchmark comparable between countries.",
      [("natural_gas.price_eur_per_mwh", "Gas price", "€/MWh LHV"),
       ("natural_gas.co2_t_per_mwh", "Gas combustion CO2", "t/MWh LHV")]),
 
     ("Grid connection",
-     "What a grid-connected run pays to be connected, on top of the hourly wholesale "
-     "price it pays for the energy itself. The connection is sized by the optimiser. "
-     "One set of charges for every area.",
      [("grid.connection_capex_eur_per_mw", "Connection capex", "€/MW"),
       ("grid.connection_lifetime_years", "Connection lifetime", "years"),
       ("grid.fee_eur_per_mw_per_year", "Capacity fee", "€/MW/yr"),
       ("grid.fee_eur_per_mwh", "Volumetric fee", "€/MWh")]),
 
-    ("Where the export routes melt their iron, and what the freight costs",
-     "An <i>export</i> route ships iron and melts it at the destination, whose power "
-     "is bought at that market's own hourly price. Distances are an assumption rather "
-     "than geography — they depend on the port and the routing.",
+    ("Export destination and freight rates",
      [("destination.area", "Destination", ""),
       ("transport.deliver_finished_steel", "Deliver finished steel too", ""),
       ("transport.sea.iron.eur_per_t_km", "Sea freight, iron", "€/t·km"),
@@ -251,15 +231,15 @@ def main() -> None:
         'straight out of <b>config/assumptions.yaml</b> at build time. A scenario '
         'can move any of them through an overlay file of its own, deep-merged over '
         'this one; a value that some scenario moves is marked '
-        '<span class="as-moved">moved</span> and collected in <b>What the '
-        'sensitivity moves</b> below. Not all assumptions are listed here.</p>'
+        '<span class="as-moved">moved</span> and collected under <b>Sensitivity</b> '
+        'below. Not all assumptions are listed here.</p>'
         '<p class="as-warn"><b>This is a mix of validated and roughly estimated '
         'placeholders.</b> Central values, ranges, sensitivity analysis, country '
         'specific values are not fixed and tbd.</p>'
         '</div>')
 
     # ---- plain sections -------------------------------------------------
-    for title, lead, rows_spec in SECTIONS:
+    for title, rows_spec in SECTIONS:
         rows = []
         for path, label, unit in rows_spec:
             shown.add(path)
@@ -268,7 +248,7 @@ def main() -> None:
                         f'<td class="v num">{fmt(read(assumptions, path))}</td>'
                         f'<td class="u">{unit}</td>'
                         f'<td class="k">{path}</td></tr>')
-        html.append(f'<div class="as-sec"><h2>{title}</h2><p class="lead">{lead}</p>'
+        html.append(f'<div class="as-sec"><h2>{title}</h2>'
                     '<div class="as-scroll"><table class="as-t">'
                     '<tr><th>Assumption</th><th class="num">Value</th><th>Unit</th>'
                     '<th>Key</th></tr>'
@@ -285,19 +265,13 @@ def main() -> None:
                 cells.append('<td class="num" style="opacity:.3">·</td>')
                 continue
             shown.add(path)
-            mark = ('<span class="as-moved">*</span>' if path in moved else "")
+            mark = ('<span class="as-moved" title="moved by the sensitivity">*</span>'
+                    if path in moved else "")
             cells.append(f'<td class="v num">{fmt(read(assumptions, path))}{mark}</td>')
         rows.append(f'<tr><td>{label}</td><td class="u">{unit}</td>'
                     + "".join(cells) + '</tr>')
     html.append(
-        '<div class="as-sec"><h2>The process steps</h2>'
-        '<p class="lead">Capex is quoted per tonne of annual output capacity, the '
-        'basis the industry quotes on; fixed opex likewise, and it is all-in — '
-        'labour, maintenance and overhead, which is why it is an eighth of capex '
-        'rather than the few per cent a maintenance-only figure would be. Every '
-        'route melts in the same EAF, so its column is shared. A dot means the '
-        'field does not apply to that step, and a '
-        '<span class="as-moved">*</span> that some scenario moves the value.</p>'
+        '<div class="as-sec"><h2>Process steps</h2>'
         '<div class="as-scroll"><table class="as-t"><tr><th>Assumption</th>'
         f'<th>Unit</th>{head}</tr>' + "".join(rows) + '</table></div></div>')
 
@@ -310,11 +284,7 @@ def main() -> None:
                     f'<td class="v num">{fmt(read(assumptions, path))}</td>'
                     f'<td class="u">MWh/t</td></tr>')
     html.append(
-        '<div class="as-sec"><h2>How the iron reaches the furnace</h2>'
-        '<p class="lead">The EAF\'s electricity is set by how hot its charge '
-        'arrives, and the route decides which state that is. An export route\'s '
-        'iron crossed an ocean, so it always arrives cold — as briquettes if a '
-        'shaft made it, as plates if a cell did.</p>'
+        '<div class="as-sec"><h2>EAF electricity by charge state</h2>'
         '<div class="as-scroll"><table class="as-t"><tr><th>Charge</th>'
         '<th class="num">Electricity</th><th>Unit</th></tr>'
         + "".join(rows) + '</table></div></div>')
@@ -327,12 +297,8 @@ def main() -> None:
         drawn = " + ".join(f"{fmt(km)} km {mode}" for mode, km in legs.items())
         rows.append(f'<tr><td class="k">{origin}</td><td class="v">{drawn}</td></tr>')
     html.append(
-        '<div class="as-sec"><h2>Freight legs to the destination</h2>'
-        '<p class="lead">Keyed by the producing country alone, so they are drawn '
-        'to whichever area <code>destination.area</code> names — here Spain. '
-        'Alberta is landlocked and reaches the sea at Vancouver; Ontario goes '
-        'down the St. Lawrence. Moving the destination means redrawing all of '
-        'them.</p><div class="as-scroll"><table class="as-t">'
+        '<div class="as-sec"><h2>Freight distances to the destination</h2>'
+        '<div class="as-scroll"><table class="as-t">'
         '<tr><th>From</th><th>Legs</th></tr>'
         + "".join(rows) + '</table></div></div>')
 
@@ -364,19 +330,13 @@ def main() -> None:
     gas_upstream = fmt(read(assumptions, f"emissions.gas_upstream_t_co2e_per_mwh.{basis}"))
     html.append(
         '<div class="as-sec"><h2>Emissions accounting</h2>'
-        f'<p class="lead">The basis is <b>{basis}</b> — what comes out of the '
-        'stack and nothing else, so renewables and nuclear are zero and an '
-        'islanded run reads zero too. None of this reaches the objective: a '
-        'number here never changed a solve. It is also not a CBAM or an ETS '
-        'figure, because the model\'s boundary stops at the melt and the process '
-        'steps\' own direct emissions — electrodes, carbon injection, the carbon '
-        'in DR-grade pellets, fluxes — are outside it. What is counted is the '
-        'energy and the freight. The <i>Estimated emissions</i> readout on the '
-        'cost-breakdown tab is built from exactly this. Burned gas is counted at '
-        f'its own combustion figure; its supply chain adds {gas_upstream} t '
-        'CO2e/MWh on this basis, which is what a stack-only accounting means.</p>'
         '<div class="as-scroll" style="display:flex;gap:36px;align-items:flex-start;'
         'flex-wrap:wrap;">'
+        '<table class="as-t" style="width:auto"><tr><th>Assumption</th>'
+        '<th class="num">Value</th><th>Unit</th></tr>'
+        f'<tr><td>Basis</td><td class="v num">{basis}</td><td class="u"></td></tr>'
+        f'<tr><td>Gas supply chain</td><td class="v num">{gas_upstream}</td>'
+        '<td class="u">t CO2e/MWh LHV</td></tr></table>'
         + "".join(columns) +
         '<table class="as-t" style="width:auto"><tr><th>Freight</th>'
         f'<th class="num">Factor</th><th>Unit</th></tr>{"".join(freight)}</table>'
@@ -396,13 +356,7 @@ def main() -> None:
         rows.append(f'<tr><td class="k">{area}</td><td class="u">{spec["iso3"]}</td>'
                     f'<td class="v">{market}</td><td class="n">{note}</td></tr>')
     html.append(
-        '<div class="as-sec"><h2>Geographies, and where their prices come from</h2>'
-        '<p class="lead">Weather is an ERA5 cutout per area, turned into hourly '
-        'capacity factors by the best-site P95 method — the profile of the best '
-        'cells in the area rather than its average. Hourly prices come from the '
-        'market operator named here, and a grid run also pulls that market\'s '
-        'generation mix, which is what the emission factors above are weighted '
-        'by. An islanded run buys no grid power and needs neither.</p>'
+        '<div class="as-sec"><h2>Geographies and price sources</h2>'
         '<div class="as-scroll"><table class="as-t"><tr><th>Area</th>'
         '<th>Country</th><th>Market</th><th>Price series</th></tr>'
         + "".join(rows) + '</table></div></div>')
@@ -418,13 +372,7 @@ def main() -> None:
                     f'<td class="v num">{fmt(read(assumptions, path))}</td>'
                     f'<td class="n">{values}</td></tr>')
     html.append(
-        '<div class="as-sec"><h2>What the sensitivity moves</h2>'
-        f'<p class="lead">{"One value" if len(moved) == 1 else str(len(moved)) + " values"}, '
-        'and nothing else. The cost-breakdown tab\'s <i>Sensitivity</i> control '
-        'is exactly this — the MOE cell\'s minimum load while built, at Boston '
-        'Metal\'s published turndown figure instead of a cell near enough to '
-        'pinned that it cannot follow a price at all. Every other value on this '
-        'page is the same whichever way that control is set.</p>'
+        '<div class="as-sec"><h2>Sensitivity</h2>'
         '<div class="as-scroll"><table class="as-t"><tr><th>Assumption</th>'
         '<th class="num">Base</th><th>Moved to</th></tr>'
         + "".join(rows) + '</table></div></div>')
