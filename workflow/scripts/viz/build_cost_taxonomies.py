@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent))    # sibling build_dashboard, cos
 sys.path.insert(0, str(REPO / "workflow"))        # common.*, scripts.*
 
 import cost_taxonomy                                                      # noqa: E402
-from build_dashboard import HTML_DIR, RESULTS, _axes, build_html          # noqa: E402
+from build_dashboard import HTML_DIR, _axes, build_html, scenario_files      # noqa: E402
 from common._constants import H2_LHV_KWH_PER_KG                           # noqa: E402
 from common._report_schema import read_report                             # noqa: E402
 
@@ -149,7 +149,11 @@ def attach(payload: dict, cases: dict) -> None:
     # The same reports build_dashboard read, walked again to attach the leaf
     # split to the records it already built. A row finds its record through the
     # axes it declares, not through a name that has to be taken apart.
-    for report in sorted(RESULTS.glob("report_*.csv")):
+    for scenario, report in scenario_files().items():
+        # The overlay is named by the scenario the file is for, which is not
+        # what the record is filed under: `standard-grid` and `standard-islanded`
+        # share the `base` pill but keep their own names on disk.
+        assumptions = _assumptions(scenario)
         for _, row in read_report(report).iterrows():
             axes = _axes(row)
             project = f"{axes['geo']}-{axes['year']}-{axes['grid']}"
@@ -159,7 +163,6 @@ def attach(payload: dict, cases: dict) -> None:
                            .get(axes["cf"]))
             if record is None:
                 continue
-            assumptions = _assumptions(axes["variant"])
             bands = cost_taxonomy.alternative_lcos_bands(row, assumptions, H2_LHV_KWH_PER_KG)
             if not bands:
                 missing += 1
