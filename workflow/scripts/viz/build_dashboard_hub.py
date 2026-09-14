@@ -5,6 +5,7 @@ artifact: a work-in-progress banner and a tab bar over isolated iframes.
 
 Inputs:
   * results/html/dashboard_v2.html         — built by build_dashboard_v2.py
+  * results/html/assumptions.html          — built by build_assumptions.py
   * results/html/cost_taxonomies.html      — built by build_cost_taxonomies.py
   * hub_pages/network_schematic.html       — static source page (no generator)
   * hub_pages/workflow_dag.html            — static source page (no generator)
@@ -52,12 +53,13 @@ FAVICON = ("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22"
 # plots — still builds and can be put back in TAB_ORDER; it is left out because
 # the choice it was there to inform has been made.
 FRAGMENTS = {
-    "taxonomy":   (HTML_DIR / "alt_taxonomy.html",       "Cost breakdown"),
-    "compare":    (HTML_DIR / "dashboard_v2.html",       "Scenario comparison"),
-    "schematic":  (HUB_PAGES / "network_schematic.html", "Network schematic"),
-    "dag":        (HUB_PAGES / "workflow_dag.html",      "Workflow DAG"),
+    "taxonomy":    (HTML_DIR / "alt_taxonomy.html",       "Cost breakdown"),
+    "assumptions": (HTML_DIR / "assumptions.html",        "Assumptions"),
+    "compare":     (HTML_DIR / "dashboard_v2.html",       "Scenario comparison"),
+    "schematic":   (HUB_PAGES / "network_schematic.html", "Network schematic"),
+    "dag":         (HUB_PAGES / "workflow_dag.html",      "Workflow DAG"),
 }
-TAB_ORDER = ["taxonomy", "compare", "schematic", "dag"]
+TAB_ORDER = ["taxonomy", "assumptions", "compare", "schematic", "dag"]
 DEFAULT = "taxonomy"
 
 
