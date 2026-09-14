@@ -102,13 +102,16 @@ ROUTE_ORDER = ["h2-dri-eaf", "h2-dri-eaf-export",
                "ew-eaf", "ew-eaf-export",
                "mix-dri-eaf", "mix-dri-eaf-export",
                "ng-dri-eaf", "ng-dri-eaf-export"]
-ROUTE_LABEL = {"h2-dri-eaf": "H2-DRI-EAF", "moe-eaf": "MOE", "ew-eaf": "Electrowinning",
-               "mix-dri-eaf": "NG-H2-DRI-EAF", "ng-dri-eaf": "NG-DRI-EAF",
-               "h2-dri-eaf-export": "H2-DRI-EAF · export",
+# Every route melts in an EAF, so naming it distinguishes nothing and only makes
+# the label longer — which costs most on the capacity panels, where the labels sit
+# tilted. What the name has to carry is the reduction step the routes differ on.
+ROUTE_LABEL = {"h2-dri-eaf": "H2-DRI", "moe-eaf": "MOE", "ew-eaf": "Electrowinning",
+               "mix-dri-eaf": "NG-H2-DRI", "ng-dri-eaf": "NG-DRI",
+               "h2-dri-eaf-export": "H2-DRI · export",
                "moe-eaf-export": "MOE · export",
                "ew-eaf-export": "Electrowinning · export",
-               "mix-dri-eaf-export": "NG-H2-DRI-EAF · export",
-               "ng-dri-eaf-export": "NG-DRI-EAF · export"}
+               "mix-dri-eaf-export": "NG-H2-DRI · export",
+               "ng-dri-eaf-export": "NG-DRI · export"}
 # Blues = clean; sand = transitional (partial gas); red = fossil. An export twin
 # takes its domestic route's hue, lightened, so a pair reads as a pair.
 ROUTE_COLOR = {"h2-dri-eaf": "#0A5680", "moe-eaf": "#0293D2", "ew-eaf": "#83D1DD",

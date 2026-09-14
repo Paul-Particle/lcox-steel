@@ -343,14 +343,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // changing one cannot silently change what counts as thin.
   const DETAIL_TOP = 26, DETAIL_PLOT_PX = 954, DETAIL_BOTTOM = 200;
   const DETAIL_H = DETAIL_TOP + DETAIL_PLOT_PX + DETAIL_BOTTOM;
-  // These panels are narrow — several to a row — so the route labels wrap to two
-  // lines and take about CAP_LABEL_PX below the axis. The legend sat 0.2 of the
-  // drawing area under the axis, which is inside that, so it was drawn among the
-  // labels. It now clears them and then drops a further legend height, and the
-  // bottom margin grows to match so the space comes out of the panel rather than
-  // out of the bars. Both measured from the built page: labels 85 px, legend 48.
-  const CAP_TOP = 20, CAP_PLOT_PX = 202, CAP_LABEL_PX = 85, CAP_LEGEND_PX = 48;
-  const CAP_BOTTOM = CAP_LABEL_PX + 2 * CAP_LEGEND_PX + 12;
+  // These panels are narrow — several to a row — so the route labels tilt and reach
+  // CAP_LABEL_PX below the axis, and the legends wrap to as many as three lines.
+  // The bottom margin is built from the parts rather than guessed at, so the legend
+  // clears the labels by CAP_GAP_PX and still has room under it: all three measured
+  // off the built page, at 1440 px wide where the panels are narrowest.
+  const CAP_TOP = 20, CAP_PLOT_PX = 202;
+  const CAP_LABEL_PX = 100, CAP_GAP_PX = 52, CAP_LEGEND_PX = 70;
+  const CAP_BOTTOM = CAP_LABEL_PX + CAP_GAP_PX + CAP_LEGEND_PX + 16;
   const CAP_H = CAP_TOP + CAP_PLOT_PX + CAP_BOTTOM;
   // Below this many pixels a stacked band is not a usable pointer target, so its
   // hover detail is folded into a neighbour instead (see renderDetail).
@@ -361,15 +361,15 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // Grid leads: it is the axis that separates the two halves of the run, and the
   // one worth reaching for first. Geography trails because it carries a pill per
   // zone and takes a row of its own (see .ct-ax-geo).
-  // Year is not among them: a geography is browsed on the year it was run for, so
-  // the pill carries it and the readout above states it. Grid leads, and geography
-  // trails because it takes a row of its own (see .ct-ax-geo).
-  const AXES = ["grid","cf","variant","geo"];
-  const AXLAB = {geo:"Geography", grid:"Grid",
+  // Neither grid mode nor year is a control. Geography is browsed in two rows, one
+  // per grid mode, so the pill sets the mode; and a geography is browsed on the
+  // year it was run for, so the pill carries that too. The readout above states
+  // both for whatever is selected.
+  const AXES = ["cf","variant","geo"];
+  const AXLAB = {geo:"Geography",
                  cf:"Capacity factor", variant:"Sensitivity"};
   const OPTS = {
     geo:  GEOS.map(g=>[g, GN[g]||g]),
-    grid: [["grid","Grid"],["nogrid","Islanded"]],
     cf:   CF_OPTS,
     variant: Object.keys(VLAB).map(v=>[v, VLAB[v]]),
   };
@@ -843,16 +843,27 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       // All three panels group rather than stack: the point of having them here is to
       // compare how each route splits its build, and a stack hides that behind the
       // total. Storage hours and process steps would not be additive anyway.
+      //
+      // Grouped bars of different technologies sit side by side with nothing saying
+      // where one route's group ends, so a rule between the categories draws the
+      // boundary. The horizontal grid comes off in exchange: two sets of lines
+      // compete, and these are the ones carrying the meaning.
+      const dividers = routes.slice(1).map((_,i)=>({
+        type:"line", xref:"x", yref:"paper", x0:i+0.5, x1:i+0.5, y0:0, y1:1,
+        line:{color:PRINT.border, width:1, dash:"dash"}, layer:"below",
+      }));
       Plotly.react(el, traces, base({
         barmode:"group", height:CAP_H, bargap:0.28, bargroupgap:0.08,
-        margin:{l:58, r:14, t:CAP_TOP, b:CAP_BOTTOM},
+        margin:{l:58, r:14, t:CAP_TOP, b:CAP_BOTTOM}, shapes:dividers,
         // Paper units are fractions of the drawing area, so the drop below the axis
         // is those pixels over CAP_PLOT_PX.
-        legend:{orientation:"h", x:0, y:-((CAP_LABEL_PX + CAP_LEGEND_PX) / CAP_PLOT_PX),
+        legend:{orientation:"h", x:0, y:-((CAP_LABEL_PX + CAP_GAP_PX) / CAP_PLOT_PX),
           xanchor:"left", yanchor:"top",
           bgcolor:"rgba(0,0,0,0)", font:{size:10.5, color:PRINT.muted}},
-        xaxis:axis({type:"category", automargin:true, tickfont:{size:11, color:PRINT.muted}}),
-        yaxis:axis({rangemode:"tozero", title:{text:unit, font:{size:11, color:PRINT.muted}}}),
+        xaxis:axis({type:"category", automargin:true, showgrid:false,
+          tickfont:{size:11, color:PRINT.muted}}),
+        yaxis:axis({rangemode:"tozero", showgrid:false,
+          title:{text:unit, font:{size:11, color:PRINT.muted}}}),
       }), CONF);
     });
   }
