@@ -23,6 +23,7 @@ from build_network import build_network, load_assumptions
 
 from common._logging import configure_logging
 from common._provenance import input_manifest
+from common._runs import zone_parents
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -201,9 +202,47 @@ def main() -> None:
         f"building {mode} network for scenario={scenario} area={area} route={route} "
         f"techs={list(cf_timeseries.columns)} (overlay={overlay_name})"
     )
+    # Freight legs are the producing country's, not the zone's: every NEM
+    # region is the same ocean away from Europe.
+    country = zone_parents(snakemake.config["areas"]).get(area, area)
+    transport_legs = assumptions["transport"]["distance_km"].get(country)
+
+    # Where an `-export` route melts its iron. The rule hands over that market's
+    # own series and nothing at all for a domestic route, so the file's presence
+    # is what decides — but which market it is gets checked against the merged
+    # assumptions, because the DAG only ever read the base file. An overlay that
+    # moves the destination has to fail here rather than be solved against
+    # whichever country the DAG happened to fetch.
+    destination_area = assumptions["destination"]["area"]
+    destination_paths = [Path(raw) for raw in snakemake.input.destination_input]
+    if len(destination_paths) > 1:
+        raise ValueError(f"{run}: multiple destination inputs: {destination_paths}")
+    destination_price = None
+    if destination_paths:
+        # `{area}_grid_emissions_{start}_{end}`, split from the right so an area
+        # code with an underscore in it still comes back whole.
+        fetched_area = destination_paths[0].stem.rsplit("_", 4)[0]
+        if fetched_area != destination_area:
+            raise ValueError(
+                f"{run}: the workflow fetched {fetched_area}'s market series, but the "
+                f"merged assumptions put the destination in {destination_area}. A "
+                f"per-scenario overlay cannot move `destination.area` — it is read at "
+                f"DAG time from config/assumptions.yaml, so change it there."
+            )
+        destination_price = (
+            pd.read_parquet(destination_paths[0])["price"].reindex(cf_timeseries.index)
+        )
+        if destination_price.isna().any():
+            raise ValueError(
+                f"{run}: {destination_area}'s price series has "
+                f"{destination_price.isna().sum()} missing values after aligning to "
+                f"the run's snapshots, so it covers a different period."
+            )
+
     n = build_network(
         route, assumptions, cf_timeseries, price_series,
-        sites=sites, demand_site=demand_site,
+        sites=sites, demand_site=demand_site, transport_legs=transport_legs,
+        destination_price=destination_price,
     )
     log.info(f"optimising with HiGHS (snapshots={len(n.snapshots)})")
     # HiGHS parallelises across cores by default (not governed by OMP_NUM_THREADS).

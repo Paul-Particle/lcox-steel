@@ -186,6 +186,7 @@ def _storage_carbon(
 def _emissions_breakdown(
     n: pypsa.Network, emissions_cfg: dict, natural_gas_cfg: dict,
     area: str, transport_legs: dict | None, grid_mix: pd.DataFrame | None,
+    destination_area: str, destination_mix: pd.DataFrame | None,
 ) -> dict[str, object]:
     """What the run emitted in a year, and who to charge it to.
 
@@ -232,7 +233,20 @@ def _emissions_breakdown(
     # can be renamed in build_network without breaking the report.
     destination_bus = (n.generators.at["destination_supply", "bus"]
                        if "destination_supply" in n.generators.index else None)
-    destination_intensity = emissions_cfg["destination_t_co2e_per_mwh"][basis]
+    if destination_bus is not None and destination_mix is None:
+        raise ValueError(
+            f"this run melts its iron in {destination_area}, but no market series for "
+            f"{destination_area} over the run's own window reached the report, so what "
+            f"its furnace emitted is unknown. `destination_input` in rule "
+            f"compile_report is what carries it (workflow/rules/viz.smk)."
+        )
+    # Its furnace carries the destination market's own hours, read the same way
+    # as any other grid's — so an export route's melt is as clean as the country
+    # it melts in was in the hours it ran, and no differently.
+    destination_intensity = (
+        _grid_intensity(destination_area, destination_mix, factors, n.snapshots)
+        if destination_bus is not None else None
+    )
 
     # What a MWh on the producing area's electricity buses carried, hour by hour:
     # its own generation at the carriers' factors, its imports at the grid's.
@@ -469,13 +483,24 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         return float(n.stores.at[name, "capital_cost"] * n.stores.at[name, "e_nom_opt"])
 
     gens = n.generators
-    non_res = ("grid_import", "gas_supply")
+    # Bought power, not built power: these are priced, so they are not part of
+    # the renewables the run chose to build.
+    non_res = ("grid_import", "gas_supply", "destination_supply")
     res_idx = gens.index[gens.p_nom_extendable & ~gens.index.isin(non_res)]
-    grid_capital = 0.0
-    if "grid_import" in gens.index and gens.at["grid_import", "p_nom_extendable"]:
-        grid_capital = float(
-            gens.at["grid_import", "capital_cost"] * gens.at["grid_import", "p_nom_opt"]
-        )
+
+    def gen_capital(name: str) -> float:
+        if name not in gens.index or not gens.at[name, "p_nom_extendable"]:
+            return 0.0
+        return float(gens.at[name, "capital_cost"] * gens.at[name, "p_nom_opt"])
+
+    def gen_marginal(name: str) -> float:
+        if name not in gens.index:
+            return 0.0
+        return _marginal_costs(
+            gens.loc[[name]], n.generators_t.p, n.generators_t.marginal_cost
+        ) * annual_scale
+
+    grid_capital = gen_capital("grid_import")
     hvdc = list(n.links.index[n.links.carrier == "HVDC"])
 
     return {
@@ -490,19 +515,13 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         # generic sum minus gas lands in the grid bucket.
         "grid": grid_capital
         + _marginal_costs(
-            gens.drop(index="gas_supply", errors="ignore"),
+            gens.drop(index=["gas_supply", "destination_supply"], errors="ignore"),
             n.generators_t.p,
             n.generators_t.marginal_cost,
         ) * annual_scale,
         # Gas bill incl. any carbon price (both live on the gas_supply
         # generator's marginal cost).
-        "gas": (
-            _marginal_costs(
-                gens.loc[["gas_supply"]], n.generators_t.p, n.generators_t.marginal_cost
-            ) * annual_scale
-            if "gas_supply" in gens.index
-            else 0.0
-        ),
+        "gas": gen_marginal("gas_supply"),
         "electrolyser": link_capital(["electrolyser"]) + link_marginal(["electrolyser"]),
         "h2_buffer": store_capital("h2_buffer"),
         "process": link_capital(PROCESS_LINKS),
@@ -510,12 +529,21 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         "iron_store": store_capital("iron_store"),
         "steel_store": store_capital("steel_store"),
         "transmission": link_capital(hvdc),
+        # Freight has no capex — the whole bill is the per-t-km charge. Only
+        # one of the two links ever exists: an export route ships its iron, and
+        # every other route ships its steel, if it delivers at all.
+        "transport": link_marginal(["iron_transport", "steel_transport"]),
+        # The destination furnace's own power, kept out of the grid group so an
+        # export run shows what it pays at each end.
+        "destination_power": (gen_capital("destination_supply")
+                              + gen_marginal("destination_supply")),
     }
 
 
 def extract_summary(
     n: pypsa.Network, scenario_name: str, run: dict, assumptions: dict,
     transport_legs: dict | None = None, grid_mix: pd.DataFrame | None = None,
+    destination_mix: pd.DataFrame | None = None,
 ) -> dict:
     """Key sizing, cost and emission metrics as a flat dict (one row of the CSV).
 
@@ -531,7 +559,9 @@ def extract_summary(
     `transport_legs` and `grid_mix` are the run's own freight legs and the
     generation mix behind its imports; both only feed the emission fields, and
     both may be absent — a route that ships nothing has no legs, and a grid
-    series solved on `dayahead` has no mix.
+    series solved on `dayahead` has no mix. `destination_mix` is the same thing
+    for the market an `-export` route melts in, and is absent for every route
+    that melts its iron at home.
     """
     breakdown = _cost_breakdown(n)
     summary = {
@@ -664,6 +694,25 @@ def extract_summary(
             if grid_conn > 0:
                 summary["grid_connection_eur_per_mwh_imported"] = grid_conn / grid_mwh
 
+    # What the destination furnace paid for its power, market price only and on
+    # the same footing as `grid_price_eur_per_mwh`: its bill over the MWh it
+    # drew, less the volumetric fee. Draw-weighted rather than the year's mean,
+    # because the furnace picks its hours — which is the whole reason its series
+    # is hourly. Not floored at zero: a furnace that ran in the hours the price
+    # was negative really was paid to melt, and rounding that up to nothing
+    # would report a bill it never had.
+    if "destination_supply" in n.generators.index:
+        destination_mwh = float(n.generators_t.p["destination_supply"].sum())
+        if destination_mwh > 0:
+            destination_energy = _marginal_costs(
+                n.generators.loc[["destination_supply"]],
+                n.generators_t.p, n.generators_t.marginal_cost,
+            )
+            summary["destination_price_eur_per_mwh"] = (
+                destination_energy / destination_mwh
+                - float(assumptions["grid"]["fee_eur_per_mwh"])
+            )
+
     if "electrolyser" in n.links.index and "steel_load" in n.loads.index:
         el_mwh = float(n.links_t.p0["electrolyser"].sum()) * annual_scale
         h2_mwh = _h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
@@ -723,11 +772,15 @@ def extract_summary(
     # How much of the iron came from the H2 shaft (production share, not capacity
     # share). Emitted for any DRI route so a pure H2-DRI reads 1.0 and a pure
     # NG-DRI 0.0 — not a missing value that downstream would coerce to 0.
-    if "dri-h2" in n.links.index or "dri-ng" in n.links.index:
-        iron_h2 = -float(n.links_t.p1["dri-h2"].sum()) if "dri-h2" in n.links.index else 0.0
-        iron_ng = -float(n.links_t.p1["dri-ng"].sum()) if "dri-ng" in n.links.index else 0.0
-        total = iron_h2 + iron_ng
-        summary["iron_from_h2_share"] = iron_h2 / total if total else float("nan")
+    # On mix-dri-eaf the split happens on the reductant bus, one shaft
+    # upstream; on the single-fuel routes it is the shafts themselves.
+    h2_link, ng_link = (("reductant-h2", "reductant-ng")
+                        if "dri-mix" in n.links.index else ("dri-h2", "dri-ng"))
+    if h2_link in n.links.index or ng_link in n.links.index:
+        from_h2 = -float(n.links_t.p1[h2_link].sum()) if h2_link in n.links.index else 0.0
+        from_ng = -float(n.links_t.p1[ng_link].sum()) if ng_link in n.links.index else 0.0
+        total = from_h2 + from_ng
+        summary["iron_from_h2_share"] = from_h2 / total if total else float("nan")
 
     if "iron_store" in n.stores.index:
         store_t = n.stores.at["iron_store", "e_nom_opt"]
@@ -737,6 +790,15 @@ def extract_summary(
             summary["iron_store_hours_steel"] = (
                 store_t / steel_t_per_h if steel_t_per_h else float("nan")
             )
+
+    annual = 8760.0 / len(n.snapshots)
+    for link, field in (("iron_transport", "iron_shipped_kt"),
+                        ("steel_transport", "steel_shipped_kt")):
+        if link in n.links.index:
+            summary[field] = float(n.links_t.p0[link].sum()) * annual / 1e3
+            # The distance behind the freight bill, so the report carries it
+            # rather than the reader going back to the assumptions.
+            summary["transport_km"] = float(n.links.at[link, "length"])
 
     if "steel_store" in n.stores.index:
         store_t = n.stores.at["steel_store", "e_nom_opt"]
@@ -806,6 +868,7 @@ def extract_summary(
     emitted = _emissions_breakdown(
         n, assumptions["emissions"], assumptions["natural_gas"],
         run["area"], transport_legs, grid_mix,
+        assumptions["destination"]["area"], destination_mix,
     )
     emissions = emitted["by_step"]
     electricity_mwh = emitted["electricity_mwh"]
@@ -894,6 +957,17 @@ def main() -> None:
         grid_area = area_tech_variant.rsplit("_", 2)[0]
         grid_series[(grid_area, grid_start, grid_end)] = pd.read_parquet(grid_path)
 
+    # And the series of the market an `-export` route melts in, kept apart from
+    # the map above rather than filed under its area: the destination is always
+    # a `variant: emissions` series, while a run's own grid row need not be, and
+    # one key per area would let one stand in for the other when a scenario
+    # produces in the same country it exports to. Every export run in the
+    # scenario names the same file, so the paths are deduplicated.
+    destination_series = {}
+    for grid_path in dict.fromkeys(snakemake.input.destination_input):
+        _, grid_start, grid_end = Path(grid_path).stem.rsplit("_", 2)
+        destination_series[(grid_start, grid_end)] = pd.read_parquet(grid_path)
+
     rows = []
     network_paths = list(dict.fromkeys(snakemake.input.networks))
     log.info(f"compiling report for scenario={scenario_name} ({len(network_paths)} runs)")
@@ -908,7 +982,10 @@ def main() -> None:
         # from Australia. Same resolution as solve_network's.
         legs = assumptions["transport"]["distance_km"].get(parents.get(area, area))
         grid_mix = grid_series.get((area, start_date, end_date))
-        summary = extract_summary(n, scenario_name, run, assumptions, legs, grid_mix)
+        destination_mix = destination_series.get((start_date, end_date))
+        summary = extract_summary(
+            n, scenario_name, run, assumptions, legs, grid_mix, destination_mix
+        )
         # Trailing the row, because it identifies the inputs rather than
         # describing them: the per-file map it stands for is in the network.
         summary["inputs_hash"] = n.meta["inputs_hash"]
