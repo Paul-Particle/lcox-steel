@@ -1,6 +1,6 @@
 """Unit tests for the report's two fine cuts of the cost of steel.
 
-`cost_*_eur_per_t` (by what was bought) and `purpose_*_eur_per_t` (by what it
+`cost_*_eur_per_t` (by what was bought) and `el_*_eur_per_t` (by what the
 was for) each have to stack back to LCOS. The cost-breakdown page prints the
 *reported* total on top of the stack it draws, so anything the split does not
 reach goes missing from the bars while every share still reads 100 % — which is
@@ -25,7 +25,7 @@ from common._report_schema import (
     LEAF_GROUP,
     LEAF_PARENTS,
     PROCESS_LINKS,
-    PURPOSE_PARTS,
+    ELECTRICITY_JOBS,
     field_stem,
 )
 from conftest import REPO_ROOT
@@ -108,18 +108,19 @@ def test_the_leaves_stack_to_the_cost_of_steel(route, assumptions):
 
 
 @pytest.mark.parametrize("route", ROUTES)
-def test_the_purpose_bands_stack_to_the_cost_of_steel(route, assumptions):
-    """The by-purpose cut closes on the same total, with no band left as a remainder.
+def test_the_electricity_jobs_stack_to_the_electricity_bill(route, assumptions):
+    """The four jobs divide one bill, with none of them left as a remainder.
 
-    The four electricity bands divide one bill by the job each megawatt-hour did,
-    so they only close while every drawing link is accounted for — which is what
-    `_leaf_breakdown` raises about rather than flooring a residual.
+    They only close while every drawing link is accounted for — which is what
+    `_leaf_breakdown` raises about rather than flooring a residual. Closing on
+    the bill rather than on LCOS is the point: the jobs re-cut one cost group,
+    so they must land on what that group's own leaves come to.
     """
     n = _solved(route, assumptions)
-    fields, breakdown, steel_t = _fields(n, assumptions)
+    fields, _, _ = _fields(n, assumptions)
 
-    bands = sum(fields[f"purpose_{part}_eur_per_t"] for part in PURPOSE_PARTS)
-    assert bands == pytest.approx(sum(breakdown.values()) / steel_t, rel=1e-9)
+    jobs = sum(fields[f"el_{job}_eur_per_t"] for job in ELECTRICITY_JOBS)
+    assert jobs == pytest.approx(fields["cost_electricity_eur_per_t"], rel=1e-9)
 
 
 @pytest.mark.parametrize("route", ROUTES)
@@ -172,10 +173,10 @@ def test_the_power_that_made_the_iron_is_its_own_band(route, assumptions):
     n = _solved(route, assumptions)
     fields, _, _ = _fields(n, assumptions)
 
-    assert fields["purpose_reduction_eur_per_t"] > 0
+    assert fields["el_reduction_eur_per_t"] > 0
     assert fields["reduction_el_mwh_per_t_steel"] > 0
-    assert (fields["purpose_reduction_eur_per_t"]
-            > fields["purpose_handling_losses_eur_per_t"])
+    assert (fields["el_reduction_eur_per_t"]
+            > fields["el_handling_losses_eur_per_t"])
 
 
 @pytest.mark.parametrize("route", ["mix-dri-eaf", "mix-dri-eaf-export"])

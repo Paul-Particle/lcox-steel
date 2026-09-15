@@ -102,7 +102,7 @@ ORE_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew")
 # The links whose electricity turns ore into iron — the three shafts, the two
 # cells, and the preheat on the blended shaft's hydrogen feed. What separates
 # them from the rest of the drawing links is what their power was for, which is
-# how the `purpose_*` split below divides the electricity bill.
+# how ELECTRICITY_JOBS below divides the electricity bill.
 REDUCTION_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew", "reductant-h2")
 
 # The finest split of the levelised cost of steel the report carries: one leaf
@@ -154,27 +154,17 @@ LEAF_GROUP = dict(LEAF_COSTS_BY_GROUP)
 # The parent groups, in the order their leaves first appear.
 LEAF_PARENTS = tuple(dict.fromkeys(group for _, group in LEAF_COSTS_BY_GROUP))
 
-# The same levelised cost cut the other way: by what each euro was spent *for*
-# rather than by what it bought. Also €/t steel and also the whole of LCOS, but
-# it separates the plant's capital from its upkeep and divides the electricity
-# bill by the job the electricity did — making the hydrogen, making the iron,
-# melting it, and the handling and losses around them.
+# The jobs the electricity did, which is the one cut of the levelised cost the
+# leaves above cannot make. They price what was bought; these divide what one of
+# those purchases was *for*: making the hydrogen, making the iron, melting it,
+# and the handling and losses around them.
 #
-# Those four are one band each because the electricity is one bill: every
-# megawatt-hour is priced at what the system that supplied it cost, and the
+# Every megawatt-hour is priced at what the system that supplied it cost, and the
 # system's whole cost is the megawatt-hours it delivered, so the four close on
-# it exactly. `making the iron` used to be a residual called `rest` — which on
-# moe-eaf and ew-eaf is the cell that makes the iron and most of the route's
-# electricity, filed under a name that said it was the leftovers.
-PURPOSE_PARTS = ("ore", "capex", "fixed_om", "hydrogen",
-                 "reduction", "melt", "handling_losses",
-                 "gas", "transport", "store")
-
-# What the single `hydrogen` band is made of, and the electricity bill the four
-# electricity bands divide — carried so a hover can open them up without the
-# page recomputing anything.
-PURPOSE_DETAIL = ("hydrogen_electrolyser", "hydrogen_buffer",
-                  "hydrogen_electricity", "electricity_total")
+# `cost_electricity_eur_per_t` exactly. They are the same money as the
+# `electricity` leaves, cut a second way, which is why they are not `cost_*` and
+# must never be added to one: doing so counts the electricity bill twice.
+ELECTRICITY_JOBS = ("reduction", "melt", "hydrogen", "handling_losses")
 
 REPORT_FIELDS = {
     # What this run is a result for.
@@ -251,11 +241,10 @@ REPORT_FIELDS = {
     "steel_store_kt": ZERO,
     "steel_store_hours_steel": UNDEFINED,
 
-    # The two fine cuts of the levelised cost of steel, each €/t steel and each
-    # stacking to `lcos_eur_per_t`: `cost_*` by what was bought (LEAF_COSTS, and
-    # the parent groups they roll up into), `purpose_*` by what it was for
-    # (PURPOSE_PARTS). A part a route has none of reads 0 — it contributed
-    # nothing, the same way its cost group does.
+    # The levelised cost of steel by what was bought, €/t steel and stacking to
+    # `lcos_eur_per_t`: the leaves (LEAF_COSTS) and the parent groups they roll
+    # up into. A leaf a route has none of reads 0 — it contributed nothing, the
+    # same way its cost group does.
     #
     # The two `cost_*_eur_per_t` blocks share a prefix but sit at different
     # levels of the same tree, so they are not to be added together: LEAF_COSTS
@@ -263,8 +252,10 @@ REPORT_FIELDS = {
     # `cost_{parent}_eur_per_t` is the sum of its own leaves.
     **{f"cost_{leaf}_eur_per_t": ZERO for leaf in LEAF_COSTS},
     **{f"cost_{parent}_eur_per_t": ZERO for parent in LEAF_PARENTS},
-    **{f"purpose_{part}_eur_per_t": ZERO for part in PURPOSE_PARTS},
-    **{f"purpose_{part}_eur_per_t": ZERO for part in PURPOSE_DETAIL},
+    # The electricity leaf group cut a second way, by the job each euro of it
+    # paid for (ELECTRICITY_JOBS). These four stack to `cost_electricity_eur_per_t`
+    # and to nothing else, so they belong in no `cost_*` sum.
+    **{f"el_{job}_eur_per_t": ZERO for job in ELECTRICITY_JOBS},
     # The same capital/upkeep split on the two carriers, in their own units, so
     # each pair stacks to the reported part above it that it divides.
     "lcoe_res_capex_eur_per_mwh": ZERO,
@@ -351,7 +342,7 @@ REPORT_FIELDS = {
     **{f"el_{field_stem(user)}_gwh": ZERO for user in ELECTRICITY_USERS},
     # The electricity nobody drew — the battery's round trip and the lines'
     # losses. With it the draws above account for the whole of what was
-    # generated, which is what lets the `purpose_*` electricity bands close on
+    # generated, which is what lets the `el_*_eur_per_t` jobs close on
     # the electricity bill.
     "el_losses_gwh": ZERO,
     **{f"emissions_{field_stem(user)}_kg_co2e_per_mwh_el": UNDEFINED

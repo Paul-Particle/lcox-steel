@@ -2,10 +2,17 @@
 """Read the finely cut levelised steel cost the report carries, for the charts.
 
 The report cuts each of its thirteen cost groups (`cost_*_meur`) as finely as
-the model allows and writes the result out — `cost_*_eur_per_t`, one column per
-priced thing, and `purpose_*_eur_per_t`, the same total divided by what each
-euro was spent for. Both stack to `lcos_eur_per_t`. This module reads them, keys
-them the way the chart bands are keyed, and puts the hover lines together.
+the model allows and writes the result out as `cost_*_eur_per_t`, one column per
+priced thing, stacking to `lcos_eur_per_t`. Beside them `el_*_eur_per_t` divides
+one of those groups — the electricity — by the job each euro of it paid for.
+This module reads them, keys them the way the chart bands are keyed, and puts
+the hover lines together.
+
+The by-purpose stack is assembled here rather than reported: nine of its ten
+bands are leaves of the cost tree added up, and only the electricity ones say
+anything the tree cannot. Reporting all ten meant a second family of fields that
+restated the first under different names, and two taxonomies that had to be kept
+agreeing with each other by hand.
 
 It used to compute the split instead, out of the coarse groups plus the quotes
 in `config/assumptions.yaml`: a plant's fixed O&M as a config-fixed fraction of
@@ -34,11 +41,11 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "workflow"))
 
 from common._report_schema import (  # noqa: E402
+    ELECTRICITY_JOBS,
     LEAF_COSTS,
     LEAF_GROUP,
     LEAF_PARENTS,
-    PURPOSE_DETAIL,
-    PURPOSE_PARTS,
+    PROCESS_LINKS,
     field_stem,
 )
 
@@ -225,14 +232,34 @@ def leaf_inputs(row: pd.Series) -> dict:
 def purpose_bands(row: pd.Series) -> dict:
     """The cost of steel by what each euro was spent for (€/t steel), summing to LCOS.
 
-    The bands and the figures a hover opens the composite ones up with, all
-    reported. The underscored keys are hover detail rather than bands, which is
-    what keeps them out of the stack.
+    Built from the cost leaves and the electricity jobs, which between them hold
+    every euro once: the plant's capital and its upkeep are its leaves gathered
+    two ways, and the electricity bands are the jobs. The underscored keys are
+    hover detail rather than bands, which is what keeps them out of the stack.
     """
-    bands = _present(row, {part: f"purpose_{part}_eur_per_t"
-                           for part in PURPOSE_PARTS})
-    bands.update(_present(row, {f"_{part}": f"purpose_{part}_eur_per_t"
-                                for part in PURPOSE_DETAIL}))
+    plants = [field_stem(link) for link in PROCESS_LINKS]
+    electrolyser = ["electrolyser_capex", "electrolyser_fom", "electrolyser_water"]
+    composed = {
+        "ore": ["cost_feedstock_eur_per_t"],
+        "capex": [f"cost_{plant}_capex_eur_per_t" for plant in plants],
+        "fixed_om": [f"cost_{plant}_fom_eur_per_t" for plant in plants],
+        "hydrogen": ([f"cost_{leaf}_eur_per_t" for leaf in electrolyser]
+                     + ["cost_h2_buffer_eur_per_t", "el_hydrogen_eur_per_t"]),
+        "gas": ["cost_gas_eur_per_t"],
+        "transport": ["cost_transport_eur_per_t"],
+        "store": ["cost_iron_store_eur_per_t", "cost_steel_store_eur_per_t"],
+        "_hydrogen_electrolyser": [f"cost_{leaf}_eur_per_t" for leaf in electrolyser],
+        "_hydrogen_buffer": ["cost_h2_buffer_eur_per_t"],
+        "_hydrogen_electricity": ["el_hydrogen_eur_per_t"],
+        "_electricity_total": ["cost_electricity_eur_per_t"],
+    }
+    bands = {}
+    for key, fields in composed.items():
+        total = sum(_value(row, field) or 0.0 for field in fields if field in row)
+        if total:
+            bands[key] = total
+    bands.update(_present(row, {job: f"el_{job}_eur_per_t"
+                                for job in ELECTRICITY_JOBS if job != "hydrogen"}))
     # What the two electricity bands that have a natural per-tonne figure took,
     # measured over the year each ran rather than from the coefficient that
     # priced it.
