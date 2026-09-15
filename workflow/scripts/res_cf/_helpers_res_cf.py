@@ -310,6 +310,11 @@ def pick_p95_cell(cell_mean, weights: np.ndarray, q: float = 0.95) -> tuple[int,
     p = weighted_percentile(vals2d.ravel(), w.ravel(), q)
 
     valid = w.ravel() > 0
+    if not valid.any():
+        raise ValueError(
+            "no cutout cell carries a positive weight: the geometry covers no cell "
+            "of this cutout, so there is no P95 cell to pick"
+        )
     vals = np.where(valid, vals2d.ravel(), np.nan)
     dist = np.abs(vals - p)
     idx_flat = np.nanargmin(dist)
