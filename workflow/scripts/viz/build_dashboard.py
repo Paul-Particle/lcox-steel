@@ -199,10 +199,9 @@ def _opt(v, digits=1):
 def _axes(row):
     """The six axes the page browses, read off one report row.
 
-    Each is a column now: the area, the weather year, whether a grid price was
-    among the run's inputs, the route, the scenario it belongs to, and the CF
-    method its renewables were solved with. The old build parsed all but the
-    first two out of a project and scenario name.
+    Each is a column: the area, the weather year, whether a grid price was among
+    the run's inputs, the route, the scenario it belongs to, and the CF method
+    its renewables were solved with.
     """
     variants = {
         col[: -len("_variant")]: row[col]
@@ -366,9 +365,8 @@ def _record(row, lcos_row, cap_row):
         "lcos": round(_num(row["lcos_eur_per_t"]), 0),
         "lcoe": _opt(row["lcoe_eur_per_mwh"]),
         "lcoh": _opt(row["lcoh_eur_per_mwh_lhv"]),
-        # The same cost per kg, which the report now carries on a steel route
-        # too — the cost-breakdown page charts hydrogen in that unit and used to
-        # convert the figure above itself.
+        # The same cost per kg, which the report carries on every route that
+        # makes hydrogen, because the cost-breakdown page charts it in that unit.
         "lcoh_kg": round(_num(row["lcoh_eur_per_kg"]), 3) or None,
         # Blank wherever the area publishes prices but no generation mix, which is
         # most of the grid side; the page says so rather than printing a zero.
@@ -425,9 +423,9 @@ def _main_year(cases):
 def _default_view(cases, baseline, cf_options):
     """The pair of scenarios the page opens on, chosen from what was solved.
 
-    The old build named a geography, year and sensitivity outright, so the page
-    opened on an "unavailable" notice whenever that one run had not been solved.
-    B differs from A by route alone; a null axis means B tracks A.
+    Chosen from what was solved rather than named outright, so the page always
+    opens on a run that exists. B differs from A by route alone; a null axis
+    means B tracks A.
     """
     # The first project that has a route worth opening on. Sorting alone can land
     # on one whose runs are all still solving, which has nothing to show — and on
@@ -464,8 +462,7 @@ def build_payload(report_paths):
     synth[geo][year][grid][route] = baseline cheapest-CF record — for the overview.
 
     One report holds one scenario's runs, spanning areas, years and routes, so a
-    single file can contribute to several projects. That is the inversion from
-    the old build, where a file *was* a project.
+    single file can contribute to several projects.
     """
     sys.path.insert(0, str(REPO / "workflow"))
     _seed_stub()

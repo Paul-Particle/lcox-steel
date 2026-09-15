@@ -3,10 +3,9 @@
 Each ERA5 download is expensive (hours of CDS queue, up to GBs), so a cutout
 should be re-fetched only when the request itself changes. The cache keys on the
 *actual* request parameters — module, bounding box, resolution, time range — not
-on the ``(area, start, end)`` filename triple. That closes the stale-bounds
-hole of the old ``_backup.nc`` stopgap, where a ``mainland_bbox`` or
-``offshore_max_distance_km`` edit changed the real bbox but reused a cutout
-cached under the same filename.
+on the ``(area, start, end)`` filename triple. A ``mainland_bbox`` or
+``offshore_max_distance_km`` edit therefore changes the key, so an edited request
+can never reuse a cutout built for a different bbox.
 
 Layout (under a gitignored ``cutouts/cache/``):
     <area>_<start>_<end>_<key>.nc     the cached cutout

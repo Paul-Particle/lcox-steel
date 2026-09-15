@@ -10,18 +10,14 @@ the hover lines together.
 
 The by-purpose stack is assembled here rather than reported: nine of its ten
 bands are leaves of the cost tree added up, and only the electricity ones say
-anything the tree cannot. Reporting all ten meant a second family of fields that
-restated the first under different names, and two taxonomies that had to be kept
-agreeing with each other by hand.
+anything the tree cannot. Reporting all ten would mean a second family of fields
+restating the first under different names, and two taxonomies to keep agreeing
+with each other by hand.
 
-It used to compute the split instead, out of the coarse groups plus the quotes
-in `config/assumptions.yaml`: a plant's fixed O&M as a config-fixed fraction of
-its annual cost, the battery's two halves as a ratio of capex quotes, the
-renewables and the grid apportioned by their levelised contributions. Every one
-of those numbers is now the cost the solve actually incurred, taken off the
-solved network in `compile_report._leaf_breakdown` — which is also the only
-place that has to know how `build_network` composed a `capital_cost`, and the
-only place that can check the leaves still stack to the total.
+Every number here is the cost the solve incurred, taken off the solved network in
+`compile_report._leaf_breakdown` — the one place that has to know how
+`build_network` composed a `capital_cost`, and the one place that can check the
+leaves stack to the total. Nothing on this page is a share of a config quote.
 
 What stays here is display: what each leaf and each parent group is called and
 what colour it is drawn in (`GROUPS`, `PROCESS_PLANTS`, `RES_TECH_LABELS`), and

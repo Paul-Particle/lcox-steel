@@ -54,9 +54,9 @@ C_GRID_CONN, C_GRID_NRG, C_TRANSM = "#71828F", "#B7C1C8", "#83D1DD"
 
 # The electricity is five bands rather than two and a remainder: making the
 # hydrogen, making the iron, melting it, moving it about, and the losses around
-# all of that. `rest of plant` used to carry the second of those, which on
-# moe-eaf and ew-eaf is the cell that makes the iron and most of the route's
-# electricity.
+# all of that. Making the iron is a band of its own because on moe-eaf and
+# ew-eaf it is the cell that draws most of the route's electricity, which a
+# `rest of plant` remainder would bury.
 PURPOSE_BANDS = [
     ["ore",             "Ore & consumables",                C_ORE],
     ["capex",           "CAPEX (process plant)",            C_CAPEX],
@@ -170,13 +170,13 @@ def attach(payload: dict, cases: dict) -> None:
         # The overlay is named by the scenario the file is for, which is not
         # what the record is filed under: `standard-grid` and `standard-islanded`
         # share the `base` pill but keep their own names on disk. Only `spec()`
-        # needs it now — the split itself is read off the report, which
-        # compile_report cut against this same merged overlay.
+        # needs it — the split itself is read off the report, which compile_report
+        # cut against this same merged overlay.
         assumptions = _assumptions(scenario)
         runs = read_report(report)
-        # The split is the report's now, so a report compiled before it existed
-        # has nothing for this page to plot. Say that, rather than failing on a
-        # missing column three frames further in.
+        # The split lives in the report, so a report without the cost-leaf
+        # columns has nothing for this page to plot. Say that, rather than
+        # failing on a missing column three frames further in.
         probe = f"cost_{cost_taxonomy.LEAF_COSTS[0]}_eur_per_t"
         if probe not in runs.columns:
             raise SystemExit(

@@ -6,7 +6,7 @@ artifact: a work-in-progress banner and a tab bar over isolated iframes.
 Inputs:
   * results/html/dashboard_v2.html         — built by build_dashboard_v2.py
   * results/html/assumptions.html          — built by build_assumptions.py
-  * results/html/cost_taxonomies.html      — built by build_cost_taxonomies.py
+  * results/html/cost_breakdown.html       — built by build_cost_breakdown.py
   * hub_pages/network_schematic.html       — static source page (no generator)
   * hub_pages/workflow_dag.html            — static source page (no generator)
 
@@ -49,9 +49,9 @@ FAVICON = ("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22"
 # (key, path, tab label). "taxonomy" and "compare" are dashboard build artifacts;
 # the other two are static source pages tracked under hub_pages/.
 #
-# `cost_taxonomies.html` — the same charts beside the taxonomy the dashboard
-# plots — still builds and can be put back in TAB_ORDER; it is left out because
-# the choice it was there to inform has been made.
+# `cost_taxonomies.html` builds but is not in TAB_ORDER: it sets two ways of
+# cutting the same cost side by side, which the hub does not need to show. Add
+# its key to TAB_ORDER to publish it.
 FRAGMENTS = {
     "breakdown":   (HTML_DIR / "cost_breakdown.html",      "Cost breakdown"),
     "assumptions": (HTML_DIR / "assumptions.html",        "Assumptions"),

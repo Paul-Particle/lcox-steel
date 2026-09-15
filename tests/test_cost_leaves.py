@@ -1,10 +1,9 @@
 """Unit tests for the report's two fine cuts of the cost of steel.
 
-`cost_*_eur_per_t` (by what was bought) and `el_*_eur_per_t` (by what the
-was for) each have to stack back to LCOS. The cost-breakdown page prints the
+`cost_*_eur_per_t` (by what was bought) and `el_*_eur_per_t` (by what it was
+for) each have to stack back to LCOS. The cost-breakdown page prints the
 *reported* total on top of the stack it draws, so anything the split does not
-reach goes missing from the bars while every share still reads 100 % — which is
-what happened to a blended shaft's ore, a third of that route's cost of steel.
+reach goes missing from the bars while every share still reads 100 %.
 
 Built on real networks from `build_network`, so the capital and marginal costs
 are the ones that price a solve, with a solved state written in by hand rather
@@ -32,7 +31,7 @@ from conftest import REPO_ROOT
 
 HOURS = 24
 # Every route that makes steel and can be built without a multi-site overlay.
-# The blended shaft and the export twins are the ones that used to fall through.
+# The blended shaft and the export twins are the ones the split has to reach.
 ROUTES = ["h2-dri-eaf", "mix-dri-eaf", "ng-dri-eaf", "moe-eaf", "ew-eaf",
           "h2-dri-eaf-export", "moe-eaf-export", "ew-eaf-export",
           "mix-dri-eaf-export", "ng-dri-eaf-export"]
@@ -183,8 +182,8 @@ def test_the_power_that_made_the_iron_is_its_own_band(route, assumptions):
 def test_a_blended_shaft_pays_for_its_ore(route, assumptions):
     """The ore leaf names every link that buys ore, the blended shaft included.
 
-    `ore_eur_per_t_steel` used to name four of the five, so on this route both
-    it and the leaf under it read zero while the run had paid for the ore.
+    `ORE_LINKS` has to name the blended shaft too, or on this route both the
+    column and the leaf under it read zero while the run paid for the ore.
     """
     n = _solved(route, assumptions)
     fields, breakdown, steel_t = _fields(n, assumptions)

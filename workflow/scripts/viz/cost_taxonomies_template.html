@@ -604,11 +604,11 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
                 amountOf(cd(rec,"consumables"), rec.lcos, "LCOS", "€/t")]);
     return out;
   }
-  // Keyed as `cost_detail` keys the per-plant costs. "ladle" was in this list
-  // and is not a plant — the MOE route's ladle metallurgy is the shared EAF,
-  // priced down by an overlay — so its line never drew; the blended shaft and
-  // the briquetting press were missing, so on those routes the lines came to
-  // well under the plant total they sit under.
+  // Keyed as `cost_detail` keys the per-plant costs. Every plant a route can
+  // build is here — the blended shaft and the briquetting press included — so
+  // the lines come to the plant total they sit under. The MOE route's ladle
+  // metallurgy is the shared EAF, priced down by an overlay, so it is not a
+  // plant of its own.
   const PLANT_LABELS = [["dri","H2-DRI shaft"],["dri_mix","Blended shaft"],
     ["dri_ng","NG-DRI shaft"],["moe","MOE"],["electrowinning","Electrowinning"],
     ["briquetting","Briquetting press"],["eaf","EAF"]];
@@ -644,8 +644,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       if(key==="ore") return oreLines(rec);
       if(key==="capex" || key==="fixed_om"){
         // Each plant's own half of its annual cost, so the lines under this band
-        // are the band. They used to be the whole of every plant under both
-        // halves, which meant neither band's detail summed to it.
+        // sum to the band. A line carrying the whole of a plant would appear
+        // under both halves and neither band's detail would add up.
         return plantHalfLines(rec, key==="capex" ? "_capex" : "_fom")
           .concat([["· of the plant total, this band is",
                     pct(a[key], (a.capex||0)+(a.fixed_om||0))]]);

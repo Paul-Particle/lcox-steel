@@ -6,12 +6,11 @@ than across one. The identity fields lead — what the run was, in text — so t
 rest of the file is a numeric block that can be read past them.
 
 Every run writes the same fields whatever route it took, so the report can be
-read as a table rather than probed field by field. Without this the shape was the
-union of whatever the runs in one scenario happened to produce: solving only
-`h2-only` left out the steel chain entirely, and adding a `moe-eaf` run grew
-every other run's row. Two runs of the same model gave CSVs a reader could not
-treat alike, and a consumer asking for a field that was never written got silence
-rather than an error.
+read as a table rather than probed field by field. The shape is this schema's
+alone and not the union of what the runs in a scenario happened to produce: a
+file of `h2-only` runs carries the steel chain's columns too, adding a `moe-eaf`
+run leaves every other row the same width, and a consumer asking for a declared
+field always gets a cell rather than silence.
 
 A blank cell therefore means one thing: the quantity is undefined for this run.
 That is a ratio with nothing in its denominator — the capacity factor of a
@@ -27,8 +26,8 @@ route without a MOE cell reads `0` there. A run that makes no steel at all
 Field names separate words with `_` throughout, including the parts that name a
 tech or a link. The network and `config/scenarios.csv` hyphenate those ids —
 `wind-onshore`, `dri-h2` — so every field built from one goes through
-`field_stem`, and the report never mixes the two spellings the way
-`wind-onshore_gw_opt` next to `lcoe_wind_onshore_eur_per_mwh` once did.
+`field_stem`, so every field name separates words with `_` whatever spelling the
+id behind it uses.
 
 `REPORT_FIELDS` maps each field to how it is filled when the run did not produce
 it. Fields a run produces that are not declared here (a multi-site run names a
