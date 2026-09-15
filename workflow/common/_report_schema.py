@@ -296,6 +296,10 @@ REPORT_FIELDS = {
     **{f"{field_stem(tech)}_gw_opt": ZERO for tech in RES_TECHS},
     "grid_import_gw_opt": ZERO,
     "gas_supply_gw_opt": ZERO,
+    # The destination furnace's own connection, which only an export route
+    # builds. Declared like the other two so it sits with them rather than after
+    # every field the schema names.
+    "destination_supply_gw_opt": ZERO,
     "battery_gw_opt": ZERO,
     "battery_mwh_opt": ZERO,
     "transmission_total_annual_cost_meur": ZERO,
