@@ -2,11 +2,10 @@
 """Read the finely cut levelised steel cost the report carries, for the charts.
 
 The report cuts each of its thirteen cost groups (`cost_*_meur`) as finely as
-the model allows and writes the result out — `leaf_*_eur_per_t`, one column per
-priced thing, and `alt_lcos_*_eur_per_t`, the taxonomy that divides the
-electricity by what the electricity was for. Both stack to `lcos_eur_per_t`.
-This module reads them, keys them the way the chart bands are keyed, and puts
-the hover lines together.
+the model allows and writes the result out — `cost_*_eur_per_t`, one column per
+priced thing, and `purpose_*_eur_per_t`, the same total divided by what each
+euro was spent for. Both stack to `lcos_eur_per_t`. This module reads them, keys
+them the way the chart bands are keyed, and puts the hover lines together.
 
 It used to compute the split instead, out of the coarse groups plus the quotes
 in `config/assumptions.yaml`: a plant's fixed O&M as a config-fixed fraction of
@@ -35,11 +34,11 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "workflow"))
 
 from common._report_schema import (  # noqa: E402
-    ALT_LCOS_DETAIL,
-    ALT_LCOS_PARTS,
     LEAF_COSTS,
     LEAF_GROUP,
     LEAF_PARENTS,
+    PURPOSE_DETAIL,
+    PURPOSE_PARTS,
     field_stem,
 )
 
@@ -106,16 +105,16 @@ def leaf_costs(row: pd.Series) -> dict:
     from the solved network and checked the leaves still stack to LCOS, so there
     is nothing to derive here and no assumptions to derive it from.
     """
-    return _present(row, {leaf: f"leaf_{leaf}_eur_per_t" for leaf in LEAF_COSTS})
+    return _present(row, {leaf: f"cost_{leaf}_eur_per_t" for leaf in LEAF_COSTS})
 
 
-def group_costs(row: pd.Series) -> dict:
+def parent_costs(row: pd.Series) -> dict:
     """What each parent group of leaves comes to for one run, €/t steel.
 
     Reported rather than summed from the rounded leaves in the payload, so a
     hover quoting a leaf's share of its group divides by the whole group.
     """
-    return _present(row, {parent: f"group_{parent}_eur_per_t"
+    return _present(row, {parent: f"cost_{parent}_eur_per_t"
                           for parent in LEAF_PARENTS})
 
 
@@ -223,35 +222,38 @@ def leaf_inputs(row: pd.Series) -> dict:
     return inputs
 
 
-def alternative_lcos_bands(row: pd.Series) -> dict:
-    """The circulated taxonomy's LCOS bands (€/t steel), which sum to LCOS.
+def purpose_bands(row: pd.Series) -> dict:
+    """The cost of steel by what each euro was spent for (€/t steel), summing to LCOS.
 
-    The bands and the four figures a hover opens the composite ones up with, all
+    The bands and the figures a hover opens the composite ones up with, all
     reported. The underscored keys are hover detail rather than bands, which is
     what keeps them out of the stack.
     """
-    bands = _present(row, {part: f"alt_lcos_{part}_eur_per_t"
-                           for part in ALT_LCOS_PARTS})
-    bands.update(_present(row, {f"_{part}": f"alt_lcos_{part}_eur_per_t"
-                                for part in ALT_LCOS_DETAIL}))
-    # The furnace's own draw, measured over the year it ran rather than taken
-    # from the charge state's coefficient.
-    eaf_draw = _value(row, "eaf_el_mwh_per_t_steel")
-    if eaf_draw:
-        bands["_eaf_mwh_per_t"] = eaf_draw
+    bands = _present(row, {part: f"purpose_{part}_eur_per_t"
+                           for part in PURPOSE_PARTS})
+    bands.update(_present(row, {f"_{part}": f"purpose_{part}_eur_per_t"
+                                for part in PURPOSE_DETAIL}))
+    # What the two electricity bands that have a natural per-tonne figure took,
+    # measured over the year each ran rather than from the coefficient that
+    # priced it.
+    for key, field in (("_melt_mwh_per_t", "eaf_el_mwh_per_t_steel"),
+                       ("_reduction_mwh_per_t", "reduction_el_mwh_per_t_steel")):
+        drawn = _value(row, field)
+        if drawn:
+            bands[key] = drawn
     return bands
 
 
-def alternative_carrier_bands(row: pd.Series) -> dict:
-    """The circulated taxonomy's LCOE and LCOH bands, in the reports' own units.
+def carrier_splits(row: pd.Series) -> dict:
+    """The LCOE and LCOH bands cut the finer way, in the reports' own units.
 
-    Same totals as the reported parts either way; this taxonomy just separates
+    Same totals as the reported parts either way; this cut just separates
     capital from fixed O&M on the renewables, and capital from fixed O&M from
-    water on the electrolyser — which the report now carries as its own columns.
+    water on the electrolyser — which the report carries as its own columns.
     """
     lcoe = _present(row, {
-        "res_capex": "alt_lcoe_res_capex_eur_per_mwh",
-        "res_fom": "alt_lcoe_res_fom_eur_per_mwh",
+        "res_capex": "lcoe_res_capex_eur_per_mwh",
+        "res_fom": "lcoe_res_fom_eur_per_mwh",
         "storage": "lcoe_storage_eur_per_mwh",
         "grid_connection": "lcoe_grid_connection_eur_per_mwh",
         "grid_energy": "lcoe_grid_energy_eur_per_mwh",
@@ -259,9 +261,9 @@ def alternative_carrier_bands(row: pd.Series) -> dict:
         "destination_power": "lcoe_destination_power_eur_per_mwh",
     })
     lcoh = _present(row, {
-        "electrolyser_capex": "alt_lcoh_electrolyser_capex_eur_per_mwh_lhv",
-        "electrolyser_fom": "alt_lcoh_electrolyser_fom_eur_per_mwh_lhv",
-        "electrolyser_water": "alt_lcoh_electrolyser_water_eur_per_mwh_lhv",
+        "electrolyser_capex": "lcoh_electrolyser_capex_eur_per_mwh_lhv",
+        "electrolyser_fom": "lcoh_electrolyser_fom_eur_per_mwh_lhv",
+        "electrolyser_water": "lcoh_electrolyser_water_eur_per_mwh_lhv",
         "storage": "lcoh_h2_storage_eur_per_mwh_lhv",
         "electricity": "lcoh_electricity_eur_per_mwh_lhv",
     })

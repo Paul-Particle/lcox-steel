@@ -51,18 +51,23 @@ C_HYDROGEN, C_H2_STORE, C_ELEC = "#91C096", "#70D2F0", "#0A5680"
 C_ELEC_EAF, C_GAS, C_STORE = "#0293D2", "#525F6A", "#D75674"
 C_GRID_CONN, C_GRID_NRG, C_TRANSM = "#71828F", "#B7C1C8", "#83D1DD"
 
-ALT_LCOS_BANDS = [
-    ["ore",       "Ore & consumables",           C_ORE],
-    ["capex",     "CAPEX (process plant)",       C_CAPEX],
-    ["fixed_om",  "O&M (process plant)",         C_OM],
-    ["hydrogen",  "Hydrogen (all-in)",           C_HYDROGEN],
-    ["eaf",       "Electricity — EAF melt",      C_ELEC_EAF],
-    ["rest",      "Electricity — rest of plant", C_ELEC],
-    ["gas",       "Gas + CO₂ (fossil routes)",   C_GAS],
-    ["store",     "Storage (iron/steel)",        C_STORE],
-    ["transport", "Freight",                     "#BDCCD9"],
+# The electricity is four bands rather than two and a remainder: making the
+# hydrogen, making the iron, melting it, and the handling and losses around
+# them. `rest of plant` used to carry the third of those, which on moe-eaf and
+# ew-eaf is the cell that makes the iron and most of the route's electricity.
+PURPOSE_BANDS = [
+    ["ore",             "Ore & consumables",                C_ORE],
+    ["capex",           "CAPEX (process plant)",            C_CAPEX],
+    ["fixed_om",        "O&M (process plant)",              C_OM],
+    ["hydrogen",        "Hydrogen (all-in)",                C_HYDROGEN],
+    ["reduction",       "Electricity — making the iron",    C_ELEC],
+    ["melt",            "Electricity — EAF melt",           C_ELEC_EAF],
+    ["handling_losses", "Electricity — handling & losses",  C_GRID_NRG],
+    ["gas",             "Gas + CO₂ (fossil routes)",        C_GAS],
+    ["store",           "Storage (iron/steel)",             C_STORE],
+    ["transport",       "Freight",                          "#BDCCD9"],
 ]
-ALT_LCOE_BANDS = [
+LCOE_SPLIT_BANDS = [
     ["res_capex",         "Renewables — capital",     C_ELEC],
     ["res_fom",           "Renewables — fixed O&M",   "#4B93BF"],
     ["storage",           "Battery / storage",        C_STORE],
@@ -72,7 +77,7 @@ ALT_LCOE_BANDS = [
     # Only an export route has one; on every other it is zero and draws nothing.
     ["destination_power", "Destination power",        "#0293D2"],
 ]
-DASH_LCOE_BANDS = [
+LCOE_GROUP_BANDS = [
     ["renewables",        "Renewables (capex+opex)",  C_ELEC],
     ["storage",           "Battery / storage",        C_STORE],
     ["grid_connection",   "Grid connection",          C_GRID_CONN],
@@ -80,14 +85,14 @@ DASH_LCOE_BANDS = [
     ["transmission",      "Transmission (HVDC)",      C_TRANSM],
     ["destination_power", "Destination power",        "#0293D2"],
 ]
-ALT_LCOH_BANDS = [
+LCOH_SPLIT_BANDS = [
     ["electrolyser_capex", "Electrolyser — capital",   C_CAPEX],
     ["electrolyser_fom",   "Electrolyser — fixed O&M", C_OM],
     ["electrolyser_water", "Water & variable opex",    "#B4D4B8"],
     ["storage",            "H₂ storage (buffer)",      C_H2_STORE],
     ["electricity",        "Electricity (@ LCOE)",     C_ELEC],
 ]
-DASH_LCOH_BANDS = [
+LCOH_GROUP_BANDS = [
     ["electrolyser", "Electrolyser (capex+opex)", C_CAPEX],
     ["storage",      "H₂ storage (buffer)",       C_H2_STORE],
     ["electricity",  "Electricity (@ LCOE)",      C_ELEC],
@@ -132,11 +137,11 @@ def attach(payload: dict, cases: dict) -> None:
     # that plant's annual cost.
     payload["process_plants"] = [[field_stem(link), label]
                                  for link, label in cost_taxonomy.PROCESS_PLANTS]
-    payload["alt_lcos_bands"] = ALT_LCOS_BANDS
-    payload["alt_lcoe_bands"] = ALT_LCOE_BANDS
-    payload["dash_lcoe_bands"] = DASH_LCOE_BANDS
-    payload["alt_lcoh_bands"] = ALT_LCOH_BANDS
-    payload["dash_lcoh_bands"] = DASH_LCOH_BANDS
+    payload["purpose_bands"] = PURPOSE_BANDS
+    payload["lcoe_split_bands"] = LCOE_SPLIT_BANDS
+    payload["lcoe_group_bands"] = LCOE_GROUP_BANDS
+    payload["lcoh_split_bands"] = LCOH_SPLIT_BANDS
+    payload["lcoh_group_bands"] = LCOH_GROUP_BANDS
     payload["h2_lhv_kwh_per_kg"] = H2_LHV_KWH_PER_KG
 
     # The config quotes a hover shows are per scenario, not global: the generated
@@ -171,7 +176,7 @@ def attach(payload: dict, cases: dict) -> None:
         # The split is the report's now, so a report compiled before it existed
         # has nothing for this page to plot. Say that, rather than failing on a
         # missing column three frames further in.
-        probe = f"leaf_{cost_taxonomy.LEAF_COSTS[0]}_eur_per_t"
+        probe = f"cost_{cost_taxonomy.LEAF_COSTS[0]}_eur_per_t"
         if probe not in runs.columns:
             raise SystemExit(
                 f"{report.name} carries no cost leaves ({probe} is not in it), so "
@@ -188,18 +193,18 @@ def attach(payload: dict, cases: dict) -> None:
                            .get(axes["cf"]))
             if record is None:
                 continue
-            bands = cost_taxonomy.alternative_lcos_bands(row)
+            bands = cost_taxonomy.purpose_bands(row)
             if not bands:
                 missing += 1
                 continue
-            carriers = cost_taxonomy.alternative_carrier_bands(row)
+            carriers = cost_taxonomy.carrier_splits(row)
 
             record["spec"] = spec_index(assumptions)
-            record["alt"] = _round_map(bands, 2)
-            record["alt_lcoe"] = _round_map(carriers["lcoe"], 2)
-            record["alt_lcoh"] = _round_map(carriers["lcoh"], 2)
+            record["purpose"] = _round_map(bands, 2)
+            record["lcoe_split"] = _round_map(carriers["lcoe"], 2)
+            record["lcoh_split"] = _round_map(carriers["lcoh"], 2)
             record["leaves"] = _round_map(cost_taxonomy.leaf_costs(row), 2)
-            record["groups"] = _round_map(cost_taxonomy.group_costs(row), 2)
+            record["groups"] = _round_map(cost_taxonomy.parent_costs(row), 2)
             record["leaf_inputs"] = {key: [list(pair) for pair in lines]
                                      for key, lines in cost_taxonomy.leaf_inputs(row).items()
                                      if key in record["leaves"]}
@@ -213,7 +218,7 @@ def attach(payload: dict, cases: dict) -> None:
 def main() -> None:
     html, cases, geos = build_html(TEMPLATE_HTML, augment=attach)
     # The single-taxonomy build fills this in; here it leaves the class list clean.
-    html = html.replace(" /*ALT_ONLY_CLASS*/", "")
+    html = html.replace(" /*PURPOSE_ONLY_CLASS*/", "")
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(html, encoding="utf-8")
     print(f"wrote {OUT_PATH} ({OUT_PATH.stat().st_size / 1e6:.2f} MB, "
