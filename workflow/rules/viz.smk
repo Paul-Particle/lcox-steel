@@ -3,9 +3,17 @@ rule compile_report:
         # The scenario table, for the variant each tech was solved with: the
         # solve reads the parquet, not its name, so this is where that survives.
         scenarios="config/scenarios.csv",
-        # Emission factors, freight legs and the grid fee. The base file only —
-        # a per-scenario overlay is not merged in here yet.
-        assumptions="config/assumptions.yaml",
+        # Emission factors, freight legs, the grid fee, and the capex and
+        # lifetime quotes the cost leaves are split on. The scenario's own
+        # overlay is merged over the base here exactly as the solve merged it,
+        # so a leaf is split on the numbers that priced it: the gas-price and
+        # EW-capex sweeps and the salt-cavern buffer all move a quote the split
+        # reads, and the base file alone would divide a solved cost by a
+        # quote the run never saw.
+        assumptions_base="config/assumptions.yaml",
+        assumptions_overlay=optional(
+            "config/assumptions_{scenario}.yaml"
+        ),
         networks=collect(
             "results/{item.scenario}/{item.area}_{item.route}_{item.start_date}_{item.end_date}.nc",
             item=lookup(query="scenario == '{scenario}'", within=runs_df),

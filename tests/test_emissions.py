@@ -243,8 +243,11 @@ def test_freight_is_charged_per_tonne_over_the_run_s_own_legs():
     emitted = _breakdown(n, legs={"sea": 10_000, "rail": 300})
 
     per_t = (0.004 * 10_000 + 0.01 * 300) / 1000.0
-    assert emitted["by_step"]["iron_transport"] == pytest.approx(1.0 * 4 * SCALE * per_t)
-    assert emitted["sources"]["freight"] == pytest.approx(emitted["by_step"]["iron_transport"])
+    shipped = pytest.approx(1.0 * 4 * SCALE * per_t)
+    assert emitted["freight_by_leg"]["iron_transport"] == shipped
+    # Outside the boundary: no step carries it and no source counts it.
+    assert "iron_transport" not in emitted["by_step"]
+    assert set(emitted["sources"]) == {"electricity", "gas"}
 
 
 def test_the_grid_s_intensity_comes_from_its_own_generation_mix():

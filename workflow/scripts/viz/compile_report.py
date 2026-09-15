@@ -19,14 +19,22 @@ import yaml
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
 from common._report_schema import (
+    DIAGNOSTIC_FIELDS,
     ELECTRICITY_USERS,
     EMISSION_STEPS,
+    FREIGHT_LEGS,
+    LEAF_COSTS,
+    LEAF_GROUP,
+    LEAF_PARENTS,
+    ORE_LINKS,
+    REDUCTION_LINKS,
     PROCESS_LINKS,
     RES_TECHS,
     field_stem,
     write_report_file,
 )
 from common._runs import load_scenarios, zone_parents
+from scripts.solve._helpers_solve import annuity_factor, deep_merge
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -192,12 +200,18 @@ def _emissions_breakdown(
     combustion too, and dividing that by its MWh would report a furnace as
     buying impossibly dirty power. `losses_mwh` is the electricity the round trip
     and the lines took, which no user drew. `sources` splits the total into
-    electricity, gas and freight.
+    electricity and gas.
+
+    `freight_by_leg` is what delivering the output emitted, and is no part of
+    `by_step` or `sources`: the boundary is the plant, and how far a customer
+    happens to be is a question asked of a route rather than a property of it.
+    It is also the one figure here that does not need a grid mix, so it stands
+    when the rest cannot be read.
 
     Accounting only: none of this reaches the objective, so nothing here can
-    move a solve. And it covers the run's energy and freight alone — the process
-    steps' own direct emissions are outside the model boundary, which is why the
-    result is not a CBAM or an ETS figure. See the `emissions` block in
+    move a solve. And it covers the run's energy alone — the process steps' own
+    direct emissions are outside the model boundary, which is why the result is
+    not a CBAM or an ETS figure. See the `emissions` block in
     config/assumptions.yaml.
 
     Electricity is attributed hour by hour at the intensity of the system that
@@ -343,17 +357,17 @@ def _emissions_breakdown(
         emissions[link] = emissions.get(link, 0.0) + burned
         gas_t += burned
 
-    # Freight over the run's own legs, each mode at its own factor.
+    # Freight over the run's own legs, each mode at its own factor. Kept out of
+    # `emissions` so that no total counts it.
     freight = emissions_cfg["freight_kg_co2e_per_t_km"]
     legs = transport_legs or {}
     t_co2e_per_t = sum(freight[mode][basis] * km for mode, km in legs.items()) / 1000.0
-    freight_t = 0.0
-    for link in ("iron_transport", "steel_transport"):
+    freight_by_leg = {}
+    for link in FREIGHT_LEGS:
         if link not in n.links.index:
             continue
         shipped = float(link_p0[link].sum()) * annual
-        emissions[link] = shipped * t_co2e_per_t
-        freight_t += emissions[link]
+        freight_by_leg[link] = shipped * t_co2e_per_t
 
     # Round-trip and line losses are electricity nobody consumed, so they belong
     # to no step. The battery's is charged inside the tank, where the intensity
@@ -377,20 +391,22 @@ def _emissions_breakdown(
     if unavailable:
         # What each user drew, and what the losses took, are known whatever the
         # mix was — only what it emitted is not. So the MWh stay and every t of
-        # CO2e goes blank, including the gas and the freight: they stack into one
-        # total with the electricity, and a total that is part known and part not
-        # is the number most likely to be quoted as if it were whole.
+        # CO2e inside the boundary goes blank, the gas included: it stacks into
+        # one total with the electricity, and a total that is part known and part
+        # not is the number most likely to be quoted as if it were whole. The
+        # freight is a distance and a factor, and no total holds it, so it stands.
         nan = float("nan")
         emissions = {step: nan for step in emissions}
         electricity_by_user = {user: nan for user in electricity_by_user}
-        electricity_t = gas_t = freight_t = nan
+        electricity_t = gas_t = nan
 
     return {
         "by_step": emissions,
         "electricity_mwh": electricity_mwh,
         "electricity_t": electricity_by_user,
         "losses_mwh": losses_mwh,
-        "sources": {"electricity": electricity_t, "gas": gas_t, "freight": freight_t},
+        "sources": {"electricity": electricity_t, "gas": gas_t},
+        "freight_by_leg": freight_by_leg,
         "unavailable": unavailable,
     }
 
@@ -483,12 +499,13 @@ def write_report(df: pd.DataFrame, report_path: Path, diagnostic_path: Path) -> 
 
     The report is the seam viz reads: which zone represents its country is
     already decided here, so it holds one column per reported place and no
-    `best_in_country` row to interpret. The diagnostic keeps every zone and the
-    flag, for the question "what would the others have cost?".
+    `best_in_country` row to interpret. The diagnostic keeps every zone, the
+    flag and the freight — every row and every field — for the questions the
+    report is not the place for.
     """
     write_report_file(df, diagnostic_path)
-    selected = df[df["best_in_country"]].drop(columns="best_in_country")
-    write_report_file(selected, report_path)
+    selected = df[df["best_in_country"]]
+    write_report_file(selected, report_path, hold_back=DIAGNOSTIC_FIELDS)
     log.info(f"wrote {report_path} ({len(selected)} runs) and {diagnostic_path} ({len(df)} runs)")
 
 
@@ -573,6 +590,305 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
     }
 
 
+def _fixed_om_share(wacc: float, cfg: dict, capex_key: str, opex_key: str) -> float:
+    """Fixed O&M's share of one component's annual cost, as build_network priced it.
+
+    A `capital_cost` in the network is `annuity x capex + fixed opex` per unit of
+    capacity, so the share carries over unchanged to the annual cost of whatever
+    the solve went on to build.
+    """
+    annual_capex = annuity_factor(wacc, cfg["lifetime_years"]) * cfg[capex_key]
+    total = annual_capex + cfg[opex_key]
+    return cfg[opex_key] / total if total else 0.0
+
+
+def _leaf_breakdown(
+    n: pypsa.Network, assumptions: dict, breakdown: dict[str, float], steel_t: float,
+    electricity: dict,
+) -> dict[str, float]:
+    """The cost groups cut as finely as the model allows, as report fields.
+
+    `cost_*_eur_per_t` comes out, one column per priced thing plus what each
+    parent group of them comes to, stacking to `lcos_eur_per_t`. So does
+    `el_*_eur_per_t`, which divides one of those groups — the electricity — by
+    the job each euro of it paid for. Both are checked against the total they
+    stack to rather than assumed to close.
+
+    Every leaf is one component's own annual cost off the solved network —
+    `capital_cost x p_nom_opt` for what was built, `marginal_cost x dispatch` for
+    what was consumed. Nothing is apportioned by a share of something else, which
+    is the difference from reading these off the report: a battery's power and
+    energy halves, a grid connection against its energy, and each renewable
+    against the others were all ratios of config quotes or of levelised
+    contributions before, and are now the costs the solve actually incurred.
+
+    The one place the quotes are still needed is the capital/fixed-O&M line
+    inside a single component, because `capital_cost` is their sum and the
+    network keeps no record of the two parts. `assumptions` must therefore be the
+    merged base+overlay the solve itself was given.
+
+    `electricity` carries what `_emissions_breakdown` read off the network: each
+    user's annual draw in `by_user`, the round trip and the lines in
+    `losses_mwh`, and the generation both are supplied out of in
+    `generation_mwh`.
+    """
+    annual_scale = 8760.0 / len(n.snapshots)
+    wacc = assumptions["finance"]["default_wacc"]
+    leaves = dict.fromkeys(LEAF_COSTS, 0.0)
+
+    def link_capital(name: str) -> float:
+        if name not in n.links.index or not bool(n.links.at[name, "p_nom_extendable"]):
+            return 0.0
+        return float(n.links.at[name, "capital_cost"] * n.links.at[name, "p_nom_opt"])
+
+    def link_marginal(name: str) -> float:
+        if name not in n.links.index or name not in n.links_t.p0.columns:
+            return 0.0
+        priced = n.links_t.p0[name] * n.links.at[name, "marginal_cost"]
+        return float(priced.sum()) * annual_scale
+
+    def store_capital(name: str) -> float:
+        if name not in n.stores.index or not bool(n.stores.at[name, "e_nom_extendable"]):
+            return 0.0
+        return float(n.stores.at[name, "capital_cost"] * n.stores.at[name, "e_nom_opt"])
+
+    def generator_capital(name: str) -> float:
+        gens = n.generators
+        if name not in gens.index or not bool(gens.at[name, "p_nom_extendable"]):
+            return 0.0
+        return float(gens.at[name, "capital_cost"] * gens.at[name, "p_nom_opt"])
+
+    # -- feedstock: the ore quote on whichever reduction step was built, and the
+    # furnace's consumables. Read off the links that carry them rather than from
+    # a list of the routes that have them, so a shaft reducing with a blend pays
+    # for its ore here like either single-fuel shaft does.
+    leaves["ore"] = sum(link_marginal(link) for link in ORE_LINKS)
+    leaves["consumables"] = link_marginal("eaf")
+
+    # -- process plants, each cut into annualised capital and fixed O&M
+    for link in PROCESS_LINKS:
+        annual = link_capital(link)
+        if not annual:
+            continue
+        share = _fixed_om_share(wacc, assumptions[link],
+                                "capex_per_t_per_year_eur", "opex_per_t_per_year_eur")
+        leaves[f"{field_stem(link)}_fom"] = annual * share
+        leaves[f"{field_stem(link)}_capex"] = annual * (1.0 - share)
+
+    # -- natural gas: the fuel bill, and separately any carbon price on it. Both
+    # ride on the gas generator's marginal cost, so the carbon comes out at the
+    # rate it was charged and the fuel is what is left of the group.
+    gas_cfg = assumptions["natural_gas"]
+    gas_mwh = (float(n.generators_t.p["gas_supply"].sum()) * annual_scale
+               if "gas_supply" in n.generators.index else 0.0)
+    carbon_per_mwh = gas_cfg.get("co2_price_eur_per_t", 0.0) * gas_cfg["co2_t_per_mwh"]
+    leaves["gas_carbon"] = gas_mwh * carbon_per_mwh
+    leaves["gas_fuel"] = breakdown["gas"] - leaves["gas_carbon"]
+
+    # -- hydrogen: the electrolyser's water and consumables are its marginal
+    # cost, so the network separates them from its capital directly, without
+    # going through the hydrogen it made and the efficiency it nominally made it at.
+    leaves["electrolyser_water"] = link_marginal("electrolyser")
+    electrolyser_capital = link_capital("electrolyser")
+    if electrolyser_capital:
+        share = _fixed_om_share(wacc, assumptions["electrolyser"],
+                                "capex_per_mw_eur", "opex_per_mw_per_year_eur")
+        leaves["electrolyser_fom"] = electrolyser_capital * share
+        leaves["electrolyser_capex"] = electrolyser_capital * (1.0 - share)
+    leaves["h2_buffer"] = breakdown["h2_buffer"]
+
+    # -- the electricity system, by technology and by component
+    res_idx = n.generators.index[
+        n.generators.p_nom_extendable
+        & ~n.generators.index.isin(("grid_import", "gas_supply", "destination_supply"))
+    ]
+
+    def res_annual(names) -> float:
+        gens = n.generators.loc[list(names)]
+        return float((gens["capital_cost"] * gens["p_nom_opt"]).sum()) if len(gens) else 0.0
+
+    named = set()
+    for tech in RES_TECHS:
+        # A multi-site run names a generator per candidate site, so the tech is a
+        # prefix rather than the whole name.
+        idx = [gen for gen in res_idx if str(gen).startswith(tech)]
+        named.update(idx)
+        annual = res_annual(idx)
+        if not annual:
+            continue
+        share = _fixed_om_share(wacc, assumptions["res"][tech],
+                                "capex_per_mw_eur", "opex_per_mw_per_year_eur")
+        leaves[f"res_{field_stem(tech)}_fom"] = annual * share
+        leaves[f"res_{field_stem(tech)}_capex"] = annual * (1.0 - share)
+    # A generator none of the three techs names keeps its cost whole here rather
+    # than being divided into a technology it is not.
+    leaves["res_other"] = res_annual(gen for gen in res_idx if gen not in named)
+
+    # The inverter rating and the energy are two components the solve sized
+    # separately, so what each cost needs no assumption about duration.
+    leaves["battery_power"] = link_capital("battery_charger")
+    leaves["battery_energy"] = store_capital("battery")
+
+    # The connection pays annuitised capex plus a yearly charge on the same built
+    # MW; the imported energy pays the market price plus a flat charge on every
+    # MWh. So each divides at the rate it was charged at, and the market price —
+    # the one part that is neither a quote nor a capacity — is the remainder.
+    grid_cfg = assumptions["grid"]
+    grid_connection = generator_capital("grid_import")
+    if grid_connection:
+        annual_capex = (annuity_factor(wacc, grid_cfg["connection_lifetime_years"])
+                        * grid_cfg["connection_capex_eur_per_mw"])
+        yearly_fee = grid_cfg["fee_eur_per_mw_per_year"]
+        fee_share = yearly_fee / (annual_capex + yearly_fee) if (annual_capex + yearly_fee) else 0.0
+        leaves["grid_capacity_fee"] = grid_connection * fee_share
+        leaves["grid_connection_capex"] = grid_connection * (1.0 - fee_share)
+    grid_mwh = (float(n.generators_t.p["grid_import"].sum()) * annual_scale
+                if "grid_import" in n.generators.index else 0.0)
+    leaves["grid_fee"] = grid_mwh * float(grid_cfg["fee_eur_per_mwh"])
+    leaves["grid_market"] = breakdown["grid"] - grid_connection - leaves["grid_fee"]
+
+    # -- what is already as fine as the model cuts it
+    for group in ("transmission", "destination_power",
+                  "iron_store", "steel_store", "transport"):
+        leaves[group] = breakdown[group]
+
+    # Every group is either split into leaves or carried into one, so the leaves
+    # come back to the total annual cost. A group that grows a component with no
+    # leaf to put it in would otherwise go missing from the stack while every
+    # share on the chart still read 100 % of LCOS.
+    total = sum(breakdown.values())
+    leaf_total = sum(leaves.values())
+    if abs(leaf_total - total) > max(1.0, 1e-9 * abs(total)):
+        raise ValueError(
+            f"the cost leaves come to {leaf_total:,.0f} EUR/yr against a total annual "
+            f"cost of {total:,.0f} EUR/yr. Every cost_*_meur group has to be split "
+            f"into leaves or carried into one here; LEAF_COSTS in "
+            f"common/_report_schema.py is the list of them."
+        )
+
+    fields = {f"cost_{leaf}_eur_per_t": value / steel_t for leaf, value in leaves.items()}
+    for parent in LEAF_PARENTS:
+        fields[f"cost_{parent}_eur_per_t"] = sum(
+            value for leaf, value in leaves.items() if LEAF_GROUP[leaf] == parent
+        ) / steel_t
+
+    # -- the electricity bill, divided by the job the electricity did. Two systems
+    # can pay it: the plant's own, and — on an export route — the market its
+    # furnace stands in, which supplies nothing but that furnace. Each system's
+    # whole cost is the megawatt-hours it delivered, so pricing every draw at its
+    # own system's rate makes the jobs below close on the bill exactly, with no
+    # remainder to take up the slack.
+    draws = electricity["by_user"]
+    destination_mwh = (float(n.generators_t.p["destination_supply"].sum())
+                       * annual_scale if "destination_supply" in n.generators.index
+                       else 0.0)
+    home_cost = sum(breakdown[group] for group in
+                    ("res", "grid", "battery", "transmission"))
+    home_mwh = electricity["generation_mwh"] - destination_mwh
+    home_rate = home_cost / home_mwh if home_mwh > 0 else 0.0
+    # The furnace melts on whichever system it stands in; everything else is at
+    # home whatever the route. `draws` is keyed by link id as the network spells
+    # it — `dri-h2`, not `dri_h2` — which is what REDUCTION_LINKS names too.
+    melts_abroad = destination_mwh > 0
+    home_draws = {link: mwh for link, mwh in draws.items()
+                  if not (melts_abroad and link == "eaf")}
+    reduction_mwh = sum(mwh for link, mwh in home_draws.items()
+                        if link in REDUCTION_LINKS)
+    electrolyser_mwh = home_draws.get("electrolyser", 0.0)
+    melt_mwh = 0.0 if melts_abroad else home_draws.get("eaf", 0.0)
+    # Whatever else drew: the briquetting press is the only one so far.
+    handling_mwh = sum(mwh for link, mwh in home_draws.items()
+                       if link not in REDUCTION_LINKS
+                       and link not in ("electrolyser", "eaf"))
+    # And the electricity nobody drew at all: the battery's round trip and the
+    # lines'. Its own job rather than part of `handling`, which is power a step
+    # did draw.
+    losses_mwh = electricity["losses_mwh"]
+    # Every megawatt-hour the home system generated is in exactly one of those
+    # five, or the bands below divide the bill by shares that do not add up to
+    # it. Checked rather than left as a remainder: a remainder closes on the
+    # total whatever it has silently swallowed, which is how the reduction step
+    # spent its first outing among the leftovers.
+    attributed = (reduction_mwh + electrolyser_mwh + melt_mwh
+                  + handling_mwh + losses_mwh)
+    if home_mwh > 0 and abs(attributed - home_mwh) > max(1.0, 1e-6 * home_mwh):
+        raise ValueError(
+            f"the electricity jobs account for {attributed:,.0f} MWh of the "
+            f"{home_mwh:,.0f} MWh this plant generated. Every drawing link has to be "
+            f"in REDUCTION_LINKS, be the furnace or the electrolyser, or fall to "
+            f"`handling` — and `draws` is keyed the way the network spells a "
+            f"link id (common/_report_schema.py names the lists)."
+        )
+    jobs = {
+        "reduction": reduction_mwh * home_rate,
+        "melt": breakdown["destination_power"] if melts_abroad else melt_mwh * home_rate,
+        "hydrogen": electrolyser_mwh * home_rate,
+        "handling": handling_mwh * home_rate,
+        "losses": losses_mwh * home_rate,
+    }
+    # The same bill the `electricity` leaves price, divided by what it was for
+    # rather than by what was bought, so the two cuts have to land on the same
+    # number. A job that swallowed another's megawatt-hours would still close on
+    # the bill, which is what the megawatt-hour check above is separately for.
+    electricity_bill = home_cost + breakdown["destination_power"]
+    job_total = sum(jobs.values())
+    if abs(job_total - electricity_bill) > max(1.0, 1e-9 * abs(electricity_bill)):
+        raise ValueError(
+            f"the electricity jobs come to {job_total:,.0f} EUR/yr against an "
+            f"electricity bill of {electricity_bill:,.0f} EUR/yr. The jobs divide the "
+            f"bill by the megawatt-hours each drew, so they only close while every "
+            f"drawing link is in REDUCTION_LINKS, is the furnace, is the "
+            f"electrolyser, or is left to `handling` "
+            f"(common/_report_schema.py names all three lists)."
+        )
+    fields.update({f"el_{job}_eur_per_t": value / steel_t
+                   for job, value in jobs.items()})
+
+    # The same capital/upkeep split on the carriers, over each carrier's own
+    # denominator so the parts stack to the reported part they divide.
+    generation_mwh = electricity["generation_mwh"]
+    if generation_mwh > 0:
+        for part in ("capex", "fom"):
+            fields[f"lcoe_res_{part}_eur_per_mwh"] = sum(
+                leaves[f"res_{field_stem(tech)}_{part}"] for tech in RES_TECHS
+            ) / generation_mwh
+    h2_mwh = (_h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
+              if "electrolyser" in n.links.index else 0.0)
+    if h2_mwh > 0:
+        for part in ("capex", "fom", "water"):
+            fields[f"lcoh_electrolyser_{part}_eur_per_mwh_lhv"] = (
+                leaves[f"electrolyser_{part}"] / h2_mwh
+            )
+
+    # -- what a tonne of steel took, measured off the run
+    fields["eaf_el_mwh_per_t_steel"] = draws.get("eaf", 0.0) / steel_t
+    fields["reduction_el_mwh_per_t_steel"] = reduction_mwh / steel_t
+    fields["electrolyser_el_mwh_per_t_steel"] = draws.get("electrolyser", 0.0) / steel_t
+    fields["gas_mwh_per_t_steel"] = gas_mwh / steel_t
+    if "electrolyser" in n.links.index:
+        fields["h2_kg_per_t_steel"] = _h2_produced_kg(n) / steel_t
+    if "battery" in n.stores.index and "battery_charger" in n.links.index:
+        power_mw = float(n.links.at["battery_charger", "p_nom_opt"])
+        if power_mw > 0:
+            fields["battery_duration_hours"] = (
+                float(n.stores.at["battery", "e_nom_opt"]) / power_mw
+            )
+
+    # -- the inputs behind the split, so a cost can be checked against them
+    for link in PROCESS_LINKS:
+        fields[f"annuity_factor_{field_stem(link)}"] = annuity_factor(
+            wacc, assumptions[link]["lifetime_years"]
+        )
+    for link in ORE_LINKS:
+        fields[f"ore_quote_{field_stem(link)}_eur_per_t"] = assumptions[link]["ore_eur_per_t"]
+    if "eaf" in n.links.index:
+        # The furnace's efficiency is tonnes of steel per tonne of iron, so its
+        # reciprocal is the charge this route feeds it — off the network, rather
+        # than back through the route's own charge table.
+        fields["eaf_iron_t_per_t_steel"] = 1.0 / float(n.links.at["eaf", "efficiency"])
+    return fields
+
+
 def extract_summary(
     n: pypsa.Network, scenario_name: str, run: dict, assumptions: dict,
     transport_legs: dict | None = None, grid_mix: pd.DataFrame | None = None,
@@ -636,14 +952,21 @@ def extract_summary(
 
     # Levelised cost of the underlying energy carriers, €/MWh, so LCOS can be read
     # against the electricity and hydrogen that drive it.
-    #   LCOE = electricity-system cost (renewables + battery + grid + transmission)
-    #          per MWh of electricity generated (renewable dispatch + grid import).
+    #   LCOE = electricity-system cost (renewables + battery + grid + transmission
+    #          + the destination furnace's own power on an export route) per MWh of
+    #          electricity generated (renewable dispatch + grid import + that same
+    #          destination supply). Route-wide: every megawatt-hour the route draws
+    #          is in the denominator, so every one of them has to be paid for in the
+    #          numerator. Leaving destination_power out while its generator stayed in
+    #          `elec_gens` put free MWh under the line and read an export route as
+    #          cheaper than its domestic twin on all thirteen grid areas.
     #   LCOH = (electrolyser capex/opex + H2 buffer + the electrolyser's electricity
     #          valued at LCOE) per MWh of H2 produced, LHV.
     annual_scale = 8760.0 / len(n.snapshots)
     elec_gens = [g for g in n.generators.index if g != "gas_supply"]
     elec_mwh = (float(n.generators_t.p[elec_gens].sum().sum()) * annual_scale) if elec_gens else 0.0
-    elec_cost = sum(breakdown[k] for k in ("res", "battery", "grid", "transmission"))
+    elec_cost = sum(breakdown[k]
+                    for k in ("res", "battery", "grid", "transmission", "destination_power"))
     lcoe = elec_cost / elec_mwh if elec_mwh > 0 and elec_cost > 0 else float("nan")
     if lcoe == lcoe:  # not NaN
         summary["lcoe_eur_per_mwh"] = lcoe
@@ -678,6 +1001,9 @@ def extract_summary(
             "lcoe_grid_connection": grid_conn,
             "lcoe_grid_energy": grid_energy,
             "lcoe_transmission": breakdown["transmission"],
+            # Zero on a domestic route, which builds no destination supply. It is a
+            # part like the others so the decomposition still closes on LCOE.
+            "lcoe_destination_power": breakdown["destination_power"],
         }
         res_total = sum(components[f"lcoe_{field_stem(tech)}"] for tech in RES_TECHS)
         summary["lcoe_renewables_eur_per_mwh"] = res_total / elec_mwh
@@ -755,6 +1081,11 @@ def extract_summary(
             buf_cost = breakdown["h2_buffer"]
             lcoh = (el_cost + buf_cost + elec_for_h2) / h2_mwh
             summary["lcoh_eur_per_mwh_lhv"] = lcoh
+            # And per kg, which is the unit the cost-breakdown page charts
+            # hydrogen in. Only the h2-only branch above filled this, so on
+            # every steel route — the ones the page actually plots — the column
+            # stood empty while the page converted the figure beside it.
+            summary["lcoh_eur_per_kg"] = lcoh * H2_LHV_KWH_PER_KG / 1000.0
             # LCOH decomposition, €/MWh LHV over the same H2 denominator so the
             # parts sum back to LCOH: the electrolyser plant, its electricity
             # (valued at LCOE) and — where built — the H2 buffer store.
@@ -783,7 +1114,11 @@ def extract_summary(
 
             for link in PROCESS_LINKS:
                 summary[f"plant_{field_stem(link)}_eur_per_t"] = _link_capex(link) / steel_t
-            ore = sum(_link_marginal(l) for l in ("dri-h2", "dri-ng", "moe", "ew"))
+            # Every link that buys ore, so the two add up to the
+            # `ore_consumables` group. Naming four of the five left a blended
+            # shaft's ore out of both this column and the leaf split under it,
+            # which on mix-dri-eaf is over a third of the cost of the steel.
+            ore = sum(_link_marginal(link) for link in ORE_LINKS)
             summary["ore_eur_per_t_steel"] = ore / steel_t
             summary["consumables_eur_per_t_steel"] = _link_marginal("eaf") / steel_t
 
@@ -891,11 +1226,20 @@ def extract_summary(
             trans_cost += n.links.at[link, "capital_cost"] * cap
         summary["transmission_total_annual_cost_meur"] = trans_cost / 1e6
 
-    ac_buses = n.buses.index[n.buses.carrier == "AC"]
-    if len(ac_buses) > 1:
-        ext = n.generators[n.generators.p_nom_extendable]
-        for carrier, grp in ext.groupby("carrier"):
-            summary[f"{field_stem(carrier)}_total_gw_opt"] = grp["p_nom_opt"].sum() / 1e3
+    # A run offered several candidate sites names a generator per site, so no
+    # single `{tech}_gw_opt` says what that tech built and the total is reported
+    # beside them. Only the sited techs: a grid connection and a gas supply are
+    # one generator whatever the siting, and on an export route the destination's
+    # supply carries the same `AC` carrier as the home connection — summing those
+    # two adds a connection in one country to a connection in another.
+    extendable = n.generators[n.generators.p_nom_extendable]
+    sited = extendable[extendable["carrier"].isin(RES_TECHS)]
+    multi_site = len(sited) > sited["carrier"].nunique()
+    if multi_site:
+        for carrier, at_sites in sited.groupby("carrier"):
+            summary[f"{field_stem(carrier)}_total_gw_opt"] = (
+                at_sites["p_nom_opt"].sum() / 1e3
+            )
 
     # Emissions, on the basis the assumptions name. Reported in kg so the
     # report's two decimals still say something about a clean route.
@@ -911,18 +1255,26 @@ def extract_summary(
     if emitted["unavailable"]:
         summary["emissions_unavailable_reason"] = emitted["unavailable"]
     emissions_t = sum(emissions.values())
+    freight_by_leg = emitted["freight_by_leg"]
     summary["emissions_kt_co2e_per_year"] = emissions_t / 1e3
     for source, value in sources.items():
         summary[f"emissions_{source}_kt_co2e_per_year"] = value / 1e3
+    summary["emissions_freight_kt_co2e_per_year"] = sum(freight_by_leg.values()) / 1e3
 
     # Per tonne of steel, and each step's share of it. The steps stack to the
-    # total, so a step this route has none of reads 0 rather than blank.
+    # total, so a step this route has none of reads 0 rather than blank. The
+    # freight sits beside them rather than in them: it is what delivering the
+    # tonne added, and no total above counts it.
     if "steel_produced_mt" in summary and summary["steel_produced_mt"] > 0:
         steel_t = summary["steel_produced_mt"] * 1e6
         summary["emissions_kg_co2e_per_t_steel"] = emissions_t * 1e3 / steel_t
         for step in EMISSION_STEPS:
             summary[f"emissions_{field_stem(step)}_kg_co2e_per_t_steel"] = (
                 emissions.get(step, 0.0) * 1e3 / steel_t
+            )
+        for leg in FREIGHT_LEGS:
+            summary[f"emissions_{field_stem(leg)}_kg_co2e_per_t_steel"] = (
+                freight_by_leg.get(leg, 0.0) * 1e3 / steel_t
             )
     if emissions_t > 0:
         for step in EMISSION_STEPS:
@@ -963,6 +1315,21 @@ def extract_summary(
             summary[f"emissions_{field_stem(user)}_kg_co2e_per_mwh_el"] = (
                 emitted["electricity_t"][user] * 1e3 / mwh
             )
+    # And what nobody drew, so the draws above account for the whole of what was
+    # generated rather than most of it.
+    summary["el_losses_gwh"] = emitted["losses_mwh"] / 1e3
+
+    # The cost groups cut as finely as the model allows — the two taxonomies the
+    # cost-breakdown page plots. Last, because it reads each user's electricity
+    # draw off the emissions breakdown above rather than reading the ports a
+    # second time. Steel routes only: the splits are shares of a tonne of steel,
+    # and h2-only has none to be a share of.
+    if "steel_produced_mt" in summary and summary["steel_produced_mt"] > 0:
+        summary.update(_leaf_breakdown(
+            n, assumptions, breakdown, summary["steel_produced_mt"] * 1e6,
+            {"by_user": electricity_mwh, "losses_mwh": emitted["losses_mwh"],
+             "generation_mwh": elec_mwh},
+        ))
 
     return summary
 
@@ -977,7 +1344,14 @@ def main() -> None:
     """
     scenario_name = snakemake.wildcards.scenario
     scenarios = load_scenarios(snakemake.input.scenarios, snakemake.config["areas"])
-    assumptions = yaml.safe_load(Path(snakemake.input.assumptions).read_text())
+    # The same merge the solve did, so the cost leaves are split on the quotes
+    # that priced the runs rather than on the base file's.
+    assumptions = yaml.safe_load(Path(snakemake.input.assumptions_base).read_text())
+    overlays = list(snakemake.input.assumptions_overlay)
+    if overlays:
+        assumptions = deep_merge(
+            assumptions, yaml.safe_load(Path(overlays[0]).read_text()) or {}
+        )
     parents = zone_parents(snakemake.config["areas"])
 
     # The grid series each run was solved against. Only the emission fields read
