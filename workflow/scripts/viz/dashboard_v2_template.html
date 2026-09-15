@@ -1,0 +1,688 @@
+<style>
+  /*FONT_CSS*/
+  .sd-root{
+    --paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8; --print:#FFFFFF;
+    --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7;
+    --border:#D6DBDF; --hair:#E4E9ED;
+    --accent:#0A5680; --accent-2:#0293D2;
+    --scnA:#0A5680; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.08); --onA:#fff;
+    --good:#4E8C6A; --mix:#C08A3A; --fossil:#C24463;
+    --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);
+    --tw:"Titillium Web",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:"SF Mono",ui-monospace,"Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    .sd-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
+      --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
+      --accent:#0293D2; --accent-2:#70D2F0; --scnA:#91C096; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16); --onA:#0E1A20;
+      --good:#91C096; --mix:#E2B681; --fossil:#E0728C;
+      --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
+  }
+  :root[data-theme="dark"] .sd-root{--paper:#10171C; --panel:#1A232A; --panel-2:#212C34;
+    --ink:#E9EEF1; --muted:#A7B6C2; --faint:#6C7E8C; --border:#2B3841; --hair:#26323A;
+    --accent:#0293D2; --accent-2:#70D2F0; --scnA:#91C096; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.16); --onA:#0E1A20;
+    --good:#91C096; --mix:#E2B681; --fossil:#E0728C;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.42);}
+  :root[data-theme="light"] .sd-root{--paper:#EAEEF1; --panel:#FFFFFF; --panel-2:#F4F6F8;
+    --ink:#1B242B; --muted:#525F6A; --faint:#8CA5B7; --border:#D6DBDF; --hair:#E4E9ED;
+    --accent:#0A5680; --accent-2:#0293D2; --scnA:#0A5680; --scnB:#0293D2; --scnB-tint:rgba(2,147,210,.08); --onA:#fff;
+    --good:#4E8C6A; --mix:#C08A3A; --fossil:#C24463;
+    --shadow:0 1px 2px rgba(27,36,43,.05),0 10px 28px rgba(27,36,43,.07);}
+
+  .sd-root{background:var(--paper);color:var(--ink);font-family:var(--tw);line-height:1.5;
+    min-height:100vh;-webkit-font-smoothing:antialiased;}
+  .sd-root *{box-sizing:border-box;}
+  .sd-wrap{max-width:1200px;margin:0 auto;padding:34px 24px 72px;}
+
+  .sd-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;
+    flex-wrap:wrap;padding-bottom:6px;}
+  .sd-brand{display:flex;align-items:center;gap:11px;margin-bottom:11px;}
+  .sd-dot{width:12px;height:12px;border-radius:50%;background:var(--accent);flex:none;}
+  .sd-brand span{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent-2);font-weight:600;}
+  .sd-title{font-size:clamp(25px,3.4vw,38px);font-weight:700;letter-spacing:-.02em;margin:0;text-wrap:balance;line-height:1.05;}
+  .sd-sub{color:var(--muted);font-size:14px;margin:9px 0 0;max-width:64ch;}
+  .sd-meta{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:right;line-height:1.7;white-space:nowrap;}
+
+  /* Scenario matrix panels */
+  .scn{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);
+    margin-bottom:14px;padding:15px 18px 17px;position:relative;overflow:hidden;}
+  .scn::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--scnA);}
+  .scn.b::before{background:var(--scnB);}
+  .scn-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:13px;}
+  .scn-tag{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;
+    color:var(--onA);background:var(--scnA);border-radius:5px;padding:3px 9px;flex:none;}
+  .scn.b .scn-tag{background:var(--scnB);color:#fff;}
+  .scn-name{font-size:14px;font-weight:700;letter-spacing:-.01em;}
+  .scn-clamp{font-family:var(--mono);font-size:10.5px;color:var(--mix);letter-spacing:.02em;}
+  .scn-reset{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 9px;cursor:pointer;font-weight:600;}
+  .scn-reset:hover{color:var(--ink);border-color:var(--faint);}
+  .scn-reset:disabled{opacity:.35;cursor:not-allowed;}
+
+  .mx{display:grid;grid-template-columns:112px 1fr;gap:9px 16px;align-items:center;}
+  @media (max-width:640px){.mx{grid-template-columns:1fr;gap:4px 0;}}
+  .mxlab{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  .sd-pills{display:flex;gap:3px;background:var(--panel-2);padding:3px;border-radius:9px;border:1px solid var(--border);flex-wrap:wrap;}
+  .sd-pill{border:0;background:transparent;color:var(--muted);font-family:var(--tw);font-size:13px;font-weight:600;
+    padding:5px 12px;border-radius:7px;cursor:pointer;transition:background .13s,color .13s;white-space:nowrap;}
+  .sd-pill:hover{color:var(--ink);}
+  .sd-pill[aria-pressed="true"]{background:var(--scnA);color:var(--onA);}
+  .scn.b .sd-pill[aria-pressed="true"]{background:var(--scnB);color:#fff;}
+  .scn.b .sd-pill.same[aria-pressed="true"]{background:transparent;color:var(--muted);box-shadow:inset 0 0 0 1.5px var(--border);}
+  .sd-pill:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;}
+  .sd-pill:disabled{opacity:.3;cursor:not-allowed;}
+  .sd-pill.same{font-style:italic;}
+
+  /* Comparison cards */
+  .sd-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:20px 0 22px;}
+  .sd-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:15px 17px;
+    box-shadow:var(--shadow);position:relative;overflow:hidden;}
+  .sd-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--border);}
+  .sd-card.a::before{background:var(--scnA);}
+  .sd-card.b::before{background:var(--scnB);}
+  .sd-card.gap::before{background:linear-gradient(var(--scnA),var(--scnB));}
+  .sd-card .k{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;}
+  .sd-card .v{font-size:27px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1;}
+  .sd-card .v small{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:0;}
+  .sd-card .d{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.4;}
+  .sd-card .prem{display:flex;align-items:baseline;gap:9px;margin-top:6px;}
+  .sd-card .pchip{font-family:var(--mono);font-size:9px;font-weight:700;border-radius:4px;padding:1px 6px;line-height:1.7;}
+  .sd-card .pchip.A{background:var(--scnA);color:var(--onA);}
+  .sd-card .pchip.B{background:var(--scnB);color:#fff;}
+  .sd-card .pv{font-size:20px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1;}
+  .sd-card .pv small{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0;}
+  .sd-card .pv.na{color:var(--faint);}
+  .sd-card .pp{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-left:auto;}
+  .sd-card .cls{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;
+    font-weight:700;border-radius:4px;padding:1px 6px;margin-top:8px;}
+  .cls.good{color:var(--good);border:1px solid var(--good);}
+  .cls.mix{color:var(--mix);border:1px solid var(--mix);}
+  .cls.fossil{color:var(--fossil);border:1px solid var(--fossil);}
+
+  .scn-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;align-items:start;}
+  .scn-grid .scn{margin-bottom:0;}
+  @media (max-width:860px){.scn-grid{grid-template-columns:1fr;}}
+
+  .sd-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden;}
+  .sd-panel-h{padding:16px 18px 6px;}
+  .sd-panel-h.row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
+  .sd-panel-h h2{font-size:15px;font-weight:700;margin:0;letter-spacing:-.01em;}
+  .sd-panel-h .hint{font-size:11.5px;font-weight:400;color:var(--muted);letter-spacing:0;}
+  .sd-panel-h p{font-size:12.5px;color:var(--muted);margin:4px 0 0;}
+  .sd-print{background:var(--print);border-top:1px solid var(--hair);}
+  .sd-plot{width:100%;overflow-x:auto;}
+  .sd-empty{padding:44px 18px;text-align:center;color:var(--faint);font-size:13px;}
+  .sd-grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;align-items:start;}
+  .sd-grid2 .sd-panel{margin-bottom:0;}
+  @media (max-width:900px){.sd-grid2{grid-template-columns:1fr;}}
+  .ab-key{display:inline-flex;gap:14px;margin-left:auto;font-family:var(--mono);font-size:10px;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--muted);align-items:center;}
+  .ab-key i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle;}
+
+  .sd-tblwrap{overflow-x:auto;padding:2px 6px 8px;}
+  .sd-tbl{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13.5px;}
+  .sd-tbl th,.sd-tbl td{padding:8px 15px;text-align:right;border-bottom:1px solid var(--hair);white-space:nowrap;}
+  .sd-tbl th{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700;vertical-align:bottom;}
+  .sd-tbl th span{display:block;font-weight:400;opacity:.65;letter-spacing:0;margin-top:2px;}
+  .sd-tbl th:first-child,.sd-tbl td.rt{text-align:left;}
+  .sd-tbl td.rt{font-weight:600;}
+  .sd-tbl .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:9px;vertical-align:middle;}
+  .sd-tbl .na{color:var(--faint);}
+  .sd-tbl tbody.grpB tr{background:var(--scnB-tint);}
+  .sd-tbl tr.ghdr td{font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);font-weight:700;padding-top:14px;padding-bottom:5px;border-bottom:1px solid var(--border);background:transparent;}
+  .sd-tbl tbody.grpB tr.ghdr td{color:var(--scnB);}
+  .sd-tbl tr.pick td{font-weight:700;}
+  .sd-tbl tr.pick td.rt{box-shadow:inset 3px 0 0 var(--mark);}
+  .sd-tbl .chip{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.04em;
+    color:#fff;border-radius:4px;padding:1px 6px;margin-left:9px;vertical-align:middle;}
+  .chip.A{background:var(--scnA);color:var(--onA);} .chip.B{background:var(--scnB);}
+  .tag{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--fossil);border:1px solid var(--fossil);border-radius:5px;
+    padding:1px 6px;margin-left:8px;vertical-align:middle;font-weight:700;}
+
+  .sd-foot{margin-top:30px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);line-height:1.6;}
+  .sd-foot b{color:var(--ink);font-weight:600;} .sd-foot em{color:var(--ink);font-style:normal;font-weight:600;}
+  .sd-foot code{font-family:var(--mono);font-size:11px;background:var(--panel-2);padding:1px 5px;border-radius:4px;}
+</style>
+
+<div class="sd-root">
+ <div class="sd-wrap">
+  <header class="sd-head">
+    <div>
+      <div class="sd-brand"><span class="sd-dot"></span><span>Future Cleantech Architects · Steel decarbonisation</span></div>
+      <h1 class="sd-title">Green Steel — Scenario Comparison</h1>
+      <p class="sd-sub">Pick a scenario from the matrix, then set a second one as a set of overrides. The cost breakdown and built-capacity charts, and the route table below, put the two side by side. A scenario is one point in the matrix of geography, weather year, grid connection, route, siting and sensitivity.</p>
+    </div>
+    <div class="sd-meta" id="sd-meta"></div>
+  </header>
+
+  <div class="scn-grid">
+    <div class="scn a">
+      <div class="scn-head">
+        <span class="scn-tag">Scenario A</span>
+        <span class="scn-name" id="name-a"></span>
+        <span class="scn-clamp" id="clamp-a"></span>
+      </div>
+      <div class="mx" id="mx-a"></div>
+    </div>
+
+    <div class="scn b">
+      <div class="scn-head">
+        <span class="scn-tag">Scenario B</span>
+        <span class="scn-name" id="name-b"></span>
+        <span class="scn-clamp" id="clamp-b"></span>
+        <button class="scn-reset" id="reset-b" type="button">B = A</button>
+      </div>
+      <div class="mx" id="mx-b"></div>
+    </div>
+  </div>
+
+  <section class="sd-cards" id="sd-cards"></section>
+
+  <div class="sd-grid2">
+    <div class="sd-panel">
+      <div class="sd-panel-h"><h2>Cost breakdown <span class="hint">(hover over bar segments for additional cost breakdowns)</span></h2><p id="cost-sub"></p></div>
+      <div class="sd-print"><div class="sd-plot" id="plot-cost"></div></div>
+    </div>
+
+    <div class="sd-panel">
+      <div class="sd-panel-h row"><div class="ht"><h2>Built capacity <span class="hint">(hover over bars for capacity factors)</span></h2><p id="cap-sub"></p></div>
+        <span class="ab-key"><span><i id="ksw-a" style="background:#0A5680"></i>A</span><span><i style="background:#0293D2"></i>B</span></span>
+      </div>
+      <div class="sd-print"><div class="sd-plot" id="plot-cap"></div></div>
+    </div>
+  </div>
+
+  <div class="sd-panel">
+    <div class="sd-panel-h"><h2>Levelised cost by route</h2><p id="tbl-sub"></p></div>
+    <div class="sd-tblwrap"><div id="sd-table"></div></div>
+  </div>
+
+  <footer class="sd-foot">
+    <p><b>Reading this.</b> LCOS is the full levelised cost per tonne of liquid steel — annualised capex plus operating cost of the whole system (renewables, storage, grid, process plant, ore and consumables) divided by annual output. Every panel compares <b>Scenario A</b> against <b>Scenario B</b>. B starts equal to A; each override you set in its strip makes B deviate on one axis, everything else tracks A. Where an override would be invalid (a geography without a grid, a route not solved there) it is clamped back and noted next to the scenario name.</p>
+    <p style="margin-top:8px"><b>The table</b> shows the full route group behind each scenario: every route at that scenario's geography, year, grid, siting and sensitivity, cheapest first. The route A actually plots is highlighted and chipped <span class="chip A" style="margin:0">A</span>; if B sits in the same group its route is chipped <span class="chip B" style="margin:0">B</span> in place, otherwise B's group is appended below with a tinted background. <b>Routes.</b> <code>H2-DRI-EAF</code>, <code>MOE</code> and <code>EW</code> are zero-fossil; <code>NG-H2-DRI-EAF</code> is transitional (the optimiser blends H2 and gas DRI — the H2-share column shows how much iron came from hydrogen, and near ~0 it is flagged as economically the fossil route); <code>NG-DRI-EAF</code> is the natural-gas benchmark. <b>LCOE</b> is the electricity-system cost — renewables + battery + grid + transmission, storage included — per MWh generated; <b>LCOH</b> is €/MWh LHV of hydrogen (electrolyser + buffer + its electricity valued at LCOE). Values are near-optimal within input uncertainty — read rankings and ranges, not the last digit.</p>
+  </footer>
+ </div>
+</div>
+
+<script>/*PLOTLY_JS*/</script>
+<script>
+const PAYLOAD = /*PAYLOAD_JSON*/;
+(function(){
+  const {cases:CASES, gas:GAS, template:FCA, geos:GEOS, years:YEARS, geo_names:GN,
+    clean_routes:CLEAN, route_order:ROUTE_ORDER, route_label:RLAB, route_color:RCOL,
+    co2_t_per_mwh:CO2F, h2_min:H2MIN, cost_groups:COST_GROUPS, cap_panels:CAP_PANELS,
+    variant_routes:VARIANT_ROUTES, variant_label:VLAB} = PAYLOAD;
+
+  const CONF = {responsive:true, displaylogo:false,
+    modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
+  const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
+  // Scenario bar colours on the (always-white) print surface. B is fixed; A is
+  // FCA fca-blue in light mode, FCA green in dark mode — matching the --scnA UI accent.
+  const A_LIGHT="#0A5680", A_DARK="#91C096", B_COL="#0293D2";
+  const isDark = () => { const t=document.documentElement.getAttribute("data-theme");
+    return t ? t==="dark" : !!(window.matchMedia && window.matchMedia("(prefers-color-scheme:dark)").matches); };
+  const chrome = () => ({A: isDark()?A_DARK:A_LIGHT, B:B_COL});
+  const ELEC = new Set(["res","battery","transmission","grid"]);   // segments priced by system LCOE
+  const H2G  = new Set(["electrolyser","h2_buffer"]);              // segments priced by hydrogen LCOH
+  let capH = 520;                              // capacity-plot height; cost plot matches it
+
+  const AXES = ["geo","year","grid","route","cf","variant"];
+  const OPTS = {
+    geo:  GEOS.map(g=>[g, GN[g]||g]),
+    year: YEARS.map(y=>[String(y), String(y)]),
+    grid: [["grid","Grid"],["nogrid","Islanded"]],
+    route:ROUTE_ORDER.map(r=>[r, RLAB[r]]),
+    cf:   [["avg","Average CF"],["p95","Best-site P95"]],
+    variant: Object.keys(VLAB).map(v=>[v, VLAB[v]]),
+  };
+  const AXLAB = {geo:"Geography", year:"Weather year", grid:"Grid",
+                 route:"Route", cf:"Capacity factor", variant:"Sensitivity"};
+
+  // ---- state: A is a full scenario; Bov holds per-axis overrides (null = track A).
+  // Default view: H2-DRI-EAF with H₂ salt-cavern storage vs MOE at 70% turndown,
+  // both at the synthetic best site (P95) in Australia, 2025, grid-connected.
+  const A = {geo:"AUS", year:"2025", grid:"grid",
+             route:"h2-dri-eaf", cf:"p95", variant:"salt"};
+  const Bov = {geo:null, year:null, grid:null, route:"moe", cf:null, variant:"moe70"};
+  // B before clamping: A with per-axis overrides applied.
+  const resolveRaw = () => { const b={}; for(const k of AXES) b[k] = Bov[k]==null ? A[k] : Bov[k]; return b; };
+
+  // ---- validity + record lookup
+  const proj = s => `${s.geo}-${s.year}-${s.grid}`;
+  const gridHas = (geo,year,grid) => !!CASES[`${geo}-${year}-${grid}`];
+  const routeHas = (geo,year,grid,route) => !!(CASES[`${geo}-${year}-${grid}`]||{})[route];
+  const routesAt = s => ROUTE_ORDER.filter(r => routeHas(s.geo,s.year,s.grid,r));
+  const variantOk = (route,v) => v==="base" || (VARIANT_ROUTES[v]||[]).includes(route);
+  const effVariant = s => variantOk(s.route, s.variant) ? s.variant : "base";
+  const cfKey = s => s.route==="ng-dri-eaf" ? "na" : s.cf;
+  function recFor(s){
+    const rc = CASES[proj(s)]?.[s.route]; if(!rc) return null;
+    const v = rc[effVariant(s)] || rc["base"]; if(!v) return null;
+    return v[cfKey(s)] || null;
+  }
+  const mixIsFossil = rec => rec && rec.h2_share!=null && rec.h2_share < H2MIN;
+  const co2Int = rec => (rec.ng_gwh*1000*CO2F)/((rec.steel_mt||1)*1e6);   // tCO2 / t steel
+  const gasPrice = s => GAS[s.geo]?.[s.year]?.[s.grid];
+
+  // Clamp a scenario to a solved point, recording what was moved (in `_notes`).
+  // An override on one axis (say geography) can leave an inherited axis (grid,
+  // route, sensitivity) invalid — clamp those back so both scenarios always plot.
+  function clamp(ctx){
+    const c={...ctx}, notes=[];
+    // Grid is a primary axis the user browses. If the geo/year has no project for
+    // the selected grid, do NOT silently flip it to the other mode — leave the
+    // selection and mark the scenario unavailable, so the panels say so instead
+    // of quietly showing the other grid mode (e.g. Brazil has no grid case).
+    if(!gridHas(c.geo,c.year,c.grid)){
+      c._notes=[];
+      c._unavail = (c.grid==="grid"?"Grid-connected":"Islanded")+" results for "
+        + geoName(c.geo)+" "+c.year+" aren’t available yet — switch to "
+        + (c.grid==="grid"?"islanded":"grid")+".";
+      return c;
+    }
+    if(!routeHas(c.geo,c.year,c.grid,c.route)){
+      const rs = ROUTE_ORDER.filter(r=>routeHas(c.geo,c.year,c.grid,r));
+      if(rs.length){ const nr = rs.includes("h2-dri-eaf")?"h2-dri-eaf":rs[0]; notes.push("route → "+RLAB[nr]); c.route=nr; }
+    }
+    if(!variantOk(c.route,c.variant)){ if(c.variant!=="base") notes.push("sensitivity → baseline"); c.variant="base"; }
+    c._notes=notes; c._unavail=null; return c;
+  }
+  const B = () => clamp(resolveRaw());
+
+  // Keep A self-consistent (it drives everything). B is clamped on read, so its
+  // overrides are never mutated here — invalid options are disabled in the matrix.
+  function normalise(){
+    const a = clamp(A); for(const k of AXES) A[k]=a[k];
+    A._notes = a._notes; A._unavail = a._unavail;
+  }
+
+  // ---- formatting / identity
+  const geoName = g => GN[g]||g;
+  const cfShort = cf => cf==="avg" ? "avg CF" : "P95";
+  function identity(s){
+    const parts = [geoName(s.geo), s.year, s.grid==="grid"?"grid":"islanded", RLAB[s.route]];
+    if(s.route!=="ng-dri-eaf") parts.push(cfShort(s.cf));
+    if(effVariant(s)!=="base") parts.push(VLAB[effVariant(s)]);
+    return parts.join(" · ");
+  }
+
+  // ---- matrix rendering
+  function pill(axis, val, lab, pressed, disabled, onclick, extraCls){
+    const b=document.createElement("button");
+    b.className="sd-pill"+(extraCls?" "+extraCls:"");
+    b.type="button"; b.textContent=lab; b.disabled=!!disabled;
+    b.setAttribute("aria-pressed", String(!!pressed));
+    b.onclick=()=>{ if(b.disabled) return; onclick(val); };
+    return b;
+  }
+  function buildMatrixA(){
+    const host=document.getElementById("mx-a"); host.innerHTML="";
+    AXES.forEach(axis=>{
+      const lab=document.createElement("div"); lab.className="mxlab"; lab.textContent=AXLAB[axis];
+      const grp=document.createElement("div"); grp.className="sd-pills";
+      OPTS[axis].forEach(([val,l])=>{
+        const dis = axisDisabledA(axis,val);
+        grp.appendChild(pill(axis,val,l, A[axis]===val, dis, v=>{ A[axis]=v; refresh(); }));
+      });
+      host.appendChild(lab); host.appendChild(grp);
+    });
+  }
+  function axisDisabledA(axis,val){
+    if(axis==="grid")    return !gridHas(A.geo,A.year,val);
+    if(axis==="route")   return !routeHas(A.geo,A.year,A.grid,val);
+    if(axis==="cf")      return A.route==="ng-dri-eaf";
+    if(axis==="variant") return !variantOk(A.route,val);
+    return false;
+  }
+  function buildMatrixB(){
+    const host=document.getElementById("mx-b"); host.innerHTML="";
+    const b=B();
+    AXES.forEach(axis=>{
+      const lab=document.createElement("div"); lab.className="mxlab"; lab.textContent=AXLAB[axis];
+      const grp=document.createElement("div"); grp.className="sd-pills";
+      // leading "same as A" pill
+      grp.appendChild(pill(axis,"__same__","Same", Bov[axis]==null, false,
+        ()=>{ Bov[axis]=null; refresh(); }, "same"));
+      OPTS[axis].forEach(([val,l])=>{
+        const dis = axisDisabledB(axis,val,b);
+        grp.appendChild(pill(axis,val,l, Bov[axis]===val, dis, v=>{ Bov[axis]=v; refresh(); }));
+      });
+      host.appendChild(lab); host.appendChild(grp);
+    });
+  }
+  function axisDisabledB(axis,val,b){
+    if(axis==="grid")    return !gridHas(b.geo,b.year,val);
+    if(axis==="route")   return !routeHas(b.geo,b.year,b.grid,val);
+    if(axis==="cf")      return b.route==="ng-dri-eaf";
+    if(axis==="variant") return !variantOk(b.route,val);
+    return false;
+  }
+
+  // ---- cards
+  const bothSame = () => AXES.every(k=>Bov[k]==null);
+  function cardsHtml(){
+    const sA=A, sB=B(), rA=recFor(sA), rB=recFor(sB);
+    const out=[];
+    const val = (rec,d)=> rec ? `${Math.round(rec.lcos).toLocaleString()}<small> €/t</small>` : `—`;
+    out.push(`<div class="sd-card a"><p class="k">Scenario A · levelised cost of steel</p>
+      <div class="v">${val(rA)}</div><p class="d">${identity(sA)}</p></div>`);
+    out.push(`<div class="sd-card b"><p class="k">Scenario B · levelised cost of steel</p>
+      <div class="v">${val(rB)}</div><p class="d">${bothSame()?"same as A — set an override":identity(sB)}</p></div>`);
+    // Cost vs the NG-DRI-EAF benchmark — the global fossil reference. NG-DRI-EAF
+    // is inherently a grid-connected run, so grid AND islanded scenarios of a
+    // geography/year compare to that same per-geo/year benchmark.
+    const ngLcos = s => {
+      const r = CASES[`${s.geo}-${s.year}-grid`]?.["ng-dri-eaf"]?.["base"]?.["na"];
+      return r ? r.lcos : null;
+    };
+    const premRow = (tag, s, rec) => {
+      const ng = ngLcos(s);
+      if(!rec || ng==null){
+        const why = !rec ? "" : "no NG benchmark";
+        return `<div class="prem"><span class="pchip ${tag}">${tag}</span>`
+          + `<span class="pv na">—</span><span class="pp">${why}</span></div>`;
+      }
+      const d=rec.lcos-ng, sign = d>0?"+":(d<0?"−":""), pct = ng?Math.round(Math.abs(d)/ng*100):0;
+      return `<div class="prem"><span class="pchip ${tag}">${tag}</span>`
+        + `<span class="pv">${sign}${Math.round(Math.abs(d)).toLocaleString()}<small> €/t</small></span>`
+        + `<span class="pp">${sign}${pct}%</span></div>`;
+    };
+    if(rA||rB){
+      const ngA=ngLcos(sA), ngB=ngLcos(sB), fmt = v => v==null?"—":Math.round(v).toLocaleString();
+      const sharedNg = bothSame() || (sA.geo===sB.geo && sA.year===sB.year);
+      const foot = sharedNg
+        ? (ngA==null ? "NG-DRI-EAF benchmark not available"
+                     : `NG-DRI-EAF benchmark: ${fmt(ngA)} €/t`)
+        : `NG-DRI-EAF: A ${fmt(ngA)} · B ${fmt(ngB)} €/t`;
+      out.push(`<div class="sd-card gap"><p class="k">Cost vs NG-DRI-EAF benchmark</p>
+        ${premRow("A",sA,rA)}${bothSame()?"":premRow("B",sB,rB)}
+        <p class="d">${foot}</p></div>`);
+    }
+    return out.join("");
+  }
+
+  // ---- plots (A vs B as two adjacent bars, shared print surface in both themes)
+  function printBase(extra){
+    return Object.assign({template:FCA, autosize:true, paper_bgcolor:PRINT.paper, plot_bgcolor:PRINT.paper,
+      font:{family:"'Titillium Web',sans-serif", color:PRINT.ink, size:12}}, extra);
+  }
+  const axis = extra => Object.assign({gridcolor:PRINT.grid, linecolor:PRINT.border,
+    tickfont:{color:PRINT.muted}, zeroline:false}, extra);
+  const xTicks = (sA,sB) => ({type:"category", automargin:true,
+    tickvals:["A","B"],
+    ticktext:[`A · ${RLAB[sA.route]}`, `B · ${RLAB[sB.route]}`],
+    tickfont:{size:12.5,color:PRINT.muted}});
+
+  function renderCost(){
+    const el=document.getElementById("plot-cost");
+    const sA=A, sB=B(), rA=recFor(sA), rB=recFor(sB);
+    if(!rA&&!rB){ el.innerHTML=`<div class="sd-empty">${sA._unavail||sB._unavail||"Neither scenario is solved."}</div>`; return; }
+    const X=["A","B"], traces=[];
+    const eur = v => v==null ? "n/a" : Math.round(v).toLocaleString()+" €/MWh";
+    const lp = (rec,k) => rec && rec.lcoe_parts ? rec.lcoe_parts[k] : null;   // €/MWh contribution to LCOE
+    const lo = (rec,k) => rec && rec.lcoe_own   ? rec.lcoe_own[k]   : null;   // the tech's own LCOE
+    const lh = (rec,k) => rec && rec.lcoh_parts ? rec.lcoh_parts[k] : null;   // €/MWh LHV contribution to LCOH
+    // Uniform hover line: "N €/MWh (P% of BASIS)". `val` is the figure shown;
+    // `share`/`total` give the parenthetical share; either may be null/absent.
+    const line = (val, share, total, basis) => {
+      if(val==null && share==null) return "n/a";
+      const pct = (total && share!=null) ? ` (${Math.round(share/total*100)}% of ${basis})` : "";
+      return eur(val!=null?val:share) + pct;
+    };
+    // generation tech — value = its own LCOE, share = its contribution to system LCOE
+    const techLine = (rec,ownK,contribK) => line(lo(rec,ownK), lp(rec,contribK), rec&&rec.lcoe, "LCOE");
+    // system add-on (storage, transmission) — value = its LCOE contribution, same for the share
+    const contribLine = (rec,k) => line(lp(rec,k), lp(rec,k), rec&&rec.lcoe, "LCOE");
+    // hydrogen cost component — value = its LCOH contribution, share of LCOH
+    const lcohLine = (rec,k) => line(lh(rec,k), lh(rec,k), rec&&rec.lcoh, "LCOH");
+    // €/t cost-detail helpers (per-plant capex, ore/consumables split).
+    const eurT = v => v==null ? "n/a" : Math.round(v).toLocaleString()+" €/t";
+    const cdv = (rec,k) => rec && rec.cost_detail ? rec.cost_detail[k] : null;
+    const tLine = (rec,k) => { const v=cdv(rec,k); if(v==null) return "n/a";
+      const p=(rec&&rec.lcos)?` (${Math.round(v/rec.lcos*100)}% of LCOS)`:""; return eurT(v)+p; };
+    // Each cost segment's share of total LCOS (customdata[0] on every bar trace).
+    const pctLcos = (rec,g) => (rec&&rec.lcos) ? Math.round((rec.costs[g]||0)/rec.lcos*100) : 0;
+    // Per-scenario detail lines for a cost group (headline handled separately).
+    // Built from *that* scenario's own components only — so a scenario missing a
+    // tech simply omits the line rather than showing "n/a" when A and B differ.
+    // Each entry {t, v}: t is the leading text ("· solar"), v the formatted value.
+    function linesFor(rec, s, g){
+      if(!rec) return [];
+      const out=[]; const push=(t,v)=>out.push({t,v});
+      if(g==="gas"){ if(rec.ng_gwh>0) push("gas price:", eur(gasPrice(s))); return out; }
+      if(g==="ore_consumables"){
+        if(cdv(rec,"ore")!=null)         push("· iron ore", tLine(rec,"ore"));
+        if(cdv(rec,"consumables")!=null) push("· EAF consumables (electrodes, fluxes, alloys)", tLine(rec,"consumables"));
+        return out;
+      }
+      if(g==="process"){
+        [["dri","H2-DRI shaft"],["dri_ng","NG-DRI shaft"],["moe","MOE"],["ladle","Ladle metallurgy"],
+         ["electrowinning","Electrowinning"],["eaf","EAF"]].forEach(([k,lab])=>{
+           if(cdv(rec,k)!=null) push("· "+lab, tLine(rec,k)); });
+        return out;
+      }
+      if(H2G.has(g)){
+        if(rec.lcoh!=null)               push("hydrogen LCOH:", eur(rec.lcoh));
+        if(lh(rec,"electrolyser")!=null) push("· electrolyser", lcohLine(rec,"electrolyser"));
+        if(lh(rec,"electricity")!=null)  push("· electricity",  lcohLine(rec,"electricity"));
+        if(lh(rec,"storage")!=null)      push("· H2 storage",   lcohLine(rec,"storage"));
+        return out;
+      }
+      if(g==="res"){
+        if(lo(rec,"renewables")!=null || lp(rec,"renewables")!=null) push("renewables:", techLine(rec,"renewables","renewables"));
+        if(lp(rec,"solar")!=null)         push("· solar", techLine(rec,"solar","solar"));
+        if(lp(rec,"wind_onshore")!=null)  push("· wind onshore", techLine(rec,"wind_onshore","wind_onshore"));
+        if(lp(rec,"wind_offshore")!=null) push("· wind offshore", techLine(rec,"wind_offshore","wind_offshore"));
+        return out;
+      }
+      if(g==="battery"){ if(lp(rec,"storage")!=null) push("storage:", contribLine(rec,"storage")); return out; }
+      if(g==="transmission"){ if(lp(rec,"transmission")!=null) push("transmission:", contribLine(rec,"transmission")); return out; }
+      if(g==="grid"){
+        const price=rec.grid_price, fee=rec.grid_fee, ci=rec.grid_conn_imported;
+        const delivered=[price,fee,ci].some(v=>v!=null)?(price||0)+(fee||0)+(ci||0):null;
+        const contrib=(lp(rec,"grid_connection")||0)+(lp(rec,"grid_energy")||0);
+        if(delivered!=null) push("grid electricity:", line(delivered, contrib||null, rec.lcoe, "LCOE"));
+        if(price!=null) push("· market price", eur(price));
+        if(fee!=null)   push("· volumetric fee", eur(fee));
+        if(ci!=null)    push("· connection", eur(ci));
+        return out;
+      }
+      return out;
+    }
+    // Each bar trace carries a per-point hovertemplate + customdata, so A and B
+    // each show only their own components (customdata[0] = that point's % of LCOS).
+    COST_GROUPS.forEach(([g,glabel,gcolor])=>{
+      const y=[rA?(rA.costs[g]||0):0, rB?(rB.costs[g]||0):0];
+      if(!y.some(v=>v)) return;
+      const mk = (rec,s) => {
+        const lines=linesFor(rec,s,g), cd=[pctLcos(rec,g), ...lines.map(l=>l.v)];
+        let ht=`${glabel}: %{y:.0f} €/t (%{customdata[0]}% of LCOS)`;
+        lines.forEach((l,i)=> ht+=`<br>${l.t} %{customdata[${i+1}]}`);
+        return {cd, ht:ht+"<extra></extra>"};
+      };
+      const a=mk(rA,sA), b=mk(rB,sB);
+      traces.push({type:"bar", x:X, y, name:glabel, marker:{color:gcolor}, legendgroup:g,
+        customdata:[a.cd,b.cd], hovertemplate:[a.ht,b.ht]});
+    });
+    const totals=[rA?rA.lcos:null, rB?rB.lcos:null];
+    const cdTot=[[eur(rA?rA.lcoe:null), eur(rA?rA.lcoh:null)],[eur(rB?rB.lcoe:null), eur(rB?rB.lcoh:null)]];
+    traces.push({type:"scatter", x:X, y:totals, mode:"text", customdata:cdTot,
+      text:totals.map(v=>v==null?"":Math.round(v).toLocaleString()+" €/t"),
+      textposition:"top center", textfont:{size:14,color:PRINT.ink}, showlegend:false,
+      hovertemplate:`levelised cost of steel (LCOS): %{y:.0f} €/t<br>electricity (LCOE): %{customdata[0]}<br>hydrogen (LCOH): %{customdata[1]}<extra></extra>`});
+    const lay=printBase({barmode:"stack", height:capH, bargap:0.5, margin:{l:66,r:18,t:24,b:132},
+      legend:{orientation:"h", x:0, y:-0.13, xanchor:"left", yanchor:"top", font:{size:10.5,color:PRINT.muted}},
+      xaxis:axis(xTicks(sA,sB)),
+      yaxis:axis({title:{text:"LCOS  (€ / t steel)",font:{size:11,color:PRINT.muted}},rangemode:"tozero"})});
+    Plotly.react(el, traces, lay, CONF);
+  }
+
+  // Horizontal, one stacked-height panel per unit (MW / t·h⁻¹ / hours). Only
+  // built components appear; A and B are two bars per component, coloured by
+  // scenario, with the value printed to the right of each bar and the value
+  // axis (with unit) along the top.
+  function renderCapacity(){
+    const el=document.getElementById("plot-cap");
+    const CH=chrome();
+    const keyA=document.getElementById("ksw-a"); if(keyA) keyA.style.background=CH.A;
+    const sA=A, sB=B(), rA=recFor(sA), rB=recFor(sB);
+    if(!rA&&!rB){ capH=460; el.innerHTML=`<div class="sd-empty">${sA._unavail||sB._unavail||"No built capacity."}</div>`; return; }
+    const fmtVal = v => Math.round(v).toLocaleString();
+    // "· capacity factor: P%" for a capacity bar, when a CF is available for it
+    // (rec.cf values are already integer percent).
+    const cfStr = (rec,key) => { const v = rec && rec.cf ? rec.cf[key] : null;
+      return v==null ? "" : `<br>capacity factor: ${v}%`; };
+    const built = CAP_PANELS.map((panel,pi)=>{
+      const [ptitle,unit,bars]=panel;
+      const comps = bars.map(([key,label])=>({key,label,
+          a: rA?(rA.caps[key]||0):0, b: rB?(rB.caps[key]||0):0}))
+        .filter(c => Math.max(c.a,c.b) > 0.05);
+      return {ptitle,unit,pi,comps};
+    }).filter(p=>p.comps.length);
+    if(!built.length){ capH=460; el.innerHTML='<div class="sd-empty">No built capacity.</div>'; return; }
+
+    // Pixel budget → paper-fraction domains so bar thickness is uniform across panels.
+    const rowPx=52, headPx=58, topPx=12, botPx=10;
+    const bodies = built.map(p=>p.comps.length*rowPx);
+    const H = topPx + botPx + bodies.reduce((s,v)=>s+v,0) + built.length*headPx;
+    capH = H;
+    const traces=[], lay=printBase({barmode:"group", height:H, bargap:0.36, bargroupgap:0.16,
+      margin:{l:8,r:78,t:8,b:botPx}, showlegend:false});
+    let y = 1 - topPx/H;
+    built.forEach((p,i)=>{
+      y -= headPx/H;                       // room above panel for its top axis + title
+      const top_=y, bot_=Math.max(0, y - bodies[i]/H);
+      y = bot_;
+      const sfx = i===0 ? "" : String(i+1);
+      const cats = p.comps.map(c=>c.label);
+      const maxv = Math.max(...p.comps.flatMap(c=>[c.a,c.b]));
+      [["a",CH.A,"A",rA],["b",CH.B,"B",rB]].forEach(([k,col,tag,rec])=>{
+        traces.push({type:"bar", orientation:"h", x:p.comps.map(c=>c[k]), y:cats,
+          xaxis:"x"+sfx, yaxis:"y"+sfx, marker:{color:col}, showlegend:false, cliponaxis:false,
+          text:p.comps.map(c=> c[k]>0.05 ? fmtVal(c[k]) : ""),
+          textposition:"outside", textfont:{size:13,color:PRINT.ink},
+          customdata:p.comps.map(c=>cfStr(rec,c.key)),
+          hovertemplate:`%{y} · ${tag}: %{x:.1f} ${p.unit}%{customdata}<extra></extra>`});
+      });
+      lay["xaxis"+sfx]=axis({domain:[0,1], anchor:"y"+sfx, side:"top",
+        range:[0, maxv*1.18], rangemode:"tozero", ticks:"",
+        title:{text:`<b>${p.ptitle}</b>`, standoff:4, font:{size:12,color:PRINT.ink}},
+        tickfont:{size:10,color:PRINT.muted}});
+      lay["yaxis"+sfx]=axis({domain:[bot_,top_], anchor:"x"+sfx, autorange:"reversed",
+        automargin:true, ticks:"", showgrid:false, linecolor:"rgba(0,0,0,0)",
+        tickfont:{size:11.5,color:PRINT.ink}});
+    });
+    Plotly.react(el, traces, lay, CONF);
+  }
+
+  // ---- table: route group(s) with the plotted route highlighted
+  const groupKey = s => `${s.geo}|${s.year}|${s.grid}|${s.cf}|${s.variant}`;
+  function groupCtx(s){ return {geo:s.geo,year:s.year,grid:s.grid,cf:s.cf,variant:s.variant}; }
+  function groupLabel(s){
+    const parts=[geoName(s.geo), s.year, s.grid==="grid"?"grid":"islanded", cfShort(s.cf)];
+    if(s.variant!=="base") parts.push(VLAB[s.variant]); else parts.push("baseline");
+    return parts.join(" · ");
+  }
+  function groupRows(ctx){
+    const rows=[];
+    routesAt(ctx).forEach(r=>{
+      const s={...ctx, route:r};
+      const rec=recFor(s); if(rec) rows.push({route:r, s, rec});
+    });
+    rows.sort((a,c)=>a.rec.lcos-c.rec.lcos);
+    return rows;
+  }
+  function num(v,d){ return v==null ? '<span class="na">—</span>' : v.toFixed(d); }
+  function tableBody(rows, picks){
+    // picks: {route: "A"|"B"|"AB"} for this group
+    return rows.map(({route,s,rec})=>{
+      const co2=co2Int(rec);
+      const share = rec.h2_share==null ? '<span class="na">—</span>' : Math.round(Math.max(0,rec.h2_share)*100)+'%';
+      const flag = (route==="mix-dri-eaf" && mixIsFossil(rec)) ? ' <span class="tag">H2 rejected</span>' : '';
+      const mark = picks[route];
+      const chip = mark ? ` <span class="chip ${mark==="AB"?"A":mark}">${mark==="AB"?"A·B":mark}</span>` : "";
+      const markCol = mark ? (mark==="B" ? "var(--scnB)" : "var(--scnA)") : "transparent";
+      return `<tr class="${mark?"pick":""}" style="--mark:${markCol}">
+        <td class="rt"><span class="sw" style="background:${RCOL[route]}"></span>${RLAB[route]}${flag}${chip}</td>
+        <td>${num(rec.lcos,0)}</td><td>${num(rec.lcoe,0)}</td><td>${num(rec.lcoh,0)}</td>
+        <td>${route.includes("dri")?share:'<span class="na">—</span>'}</td>
+        <td>${co2>0?co2.toFixed(2):'<span class="na">0.00</span>'}</td></tr>`;
+    }).join("");
+  }
+  function renderTable(){
+    const el=document.getElementById("sd-table");
+    const sA=A, sB=B();
+    const sameGroup = groupKey(sA)===groupKey(sB);
+    const gp=gasPrice(sA);
+    document.getElementById("tbl-sub").innerHTML =
+      `Group A: ${groupLabel(sA)}` + (sameGroup?"":` · Group B: ${groupLabel(sB)}`)
+      + (gp!=null?` · <b>gas €${gp}/MWh</b>`:"");
+
+    const head = `<thead><tr>
+        <th>Route</th><th>LCOS<span>€/t steel</span></th><th>LCOE<span>€/MWh</span></th>
+        <th>LCOH<span>€/MWh LHV</span></th><th>H2 share<span>iron from H2</span></th>
+        <th>CO2<span>t/t steel</span></th></tr></thead>`;
+
+    const rowsA = groupRows(groupCtx(sA));
+    if(!rowsA.length){ el.innerHTML=`<div class="sd-empty">${sA._unavail||"No solved routes for Scenario A."}</div>`; return; }
+    const picksA={}; picksA[sA.route]="A";
+    if(sameGroup){ picksA[sB.route] = (sB.route===sA.route) ? "AB" : "B"; }
+    const ghdrA = `<tr class="ghdr"><td colspan="6">Scenario A group — ${groupLabel(sA)}</td></tr>`;
+    let html = `<table class="sd-tbl">${head}<tbody>${ghdrA}${tableBody(rowsA, picksA)}</tbody>`;
+
+    if(!sameGroup){
+      const rowsB = groupRows(groupCtx(sB));
+      const ghdrB = `<tr class="ghdr"><td colspan="6">Scenario B group — ${groupLabel(sB)}</td></tr>`;
+      const picksB={}; picksB[sB.route]="B";
+      html += `<tbody class="grpB">${ghdrB}${rowsB.length?tableBody(rowsB,picksB):
+        '<tr><td colspan="6" class="na" style="text-align:center;padding:18px">No solved routes for Scenario B.</td></tr>'}</tbody>`;
+    }
+    el.innerHTML = html + `</table>`;
+  }
+
+  // ---- meta + labels
+  function renderMeta(){
+    let nrec=0, projs=new Set();
+    for(const p in CASES){ projs.add(p); for(const r in CASES[p]) for(const v in CASES[p][r]) nrec+=Object.keys(CASES[p][r][v]).length; }
+    document.getElementById("sd-meta").innerHTML =
+      `${GEOS.length} geographies · ${YEARS.length} years<br>${projs.size} projects · ${nrec} scenarios<br>hourly · 8760 snapshots`;
+  }
+  function renderLabels(){
+    const sA=A, sB=B();
+    document.getElementById("name-a").textContent = identity(sA);
+    document.getElementById("name-b").textContent = bothSame() ? identity(sB)+"  (= A)" : identity(sB);
+    document.getElementById("cost-sub").textContent = "€/t by cost group · A vs B";
+    document.getElementById("cap-sub").textContent = "optimised build · A vs B";
+    document.getElementById("reset-b").disabled = bothSame();
+    // Scenario note: either an unavailable grid case (not silently switched), or a
+    // clamp where an override left an inherited axis (route/sensitivity) invalid.
+    const noteFor = s => s._unavail ? s._unavail
+      : (s._notes && s._notes.length ? "clamped: "+s._notes.join(", ") : "");
+    document.getElementById("clamp-a").textContent = noteFor(A);
+    document.getElementById("clamp-b").textContent = noteFor(sB);
+  }
+
+  // ---- main
+  function renderAll(){
+    document.getElementById("sd-cards").innerHTML = cardsHtml();
+    renderCapacity(); renderCost(); renderTable();   // capacity first: it sets the shared height
+  }
+  function refresh(){
+    normalise();
+    buildMatrixA(); buildMatrixB();
+    renderLabels();
+    renderAll();
+  }
+
+  document.getElementById("reset-b").onclick=()=>{ for(const k of AXES) Bov[k]=null; refresh(); };
+
+  renderMeta();
+  refresh();
+
+  // Plotly measures text on first paint; re-render once the embedded font is ready.
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(renderAll);
+  new MutationObserver(()=>renderAll()).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+})();
+</script>
