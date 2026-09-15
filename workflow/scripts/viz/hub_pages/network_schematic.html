@@ -319,7 +319,7 @@
         <span class="lg"><span class="sw" style="border-width:2.4px;border-color:var(--c-steel);background:color-mix(in srgb,var(--c-steel) 14%,var(--surface))"></span>Bus (energy / mass carrier)</span>
         <span class="lg"><span class="sw" style="background:var(--surface)"></span>Link (process step)</span>
         <span class="lg"><span class="sw" style="background:var(--surface-2)"></span>Generator / Load</span>
-        <span class="lg"><span class="sw" style="border-style:dashed;background:var(--surface)"></span>Store · StorageUnit</span>
+        <span class="lg"><span class="sw" style="border-style:dashed;background:var(--surface)"></span>Store</span>
         <span class="lg"><span class="sw" style="border-style:dashed;border-color:var(--accent);background:var(--surface)"></span>Planned (not yet in model)</span>
       </div>
     </div>
@@ -382,7 +382,7 @@
     { id:"electricity", kind:"bus",  color:"ac",  name:"electricity", unit:"MW AC", x:252, y:250, routes:ROUTES,
       body:"Bus · carrier AC\nCentral electricity node.\nMulti-site: one electricity_{site} bus per site." },
     { id:"battery",     kind:"store",color:"ac",  name:"battery",     x:252, y:346, routes:ROUTES,
-      body:"StorageUnit · extendable, cyclic\n€200 k/MW + €150 k/MWh · max 6 h · 90% round-trip" },
+      body:"Store + charger/discharger Links · extendable, cyclic\n€200 k/MW (one shared inverter rating) + €150 k/MWh\nduration sized by the optimiser · 90% round-trip" },
 
     { id:"electrolyser",kind:"link", color:"h2",  name:"electrolyser",x:404, y:110, routes:H2,
       body:"Link  electricity -> H2\neff ~ 0.606 MWh H2/MWh e  (33.33 / 55 kWh/kg)\ncapex €0.7 M/MW · 20 yr · varopex €1/MWhe\nh2_only: floored to meet the flat load" },
