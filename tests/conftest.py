@@ -27,6 +27,7 @@ for _p in (
     REPO_ROOT / "workflow",
     REPO_ROOT / "workflow" / "scripts" / "grid",
     REPO_ROOT / "workflow" / "scripts" / "viz",
+    REPO_ROOT / "workflow" / "scripts" / "solve",
 ):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))

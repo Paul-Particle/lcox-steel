@@ -22,6 +22,8 @@ from common._report_schema import (
     ELECTRICITY_USERS,
     EMISSION_STEPS,
     LEAF_COSTS,
+    LEAF_GROUP,
+    LEAF_PARENTS,
     ORE_LINKS,
     PROCESS_LINKS,
     RES_TECHS,
@@ -751,6 +753,10 @@ def _leaf_breakdown(
         )
 
     fields = {f"leaf_{leaf}_eur_per_t": value / steel_t for leaf, value in leaves.items()}
+    for parent in LEAF_PARENTS:
+        fields[f"group_{parent}_eur_per_t"] = sum(
+            value for leaf, value in leaves.items() if LEAF_GROUP[leaf] == parent
+        ) / steel_t
 
     # -- the other taxonomy, from the same leaves and the same groups
     fixed_om = sum(leaves[f"{field_stem(link)}_fom"] for link in PROCESS_LINKS)
@@ -1029,6 +1035,11 @@ def extract_summary(
             buf_cost = breakdown["h2_buffer"]
             lcoh = (el_cost + buf_cost + elec_for_h2) / h2_mwh
             summary["lcoh_eur_per_mwh_lhv"] = lcoh
+            # And per kg, which is the unit the cost-breakdown page charts
+            # hydrogen in. Only the h2-only branch above filled this, so on
+            # every steel route — the ones the page actually plots — the column
+            # stood empty while the page converted the figure beside it.
+            summary["lcoh_eur_per_kg"] = lcoh * H2_LHV_KWH_PER_KG / 1000.0
             # LCOH decomposition, €/MWh LHV over the same H2 denominator so the
             # parts sum back to LCOH: the electrolyser plant, its electricity
             # (valued at LCOE) and — where built — the H2 buffer store.

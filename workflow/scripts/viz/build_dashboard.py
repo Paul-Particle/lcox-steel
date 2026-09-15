@@ -330,6 +330,11 @@ def _record(row, lcos_row, cap_row):
     for col, key in (
         ("plant_dri_h2_eur_per_t", "dri"),
         ("plant_dri_ng_eur_per_t", "dri_ng"),
+        # The blended shaft and the briquetting press were absent, so on a
+        # blended or an export route the per-plant lines came to well under the
+        # process group they are meant to add up to.
+        ("plant_dri_mix_eur_per_t", "dri_mix"),
+        ("plant_briquetting_eur_per_t", "briquetting"),
         ("plant_eaf_eur_per_t", "eaf"),
         ("plant_moe_eur_per_t", "moe"),
         ("plant_ew_eur_per_t", "electrowinning"),
@@ -361,6 +366,10 @@ def _record(row, lcos_row, cap_row):
         "lcos": round(_num(row["lcos_eur_per_t"]), 0),
         "lcoe": _opt(row["lcoe_eur_per_mwh"]),
         "lcoh": _opt(row["lcoh_eur_per_mwh_lhv"]),
+        # The same cost per kg, which the report now carries on a steel route
+        # too — the cost-breakdown page charts hydrogen in that unit and used to
+        # convert the figure above itself.
+        "lcoh_kg": round(_num(row["lcoh_eur_per_kg"]), 3) or None,
         # Blank wherever the area publishes prices but no generation mix, which is
         # most of the grid side; the page says so rather than printing a zero.
         "emissions": _opt(row["emissions_kg_co2e_per_t_steel"]),

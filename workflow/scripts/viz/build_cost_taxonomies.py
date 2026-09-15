@@ -10,14 +10,17 @@ Five panels, all with the model's five routes as the bars:
 
   * LCOS, LCOE and LCOH, each shown both ways side by side;
   * built capacity, for reference;
-  * the same LCOS cut as finely as the model allows — up to 22 leaves, each hover
+  * the same LCOS cut as finely as the model allows — up to 40 leaves, each hover
     naming the inputs behind that number.
 
 The page renders client-side from the shared dashboard payload (the same one
 `build_dashboard_v2.py` uses), so the scenario matrix can move geography, weather
 year, grid mode, capacity-factor basis and sensitivity variant without a rebuild.
-`cost_taxonomy.py` supplies the derived splits; this module only assembles them
-into the payload and fills the template.
+Every number on it is a report column: `compile_report` cuts the cost groups off
+the solved networks, `cost_taxonomy.py` reads them back and keys them the way the
+bands are keyed, and this module only assembles them into the payload and fills
+the template. So a report compiled before those columns existed has nothing to
+plot, and `attach` says so rather than failing on a missing column.
 
 Run it directly — it is not a pipeline rule.
 """
@@ -34,7 +37,7 @@ sys.path.insert(0, str(REPO / "workflow"))        # common.*, scripts.*
 import cost_taxonomy                                                      # noqa: E402
 from build_dashboard import HTML_DIR, _axes, build_html, scenario_files      # noqa: E402
 from common._constants import H2_LHV_KWH_PER_KG                           # noqa: E402
-from common._report_schema import read_report                             # noqa: E402
+from common._report_schema import field_stem, read_report                 # noqa: E402
 
 OUT_PATH = HTML_DIR / "cost_taxonomies.html"
 TEMPLATE_HTML = Path(__file__).with_name("cost_taxonomies_template.html")
@@ -124,6 +127,11 @@ def attach(payload: dict, cases: dict) -> None:
     can never be given another scenario's split.
     """
     payload["leaf_groups"] = [list(group) for group in cost_taxonomy.GROUPS]
+    # The plants, by the stem their leaves are keyed on, so a hover over the
+    # capital or the upkeep band can name each one and reach its own half of
+    # that plant's annual cost.
+    payload["process_plants"] = [[field_stem(link), label]
+                                 for link, label in cost_taxonomy.PROCESS_PLANTS]
     payload["alt_lcos_bands"] = ALT_LCOS_BANDS
     payload["alt_lcoe_bands"] = ALT_LCOE_BANDS
     payload["dash_lcoe_bands"] = DASH_LCOE_BANDS
@@ -155,9 +163,23 @@ def attach(payload: dict, cases: dict) -> None:
     for scenario, report in scenario_files().items():
         # The overlay is named by the scenario the file is for, which is not
         # what the record is filed under: `standard-grid` and `standard-islanded`
-        # share the `base` pill but keep their own names on disk.
+        # share the `base` pill but keep their own names on disk. Only `spec()`
+        # needs it now — the split itself is read off the report, which
+        # compile_report cut against this same merged overlay.
         assumptions = _assumptions(scenario)
-        for _, row in read_report(report).iterrows():
+        runs = read_report(report)
+        # The split is the report's now, so a report compiled before it existed
+        # has nothing for this page to plot. Say that, rather than failing on a
+        # missing column three frames further in.
+        probe = f"leaf_{cost_taxonomy.LEAF_COSTS[0]}_eur_per_t"
+        if probe not in runs.columns:
+            raise SystemExit(
+                f"{report.name} carries no cost leaves ({probe} is not in it), so "
+                f"there is nothing to break down. Recompile the reports — "
+                f"`snakemake results/report_{scenario}.csv --force` — which needs "
+                f"the scenario's solved networks under results/{scenario}/."
+            )
+        for _, row in runs.iterrows():
             axes = _axes(row)
             project = f"{axes['geo']}-{axes['year']}-{axes['grid']}"
             record = (cases.get(project, {})
@@ -166,21 +188,20 @@ def attach(payload: dict, cases: dict) -> None:
                            .get(axes["cf"]))
             if record is None:
                 continue
-            bands = cost_taxonomy.alternative_lcos_bands(row, assumptions, H2_LHV_KWH_PER_KG)
+            bands = cost_taxonomy.alternative_lcos_bands(row)
             if not bands:
                 missing += 1
                 continue
-            carriers = cost_taxonomy.alternative_carrier_bands(
-                row, assumptions, H2_LHV_KWH_PER_KG)
-            leaves, leaf_inputs = cost_taxonomy.leaf_costs(row, assumptions)
+            carriers = cost_taxonomy.alternative_carrier_bands(row)
 
             record["spec"] = spec_index(assumptions)
             record["alt"] = _round_map(bands, 2)
             record["alt_lcoe"] = _round_map(carriers["lcoe"], 2)
             record["alt_lcoh"] = _round_map(carriers["lcoh"], 2)
-            record["leaves"] = _round_map(leaves, 2)
+            record["leaves"] = _round_map(cost_taxonomy.leaf_costs(row), 2)
+            record["groups"] = _round_map(cost_taxonomy.group_costs(row), 2)
             record["leaf_inputs"] = {key: [list(pair) for pair in lines]
-                                     for key, lines in leaf_inputs.items()
+                                     for key, lines in cost_taxonomy.leaf_inputs(row).items()
                                      if key in record["leaves"]}
             attached += 1
 
