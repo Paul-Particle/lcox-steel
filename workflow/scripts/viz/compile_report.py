@@ -622,13 +622,12 @@ def _leaf_breakdown(
 
     Every leaf is one component's own annual cost off the solved network —
     `capital_cost x p_nom_opt` for what was built, `marginal_cost x dispatch` for
-    what was consumed. Nothing is apportioned by a share of something else, which
-    is the difference from reading these off the report: a battery's power and
-    energy halves, a grid connection against its energy, and each renewable
-    against the others were all ratios of config quotes or of levelised
-    contributions before, and are now the costs the solve actually incurred.
+    what was consumed. Nothing is apportioned by a share of something else: a
+    battery's power and energy halves, a grid connection against its energy, and
+    each renewable against the others are each the cost the solve incurred, not a
+    ratio of config quotes or of levelised contributions.
 
-    The one place the quotes are still needed is the capital/fixed-O&M line
+    The one place the quotes are needed is the capital/fixed-O&M line
     inside a single component, because `capital_cost` is their sum and the
     network keeps no record of the two parts. `assumptions` must therefore be the
     merged base+overlay the solve itself was given.
@@ -813,8 +812,8 @@ def _leaf_breakdown(
     # Every megawatt-hour the home system generated is in exactly one of those
     # five, or the bands below divide the bill by shares that do not add up to
     # it. Checked rather than left as a remainder: a remainder closes on the
-    # total whatever it has silently swallowed, which is how the reduction step
-    # spent its first outing among the leftovers.
+    # total whatever it has absorbed, so a step missing from the five would read
+    # as part of the leftovers instead of as an error.
     attributed = (reduction_mwh + electrolyser_mwh + melt_mwh
                   + handling_mwh + losses_mwh)
     if home_mwh > 0 and abs(attributed - home_mwh) > max(1.0, 1e-6 * home_mwh):
@@ -963,9 +962,10 @@ def extract_summary(
     #          electricity generated (renewable dispatch + grid import + that same
     #          destination supply). Route-wide: every megawatt-hour the route draws
     #          is in the denominator, so every one of them has to be paid for in the
-    #          numerator. Leaving destination_power out while its generator stayed in
-    #          `elec_gens` put free MWh under the line and read an export route as
-    #          cheaper than its domestic twin on all thirteen grid areas.
+    #          numerator: `elec_gens` picks up the destination supply, so `elec_cost`
+    #          carries `destination_power` alongside it. Numerator and denominator
+    #          cover the same generators, or an export route reads cheaper than its
+    #          domestic twin by the MWh nobody was charged for.
     #   LCOH = (electrolyser capex/opex + H2 buffer + the electrolyser's electricity
     #          valued at LCOE) per MWh of H2 produced, LHV.
     annual_scale = 8760.0 / len(n.snapshots)
@@ -1088,9 +1088,8 @@ def extract_summary(
             lcoh = (el_cost + buf_cost + elec_for_h2) / h2_mwh
             summary["lcoh_eur_per_mwh_lhv"] = lcoh
             # And per kg, which is the unit the cost-breakdown page charts
-            # hydrogen in. Only the h2-only branch above filled this, so on
-            # every steel route — the ones the page actually plots — the column
-            # stood empty while the page converted the figure beside it.
+            # hydrogen in. Filled on every route that makes hydrogen, not only
+            # h2-only, because the steel routes are the ones the page plots.
             summary["lcoh_eur_per_kg"] = lcoh * H2_LHV_KWH_PER_KG / 1000.0
             # LCOH decomposition, €/MWh LHV over the same H2 denominator so the
             # parts sum back to LCOH: the electrolyser plant, its electricity
@@ -1120,10 +1119,10 @@ def extract_summary(
 
             for link in PROCESS_LINKS:
                 summary[f"plant_{field_stem(link)}_eur_per_t"] = _link_capex(link) / steel_t
-            # Every link that buys ore, so the two add up to the
-            # `ore_consumables` group. Naming four of the five left a blended
-            # shaft's ore out of both this column and the leaf split under it,
-            # which on mix-dri-eaf is over a third of the cost of the steel.
+            # Every link that buys ore — the blended shaft included, where the
+            # ore is over a third of the cost of the steel — so this column and
+            # `consumables` add up to the `ore_consumables` group and the leaf
+            # split under it reaches the same total.
             ore = sum(_link_marginal(link) for link in ORE_LINKS)
             summary["ore_eur_per_t_steel"] = ore / steel_t
             summary["consumables_eur_per_t_steel"] = _link_marginal("eaf") / steel_t

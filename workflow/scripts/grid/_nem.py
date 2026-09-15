@@ -85,8 +85,8 @@ def _process_full_month(
     }
     df = pd.concat(list(tables.values()), axis=1, sort=False)
     area_df = df[area].copy()
-    # AEMO settles in AUD; every variant's `price` column is EUR/MWh, and the
-    # solve now reads that column by name on any variant it is given.
+    # AEMO settles in AUD; every variant's `price` column is EUR/MWh, because the
+    # solve reads that column by name on whichever variant it is given.
     area_df["price"] = area_df["price"] * eur_per_aud
 
     wind  = area_df.get("wind_onshore", pd.Series(0, index=area_df.index))

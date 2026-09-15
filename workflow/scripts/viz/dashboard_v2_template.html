@@ -478,8 +478,11 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         return out;
       }
       if(g==="process"){
-        [["dri","H2-DRI shaft"],["dri_ng","NG-DRI shaft"],["moe","MOE"],["ladle","Ladle metallurgy"],
-         ["electrowinning","Electrowinning"],["eaf","EAF"]].forEach(([k,lab])=>{
+        // The same plants cost_taxonomies_template keys, so the two pages name
+        // the process the same way. Ladle metallurgy is the shared EAF here.
+        [["dri","H2-DRI shaft"],["dri_mix","Blended shaft"],["dri_ng","NG-DRI shaft"],
+         ["moe","MOE"],["electrowinning","Electrowinning"],
+         ["briquetting","Briquetting press"],["eaf","EAF"]].forEach(([k,lab])=>{
            if(cdv(rec,k)!=null) push("· "+lab, tLine(rec,k)); });
         return out;
       }

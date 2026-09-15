@@ -25,10 +25,13 @@ data/entsoe_cache/*
 !data/entsoe_cache/entsoe_bidding_zones.csv
 data/canada_cache/*
 
-# Derived workflow outputs (rebuilt by snakemake)
+# Derived workflow outputs (rebuilt by snakemake), except the area geometries,
+# which are committed: building them needs the EEZ and Natural-Earth zips the
+# repo does not ship, and the demo has to run after a fresh clone.
 resources/*.parquet
 resources/timeseries/
 resources/shapes/
+!resources/shapes/*.parquet
 
 # Log files
 logs/
@@ -53,9 +56,12 @@ results/*.json
 # Git attributes
 * text=auto eol=lf
 
-# Atlite / ERA5
-cutouts/
+# Atlite / ERA5. The demo's pre-sliced Victoria cutout is committed so that a
+# fresh clone runs with no CDS download; `cutouts/*` rather than `cutouts/` so
+# that one file can be excepted, and the exception comes after `*.nc`.
+cutouts/*
 *.nc
+!cutouts/VIC1_20250101_20251231_backup.nc
 
 # Raw/large geodata (download manually — see README)
 data/shapes/offshore_zones/

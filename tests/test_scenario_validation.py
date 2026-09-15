@@ -1,7 +1,7 @@
 """Unit tests for the checks the scenario table has to pass before a DAG is built.
 
-Both used to sit as raw Python in the Snakefile, where nothing could reach them.
-Synthetic frames, no CSV on disk.
+Both live in `common/_runs.py` rather than in the Snakefile, so a test can reach
+them. Synthetic frames, no CSV on disk.
 """
 
 import pandas as pd
