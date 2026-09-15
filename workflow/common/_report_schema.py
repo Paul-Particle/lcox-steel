@@ -84,13 +84,14 @@ ELECTRICITY_USERS = (*PROCESS_LINKS, "electrolyser", "reductant-h2")
 
 # The legs a run can ship over, by the id `build_network` gives them. Only one
 # ever exists: an export route moves its iron, every other route its steel.
-FREIGHT_STEPS = ("iron_transport", "steel_transport")
+# Delivery is outside the accounting boundary below, so these are not steps.
+FREIGHT_LEGS = ("iron_transport", "steel_transport")
 
 # Everything a run can emit through, in the order `compile_report`'s breakdown
 # builds them: the electricity users, the one link that burns gas and no power,
-# the freight legs, and the two losses that belong to no step in particular.
-# Together they are the run's total, so the shares stack to 100 %.
-EMISSION_STEPS = (*ELECTRICITY_USERS, "reductant-ng", *FREIGHT_STEPS,
+# and the two losses that belong to no step in particular. Together they are the
+# run's total, so the shares stack to 100 %.
+EMISSION_STEPS = (*ELECTRICITY_USERS, "reductant-ng",
                   "battery_losses", "transmission_losses")
 
 # The links that buy ore, by the id `build_network` gives them: each carries an
@@ -302,14 +303,17 @@ REPORT_FIELDS = {
     "battery_mwh_opt": ZERO,
     "transmission_total_annual_cost_meur": ZERO,
 
-    # Emissions from the run's energy and freight. Accounting only — none of it
-    # reaches the objective, so these never move a cost. And only the energy and
-    # the freight: the process steps' own direct emissions (electrodes, carbon
-    # injection, pellet carbon, carbonate fluxes) sit outside the model boundary,
-    # which is why a figure here is not a CBAM or an ETS number. `emissions_basis`
-    # says which of the three factor bases produced them, so no number here can be
-    # read on the wrong footing; a grid run's intensity always comes from its own
-    # `variant: emissions` generation series, never from a stand-in.
+    # Emissions from the energy a run used. Accounting only — none of it reaches
+    # the objective, so these never move a cost. And only the energy: the process
+    # steps' own direct emissions (electrodes, carbon injection, pellet carbon,
+    # carbonate fluxes) sit outside the model boundary, as does delivering the
+    # steel, which is why a figure here is not a CBAM or an ETS number. The
+    # freight is measured all the same, at the foot of this block.
+    #
+    # `emissions_basis` says which of the three factor bases produced them, so no
+    # number here can be read on the wrong footing; a grid run's intensity always
+    # comes from its own `variant: emissions` generation series, never from a
+    # stand-in.
     #
     # In kg rather than t throughout: the report rounds to two decimals, and a
     # clean route's tonne of steel lands near a thousandth of a tonne of CO2e.
@@ -322,17 +326,24 @@ REPORT_FIELDS = {
     # scenario, and a 0.00 here would read as the cleanest steel in the table.
     "emissions_kg_co2e_per_t_steel": UNDEFINED,
     "emissions_kg_co2e_per_kg_h2": UNDEFINED,
-    # The three things that emit, as annual totals.
+    # The two things inside the boundary that emit, as annual totals. Together
+    # they are `emissions_kt_co2e_per_year`.
     "emissions_electricity_kt_co2e_per_year": ZERO,
     "emissions_gas_kt_co2e_per_year": ZERO,
-    "emissions_freight_kt_co2e_per_year": ZERO,
     # Per step: what it added to a tonne of steel, and what share of the tonne
-    # that was. The shares stack to 100 % in the diagnostic; the report leaves
-    # the freight legs out (see DIAGNOSTIC_FIELDS), so a route that ships stacks
-    # to less there.
+    # that was. The shares stack to 100 %.
     **{f"emissions_{field_stem(step)}_kg_co2e_per_t_steel": ZERO
        for step in EMISSION_STEPS},
     **{f"emissions_{field_stem(step)}_pct": UNDEFINED for step in EMISSION_STEPS},
+    # What delivering the steel added, which none of the totals above counts:
+    # the boundary is the plant, and the distance to a customer is a question
+    # asked of a route rather than a property of it. Add these to
+    # `emissions_kg_co2e_per_t_steel` for a delivered figure. Only the
+    # diagnostic carries them (see DIAGNOSTIC_FIELDS), and unlike everything
+    # else here they survive an unknown grid mix, being a distance and a factor.
+    "emissions_freight_kt_co2e_per_year": ZERO,
+    **{f"emissions_{field_stem(leg)}_kg_co2e_per_t_steel": ZERO
+       for leg in FREIGHT_LEGS},
     # Electricity by who drew it, and how dirty their own hours were. The system
     # average is what a MWh cost the run on average; a user above it bought the
     # dirty hours, one below it chased the clean ones.
@@ -370,18 +381,13 @@ IDENTITY_FIELDS = ("scenario", "area", "country", "route", "start_date", "end_da
 
 # Fields only the diagnostic carries, for two separate reasons. The flag,
 # because the report has already acted on it, so a frame without it is not
-# missing anything. The freight, because the report covers the energy a run
-# used and not the distance it then travelled; what a route's shipping emitted
-# is read off the diagnostic.
-#
-# The totals keep counting the freight, so on a route that ships, a report row's
-# per-step emissions stack to less than its `emissions_kg_co2e_per_t_steel` and
-# its `emissions_*_pct` to less than 100. The diagnostic is where they close.
+# missing anything. The freight, because it is outside the boundary the rest of
+# the emission fields are inside, and a figure that no total counts reads as one
+# that some total does.
 DIAGNOSTIC_FIELDS = ("best_in_country",
                      "emissions_freight_kt_co2e_per_year",
-                     *(f"emissions_{field_stem(step)}_kg_co2e_per_t_steel"
-                       for step in FREIGHT_STEPS),
-                     *(f"emissions_{field_stem(step)}_pct" for step in FREIGHT_STEPS))
+                     *(f"emissions_{field_stem(leg)}_kg_co2e_per_t_steel"
+                       for leg in FREIGHT_LEGS))
 
 FIELD_ORDER = tuple(IDENTITY_FIELDS) + tuple(
     field for field in REPORT_FIELDS if field not in IDENTITY_FIELDS

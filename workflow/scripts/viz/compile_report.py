@@ -22,6 +22,7 @@ from common._report_schema import (
     DIAGNOSTIC_FIELDS,
     ELECTRICITY_USERS,
     EMISSION_STEPS,
+    FREIGHT_LEGS,
     LEAF_COSTS,
     LEAF_GROUP,
     LEAF_PARENTS,
@@ -199,12 +200,18 @@ def _emissions_breakdown(
     combustion too, and dividing that by its MWh would report a furnace as
     buying impossibly dirty power. `losses_mwh` is the electricity the round trip
     and the lines took, which no user drew. `sources` splits the total into
-    electricity, gas and freight.
+    electricity and gas.
+
+    `freight_by_leg` is what delivering the output emitted, and is no part of
+    `by_step` or `sources`: the boundary is the plant, and how far a customer
+    happens to be is a question asked of a route rather than a property of it.
+    It is also the one figure here that does not need a grid mix, so it stands
+    when the rest cannot be read.
 
     Accounting only: none of this reaches the objective, so nothing here can
-    move a solve. And it covers the run's energy and freight alone — the process
-    steps' own direct emissions are outside the model boundary, which is why the
-    result is not a CBAM or an ETS figure. See the `emissions` block in
+    move a solve. And it covers the run's energy alone — the process steps' own
+    direct emissions are outside the model boundary, which is why the result is
+    not a CBAM or an ETS figure. See the `emissions` block in
     config/assumptions.yaml.
 
     Electricity is attributed hour by hour at the intensity of the system that
@@ -350,17 +357,17 @@ def _emissions_breakdown(
         emissions[link] = emissions.get(link, 0.0) + burned
         gas_t += burned
 
-    # Freight over the run's own legs, each mode at its own factor.
+    # Freight over the run's own legs, each mode at its own factor. Kept out of
+    # `emissions` so that no total counts it.
     freight = emissions_cfg["freight_kg_co2e_per_t_km"]
     legs = transport_legs or {}
     t_co2e_per_t = sum(freight[mode][basis] * km for mode, km in legs.items()) / 1000.0
-    freight_t = 0.0
-    for link in ("iron_transport", "steel_transport"):
+    freight_by_leg = {}
+    for link in FREIGHT_LEGS:
         if link not in n.links.index:
             continue
         shipped = float(link_p0[link].sum()) * annual
-        emissions[link] = shipped * t_co2e_per_t
-        freight_t += emissions[link]
+        freight_by_leg[link] = shipped * t_co2e_per_t
 
     # Round-trip and line losses are electricity nobody consumed, so they belong
     # to no step. The battery's is charged inside the tank, where the intensity
@@ -384,20 +391,22 @@ def _emissions_breakdown(
     if unavailable:
         # What each user drew, and what the losses took, are known whatever the
         # mix was — only what it emitted is not. So the MWh stay and every t of
-        # CO2e goes blank, including the gas and the freight: they stack into one
-        # total with the electricity, and a total that is part known and part not
-        # is the number most likely to be quoted as if it were whole.
+        # CO2e inside the boundary goes blank, the gas included: it stacks into
+        # one total with the electricity, and a total that is part known and part
+        # not is the number most likely to be quoted as if it were whole. The
+        # freight is a distance and a factor, and no total holds it, so it stands.
         nan = float("nan")
         emissions = {step: nan for step in emissions}
         electricity_by_user = {user: nan for user in electricity_by_user}
-        electricity_t = gas_t = freight_t = nan
+        electricity_t = gas_t = nan
 
     return {
         "by_step": emissions,
         "electricity_mwh": electricity_mwh,
         "electricity_t": electricity_by_user,
         "losses_mwh": losses_mwh,
-        "sources": {"electricity": electricity_t, "gas": gas_t, "freight": freight_t},
+        "sources": {"electricity": electricity_t, "gas": gas_t},
+        "freight_by_leg": freight_by_leg,
         "unavailable": unavailable,
     }
 
@@ -1246,18 +1255,26 @@ def extract_summary(
     if emitted["unavailable"]:
         summary["emissions_unavailable_reason"] = emitted["unavailable"]
     emissions_t = sum(emissions.values())
+    freight_by_leg = emitted["freight_by_leg"]
     summary["emissions_kt_co2e_per_year"] = emissions_t / 1e3
     for source, value in sources.items():
         summary[f"emissions_{source}_kt_co2e_per_year"] = value / 1e3
+    summary["emissions_freight_kt_co2e_per_year"] = sum(freight_by_leg.values()) / 1e3
 
     # Per tonne of steel, and each step's share of it. The steps stack to the
-    # total, so a step this route has none of reads 0 rather than blank.
+    # total, so a step this route has none of reads 0 rather than blank. The
+    # freight sits beside them rather than in them: it is what delivering the
+    # tonne added, and no total above counts it.
     if "steel_produced_mt" in summary and summary["steel_produced_mt"] > 0:
         steel_t = summary["steel_produced_mt"] * 1e6
         summary["emissions_kg_co2e_per_t_steel"] = emissions_t * 1e3 / steel_t
         for step in EMISSION_STEPS:
             summary[f"emissions_{field_stem(step)}_kg_co2e_per_t_steel"] = (
                 emissions.get(step, 0.0) * 1e3 / steel_t
+            )
+        for leg in FREIGHT_LEGS:
+            summary[f"emissions_{field_stem(leg)}_kg_co2e_per_t_steel"] = (
+                freight_by_leg.get(leg, 0.0) * 1e3 / steel_t
             )
     if emissions_t > 0:
         for step in EMISSION_STEPS:
