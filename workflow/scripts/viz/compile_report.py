@@ -25,6 +25,7 @@ from common._report_schema import (
     LEAF_GROUP,
     LEAF_PARENTS,
     ORE_LINKS,
+    REDUCTION_LINKS,
     PROCESS_LINKS,
     RES_TECHS,
     field_stem,
@@ -592,15 +593,15 @@ def _fixed_om_share(wacc: float, cfg: dict, capex_key: str, opex_key: str) -> fl
 
 def _leaf_breakdown(
     n: pypsa.Network, assumptions: dict, breakdown: dict[str, float], steel_t: float,
-    lcoe: float, elec_mwh: float, electricity_mwh: dict[str, float],
+    electricity: dict,
 ) -> dict[str, float]:
     """The cost groups cut as finely as the model allows, as report fields.
 
-    Two cuts of the same levelised cost come out: `leaf_*_eur_per_t`, one column
-    per priced thing, and `alt_lcos_*_eur_per_t`, the coarser taxonomy that
-    divides the electricity by what the electricity was for. Both stack to
-    `lcos_eur_per_t`, and the leaves are checked against the total rather than
-    assumed to close.
+    Two cuts of the same levelised cost come out: `cost_*_eur_per_t`, one column
+    per priced thing plus what each parent group of them comes to, and
+    `purpose_*_eur_per_t`, the same total divided by what each euro was spent
+    *for*. Both stack to `lcos_eur_per_t`, and both are checked against the
+    total rather than assumed to close.
 
     Every leaf is one component's own annual cost off the solved network —
     `capital_cost x p_nom_opt` for what was built, `marginal_cost x dispatch` for
@@ -615,8 +616,10 @@ def _leaf_breakdown(
     network keeps no record of the two parts. `assumptions` must therefore be the
     merged base+overlay the solve itself was given.
 
-    `electricity_mwh` is each user's annual draw as `_emissions_breakdown` read it
-    off the network, and `elec_mwh` the generation LCOE is levelised over.
+    `electricity` carries what `_emissions_breakdown` read off the network: each
+    user's annual draw in `by_user`, the round trip and the lines in
+    `losses_mwh`, and the generation both are supplied out of in
+    `generation_mwh`.
     """
     annual_scale = 8760.0 / len(n.snapshots)
     wacc = assumptions["finance"]["default_wacc"]
@@ -752,39 +755,70 @@ def _leaf_breakdown(
             f"common/_report_schema.py is the list of them."
         )
 
-    fields = {f"leaf_{leaf}_eur_per_t": value / steel_t for leaf, value in leaves.items()}
+    fields = {f"cost_{leaf}_eur_per_t": value / steel_t for leaf, value in leaves.items()}
     for parent in LEAF_PARENTS:
-        fields[f"group_{parent}_eur_per_t"] = sum(
+        fields[f"cost_{parent}_eur_per_t"] = sum(
             value for leaf, value in leaves.items() if LEAF_GROUP[leaf] == parent
         ) / steel_t
 
-    # -- the other taxonomy, from the same leaves and the same groups
+    # -- the same total, divided by what each euro was spent for
     fixed_om = sum(leaves[f"{field_stem(link)}_fom"] for link in PROCESS_LINKS)
-    electricity = sum(breakdown[group] for group in
-                      ("res", "grid", "battery", "transmission", "destination_power"))
-    # What the two big draws cost, each at the price of the power that reached
-    # it: the hydrogen's at the plant's own levelised electricity, and the
-    # furnace's at the same — unless it melts in another market, where it is the
-    # only user of that market's supply and the whole of it is its bill.
-    priced = lcoe if lcoe == lcoe else 0.0
-    hydrogen_electricity = electricity_mwh.get("electrolyser", 0.0) * priced
-    melts_abroad = "destination_supply" in n.generators.index
-    eaf_electricity = (breakdown["destination_power"] if melts_abroad
-                       else electricity_mwh.get("eaf", 0.0) * priced)
-    # `rest` is the electricity left once those two are taken out, so the bands
-    # close on the total the same way the leaves do. Floored, because the two
-    # shares are priced at a levelised cost taken over all generation while the
-    # export routes buy some of theirs in another market — where that makes the
-    # two come to more than the whole, a negative band would say less than a
-    # zero one does.
+
+    # The electricity bill, divided by the job the electricity did. Two systems
+    # can pay it: the plant's own, and — on an export route — the market its
+    # furnace stands in, which supplies nothing but that furnace. Each system's
+    # whole cost is the megawatt-hours it delivered, so pricing every draw at its
+    # own system's rate makes the jobs below close on the bill exactly, with no
+    # remainder to take up the slack.
+    draws = electricity["by_user"]
+    destination_mwh = (float(n.generators_t.p["destination_supply"].sum())
+                       * annual_scale if "destination_supply" in n.generators.index
+                       else 0.0)
+    home_cost = sum(breakdown[group] for group in
+                    ("res", "grid", "battery", "transmission"))
+    home_mwh = electricity["generation_mwh"] - destination_mwh
+    home_rate = home_cost / home_mwh if home_mwh > 0 else 0.0
+    # The furnace melts on whichever system it stands in; everything else is at
+    # home whatever the route. `draws` is keyed by link id as the network spells
+    # it — `dri-h2`, not `dri_h2` — which is what REDUCTION_LINKS names too.
+    melts_abroad = destination_mwh > 0
+    home_draws = {link: mwh for link, mwh in draws.items()
+                  if not (melts_abroad and link == "eaf")}
+    reduction_mwh = sum(mwh for link, mwh in home_draws.items()
+                        if link in REDUCTION_LINKS)
+    electrolyser_mwh = home_draws.get("electrolyser", 0.0)
+    melt_mwh = 0.0 if melts_abroad else home_draws.get("eaf", 0.0)
+    # Whatever else drew — the briquetting press — plus the electricity nobody
+    # drew at all: the battery's round trip and the lines'.
+    handling_mwh = (sum(mwh for link, mwh in home_draws.items()
+                        if link not in REDUCTION_LINKS
+                        and link not in ("electrolyser", "eaf"))
+                    + electricity["losses_mwh"])
+    # Every megawatt-hour the home system generated is in exactly one of those
+    # four, or the bands below divide the bill by shares that do not add up to
+    # it. Checked rather than left as a remainder: a remainder closes on the
+    # total whatever it has silently swallowed, which is how the reduction step
+    # spent its first outing inside `handling_losses`.
+    attributed = reduction_mwh + electrolyser_mwh + melt_mwh + handling_mwh
+    if home_mwh > 0 and abs(attributed - home_mwh) > max(1.0, 1e-6 * home_mwh):
+        raise ValueError(
+            f"the electricity jobs account for {attributed:,.0f} MWh of the "
+            f"{home_mwh:,.0f} MWh this plant generated. Every drawing link has to be "
+            f"in REDUCTION_LINKS, be the furnace or the electrolyser, or fall to "
+            f"`handling_losses` — and `draws` is keyed the way the network spells a "
+            f"link id (common/_report_schema.py names the lists)."
+        )
+    melt = breakdown["destination_power"] if melts_abroad else melt_mwh * home_rate
+    hydrogen_electricity = electrolyser_mwh * home_rate
     bands = {
         "ore": breakdown["ore_consumables"],
         "capex": breakdown["process"] - fixed_om,
         "fixed_om": fixed_om,
         "hydrogen": (breakdown["electrolyser"] + breakdown["h2_buffer"]
                      + hydrogen_electricity),
-        "eaf": eaf_electricity,
-        "rest": max(electricity - hydrogen_electricity - eaf_electricity, 0.0),
+        "reduction": reduction_mwh * home_rate,
+        "melt": melt,
+        "handling_losses": handling_mwh * home_rate,
         "gas": breakdown["gas"],
         "transport": breakdown["transport"],
         "store": breakdown["iron_store"] + breakdown["steel_store"],
@@ -793,31 +827,41 @@ def _leaf_breakdown(
         "hydrogen_electrolyser": breakdown["electrolyser"],
         "hydrogen_buffer": breakdown["h2_buffer"],
         "hydrogen_electricity": hydrogen_electricity,
-        "electricity_total": electricity,
+        "electricity_total": home_cost + breakdown["destination_power"],
     }
-    fields.update({f"alt_lcos_{part}_eur_per_t": value / steel_t
+    purpose_total = sum(bands.values())
+    if abs(purpose_total - total) > max(1.0, 1e-9 * abs(total)):
+        raise ValueError(
+            f"the cost by purpose comes to {purpose_total:,.0f} EUR/yr against a total "
+            f"annual cost of {total:,.0f} EUR/yr. The electricity bands divide the "
+            f"electricity bill by the megawatt-hours each job drew, so they only "
+            f"close while every drawing link is in REDUCTION_LINKS, is the furnace, "
+            f"is the electrolyser, or is left to `handling_losses` "
+            f"(common/_report_schema.py names all three lists)."
+        )
+    fields.update({f"purpose_{part}_eur_per_t": value / steel_t
                    for part, value in {**bands, **detail}.items()})
 
     # The same capital/upkeep split on the carriers, over each carrier's own
-    # denominator so the parts stack to its levelised cost.
-    if elec_mwh > 0:
-        res_capex = sum(leaves[f"res_{field_stem(tech)}_capex"] for tech in RES_TECHS)
-        res_fom = sum(leaves[f"res_{field_stem(tech)}_fom"] for tech in RES_TECHS)
-        fields["alt_lcoe_res_capex_eur_per_mwh"] = res_capex / elec_mwh
-        fields["alt_lcoe_res_fom_eur_per_mwh"] = res_fom / elec_mwh
+    # denominator so the parts stack to the reported part they divide.
+    generation_mwh = electricity["generation_mwh"]
+    if generation_mwh > 0:
+        for part in ("capex", "fom"):
+            fields[f"lcoe_res_{part}_eur_per_mwh"] = sum(
+                leaves[f"res_{field_stem(tech)}_{part}"] for tech in RES_TECHS
+            ) / generation_mwh
     h2_mwh = (_h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
               if "electrolyser" in n.links.index else 0.0)
     if h2_mwh > 0:
-        for part, value in (("capex", leaves["electrolyser_capex"]),
-                            ("fom", leaves["electrolyser_fom"]),
-                            ("water", leaves["electrolyser_water"])):
-            fields[f"alt_lcoh_electrolyser_{part}_eur_per_mwh_lhv"] = value / h2_mwh
+        for part in ("capex", "fom", "water"):
+            fields[f"lcoh_electrolyser_{part}_eur_per_mwh_lhv"] = (
+                leaves[f"electrolyser_{part}"] / h2_mwh
+            )
 
     # -- what a tonne of steel took, measured off the run
-    fields["eaf_el_mwh_per_t_steel"] = electricity_mwh.get("eaf", 0.0) / steel_t
-    fields["electrolyser_el_mwh_per_t_steel"] = (
-        electricity_mwh.get("electrolyser", 0.0) / steel_t
-    )
+    fields["eaf_el_mwh_per_t_steel"] = draws.get("eaf", 0.0) / steel_t
+    fields["reduction_el_mwh_per_t_steel"] = reduction_mwh / steel_t
+    fields["electrolyser_el_mwh_per_t_steel"] = draws.get("electrolyser", 0.0) / steel_t
     fields["gas_mwh_per_t_steel"] = gas_mwh / steel_t
     if "electrolyser" in n.links.index:
         fields["h2_kg_per_t_steel"] = _h2_produced_kg(n) / steel_t
@@ -828,7 +872,7 @@ def _leaf_breakdown(
                 float(n.stores.at["battery", "e_nom_opt"]) / power_mw
             )
 
-    # -- the inputs behind the split, so a leaf can be checked against them
+    # -- the inputs behind the split, so a cost can be checked against them
     for link in PROCESS_LINKS:
         fields[f"annuity_factor_{field_stem(link)}"] = annuity_factor(
             wacc, assumptions[link]["lifetime_years"]
@@ -1252,16 +1296,20 @@ def extract_summary(
             summary[f"emissions_{field_stem(user)}_kg_co2e_per_mwh_el"] = (
                 emitted["electricity_t"][user] * 1e3 / mwh
             )
+    # And what nobody drew, so the draws above account for the whole of what was
+    # generated rather than most of it.
+    summary["el_losses_gwh"] = emitted["losses_mwh"] / 1e3
 
     # The cost groups cut as finely as the model allows — the two taxonomies the
     # cost-breakdown page plots. Last, because it reads each user's electricity
     # draw off the emissions breakdown above rather than reading the ports a
-    # second time. Steel routes only: the leaves are shares of a tonne of steel,
+    # second time. Steel routes only: the splits are shares of a tonne of steel,
     # and h2-only has none to be a share of.
     if "steel_produced_mt" in summary and summary["steel_produced_mt"] > 0:
         summary.update(_leaf_breakdown(
             n, assumptions, breakdown, summary["steel_produced_mt"] * 1e6,
-            summary.get("lcoe_eur_per_mwh", float("nan")), elec_mwh, electricity_mwh,
+            {"by_user": electricity_mwh, "losses_mwh": emitted["losses_mwh"],
+             "generation_mwh": elec_mwh},
         ))
 
     return summary

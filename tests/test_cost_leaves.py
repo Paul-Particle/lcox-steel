@@ -1,10 +1,10 @@
-"""Unit tests for the report's finest cut of the cost of steel.
+"""Unit tests for the report's two fine cuts of the cost of steel.
 
-The leaves and the alternative bands each have to stack back to LCOS. The
-cost-breakdown page prints the *reported* total on top of the stack it draws, so
-a group that grows a component with no leaf to put it in goes missing from the
-bars while every share still reads 100 % — which is what happened to a blended
-shaft's ore, a third of the cost of that route's steel.
+`cost_*_eur_per_t` (by what was bought) and `purpose_*_eur_per_t` (by what it
+was for) each have to stack back to LCOS. The cost-breakdown page prints the
+*reported* total on top of the stack it draws, so anything the split does not
+reach goes missing from the bars while every share still reads 100 % — which is
+what happened to a blended shaft's ore, a third of that route's cost of steel.
 
 Built on real networks from `build_network`, so the capital and marginal costs
 are the ones that price a solve, with a solved state written in by hand rather
@@ -20,11 +20,12 @@ import yaml
 import compile_report  # sys.path set by conftest
 from build_network import build_network
 from common._report_schema import (
-    ALT_LCOS_PARTS,
+    ELECTRICITY_USERS,
     LEAF_COSTS,
     LEAF_GROUP,
     LEAF_PARENTS,
     PROCESS_LINKS,
+    PURPOSE_PARTS,
     field_stem,
 )
 from conftest import REPO_ROOT
@@ -77,13 +78,21 @@ def _fields(n, assumptions: dict) -> tuple[dict, dict, float]:
     steel_t = float(n.loads.at["steel_load", "p_set"]) * 8760.0
     # The drawing links and the generation, as extract_summary hands them over.
     annual = 8760.0 / len(n.snapshots)
+    # Keyed by link id, exactly as `_emissions_breakdown` hands them over: the
+    # network spells a shaft `dri-h2`, and a stemmed key here would let a
+    # mis-keyed lookup in the split pass the test and fail on a real report.
     drawn = {link: float(n.links_t.p0[link].sum()) * annual
-             for link in ("eaf", "electrolyser") if link in n.links.index}
-    elec_mwh = float(
-        n.generators_t.p[[g for g in n.generators.index if g != "gas_supply"]].sum().sum()
-    ) * annual
+             for link in ELECTRICITY_USERS if link in n.links.index}
+    # Generation balances the draws and the losses, because that is the one
+    # thing the electricity bands need to be true: they divide the bill by the
+    # megawatt-hours each job took, so the jobs have to be the generation. The
+    # written-in dispatch puts the same flow on every link, which by itself
+    # draws more than the generators make.
+    losses_mwh = 0.02 * sum(drawn.values())
+    elec_mwh = sum(drawn.values()) + losses_mwh
     fields = compile_report._leaf_breakdown(
-        n, assumptions, breakdown, steel_t, 55.0, elec_mwh, drawn,
+        n, assumptions, breakdown, steel_t,
+        {"by_user": drawn, "losses_mwh": losses_mwh, "generation_mwh": elec_mwh},
     )
     return fields, breakdown, steel_t
 
@@ -94,17 +103,22 @@ def test_the_leaves_stack_to_the_cost_of_steel(route, assumptions):
     n = _solved(route, assumptions)
     fields, breakdown, steel_t = _fields(n, assumptions)
 
-    leaves = sum(fields[f"leaf_{leaf}_eur_per_t"] for leaf in LEAF_COSTS)
+    leaves = sum(fields[f"cost_{leaf}_eur_per_t"] for leaf in LEAF_COSTS)
     assert leaves == pytest.approx(sum(breakdown.values()) / steel_t, rel=1e-9)
 
 
 @pytest.mark.parametrize("route", ROUTES)
-def test_the_alternative_bands_stack_to_the_cost_of_steel(route, assumptions):
-    """The other taxonomy closes on the same total, cut a different way."""
+def test_the_purpose_bands_stack_to_the_cost_of_steel(route, assumptions):
+    """The by-purpose cut closes on the same total, with no band left as a remainder.
+
+    The four electricity bands divide one bill by the job each megawatt-hour did,
+    so they only close while every drawing link is accounted for — which is what
+    `_leaf_breakdown` raises about rather than flooring a residual.
+    """
     n = _solved(route, assumptions)
     fields, breakdown, steel_t = _fields(n, assumptions)
 
-    bands = sum(fields[f"alt_lcos_{part}_eur_per_t"] for part in ALT_LCOS_PARTS)
+    bands = sum(fields[f"purpose_{part}_eur_per_t"] for part in PURPOSE_PARTS)
     assert bands == pytest.approx(sum(breakdown.values()) / steel_t, rel=1e-9)
 
 
@@ -115,10 +129,9 @@ def test_each_parent_group_is_its_own_leaves(route, assumptions):
     fields, _, _ = _fields(n, assumptions)
 
     for parent in LEAF_PARENTS:
-        own = sum(value for key, value in fields.items()
-                  if key.startswith("leaf_")
-                  and LEAF_GROUP[key[len("leaf_"):-len("_eur_per_t")]] == parent)
-        assert fields[f"group_{parent}_eur_per_t"] == pytest.approx(own, rel=1e-9)
+        own = sum(fields[f"cost_{leaf}_eur_per_t"] for leaf in LEAF_COSTS
+                  if LEAF_GROUP[leaf] == parent)
+        assert fields[f"cost_{parent}_eur_per_t"] == pytest.approx(own, rel=1e-9)
 
 
 @pytest.mark.parametrize("route", ["h2-dri-eaf", "mix-dri-eaf", "moe-eaf",
@@ -138,12 +151,31 @@ def test_a_plants_two_halves_are_its_whole_annual_cost(route, assumptions):
         stem = field_stem(link)
         whole = float(n.links.at[link, "capital_cost"]
                       * n.links.at[link, "p_nom_opt"]) / steel_t
-        halves = (fields[f"leaf_{stem}_capex_eur_per_t"]
-                  + fields[f"leaf_{stem}_fom_eur_per_t"])
+        halves = (fields[f"cost_{stem}_capex_eur_per_t"]
+                  + fields[f"cost_{stem}_fom_eur_per_t"])
         assert halves == pytest.approx(whole, rel=1e-9)
         # And neither half is the whole of it: a fixed-opex quote of about an
         # eighth of capex puts the upkeep well inside these bounds.
-        assert 0.0 < fields[f"leaf_{stem}_fom_eur_per_t"] < whole
+        assert 0.0 < fields[f"cost_{stem}_fom_eur_per_t"] < whole
+
+
+@pytest.mark.parametrize("route", ["h2-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf"])
+def test_the_power_that_made_the_iron_is_its_own_band(route, assumptions):
+    """The reduction step is named rather than swept in with handling and losses.
+
+    It was a remainder before, under a label that called it the rest of the
+    plant — and on the electrolytic routes it is the largest single electricity
+    item there is. A remainder also hides a mis-keyed draw: a lookup that missed
+    every shaft still closed on the total, with the whole reduction step inside
+    `handling_losses`.
+    """
+    n = _solved(route, assumptions)
+    fields, _, _ = _fields(n, assumptions)
+
+    assert fields["purpose_reduction_eur_per_t"] > 0
+    assert fields["reduction_el_mwh_per_t_steel"] > 0
+    assert (fields["purpose_reduction_eur_per_t"]
+            > fields["purpose_handling_losses_eur_per_t"])
 
 
 @pytest.mark.parametrize("route", ["mix-dri-eaf", "mix-dri-eaf-export"])
@@ -156,8 +188,8 @@ def test_a_blended_shaft_pays_for_its_ore(route, assumptions):
     n = _solved(route, assumptions)
     fields, breakdown, steel_t = _fields(n, assumptions)
 
-    assert fields["leaf_ore_eur_per_t"] > 0
-    assert (fields["leaf_ore_eur_per_t"] + fields["leaf_consumables_eur_per_t"]
+    assert fields["cost_ore_eur_per_t"] > 0
+    assert (fields["cost_ore_eur_per_t"] + fields["cost_consumables_eur_per_t"]
             == pytest.approx(breakdown["ore_consumables"] / steel_t, rel=1e-9))
 
 
@@ -183,5 +215,5 @@ def test_a_cost_group_with_nowhere_to_go_is_refused(group, assumptions):
         compile_report._leaf_breakdown(
             n, assumptions, breakdown,
             float(n.loads.at["steel_load", "p_set"]) * 8760.0,
-            55.0, 1e6, {"eaf": 1e5},
+            {"by_user": {"eaf": 1e5}, "losses_mwh": 0.0, "generation_mwh": 1e6},
         )
