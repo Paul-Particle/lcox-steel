@@ -1,0 +1,8 @@
+# Machinery test, not a study: one overlay read by two routes from one scenario.
+# h2-dri-eaf picks up the cheap salt-cavern H2 store, moe-eaf the lower MOE
+# turndown, and neither reads the other's key — which is why the scenario names
+# both routes explicitly rather than using all-routes.
+h2_buffer:
+  capex_per_mwh_eur: 350
+moe:
+  p_min_pu: 0.7

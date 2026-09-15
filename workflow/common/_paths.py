@@ -2,7 +2,7 @@
 
 Scripts import this with:
 
-    from common._paths import DATA, RESOURCES, RES_CF, CUTOUTS
+    from common._paths import DATA, RESOURCES, TIMESERIES, CUTOUTS
 
 This works because `workflow/` is on sys.path (added by
 `workflow/rules/common.smk` under Snakemake; scripts that run standalone add it
@@ -21,7 +21,9 @@ SHAPES_RAW = DATA / "shapes"                   # ne_110m, offshore_zone (eez_v12
 
 # Derived (Snakemake-tracked, reproducible from raw + scripts + config)
 RESOURCES = REPO_ROOT / "resources"
-RES_CF = RESOURCES / "res_cf"
+# Every CF and grid-price series a scenario can consume, in one flat namespace
+# keyed {area}_{tech}_{variant}_{start_date}_{end_date} — see config/scenarios.csv.
+TIMESERIES = RESOURCES / "timeseries"
 SHAPES_RES = RESOURCES / "shapes"              # regions.geojson, offshore_regions.geojson
 
 # Atlite weather cutouts — derived in principle but expensive enough to treat as

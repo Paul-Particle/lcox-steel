@@ -1,4 +1,4 @@
-"""ENTSO-E download primitives — imported by retrieve_entsoe.py.
+"""ENTSO-E download primitives — imported by _entsoe.py.
 
 Provides the per-month raw cache layer:
   data/entsoe_cache/{area}/{YYYY-MM}/{data_type}.parquet
@@ -15,7 +15,7 @@ import entsoe
 import pandas as pd
 from dotenv import load_dotenv
 
-# Module-level logger only — the rule script (retrieve_entsoe.py) installs handlers.
+# Module-level logger only — the rule script (_entsoe.py) installs handlers.
 log = logging.getLogger(__name__)
 
 

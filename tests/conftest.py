@@ -18,9 +18,16 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# retrieve_entsoe imports ``common.*`` (workflow/) and its siblings
-# (_helpers, download_entsoe) as top-level modules (workflow/scripts/grid/).
-for _p in (REPO_ROOT / "workflow", REPO_ROOT / "workflow" / "scripts" / "grid"):
+# _entsoe imports ``common.*`` (workflow/) and its siblings
+# (_helpers_grid, download_entsoe) as top-level modules
+# (workflow/scripts/grid/); the viz scripts likewise import each other by bare
+# name. Each scripts/ dir suffixes its helper module with its own name, so a
+# second dir on this flat path cannot shadow the first's.
+for _p in (
+    REPO_ROOT / "workflow",
+    REPO_ROOT / "workflow" / "scripts" / "grid",
+    REPO_ROOT / "workflow" / "scripts" / "viz",
+):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
@@ -39,9 +46,9 @@ def pipeline_full_de_2023() -> pd.DataFrame:
             "pipeline for DE_LU 2023 (all six data types)."
         )
 
-    import retrieve_entsoe  # imported here so sys.path (set above) is in effect
+    import _entsoe  # imported here so sys.path (set above) is in effect
 
-    frames = [retrieve_entsoe._process_full_month(AREA, ym, RAW_CACHE) for ym in MONTHS]
+    frames = [_entsoe._process_full_month(AREA, ym, RAW_CACHE) for ym in MONTHS]
     combined = (
         pd.concat(frames)
         .pipe(lambda df: df[~df.index.duplicated(keep="last")])
