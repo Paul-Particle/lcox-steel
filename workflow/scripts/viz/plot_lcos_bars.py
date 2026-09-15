@@ -21,7 +21,7 @@ if "snakemake" not in globals():
 
 from common._logging import configure_logging
 from common._report_schema import read_report
-from _run_display import run_label
+from _run_display import run_labels
 from scripts.viz.style import (
     apply_header,
     blue_black,
@@ -86,7 +86,7 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     steel_t_per_year = steel["steel_produced_mt"] * 1e6
-    plot_df = pd.DataFrame({"label": steel.apply(run_label, axis=1)})
+    plot_df = pd.DataFrame({"label": run_labels(df).loc[steel.index]})
     for group, _, _ in COST_GROUPS:
         plot_df[group] = steel[f"cost_{group}_meur"] * 1e6 / steel_t_per_year.values
     plot_df["lcos_total"] = steel["lcos_eur_per_t"].values

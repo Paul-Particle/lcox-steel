@@ -25,7 +25,7 @@ if "snakemake" not in globals():
 
 from common._logging import configure_logging
 from common._report_schema import PROCESS_LINKS, field_stem, read_report
-from _run_display import run_label
+from _run_display import run_labels
 from scripts.viz.style import (
     apply_header,
     blue_black,
@@ -113,9 +113,10 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
     """
     solar_cols = _solar_cols(df)
     wind_cols  = _wind_cols(df)
+    labels = run_labels(df)
     rows = []
-    for _, r in df.iterrows():
-        row = {"label": run_label(r)}
+    for idx, r in df.iterrows():
+        row = {"label": labels[idx]}
         row["dri_h2_mw_lhv"]    = r["dri_h2_mw_lhv"]
         row["electrolyser_mw"]  = r["electrolyser_gw"] * 1e3
         row["battery_mw"]       = r["battery_gw_opt"] * 1e3
@@ -125,7 +126,9 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
         # still show a solar bar.
         if solar_cols:
             for col in solar_cols:
-                az = col.replace("solar_", "").replace("_gw_opt", "")
+                # Orientation columns separate with `_` and per-site ones with
+                # `-`, so the separator is stripped rather than matched.
+                az = col.removesuffix("_gw_opt").removeprefix("solar").lstrip("_-")
                 row[f"solar_{az}_mw"] = r[col] * 1e3
         elif "solar_gw_opt" in df.columns:
             row["solar_mw"] = r["solar_gw_opt"] * 1e3
