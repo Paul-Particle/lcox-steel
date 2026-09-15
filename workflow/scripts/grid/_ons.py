@@ -51,9 +51,10 @@ from download_ons import SUBSYSTEMS, read_area_year
 # Module-level logger only — retrieve_grid_data.py installs the handlers.
 log = logging.getLogger(__name__)
 
-# Brazil abolished daylight saving from 2019; earlier years carry DST transitions
-# that make the fixed-offset localisation in to_utc_naive ambiguous.
-FIRST_DST_FREE_YEAR = 2019
+# Brazil's last daylight-saving period ran to 16 February 2019, so 2019 itself
+# still carries a transition and the first clean year is 2020. Earlier years have
+# a repeated wall-clock hour that makes to_utc_naive's localisation ambiguous.
+FIRST_DST_FREE_YEAR = 2020
 
 BALANCE_COLUMNS = {
     "val_gerhidraulica": "hydro",

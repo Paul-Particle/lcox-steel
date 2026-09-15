@@ -48,7 +48,11 @@ def download_year(dataset: str, year: int, cache_dir: Path) -> Path:
     response.raise_for_status()
 
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_bytes(response.content)
+    # Staged and renamed, because the cache is keyed on the file existing: a write
+    # cut short would otherwise leave a short file that every later run reuses.
+    staged = cache_path.with_suffix(cache_path.suffix + ".part")
+    staged.write_bytes(response.content)
+    staged.replace(cache_path)
     log.info(f"{dataset}/{year}: cached ({len(response.content) / 1e6:.1f} MB)")
     return cache_path
 

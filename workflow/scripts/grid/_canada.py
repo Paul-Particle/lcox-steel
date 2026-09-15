@@ -50,7 +50,11 @@ def fetch_year_csv(url: str, cache_path: Path) -> Path:
     response = requests.get(url, timeout=300)
     response.raise_for_status()
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_bytes(response.content)
+    # Staged and renamed, because the cache is keyed on the file existing: a write
+    # cut short would otherwise leave a short file that every later run reuses.
+    staged = cache_path.with_suffix(cache_path.suffix + ".part")
+    staged.write_bytes(response.content)
+    staged.replace(cache_path)
     return cache_path
 
 
@@ -60,8 +64,10 @@ def read_aeso_year(year: int, cache_dir: Path) -> pd.DataFrame:
     # 31 December. Requesting 31 December stops the file a day short instead.
     url = AESO_POOL_PRICE_URL.format(begin=f"0101{year}", end=f"0101{year + 1}")
     raw = (
+        # AESO writes demand with a thousands separator ("9,514"), which would
+        # otherwise coerce to NaN for the whole load column.
         pd.read_csv(fetch_year_csv(url, cache_dir / f"aeso_pool_price_{year}.csv"),
-                    skiprows=4)
+                    skiprows=4, thousands=",")
         .dropna(how="all")
     )
     raw[["market_date", "hour_ending"]] = raw["Date (HE)"].str.split(" ", expand=True)
