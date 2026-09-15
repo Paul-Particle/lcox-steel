@@ -51,10 +51,11 @@ C_HYDROGEN, C_H2_STORE, C_ELEC = "#91C096", "#70D2F0", "#0A5680"
 C_ELEC_EAF, C_GAS, C_STORE = "#0293D2", "#525F6A", "#D75674"
 C_GRID_CONN, C_GRID_NRG, C_TRANSM = "#71828F", "#B7C1C8", "#83D1DD"
 
-# The electricity is four bands rather than two and a remainder: making the
-# hydrogen, making the iron, melting it, and the handling and losses around
-# them. `rest of plant` used to carry the third of those, which on moe-eaf and
-# ew-eaf is the cell that makes the iron and most of the route's electricity.
+# The electricity is five bands rather than two and a remainder: making the
+# hydrogen, making the iron, melting it, moving it about, and the losses around
+# all of that. `rest of plant` used to carry the second of those, which on
+# moe-eaf and ew-eaf is the cell that makes the iron and most of the route's
+# electricity.
 PURPOSE_BANDS = [
     ["ore",             "Ore & consumables",                C_ORE],
     ["capex",           "CAPEX (process plant)",            C_CAPEX],
@@ -62,7 +63,8 @@ PURPOSE_BANDS = [
     ["hydrogen",        "Hydrogen (all-in)",                C_HYDROGEN],
     ["reduction",       "Electricity — making the iron",    C_ELEC],
     ["melt",            "Electricity — EAF melt",           C_ELEC_EAF],
-    ["handling_losses", "Electricity — handling & losses",  C_GRID_NRG],
+    ["handling",        "Electricity — handling",           C_GRID_NRG],
+    ["losses",          "Electricity — round trip & lines",  C_GRID_CONN],
     ["gas",             "Gas + CO₂ (fossil routes)",        C_GAS],
     ["store",           "Storage (iron/steel)",             C_STORE],
     ["transport",       "Freight",                          "#BDCCD9"],

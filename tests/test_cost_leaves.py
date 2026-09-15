@@ -162,13 +162,13 @@ def test_a_plants_two_halves_are_its_whole_annual_cost(route, assumptions):
 
 @pytest.mark.parametrize("route", ["h2-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf"])
 def test_the_power_that_made_the_iron_is_its_own_band(route, assumptions):
-    """The reduction step is named rather than swept in with handling and losses.
+    """The reduction step is named rather than swept in with the leftovers.
 
     It was a remainder before, under a label that called it the rest of the
     plant — and on the electrolytic routes it is the largest single electricity
     item there is. A remainder also hides a mis-keyed draw: a lookup that missed
-    every shaft still closed on the total, with the whole reduction step inside
-    `handling_losses`.
+    every shaft still closed on the total, with the whole reduction step filed
+    as something nothing drew.
     """
     n = _solved(route, assumptions)
     fields, _, _ = _fields(n, assumptions)
@@ -176,7 +176,7 @@ def test_the_power_that_made_the_iron_is_its_own_band(route, assumptions):
     assert fields["el_reduction_eur_per_t"] > 0
     assert fields["reduction_el_mwh_per_t_steel"] > 0
     assert (fields["el_reduction_eur_per_t"]
-            > fields["el_handling_losses_eur_per_t"])
+            > fields["el_handling_eur_per_t"] + fields["el_losses_eur_per_t"])
 
 
 @pytest.mark.parametrize("route", ["mix-dri-eaf", "mix-dri-eaf-export"])

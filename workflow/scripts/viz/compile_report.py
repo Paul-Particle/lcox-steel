@@ -796,31 +796,35 @@ def _leaf_breakdown(
                         if link in REDUCTION_LINKS)
     electrolyser_mwh = home_draws.get("electrolyser", 0.0)
     melt_mwh = 0.0 if melts_abroad else home_draws.get("eaf", 0.0)
-    # Whatever else drew — the briquetting press — plus the electricity nobody
-    # drew at all: the battery's round trip and the lines'.
-    handling_mwh = (sum(mwh for link, mwh in home_draws.items()
-                        if link not in REDUCTION_LINKS
-                        and link not in ("electrolyser", "eaf"))
-                    + electricity["losses_mwh"])
+    # Whatever else drew: the briquetting press is the only one so far.
+    handling_mwh = sum(mwh for link, mwh in home_draws.items()
+                       if link not in REDUCTION_LINKS
+                       and link not in ("electrolyser", "eaf"))
+    # And the electricity nobody drew at all: the battery's round trip and the
+    # lines'. Its own job rather than part of `handling`, which is power a step
+    # did draw.
+    losses_mwh = electricity["losses_mwh"]
     # Every megawatt-hour the home system generated is in exactly one of those
-    # four, or the bands below divide the bill by shares that do not add up to
+    # five, or the bands below divide the bill by shares that do not add up to
     # it. Checked rather than left as a remainder: a remainder closes on the
     # total whatever it has silently swallowed, which is how the reduction step
-    # spent its first outing inside `handling_losses`.
-    attributed = reduction_mwh + electrolyser_mwh + melt_mwh + handling_mwh
+    # spent its first outing among the leftovers.
+    attributed = (reduction_mwh + electrolyser_mwh + melt_mwh
+                  + handling_mwh + losses_mwh)
     if home_mwh > 0 and abs(attributed - home_mwh) > max(1.0, 1e-6 * home_mwh):
         raise ValueError(
             f"the electricity jobs account for {attributed:,.0f} MWh of the "
             f"{home_mwh:,.0f} MWh this plant generated. Every drawing link has to be "
             f"in REDUCTION_LINKS, be the furnace or the electrolyser, or fall to "
-            f"`handling_losses` — and `draws` is keyed the way the network spells a "
+            f"`handling` — and `draws` is keyed the way the network spells a "
             f"link id (common/_report_schema.py names the lists)."
         )
     jobs = {
         "reduction": reduction_mwh * home_rate,
         "melt": breakdown["destination_power"] if melts_abroad else melt_mwh * home_rate,
         "hydrogen": electrolyser_mwh * home_rate,
-        "handling_losses": handling_mwh * home_rate,
+        "handling": handling_mwh * home_rate,
+        "losses": losses_mwh * home_rate,
     }
     # The same bill the `electricity` leaves price, divided by what it was for
     # rather than by what was bought, so the two cuts have to land on the same
@@ -834,7 +838,7 @@ def _leaf_breakdown(
             f"electricity bill of {electricity_bill:,.0f} EUR/yr. The jobs divide the "
             f"bill by the megawatt-hours each drew, so they only close while every "
             f"drawing link is in REDUCTION_LINKS, is the furnace, is the "
-            f"electrolyser, or is left to `handling_losses` "
+            f"electrolyser, or is left to `handling` "
             f"(common/_report_schema.py names all three lists)."
         )
     fields.update({f"el_{job}_eur_per_t": value / steel_t
