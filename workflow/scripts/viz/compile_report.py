@@ -19,6 +19,7 @@ import yaml
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
 from common._report_schema import (
+    DIAGNOSTIC_FIELDS,
     ELECTRICITY_USERS,
     EMISSION_STEPS,
     LEAF_COSTS,
@@ -489,12 +490,13 @@ def write_report(df: pd.DataFrame, report_path: Path, diagnostic_path: Path) -> 
 
     The report is the seam viz reads: which zone represents its country is
     already decided here, so it holds one column per reported place and no
-    `best_in_country` row to interpret. The diagnostic keeps every zone and the
-    flag, for the question "what would the others have cost?".
+    `best_in_country` row to interpret. The diagnostic keeps every zone, the
+    flag and the freight — every row and every field — for the questions the
+    report is not the place for.
     """
     write_report_file(df, diagnostic_path)
-    selected = df[df["best_in_country"]].drop(columns="best_in_country")
-    write_report_file(selected, report_path)
+    selected = df[df["best_in_country"]]
+    write_report_file(selected, report_path, hold_back=DIAGNOSTIC_FIELDS)
     log.info(f"wrote {report_path} ({len(selected)} runs) and {diagnostic_path} ({len(df)} runs)")
 
 

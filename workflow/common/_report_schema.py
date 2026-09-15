@@ -82,12 +82,15 @@ COST_GROUPS = ("res", "battery", "grid", "gas", "electrolyser", "h2_buffer",
 # list does not name, rather than leaving its draw out of the total.
 ELECTRICITY_USERS = (*PROCESS_LINKS, "electrolyser", "reductant-h2")
 
+# The legs a run can ship over, by the id `build_network` gives them. Only one
+# ever exists: an export route moves its iron, every other route its steel.
+FREIGHT_STEPS = ("iron_transport", "steel_transport")
+
 # Everything a run can emit through, in the order `compile_report`'s breakdown
 # builds them: the electricity users, the one link that burns gas and no power,
 # the freight legs, and the two losses that belong to no step in particular.
 # Together they are the run's total, so the shares stack to 100 %.
-EMISSION_STEPS = (*ELECTRICITY_USERS, "reductant-ng",
-                  "iron_transport", "steel_transport",
+EMISSION_STEPS = (*ELECTRICITY_USERS, "reductant-ng", *FREIGHT_STEPS,
                   "battery_losses", "transmission_losses")
 
 # The links that buy ore, by the id `build_network` gives them: each carries an
@@ -324,7 +327,9 @@ REPORT_FIELDS = {
     "emissions_gas_kt_co2e_per_year": ZERO,
     "emissions_freight_kt_co2e_per_year": ZERO,
     # Per step: what it added to a tonne of steel, and what share of the tonne
-    # that was. The shares stack to 100 %.
+    # that was. The shares stack to 100 % in the diagnostic; the report leaves
+    # the freight legs out (see DIAGNOSTIC_FIELDS), so a route that ships stacks
+    # to less there.
     **{f"emissions_{field_stem(step)}_kg_co2e_per_t_steel": ZERO
        for step in EMISSION_STEPS},
     **{f"emissions_{field_stem(step)}_pct": UNDEFINED for step in EMISSION_STEPS},
@@ -363,16 +368,27 @@ IDENTITY_FIELDS = ("scenario", "area", "country", "route", "start_date", "end_da
                    # coerced to a number when a report is read back.
                    "emissions_basis", "emissions_unavailable_reason", "inputs_hash")
 
-# Fields only the diagnostic carries: the report has already acted on the flag,
-# so a frame without it is not missing anything.
-DIAGNOSTIC_FIELDS = ("best_in_country",)
+# Fields only the diagnostic carries, for two separate reasons. The flag,
+# because the report has already acted on it, so a frame without it is not
+# missing anything. The freight, because the report covers the energy a run
+# used and not the distance it then travelled; what a route's shipping emitted
+# is read off the diagnostic.
+#
+# The totals keep counting the freight, so on a route that ships, a report row's
+# per-step emissions stack to less than its `emissions_kg_co2e_per_t_steel` and
+# its `emissions_*_pct` to less than 100. The diagnostic is where they close.
+DIAGNOSTIC_FIELDS = ("best_in_country",
+                     "emissions_freight_kt_co2e_per_year",
+                     *(f"emissions_{field_stem(step)}_kg_co2e_per_t_steel"
+                       for step in FREIGHT_STEPS),
+                     *(f"emissions_{field_stem(step)}_pct" for step in FREIGHT_STEPS))
 
 FIELD_ORDER = tuple(IDENTITY_FIELDS) + tuple(
     field for field in REPORT_FIELDS if field not in IDENTITY_FIELDS
 )
 
 
-def apply_schema(frame: pd.DataFrame) -> pd.DataFrame:
+def apply_schema(frame: pd.DataFrame, hold_back: tuple = ()) -> pd.DataFrame:
     """Put a frame of runs on the declared fields, in the declared order.
 
     Every run then writes the same fields whatever route it took, and a field the
@@ -380,20 +396,27 @@ def apply_schema(frame: pd.DataFrame) -> pd.DataFrame:
     total, blank where it is undefined. Fields the schema does not declare — a
     multi-site run names a generator per candidate site — keep their place after
     the declared ones.
+
+    `hold_back` names the fields to leave out, which is how the report is written
+    without what only the diagnostic carries. A held-back field is gone whether
+    or not the frame had it, so which file a field appears in is this tuple's
+    answer alone and not a matter of what the runs happened to produce.
     """
     extra = [field for field in frame.columns if field not in REPORT_FIELDS]
     if extra:
         log.info(f"report carries {len(extra)} run-specific field(s): {extra}")
-    declared = [field for field in FIELD_ORDER
-                if field in frame.columns or field not in DIAGNOSTIC_FIELDS]
+    declared = [field for field in FIELD_ORDER if field not in hold_back]
     on_schema = frame.reindex(columns=declared + extra)
     # A run whose emission intensity is unknown keeps its emission fields blank.
     # Zero-filling them would say the run emitted nothing, which is the one
     # reading that is certainly wrong. Every other field fills as it always did,
     # including the MWh each user drew — that is known whatever the mix was.
     unknown = on_schema["emissions_unavailable_reason"].notna()
-    emission_fields = [field for field in ZERO_FILLED if field.startswith("emissions_")]
-    other_fields = [field for field in ZERO_FILLED if not field.startswith("emissions_")]
+    # Against the columns in hand rather than the whole declaration: a held-back
+    # field is not there to fill.
+    zero_filled = [field for field in ZERO_FILLED if field in on_schema.columns]
+    emission_fields = [field for field in zero_filled if field.startswith("emissions_")]
+    other_fields = [field for field in zero_filled if not field.startswith("emissions_")]
     on_schema[other_fields] = on_schema[other_fields].fillna(0.0)
     on_schema.loc[~unknown, emission_fields] = (
         on_schema.loc[~unknown, emission_fields].fillna(0.0)
@@ -401,7 +424,7 @@ def apply_schema(frame: pd.DataFrame) -> pd.DataFrame:
     return on_schema
 
 
-def write_report_file(frame: pd.DataFrame, path: Path) -> None:
+def write_report_file(frame: pd.DataFrame, path: Path, hold_back: tuple = ()) -> None:
     """Write one report file: a column per run, a row per field.
 
     Runs are named `{scenario}_{n}` in the order they were compiled. The number
@@ -409,7 +432,7 @@ def write_report_file(frame: pd.DataFrame, path: Path) -> None:
     were solved alongside it — which of two files a column came from is answered
     by the identity rows, not by matching numbers across them.
     """
-    on_schema = apply_schema(frame)
+    on_schema = apply_schema(frame, hold_back)
     numeric = on_schema.select_dtypes("number").columns
     on_schema[numeric] = on_schema[numeric].round(2)
     counter = on_schema.groupby("scenario").cumcount() + 1
