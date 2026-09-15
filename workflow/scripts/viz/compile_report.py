@@ -608,11 +608,11 @@ def _leaf_breakdown(
 ) -> dict[str, float]:
     """The cost groups cut as finely as the model allows, as report fields.
 
-    Two cuts of the same levelised cost come out: `cost_*_eur_per_t`, one column
-    per priced thing plus what each parent group of them comes to, and
-    `purpose_*_eur_per_t`, the same total divided by what each euro was spent
-    *for*. Both stack to `lcos_eur_per_t`, and both are checked against the
-    total rather than assumed to close.
+    `cost_*_eur_per_t` comes out, one column per priced thing plus what each
+    parent group of them comes to, stacking to `lcos_eur_per_t`. So does
+    `el_*_eur_per_t`, which divides one of those groups — the electricity — by
+    the job each euro of it paid for. Both are checked against the total they
+    stack to rather than assumed to close.
 
     Every leaf is one component's own annual cost off the solved network —
     `capital_cost x p_nom_opt` for what was built, `marginal_cost x dispatch` for
@@ -772,10 +772,7 @@ def _leaf_breakdown(
             value for leaf, value in leaves.items() if LEAF_GROUP[leaf] == parent
         ) / steel_t
 
-    # -- the same total, divided by what each euro was spent for
-    fixed_om = sum(leaves[f"{field_stem(link)}_fom"] for link in PROCESS_LINKS)
-
-    # The electricity bill, divided by the job the electricity did. Two systems
+    # -- the electricity bill, divided by the job the electricity did. Two systems
     # can pay it: the plant's own, and — on an export route — the market its
     # furnace stands in, which supplies nothing but that furnace. Each system's
     # whole cost is the megawatt-hours it delivered, so pricing every draw at its
@@ -819,39 +816,29 @@ def _leaf_breakdown(
             f"`handling_losses` — and `draws` is keyed the way the network spells a "
             f"link id (common/_report_schema.py names the lists)."
         )
-    melt = breakdown["destination_power"] if melts_abroad else melt_mwh * home_rate
-    hydrogen_electricity = electrolyser_mwh * home_rate
-    bands = {
-        "ore": breakdown["ore_consumables"],
-        "capex": breakdown["process"] - fixed_om,
-        "fixed_om": fixed_om,
-        "hydrogen": (breakdown["electrolyser"] + breakdown["h2_buffer"]
-                     + hydrogen_electricity),
+    jobs = {
         "reduction": reduction_mwh * home_rate,
-        "melt": melt,
+        "melt": breakdown["destination_power"] if melts_abroad else melt_mwh * home_rate,
+        "hydrogen": electrolyser_mwh * home_rate,
         "handling_losses": handling_mwh * home_rate,
-        "gas": breakdown["gas"],
-        "transport": breakdown["transport"],
-        "store": breakdown["iron_store"] + breakdown["steel_store"],
     }
-    detail = {
-        "hydrogen_electrolyser": breakdown["electrolyser"],
-        "hydrogen_buffer": breakdown["h2_buffer"],
-        "hydrogen_electricity": hydrogen_electricity,
-        "electricity_total": home_cost + breakdown["destination_power"],
-    }
-    purpose_total = sum(bands.values())
-    if abs(purpose_total - total) > max(1.0, 1e-9 * abs(total)):
+    # The same bill the `electricity` leaves price, divided by what it was for
+    # rather than by what was bought, so the two cuts have to land on the same
+    # number. A job that swallowed another's megawatt-hours would still close on
+    # the bill, which is what the megawatt-hour check above is separately for.
+    electricity_bill = home_cost + breakdown["destination_power"]
+    job_total = sum(jobs.values())
+    if abs(job_total - electricity_bill) > max(1.0, 1e-9 * abs(electricity_bill)):
         raise ValueError(
-            f"the cost by purpose comes to {purpose_total:,.0f} EUR/yr against a total "
-            f"annual cost of {total:,.0f} EUR/yr. The electricity bands divide the "
-            f"electricity bill by the megawatt-hours each job drew, so they only "
-            f"close while every drawing link is in REDUCTION_LINKS, is the furnace, "
-            f"is the electrolyser, or is left to `handling_losses` "
+            f"the electricity jobs come to {job_total:,.0f} EUR/yr against an "
+            f"electricity bill of {electricity_bill:,.0f} EUR/yr. The jobs divide the "
+            f"bill by the megawatt-hours each drew, so they only close while every "
+            f"drawing link is in REDUCTION_LINKS, is the furnace, is the "
+            f"electrolyser, or is left to `handling_losses` "
             f"(common/_report_schema.py names all three lists)."
         )
-    fields.update({f"purpose_{part}_eur_per_t": value / steel_t
-                   for part, value in {**bands, **detail}.items()})
+    fields.update({f"el_{job}_eur_per_t": value / steel_t
+                   for job, value in jobs.items()})
 
     # The same capital/upkeep split on the carriers, over each carrier's own
     # denominator so the parts stack to the reported part they divide.
