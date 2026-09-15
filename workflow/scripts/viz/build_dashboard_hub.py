@@ -45,16 +45,20 @@ FAVICON = ("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22"
            "%20viewBox=%220%200%20100%20100%22%3E%3Ctext%20y=%22.9em%22"
            "%20font-size=%2290%22%3E🏭%3C/text%3E%3C/svg%3E")
 
-# (key, path, tab label). "compare" and "taxonomies" are dashboard build artifacts;
+# (key, path, tab label). "taxonomy" and "compare" are dashboard build artifacts;
 # the other two are static source pages tracked under hub_pages/.
+#
+# `cost_taxonomies.html` — the same charts beside the taxonomy the dashboard
+# plots — still builds and can be put back in TAB_ORDER; it is left out because
+# the choice it was there to inform has been made.
 FRAGMENTS = {
-    "compare":    (HTML_DIR / "dashboard_v2.html",      "Scenario comparison"),
-    "taxonomies": (HTML_DIR / "cost_taxonomies.html",   "Cost breakdown options"),
+    "taxonomy":   (HTML_DIR / "alt_taxonomy.html",       "Cost breakdown"),
+    "compare":    (HTML_DIR / "dashboard_v2.html",       "Scenario comparison"),
     "schematic":  (HUB_PAGES / "network_schematic.html", "Network schematic"),
     "dag":        (HUB_PAGES / "workflow_dag.html",      "Workflow DAG"),
 }
-TAB_ORDER = ["schematic", "compare", "taxonomies", "dag"]
-DEFAULT = "schematic"
+TAB_ORDER = ["taxonomy", "compare", "schematic", "dag"]
+DEFAULT = "taxonomy"
 
 
 def wrap(fragment_html: str, title: str) -> str:

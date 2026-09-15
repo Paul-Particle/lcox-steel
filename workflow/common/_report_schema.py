@@ -209,6 +209,13 @@ REPORT_FIELDS = {
     **{f"emissions_{field_stem(user)}_kg_co2e_per_mwh_el": UNDEFINED
        for user in ELECTRICITY_USERS},
 
+    # Why the emission fields above are blank, when they are. A market that
+    # publishes prices but no per-carrier generation leaves a run that imports
+    # from it with no intensity to report, which is neither zero nor undefined —
+    # it is unknown, and the schema had no other way to say so. Blank here means
+    # the emission fields mean what they usually mean.
+    "emissions_unavailable_reason": UNDEFINED,
+
     # Which inputs produced the run (see common/_provenance.py).
     "inputs_hash": UNDEFINED,
 }
@@ -220,7 +227,9 @@ ZERO_FILLED = tuple(field for field, fill in REPORT_FIELDS.items() if fill == ZE
 IDENTITY_FIELDS = ("scenario", "area", "country", "route", "start_date", "end_date",
                    *(f"{field_stem(tech)}_variant" for tech in INPUT_TECHS),
                    "best_in_country", "lco_output_unit",
-                   "emissions_basis", "inputs_hash")
+                   # Prose, not a measurement: everything outside this tuple is
+                   # coerced to a number when a report is read back.
+                   "emissions_basis", "emissions_unavailable_reason", "inputs_hash")
 
 # Fields only the diagnostic carries: the report has already acted on the flag,
 # so a frame without it is not missing anything.
@@ -246,7 +255,17 @@ def apply_schema(frame: pd.DataFrame) -> pd.DataFrame:
     declared = [field for field in FIELD_ORDER
                 if field in frame.columns or field not in DIAGNOSTIC_FIELDS]
     on_schema = frame.reindex(columns=declared + extra)
-    on_schema[list(ZERO_FILLED)] = on_schema[list(ZERO_FILLED)].fillna(0.0)
+    # A run whose emission intensity is unknown keeps its emission fields blank.
+    # Zero-filling them would say the run emitted nothing, which is the one
+    # reading that is certainly wrong. Every other field fills as it always did,
+    # including the MWh each user drew — that is known whatever the mix was.
+    unknown = on_schema["emissions_unavailable_reason"].notna()
+    emission_fields = [field for field in ZERO_FILLED if field.startswith("emissions_")]
+    other_fields = [field for field in ZERO_FILLED if not field.startswith("emissions_")]
+    on_schema[other_fields] = on_schema[other_fields].fillna(0.0)
+    on_schema.loc[~unknown, emission_fields] = (
+        on_schema.loc[~unknown, emission_fields].fillna(0.0)
+    )
     return on_schema
 
 

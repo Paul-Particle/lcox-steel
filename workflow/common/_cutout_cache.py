@@ -90,17 +90,31 @@ def link_or_copy(src: Path, dst: Path) -> None:
     extra disk, so the fallback is logged (WARNING) rather than silently taken.
     """
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.exists():
-        dst.unlink()
+    # Stage beside the destination and rename over it, rather than removing the
+    # destination first. The rename is atomic within a filesystem, so `dst` names
+    # the old file or the new one and never nothing — which matters here because
+    # the shared mount is slow enough to observe the gap, and a rule that has just
+    # materialised its own output should not be able to fail to open it.
+    staging = dst.with_name(dst.name + ".linking")
+    if staging.exists():
+        staging.unlink()
     try:
-        os.link(src, dst)
+        os.link(src, staging)
         log.debug(f"hardlinked {dst.name} <- {src}")
     except OSError as exc:
         log.warning(
             f"could not hardlink {dst.name} ({exc.strerror}); copying instead "
             f"(uses extra disk). src={src}"
         )
-        shutil.copyfile(src, dst)
+        shutil.copyfile(src, staging)
+    os.replace(staging, dst)
+    # A hardlink shares its target's mtime, so a cutout materialised from the
+    # cache can be older than the geometry the rule read to ask for it. Snakemake
+    # would then call the output stale and rebuild it on every DAG build. The
+    # touch moves the cache entry's mtime as well, since it is the same inode —
+    # which costs nothing: the cache is keyed on the request parameters, and no
+    # timestamp decides whether an entry is valid.
+    dst.touch()
 
 
 def cache_size_bytes() -> int:

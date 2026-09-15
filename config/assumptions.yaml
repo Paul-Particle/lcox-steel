@@ -21,25 +21,29 @@ plant:
   # (supply-side model; steel demand itself is not flexible).
   steel_mt_per_year: 1.0
 
+# The register's global IRENA 2025 figures. One set for every geography, as with
+# the other cross-country inputs in this file.
 res:
   wind-onshore:
-    capex_per_mw_eur: 1_000_000
-    opex_per_mw_per_year_eur: 30_000
-    lifetime_years: 25
+    capex_per_mw_eur: 864_000
+    opex_per_mw_per_year_eur: 21_600
+    lifetime_years: 20
   solar:
-    capex_per_mw_eur: 600_000
-    opex_per_mw_per_year_eur: 12_000
-    lifetime_years: 25
+    capex_per_mw_eur: 590_000
+    opex_per_mw_per_year_eur: 11_800
+    lifetime_years: 20
   wind-offshore:
-    capex_per_mw_eur: 2_500_000
-    opex_per_mw_per_year_eur: 75_000
-    lifetime_years: 25
+    capex_per_mw_eur: 2_594_000
+    opex_per_mw_per_year_eur: 64_800
+    lifetime_years: 20
 
 electrolyser:
-  capex_per_mw_eur: 700_000
-  opex_per_mw_per_year_eur: 20_000
-  lifetime_years: 20
-  efficiency_kwh_per_kg: 55   # nominal; future: add overload_efficiency_kwh_per_kg
+  # Alkaline. The register carries alkaline and PEM side by side throughout; this
+  # run is priced on the alkaline column.
+  capex_per_mw_eur: 928_000
+  opex_per_mw_per_year_eur: 18_600   # 2 % of capex
+  lifetime_years: 30
+  efficiency_kwh_per_kg: 48.3
   # Variable opex per MWh electricity input (water, consumables); applied as
   # marginal_cost on the link's p0 side.
   varopex_eur_per_mwh_el: 1.0
@@ -48,14 +52,17 @@ battery:
   # Duration is not set here: energy and power capacity are priced separately
   # and sized separately, so the optimiser picks the hours. capex_per_mw_eur
   # buys one bidirectional inverter, charging and discharging at that rating.
-  capex_per_mw_eur: 200_000   # power capacity cost
-  capex_per_mwh_eur: 150_000  # energy capacity cost
-  lifetime_years: 15
-  efficiency_roundtrip: 0.90
+  capex_per_mw_eur: 138_000   # power capacity cost
+  capex_per_mwh_eur: 89_600   # energy capacity cost
+  lifetime_years: 20
+  efficiency_roundtrip: 0.85
 
 h2_buffer:
-  capex_per_mwh_eur: 10_000   # compressed H2 tank, ~€10/kWh
-  lifetime_years: 25
+  # Salt cavern, the storage every route is given by default here — a lower
+  # bound, and deliberately so. The register's tank-with-compressor figure is
+  # 60_050 EUR/MWh; set that to price the routes on tanks instead.
+  capex_per_mwh_eur: 350
+  lifetime_years: 30
   # e_nom_extendable always True — PyPSA finds optimal buffer size
 
 # ---------------------------------------------------------------------------
@@ -69,30 +76,21 @@ h2_buffer:
 # ---------------------------------------------------------------------------
 
 dri-h2:
-  # H2 DRI shaft furnace. Vogl, Åhman & Nilsson (2018) quote 230 €/(t/yr), which
-  # Hüttel & Lehner (DIW DP 2082, 2024) trace back through Wörtler et al. (2013)
-  # to 2011 cost estimates — so the familiar figure is in 2011 euros. They put
-  # the inflation-adjusted shaft at 324 €2022 per tonne of annual *steelmaking*
-  # capacity.
-  #
-  # That basis is not this one. Capex here is per tonne of annual *output*, and
-  # a shaft's output is DRI, of which a tonne of steel takes
-  # `iron_t_per_t_steel`. So 324 / 1.10 = 295 €2022 per (t DRI/yr).
-  #
-  # This is still a greenfield, equipment-level figure. DIW's own reading of
-  # built and announced projects is that ~750 €/(t steel/yr) for the whole
-  # DR-EAF route is closer to what these cost — roughly 417 here and 333 on the
-  # EAF — with the caveat that publicised project values may be inflated to
-  # attract subsidy. Thyssenkrupp's 2.5 Mt/yr Duisburg plant at ~€2 bn is
-  # ~800 €/(t/yr) including its melters, which is consistent with that.
-  # Agora apply a further 1.8x for brownfield integration.
-  capex_per_t_per_year_eur: 295
-  opex_per_t_per_year_eur: 9          # ≈3 % of capex
+  # H2 DRI shaft furnace, per tonne of annual DRI output. A greenfield,
+  # equipment-level figure: taken with the EAF's it puts the whole DR-EAF route
+  # near 780 €/(t steel/yr), which is the range built and announced projects sit
+  # in — Thyssenkrupp's 2.5 Mt/yr Duisburg plant at ~€2 bn is ~800 €/(t/yr)
+  # including its melters. Agora apply a further 1.8x for brownfield integration.
+  capex_per_t_per_year_eur: 566
+  # All-in fixed operating cost: labour, maintenance and overhead, which is why
+  # it is an eighth of capex rather than the few per cent a maintenance-only
+  # figure would be. The mean of the register's Australian, Brazilian and
+  # European figures, one value being all this file can hold.
+  opex_per_t_per_year_eur: 70
   lifetime_years: 20
-  el_mwh_per_t: 0.35                  # shaft auxiliaries + electric H2 preheat
-  # DR-grade pellets: ~1.45 t pellets per t DRI at ~140 €/t incl. premium.
-  ore_eur_per_t: 200
-  iron_t_per_t_steel: 1.10            # DR pellets: gangue plus metallisation loss
+  el_mwh_per_t: 1.006                 # 177 kWh/t auxiliaries + 828 kWh/t electric heat
+  ore_eur_per_t: 238                  # DR-grade pellets, per t of DRI
+  iron_t_per_t_steel: 1.17            # DR pellets: gangue plus metallisation loss
   p_min_pu: 0.5
 
 dri-mix:
@@ -104,16 +102,18 @@ dri-mix:
   # Both single-fuel shafts sit at the same 295 €2022/(t DRI/yr), so a
   # dual-capable one is taken at that level too. See dri-h2 for where the
   # figure comes from and why it is not the familiar 230.
-  capex_per_t_per_year_eur: 295
-  opex_per_t_per_year_eur: 9          # ≈3 % of capex
+  capex_per_t_per_year_eur: 566
+  opex_per_t_per_year_eur: 70
   lifetime_years: 20
   # Shaft auxiliaries alone, as the NG shaft. The H2 feed's preheat is charged
-  # where it belongs, on the H2 side: 0.10 + 0.25 is the single-fuel H2 shaft's
-  # 0.35, so the blend's corners meet the routes it sits between.
-  el_mwh_per_t: 0.10
-  h2_preheat_el_mwh_per_t: 0.25
-  ore_eur_per_t: 200                  # DR-grade pellets, as the other shafts
-  iron_t_per_t_steel: 1.10
+  # where it belongs, on the H2 side, and the register splits the H2 shaft the
+  # same way: 178 kWh/t of machine drive plus 828 kWh/t of electric heat is the
+  # single-fuel H2 shaft's 1.006, so the blend's corners meet the routes it sits
+  # between.
+  el_mwh_per_t: 0.178
+  h2_preheat_el_mwh_per_t: 0.828
+  ore_eur_per_t: 238                  # DR-grade pellets, as the other shafts
+  iron_t_per_t_steel: 1.17
   p_min_pu: 0.5
   # A small buffer on the reductant bus, fixed rather than sized by the
   # optimiser, so the shaft draws from a mixed volume instead of straight off
@@ -129,12 +129,11 @@ eaf:
   # somewhere. Hannah's cheap-ladle case is that same furnace with the capex
   # written down by a scenario overlay, e.g.
   #   eaf: {capex_per_t_per_year_eur: 50, opex_per_t_per_year_eur: 1.5}
-  # Fischedick et al. (2014) quote 184 €/(t/yr), which reaches 2011 euros by the
-  # same route as the shaft's 230 — see dri-h2. Hüttel & Lehner (DIW DP 2082,
-  # 2024) put the inflation-adjusted EAF at 259 €2022. No basis conversion here:
-  # an EAF's output is steel, which is what the source quotes it against.
-  capex_per_t_per_year_eur: 259
-  opex_per_t_per_year_eur: 8          # ≈3 % of capex
+  # Per tonne of annual liquid steel, which is the basis an EAF is quoted on.
+  capex_per_t_per_year_eur: 363
+  # As the shaft's: all-in, labour and overhead included, and the mean of the
+  # register's three regions.
+  opex_per_t_per_year_eur: 91
   lifetime_years: 20
   consumables_eur_per_t: 40           # electrodes, fluxes, alloys, carbon; per t steel
   p_min_pu: 0.4
@@ -143,21 +142,23 @@ eaf:
   # state a route delivers). Melting is nearly all of an EAF's electricity, so
   # iron that shows up hot has had part of that bill paid upstream.
   charge:
-    cold:
-      # 25 °C: HBI or plates off a stockpile, and anything that crossed an
-      # ocean. The textbook cold-charge figure and the basis for the others.
-      el_mwh_per_t: 0.65
+    briquettes:
+      # 25 °C HBI off a ship. The register's dearest charge: briquettes are
+      # dense, and they arrive with the gangue the shaft could not take out.
+      el_mwh_per_t: 0.569
+    plates:
+      # 25 °C electrowon plates, or MOE iron let go cold and solid. Cold like
+      # the briquettes, but nearly gangue-free, so less of the melt is spent on
+      # material that ends up in the slag.
+      el_mwh_per_t: 0.450
     hot:
       # ~650 °C: sponge iron walked straight from the shaft to the furnace.
-      # Hot charging is worth ~130 kWh/t in practice.
-      el_mwh_per_t: 0.52
+      el_mwh_per_t: 0.447
     liquid:
-      # ~1550 °C from the MOE cell, so the melt is already done. Deliberately
-      # not the full thermodynamic credit: this also has to cover getting the
-      # metal across to the furnace, the heat it loses on the way, holding the
-      # bath, and superheating to tapping temperature. Superheat is small, the
-      # handling is not.
-      el_mwh_per_t: 0.20
+      # ~1550 °C from the MOE cell, so the melt is already done. What is left
+      # covers getting the metal across to the furnace, the heat it loses on the
+      # way, holding the bath and superheating to tapping temperature.
+      el_mwh_per_t: 0.183
 
 moe:
   # Molten oxide electrolysis (Boston Metal type), electricity → liquid iron.
@@ -165,26 +166,43 @@ moe:
   # highly uncertain (pre-commercial). The cell can barely turn down (freeze
   # risk), hence p_min_pu near 1. Output is hot metal, so there is no store on
   # the iron bus: the cell feeds the EAF directly, hour for hour.
-  capex_per_t_per_year_eur: 900
-  opex_per_t_per_year_eur: 27         # ≈3 % of capex
+  capex_per_t_per_year_eur: 1416
+  # The register gives the shaft, the MOE cell and the electrowinning cell one
+  # fixed-operating-cost row between them, so all three carry the same figure.
+  opex_per_t_per_year_eur: 70
   lifetime_years: 20
-  el_mwh_per_t: 4.0                   # per t liquid iron
-  # Non-DR-grade fines/concentrate: ~1.6 t per t iron at ~100 €/t.
-  ore_eur_per_t: 160
-  iron_t_per_t_steel: 1.04            # hot metal, near gangue-free; refining loss only
+  el_mwh_per_t: 3.181                 # per t liquid iron, mid ore grade
+  # Concentrate rather than DR-grade pellets, which is most of why it is cheaper
+  # per tonne of iron than the shaft's: 1.54 t at the register's iron-ore fines
+  # price, against 1.38 t of pellets carrying a DR premium.
+  ore_eur_per_t: 159
+  # The cell is its own slag channel: gangue stays ionic in the electrolyte and
+  # leaves as a bleed, so what reaches the furnace is carbon-free, silicon-free
+  # iron. That is the whole difference from hot metal, which takes about 1.08 a
+  # tonne because 4 % carbon and a point of silicon burn out of it. Here the only
+  # losses are transfer and ladle skull and a little refining oxidation.
+  #
+  # Ore grade therefore does not move this number — it moves `ore_eur_per_t` and
+  # the cell's throughput. Phosphorus is the one impurity that could reach the
+  # furnace and force a dephosphorising slag, which would cost about two points.
+  iron_t_per_t_steel: 1.03
   p_min_pu: 0.95
 
 ew:
   # Low-temperature aqueous iron electrowinning (Electra type), electricity →
   # solid iron plates. ~2–3 MWh/t iron claimed; capex very uncertain
   # (500–3000 €/(t/yr) span in public estimates — sweep this).
-  capex_per_t_per_year_eur: 1200
-  opex_per_t_per_year_eur: 36         # ≈3 % of capex
+  capex_per_t_per_year_eur: 708
+  opex_per_t_per_year_eur: 70         # shares the register's row with DRI and MOE
   lifetime_years: 20
-  el_mwh_per_t: 2.5                   # per t iron
-  # Tolerates lower-grade ore than DR pellets — part of the route's pitch.
-  ore_eur_per_t: 150
-  iron_t_per_t_steel: 1.05            # high-purity plates; little gangue to slag off
+  el_mwh_per_t: 3.739                 # per t iron plate, excluding ore prep
+  # The same concentrate the MOE cell takes, at the same price.
+  ore_eur_per_t: 159
+  # Plates are above 99 % iron — the gangue is refined out of the leach liquor
+  # rather than slagged off downstream — so there is almost none to lose to slag.
+  # A point above the MOE cell's because the plate arrives cold and solid and
+  # pays a melt-in oxidation and dust penalty that liquid iron never does.
+  iron_t_per_t_steel: 1.04
   p_min_pu: 0.2                       # marketed as load-following
 
 natural_gas:
@@ -194,7 +212,7 @@ natural_gas:
   # per-area assumptions mechanism yet. A single price also keeps the fossil
   # benchmark comparable across countries, the same argument that governs the
   # other cross-country inputs.
-  price_eur_per_mwh: 35
+  price_eur_per_mwh: 21.9       # midpoint of the register's low/high benchmark
   co2_t_per_mwh: 0.20           # combustion emissions, LHV basis
   # Carbon price applied to gas CO2 (goes into the gas marginal cost).
   # Default 0 = pure fixed-gas-price benchmark; EU ETS 2023 avg ≈ 85 €/t.
@@ -204,13 +222,13 @@ dri-ng:
   # Natural-gas DRI shaft (Midrex/HYL type) — the mature fossil benchmark.
   # Same shaft capex level as the H2 shaft (see dri-h2 for the source); gas use
   # ~10 GJ/t DRI. Electricity is lower than the H2 shaft (no H2 preheat).
-  capex_per_t_per_year_eur: 295
-  opex_per_t_per_year_eur: 9          # ≈3 % of capex
+  capex_per_t_per_year_eur: 566
+  opex_per_t_per_year_eur: 70
   lifetime_years: 20
-  gas_mwh_per_t: 2.75                 # LHV, per t DRI
-  el_mwh_per_t: 0.1
-  ore_eur_per_t: 200                  # DR-grade pellets, same as H2 DRI
-  iron_t_per_t_steel: 1.10            # same pellets as the H2 shaft, same yield
+  gas_mwh_per_t: 3.469                # LHV, per t DRI: reductant plus heat
+  el_mwh_per_t: 0.178                 # machine drive and auxiliaries
+  ore_eur_per_t: 238                  # DR-grade pellets, same as H2 DRI
+  iron_t_per_t_steel: 1.17            # same pellets as the H2 shaft, same yield
   p_min_pu: 0.5
 
 briquetting:
@@ -222,7 +240,7 @@ briquetting:
   capex_per_t_per_year_eur: 40
   opex_per_t_per_year_eur: 1.2        # ≈3 % of capex
   lifetime_years: 20
-  el_mwh_per_t: 0.025                 # press, screening and handling
+  el_mwh_per_t: 0.01                  # press, screening and handling
   yield_t_per_t: 0.98                 # fines lost on screening
 
 iron_store:
@@ -230,8 +248,8 @@ iron_store:
   # an export route waiting on a ship (shed + handling). Routes that hand the
   # furnace hot metal or hot sponge iron have nowhere to put it and get none.
   # Cheap but deliberately non-zero so the optimal size is unique and reportable.
-  capex_per_t_eur: 20
-  lifetime_years: 25
+  capex_per_t_eur: 21
+  lifetime_years: 100
 
 steel_store:
   # Finished-steel inventory buffer on the steel bus. The supply-side way to
@@ -253,8 +271,12 @@ grid:
   # plus a volumetric fee. German HV-level order-of-magnitude eyeballs.
   connection_capex_eur_per_mw: 150_000
   connection_lifetime_years: 40
-  fee_eur_per_mw_per_year: 60_000     # capacity charge (Leistungspreis)
-  fee_eur_per_mwh: 10.0               # volumetric charge (Arbeitspreis)
+  # One capacity charge and no volumetric one, so every geography is compared on
+  # the same single number. At this plant's ~8000 full-load hours it works out
+  # near 19 €/MWh, between the German HV band-load position and Hydrogen
+  # Europe's 29.3 €/MWh EU average.
+  fee_eur_per_mw_per_year: 140_000
+  fee_eur_per_mwh: 0.0
 
 destination:
   # Where an `-export` route melts its iron: an area from config.yaml's `areas`
@@ -264,15 +286,14 @@ destination:
   # come from one file. Nothing about the destination is a hand-set number any
   # more; changing this line changes both the bill and the carbon.
   #
-  # Connection charges still come from the `grid` block, which is German HV
-  # level, and so are only right for a German-sized destination.
+  # Connection charges come from the `grid` block, which carries one set of
+  # figures for every area.
   #
-  # `transport.distance_km` below is keyed by the *producing* country and its
-  # legs are drawn to a north-west European port, so moving this away from a
-  # Rotterdam-ish destination would price power in one place and ship to
-  # another. Re-keying the legs by (origin, destination) is the change that
-  # would fix that.
-  area: DEU
+  # `transport.distance_km` below is keyed by the *producing* country alone, so
+  # its legs have to be drawn to whichever destination this names — they are
+  # drawn to Spain. Moving this line means redrawing them; re-keying the legs by
+  # (origin, destination) is the change that would make the pair travel together.
+  area: ESP
 
 transport:
   # Freight, charged per t and km with no capacity decision and no capex,
@@ -306,20 +327,34 @@ transport:
   # its per-t part is zero because the European rates we anchor on are already
   # quoted all-in.
   sea:
-    iron:  { eur_per_t: 5,  eur_per_t_km: 0.0015 }
-    steel: { eur_per_t: 12, eur_per_t_km: 0.0033 }
+    iron:  { eur_per_t: 0,  eur_per_t_km: 0.000343 }
+    steel: { eur_per_t: 0,  eur_per_t_km: 0.000343 }
   rail:
     iron:  { eur_per_t: 0,  eur_per_t_km: 0.035 }
     steel: { eur_per_t: 0,  eur_per_t_km: 0.045 }
 
   # Legs from the producing country to the destination, by mode. An EU producer
   # has no sea leg, only a token overland run to the furnace.
+  # Legs from the producing country to Spain, by mode. The sea distances are the
+  # register's; the overland ones are road-and-rail distances to the Spanish
+  # coast. Alberta is landlocked, so its iron goes to Vancouver before it floats;
+  # Ontario reaches the Atlantic down the St. Lawrence.
   distance_km:
-    DEU: { rail: 300 }
-    FRA: { rail: 800 }
-    ESP: { rail: 1_500 }
-    BRA: { sea: 9_500 }         # Tubarao -> Rotterdam
-    AUS: { sea: 19_500 }        # Port Hedland -> Rotterdam via Suez
+    DEU: { rail: 1_800 }
+    FRA: { rail: 1_000 }
+    ESP: { rail: 400 }
+    BRA: { sea: 8_945 }                    # register: Brazil -> Spain
+    AUS: { sea: 17_960 }                   # register: Australia -> Spain
+    AB:  { rail: 1_150, sea: 15_400 }      # Edmonton -> Vancouver -> Spain via Panama
+    ONT: { rail: 550, sea: 5_900 }         # Hamilton -> Montreal -> Spain
+
+anchor:
+  # Anchor-colocation scenarios only (the `anchor-colo-n*` CF variants). The
+  # anchor cell is the plant site, and every site is an extendable generator, so
+  # without a floor the optimiser may build nothing there — leaving the anchor as
+  # the thing that shortlisted the candidates rather than a place anything
+  # stands. 0 leaves that freedom, which is what every run before this had.
+  min_capacity_mw: 0
 
 transmission:
   # HVDC link connecting a candidate RES site to the electrolyser/demand site.

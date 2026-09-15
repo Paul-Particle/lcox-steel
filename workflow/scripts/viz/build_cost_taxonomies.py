@@ -185,6 +185,8 @@ def attach(payload: dict, cases: dict) -> None:
 
 def main() -> None:
     html, cases, geos = build_html(TEMPLATE_HTML, augment=attach)
+    # The single-taxonomy build fills this in; here it leaves the class list clean.
+    html = html.replace(" /*ALT_ONLY_CLASS*/", "")
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(html, encoding="utf-8")
     print(f"wrote {OUT_PATH} ({OUT_PATH.stat().st_size / 1e6:.2f} MB, "

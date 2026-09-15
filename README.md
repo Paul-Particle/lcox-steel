@@ -376,14 +376,43 @@ UTC hourly `DatetimeIndex`, leading `price` column (EUR/MWh). Three variants:
 | `emissions` | `price` + one per carrier, hourly | the default for grid rows — the solve buys at the price, the report weights the mix by `emissions.electricity_t_co2e_per_mwh` |
 | `full` | all data types, native resolution | analysis; adds load, RES forecast and cross-border flows |
 
-The carrier column names are the shared vocabulary both downloaders emit
+The carrier column names are the shared vocabulary the downloaders emit
 (`brown_coal`, `hard_coal`, `gas`, `wind_onshore`, …), which is what lets one
-factor table serve ENTSO-E and NEM alike. A grid run whose series carries no
-mix has no emission intensity, and `compile_report` says so rather than
-substituting a figure — as it does for a carrier the factor table has no entry
-for, rather than renormalising the mix over the rest of it. `full` is not a mix
-source despite carrying the carriers: it is at native resolution, so reading an
-hour off it would take the `:00` instant for the hour's mean.
+factor table serve every market. `full` is not a mix source despite carrying the
+carriers: it is at native resolution, so reading an hour off it would take the
+`:00` instant for the hour's mean.
+
+Five sources sit behind `retrieve_grid_data`, and they do not all serve all three
+variants. A scenario's grid row names one variant for every area it covers, so a
+source that has no generation to publish answers an `emissions` request with the
+price alone and says so in its log, rather than refusing and taking the price down
+with it:
+
+| source | areas | serves | generation mix? |
+|---|---|---|---|
+| `entsoe` | DEU, ESP, FRA | all three | yes, per carrier |
+| `nem` | the five NEM regions | all three | yes, per carrier |
+| `ons` | the four SIN submarkets | `dayahead`, `full` | **no** — the balance dataset aggregates everything thermal into one column, and no single emission factor describes gas, coal, oil, biomass and nuclear together |
+| `aeso` | AB | `dayahead` | **no** — per-carrier generation needs AESO's keyed API or its bulk metered-volume files |
+| `ieso` | ONT | `dayahead` | **no** — Ontario needs a separate XML report |
+
+A run that imports from one of the last three therefore has no emission intensity.
+`compile_report` reports its emission fields blank beside
+`emissions_unavailable_reason`, which says which area and why — blank on its own
+would mean "undefined for this run", which is the schema's existing meaning and the
+wrong one here. Everything that does not need a mix is still reported, including
+the MWh each user drew. The same goes for a carrier the factor table has no entry
+for, except that one is an error: it means the vocabulary has drifted, not that
+the data is missing.
+
+**ONS price caveat.** ONS publishes the Marginal Operating Cost (CMO), the shadow
+price from the DESSEM dispatch model. Brazil settles on CCEE's PLD, which is the
+hourly CMO clipped to an annual floor and cap set by ANEEL, and `_ons.py`
+reconstructs PLD by applying those limits (`ons.pld_limits`). The clip is not
+cosmetic — a fifth of 2025 SE hours and nearly half of NE hours fall below the
+floor — and the reconstruction has been spot-checked against a single published
+weekly PLD and is otherwise unvalidated. Raw CMO is kept as `cmo_brl` in the
+`full` variant so nothing is lost to the clip.
 
 **Capacity factors** (`resources/timeseries/{area}_{tech}_area-average_{start}_{end}.parquet`):
 hourly parquet, `DatetimeIndex` named `time`, one column whose name *is* the tech
