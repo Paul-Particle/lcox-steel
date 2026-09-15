@@ -106,25 +106,43 @@ ORE_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew")
 # reader comparing routes wants them apart. The network carries only their sum,
 # so the share is taken from the quotes that priced it.
 #
-# In the stack order the cost-breakdown page draws them, grouped as
-# `viz/cost_taxonomy.GROUPS` groups them: feedstock, process, gas, hydrogen,
-# electricity, then the solid stores and the freight.
-LEAF_COSTS = (
-    "ore", "consumables",
-    *(part for link in PROCESS_LINKS
-      for part in (f"{field_stem(link)}_capex", f"{field_stem(link)}_fom")),
-    "gas_fuel", "gas_carbon",
-    "electrolyser_capex", "electrolyser_fom", "electrolyser_water", "h2_buffer",
-    *(part for tech in RES_TECHS
-      for part in (f"res_{field_stem(tech)}_capex", f"res_{field_stem(tech)}_fom")),
+# Each leaf with the parent group it rolls up into, in the stack order the
+# cost-breakdown page draws them. One list, so a leaf cannot be in the report
+# without a group to belong to. What a group is called and what colour it is
+# drawn in stays viz/cost_taxonomy.GROUPS' business; which group a leaf is in is
+# structural and lives here.
+LEAF_COSTS_BY_GROUP = (
+    ("ore", "feedstock"),
+    ("consumables", "feedstock"),
+    *((f"{field_stem(link)}_{half}", "process")
+      for link in PROCESS_LINKS for half in ("capex", "fom")),
+    ("gas_fuel", "gas"),
+    ("gas_carbon", "gas"),
+    ("electrolyser_capex", "hydrogen"),
+    ("electrolyser_fom", "hydrogen"),
+    ("electrolyser_water", "hydrogen"),
+    ("h2_buffer", "hydrogen"),
+    *((f"res_{field_stem(tech)}_{half}", "electricity")
+      for tech in RES_TECHS for half in ("capex", "fom")),
     # A geography may build a generator none of the three techs names; its cost
     # lands here undivided rather than going missing from the stack.
-    "res_other",
-    "battery_power", "battery_energy",
-    "grid_connection_capex", "grid_capacity_fee", "grid_market", "grid_fee",
-    "transmission", "destination_power",
-    "iron_store", "steel_store", "transport",
+    ("res_other", "electricity"),
+    ("battery_power", "electricity"),
+    ("battery_energy", "electricity"),
+    ("grid_connection_capex", "electricity"),
+    ("grid_capacity_fee", "electricity"),
+    ("grid_market", "electricity"),
+    ("grid_fee", "electricity"),
+    ("transmission", "electricity"),
+    ("destination_power", "electricity"),
+    ("iron_store", "storage"),
+    ("steel_store", "storage"),
+    ("transport", "storage"),
 )
+LEAF_COSTS = tuple(leaf for leaf, _ in LEAF_COSTS_BY_GROUP)
+LEAF_GROUP = dict(LEAF_COSTS_BY_GROUP)
+# The parent groups, in the order their leaves first appear.
+LEAF_PARENTS = tuple(dict.fromkeys(group for _, group in LEAF_COSTS_BY_GROUP))
 
 # The same levelised cost cut the other way — the taxonomy the cost-breakdown
 # page opens on. Also €/t steel and also the whole of LCOS, but it separates the
@@ -220,6 +238,9 @@ REPORT_FIELDS = {
     # `lcos_eur_per_t`, so a leaf a route has none of reads 0 — it contributed
     # nothing, the same way its cost group does.
     **{f"leaf_{leaf}_eur_per_t": ZERO for leaf in LEAF_COSTS},
+    # And what each parent group of them comes to, so a leaf can be read against
+    # the group it belongs to as well as against the whole.
+    **{f"group_{parent}_eur_per_t": ZERO for parent in LEAF_PARENTS},
     **{f"alt_lcos_{part}_eur_per_t": ZERO for part in ALT_LCOS_PARTS},
     **{f"alt_lcos_{part}_eur_per_t": ZERO for part in ALT_LCOS_DETAIL},
     # The same capital/upkeep split on the two carriers, in their own units, so

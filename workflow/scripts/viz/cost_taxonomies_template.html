@@ -329,6 +329,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     leaf_specs:LEAF_SPECS, leaf_groups:LEAF_GROUPS, alt_lcos_bands:ALT_LCOS,
     alt_lcoe_bands:ALT_LCOE, dash_lcoe_bands:DASH_LCOE, alt_lcoh_bands:ALT_LCOH,
     dash_lcoh_bands:DASH_LCOH, h2_lhv_kwh_per_kg:H2LHV,
+    process_plants:PLANTS,
     base_variant:BASE, cf_options:CF_OPTS, default_view:DEFAULT} = PAYLOAD;
   // Hidden by the single-taxonomy build, which shows the alternative alone.
   const ALT_ONLY = /*ALT_ONLY*/false;
@@ -602,11 +603,25 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
                 amountOf(cd(rec,"consumables"), rec.lcos, "LCOS", "€/t")]);
     return out;
   }
-  const PLANT_LABELS = [["dri","H2-DRI shaft"],["dri_ng","NG-DRI shaft"],["moe","MOE"],
-    ["ladle","Ladle metallurgy"],["electrowinning","Electrowinning"],["eaf","EAF"]];
+  // Keyed as `cost_detail` keys the per-plant costs. "ladle" was in this list
+  // and is not a plant — the MOE route's ladle metallurgy is the shared EAF,
+  // priced down by an overlay — so its line never drew; the blended shaft and
+  // the briquetting press were missing, so on those routes the lines came to
+  // well under the plant total they sit under.
+  const PLANT_LABELS = [["dri","H2-DRI shaft"],["dri_mix","Blended shaft"],
+    ["dri_ng","NG-DRI shaft"],["moe","MOE"],["electrowinning","Electrowinning"],
+    ["briquetting","Briquetting press"],["eaf","EAF"]];
   function plantLines(rec){
     return PLANT_LABELS.filter(([k])=>cd(rec,k)!=null)
       .map(([k,lab])=>["· "+lab, amountOf(cd(rec,k), rec.lcos, "LCOS", "€/t")]);
+  }
+  // The same plants, but each one's own half of its annual cost: under the
+  // capital band the capital, under the upkeep band the upkeep. Both halves are
+  // reported leaves, so the lines under a band add up to the band.
+  function plantHalfLines(rec, half){
+    return (PLANTS||[]).filter(([stem])=>(rec.leaves||{})[stem+half]!=null)
+      .map(([stem,lab])=>["· "+lab,
+        amountOf((rec.leaves)[stem+half], rec.lcos, "LCOS", "€/t")]);
   }
   function gasLines(rec, s){
     return rec.ng_gwh>0 ? [["gas price:", amount(gasPrice(s),"€/MWh LHV",1)]] : [];
@@ -627,10 +642,12 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       const rec = recs[r], a = rec.alt || {}, L = rec.lcos;
       if(key==="ore") return oreLines(rec);
       if(key==="capex" || key==="fixed_om"){
-        // The per-plant detail is the same list either way; the band label says which
-        // half of each plant's annual cost is being shown.
-        return plantLines(rec).concat([["· of the plant total, this band is",
-          pct(a[key], (a.capex||0)+(a.fixed_om||0))]]);
+        // Each plant's own half of its annual cost, so the lines under this band
+        // are the band. They used to be the whole of every plant under both
+        // halves, which meant neither band's detail summed to it.
+        return plantHalfLines(rec, key==="capex" ? "_capex" : "_fom")
+          .concat([["· of the plant total, this band is",
+                    pct(a[key], (a.capex||0)+(a.fixed_om||0))]]);
       }
       if(key==="hydrogen"){
         const out = rec.lcoh!=null ? [["hydrogen LCOH:", amount(rec.lcoh,"€/MWh LHV",1)]] : [];
@@ -714,8 +731,11 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     // denominator: Sudeste/C-Oeste reports -366.9 €/MWh, Norte -9.2. Plot a
     // hydrogen cost only where hydrogen was actually made.
     const madeH2 = r => recs[r].lcoh!=null && recs[r].lcoh > 0 && recs[r].h2_share > 0;
+    // The per-kg total is the report's own `lcoh_eur_per_kg`, not this page's
+    // conversion of the per-MWh figure — the bands still scale, because they are
+    // reported per MWh LHV.
     const totals = routes.map(r=>(isLcoe ? recs[r].lcoe
-                                         : (madeH2(r) ? recs[r].lcoh*scale : null)));
+                                         : (madeH2(r) ? recs[r].lcoh_kg : null)));
     const unit = isLcoe ? "€/MWh" : "€/kg";
     const fmt = isLcoe ? ",.1f" : ",.2f";
     const basis = isLcoe ? "LCOE" : "LCOH";
@@ -780,8 +800,9 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const groupOf = {}, labelOf = {};
     LEAF_SPEC.forEach(([key,label,group])=>{ groupOf[key]=group; labelOf[key]=label; });
     const valueOf = (key,r) => (recs[r].leaves||{})[key] || 0;
-    const groupTotal = (group,r) => LEAF_SPEC.reduce(
-      (s,[k,,g])=> g===group ? s+valueOf(k,r) : s, 0);
+    // The group's own reported total, not a sum of the rounded leaves in the
+    // payload — so a leaf's share of its group is a share of the whole group.
+    const groupTotal = (group,r) => (recs[r].groups||{})[group] || 0;
 
     // A band worth a euro or two on a 700 €/t bar is a pixel tall — real, but no
     // pointer can land on it. Each one's detail is therefore folded into a band that
