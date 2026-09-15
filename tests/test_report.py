@@ -14,7 +14,12 @@ import pytest
 
 import compile_report  # sys.path set by conftest
 import _run_display
-from common._report_schema import FIELD_ORDER, IDENTITY_FIELDS, read_report
+from common._report_schema import (
+    DIAGNOSTIC_FIELDS,
+    FIELD_ORDER,
+    IDENTITY_FIELDS,
+    read_report,
+)
 from common._runs import zone_parents
 
 AREAS = {
@@ -227,7 +232,7 @@ def test_every_route_writes_the_same_fields(tmp_path):
     compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
     report = read_report(report_path)
 
-    declared = [f for f in FIELD_ORDER if f != "best_in_country"]
+    declared = [f for f in FIELD_ORDER if f not in DIAGNOSTIC_FIELDS]
     assert list(report.columns) == declared
 
 
@@ -264,7 +269,7 @@ def test_run_specific_fields_follow_the_declared_ones(tmp_path):
     assert report.at["s_1", "solar_c00_gw_opt"] == 1.4
 
 
-def test_the_diagnostic_is_the_report_plus_the_flag(tmp_path):
+def test_the_diagnostic_is_the_report_plus_the_held_back_fields(tmp_path):
     df = _report([
         ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
         ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
@@ -276,7 +281,49 @@ def test_the_diagnostic_is_the_report_plus_the_flag(tmp_path):
 
     report = set(read_report(report_path).columns)
     diagnostic = set(read_report(diagnostic_path).columns)
-    assert diagnostic - report == {"best_in_country"}
+    assert diagnostic - report == set(DIAGNOSTIC_FIELDS)
+
+
+def test_the_freight_a_run_reports_is_held_back_from_the_report(tmp_path):
+    """A route that ships writes its freight, and only the diagnostic carries it.
+
+    What the report keeps is the total the freight is part of, so the two files
+    disagree on the per-step stack and not on what the run emitted.
+    """
+    df = _report([("s", "VIC1", "moe-eaf-export", "20250101", "20251231", 900.0)])
+    df["emissions_kg_co2e_per_t_steel"] = 372.4
+    df["emissions_freight_kt_co2e_per_year"] = 215.0
+    df["emissions_steel_transport_kg_co2e_per_t_steel"] = 215.0
+    df["emissions_steel_transport_pct"] = 57.7
+    df["emissions_moe_kg_co2e_per_t_steel"] = 149.3
+    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
+
+    report_path = tmp_path / "report_s.csv"
+    diagnostic_path = tmp_path / ".report_s_diag.csv"
+    compile_report.write_report(flagged, report_path, diagnostic_path)
+    report = read_report(report_path).iloc[0]
+    diagnostic = read_report(diagnostic_path).iloc[0]
+
+    assert "emissions_steel_transport_kg_co2e_per_t_steel" not in report.index
+    assert "emissions_freight_kt_co2e_per_year" not in report.index
+    assert diagnostic["emissions_steel_transport_kg_co2e_per_t_steel"] == 215.0
+    # The total is the run's, not the report's share of it: both files agree.
+    assert report["emissions_kg_co2e_per_t_steel"] == 372.4
+    assert diagnostic["emissions_kg_co2e_per_t_steel"] == 372.4
+
+
+def test_a_freight_field_no_run_produced_still_reaches_the_diagnostic(tmp_path):
+    """The diagnostic declares every field, so which file one lands in is fixed."""
+    df = _report([("s", "VIC1", "h2-only", "20250101", "20251231", 4.1)])
+    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
+
+    report_path = tmp_path / "report_s.csv"
+    diagnostic_path = tmp_path / ".report_s_diag.csv"
+    compile_report.write_report(flagged, report_path, diagnostic_path)
+
+    diagnostic = read_report(diagnostic_path)
+    assert diagnostic.at["s_1", "emissions_steel_transport_kg_co2e_per_t_steel"] == 0.0
+    assert pd.isna(diagnostic.at["s_1", "emissions_steel_transport_pct"])
 
 
 def test_a_report_reads_back_as_it_was_written(tmp_path):
