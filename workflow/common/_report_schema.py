@@ -157,14 +157,20 @@ LEAF_PARENTS = tuple(dict.fromkeys(group for _, group in LEAF_COSTS_BY_GROUP))
 # The jobs the electricity did, which is the one cut of the levelised cost the
 # leaves above cannot make. They price what was bought; these divide what one of
 # those purchases was *for*: making the hydrogen, making the iron, melting it,
-# and the handling and losses around them.
+# moving it about, and the losses around all of that.
+#
+# `handling` is drawn power that no production step drew — the briquetting press
+# is the only one so far. `losses` is power nobody drew at all: the battery's
+# round trip and the lines'. They are separate jobs because only one of them is
+# electricity anyone used, and `el_losses_gwh` above measures the second in its
+# own units.
 #
 # Every megawatt-hour is priced at what the system that supplied it cost, and the
-# system's whole cost is the megawatt-hours it delivered, so the four close on
+# system's whole cost is the megawatt-hours it delivered, so the five close on
 # `cost_electricity_eur_per_t` exactly. They are the same money as the
 # `electricity` leaves, cut a second way, which is why they are not `cost_*` and
 # must never be added to one: doing so counts the electricity bill twice.
-ELECTRICITY_JOBS = ("reduction", "melt", "hydrogen", "handling_losses")
+ELECTRICITY_JOBS = ("reduction", "melt", "hydrogen", "handling", "losses")
 
 REPORT_FIELDS = {
     # What this run is a result for.
@@ -253,7 +259,7 @@ REPORT_FIELDS = {
     **{f"cost_{leaf}_eur_per_t": ZERO for leaf in LEAF_COSTS},
     **{f"cost_{parent}_eur_per_t": ZERO for parent in LEAF_PARENTS},
     # The electricity leaf group cut a second way, by the job each euro of it
-    # paid for (ELECTRICITY_JOBS). These four stack to `cost_electricity_eur_per_t`
+    # paid for (ELECTRICITY_JOBS). These stack to `cost_electricity_eur_per_t`
     # and to nothing else, so they belong in no `cost_*` sum.
     **{f"el_{job}_eur_per_t": ZERO for job in ELECTRICITY_JOBS},
     # The same capital/upkeep split on the two carriers, in their own units, so

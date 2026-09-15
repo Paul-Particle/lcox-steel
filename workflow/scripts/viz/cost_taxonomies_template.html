@@ -657,7 +657,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
           if(a[k]>0) out.push([lab, amountOf(a[k], L, "LCOS", "€/t")]); });
         return out;
       }
-      // The four electricity bands are one bill divided by the job each
+      // The five electricity bands are one bill divided by the job each
       // megawatt-hour did, so each one names its own draw and the price it paid.
       if(key==="reduction") return a.reduction>0
         ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
@@ -667,10 +667,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
            ["· furnace demand", amount(a._melt_mwh_per_t,"MWh/t steel",2)],
            ["· of the electricity bill", pct(a.melt, a._electricity_total)]] : [];
-      if(key==="handling_losses") return a.handling_losses>0
+      if(key==="handling") return a.handling>0
         ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
-           ["· the press, the battery's round trip and the lines", ""],
-           ["· of the electricity bill", pct(a.handling_losses, a._electricity_total)],
+           ["· drawn by the briquetting press", ""],
+           ["· of the electricity bill", pct(a.handling, a._electricity_total)]] : [];
+      if(key==="losses") return a.losses>0
+        ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
+           ["· the battery's round trip and the lines, drawn by nothing", ""],
+           ["· of the electricity bill", pct(a.losses, a._electricity_total)],
            ["· electricity system, all in", amountOf(a._electricity_total, L, "LCOS", "€/t")]] : [];
       if(key==="gas") return gasLines(rec, S);
       if(key==="store") return storeLines(rec);
