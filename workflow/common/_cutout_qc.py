@@ -275,6 +275,16 @@ def grid_request_mismatches(path: str | Path, params: dict) -> list[str]:
 
         x = ds.coords["x"].values
         y = ds.coords["y"].values
+        # A step needs two cells to measure. An area narrower than one ERA5 cell
+        # has nothing to compare against the request, which is worth saying.
+        for axis, coord in (("x", x), ("y", y)):
+            if len(coord) < 2:
+                mismatches.append(
+                    f"only {len(coord)} '{axis}' cell, so the grid step cannot be read"
+                )
+        if mismatches:
+            return mismatches
+
         actual_step_x = abs(float(np.diff(x)[0]))
         actual_step_y = abs(float(np.diff(y)[0]))
 

@@ -38,6 +38,7 @@ import cost_taxonomy                                                      # noqa
 from build_dashboard import HTML_DIR, _axes, build_html, scenario_files      # noqa: E402
 from common._constants import H2_LHV_KWH_PER_KG                           # noqa: E402
 from common._report_schema import field_stem, read_report                 # noqa: E402
+from scripts.solve._helpers_solve import deep_merge                       # noqa: E402
 
 OUT_PATH = HTML_DIR / "cost_taxonomies.html"
 TEMPLATE_HTML = Path(__file__).with_name("cost_taxonomies_template.html")
@@ -111,11 +112,9 @@ def _assumptions(scenario: str) -> dict:
     merged = yaml.safe_load((CONFIG_DIR / "assumptions.yaml").read_text())
     overlay_path = CONFIG_DIR / f"assumptions_{scenario}.yaml"
     if overlay_path.exists():
-        for key, value in (yaml.safe_load(overlay_path.read_text()) or {}).items():
-            if isinstance(value, dict) and isinstance(merged.get(key), dict):
-                merged[key].update(value)
-            else:
-                merged[key] = value
+        # The same merge the solve used, so a nested override lands here the way
+        # it landed in the network the report describes.
+        merged = deep_merge(merged, yaml.safe_load(overlay_path.read_text()) or {})
     return merged
 
 
