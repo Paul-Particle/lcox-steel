@@ -139,18 +139,18 @@
   @media (max-width:1040px){.ct-pair{grid-template-columns:1fr;}}
   /* The single-taxonomy build keeps the alternative column and drops the other,
      so the remaining chart takes the full width rather than half of it. */
-  .ct-wrap.alt-only .ct-pair{grid-template-columns:1fr;}
-  .ct-wrap.alt-only .ct-col.dash,
-  .ct-wrap.alt-only .ct-key.dash,
-  .ct-wrap.alt-only .ct-col-h{display:none;}
+  .ct-wrap.purpose-only .ct-pair{grid-template-columns:1fr;}
+  .ct-wrap.purpose-only .ct-col.dash,
+  .ct-wrap.purpose-only .ct-key.dash,
+  .ct-wrap.purpose-only .ct-col-h{display:none;}
   /* Prose that only makes sense beside the other taxonomy, and the wording that
      replaces it when this page shows one. Nothing on the single-taxonomy page
      should name a comparison the reader cannot see. */
-  .ct-wrap.alt-only .pair-only{display:none;}
-  .ct-wrap:not(.alt-only) .solo-only{display:none;}
+  .ct-wrap.purpose-only .pair-only{display:none;}
+  .ct-wrap:not(.purpose-only) .solo-only{display:none;}
   /* The legend tells the two taxonomies apart, which is not a question this page
      asks when it shows one — the chart legends already name every band. */
-  .ct-wrap.alt-only .ct-legend{display:none;}
+  .ct-wrap.purpose-only .ct-legend{display:none;}
   .ct-col{min-width:0;}
   .ct-col-h{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:8px 0 2px;
     border-bottom:1px solid var(--hair);margin-bottom:6px;}
@@ -168,7 +168,7 @@
 </style>
 
 <div class="ct-root">
- <div class="ct-wrap /*ALT_ONLY_CLASS*/">
+ <div class="ct-wrap /*PURPOSE_ONLY_CLASS*/">
   <header class="ct-head">
     <div class="ct-headline">
       <div>
@@ -326,13 +326,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     geo_country:GEO_COUNTRY, main_year:MAIN_YEAR,
     route_order:ROUTE_ORDER, route_label:RLAB, cost_groups:COST_GROUPS,
     cap_panels:CAP_PANELS, variant_label:VLAB,
-    leaf_specs:LEAF_SPECS, leaf_groups:LEAF_GROUPS, alt_lcos_bands:ALT_LCOS,
-    alt_lcoe_bands:ALT_LCOE, dash_lcoe_bands:DASH_LCOE, alt_lcoh_bands:ALT_LCOH,
-    dash_lcoh_bands:DASH_LCOH, h2_lhv_kwh_per_kg:H2LHV,
+    leaf_specs:LEAF_SPECS, leaf_groups:LEAF_GROUPS, purpose_bands:PURPOSE,
+    lcoe_split_bands:LCOE_SPLIT, lcoe_group_bands:LCOE_GROUPS,
+    lcoh_split_bands:LCOH_SPLIT, lcoh_group_bands:LCOH_GROUPS,
+    h2_lhv_kwh_per_kg:H2LHV,
     process_plants:PLANTS,
     base_variant:BASE, cf_options:CF_OPTS, default_view:DEFAULT} = PAYLOAD;
-  // Hidden by the single-taxonomy build, which shows the alternative alone.
-  const ALT_ONLY = /*ALT_ONLY*/false;
+  // Hidden by the single-taxonomy build, which keeps the purpose split alone.
+  const PURPOSE_ONLY = /*PURPOSE_ONLY*/false;
 
   const CONF = {responsive:true, displaylogo:false,
     modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines",
@@ -637,9 +638,9 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     routes.forEach(r=>recs[r]=recFor(S,r));
     const totals = routes.map(r=>recs[r].lcos);
 
-    // alternative: the circulated bands, with the composite blocks explained
-    const altLines = (key, r) => {
-      const rec = recs[r], a = rec.alt || {}, L = rec.lcos;
+    // by purpose: what each euro was spent for, with the composite bands opened up
+    const purposeLines = (key, r) => {
+      const rec = recs[r], a = rec.purpose || {}, L = rec.lcos;
       if(key==="ore") return oreLines(rec);
       if(key==="capex" || key==="fixed_om"){
         // Each plant's own half of its annual cost, so the lines under this band
@@ -651,29 +652,38 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       }
       if(key==="hydrogen"){
         const out = rec.lcoh!=null ? [["hydrogen LCOH:", amount(rec.lcoh,"€/MWh LHV",1)]] : [];
-        [["_electrolyser","· electrolyser plant"],["_h2_buffer","· H₂ buffer"],
+        [["_hydrogen_electrolyser","· electrolyser plant"],["_hydrogen_buffer","· H₂ buffer"],
          ["_hydrogen_electricity","· electricity to make the H₂"]].forEach(([k,lab])=>{
           if(a[k]>0) out.push([lab, amountOf(a[k], L, "LCOS", "€/t")]); });
         return out;
       }
-      if(key==="eaf") return a.eaf>0 ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
-        ["· furnace demand", amount(a._eaf_mwh_per_t,"MWh/t steel",2)]] : [];
-      if(key==="rest") return [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
-        ["· electricity system, all in", amountOf(a._electricity_total, L, "LCOS", "€/t")],
-        ["· less the H₂ and EAF melt shares",
-         amount((a._hydrogen_electricity||0)+(a.eaf||0), "€/t")]];
+      // The four electricity bands are one bill divided by the job each
+      // megawatt-hour did, so each one names its own draw and the price it paid.
+      if(key==="reduction") return a.reduction>0
+        ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
+           ["· drawn making the iron", amount(a._reduction_mwh_per_t,"MWh/t steel",2)],
+           ["· of the electricity bill", pct(a.reduction, a._electricity_total)]] : [];
+      if(key==="melt") return a.melt>0
+        ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
+           ["· furnace demand", amount(a._melt_mwh_per_t,"MWh/t steel",2)],
+           ["· of the electricity bill", pct(a.melt, a._electricity_total)]] : [];
+      if(key==="handling_losses") return a.handling_losses>0
+        ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
+           ["· the press, the battery's round trip and the lines", ""],
+           ["· of the electricity bill", pct(a.handling_losses, a._electricity_total)],
+           ["· electricity system, all in", amountOf(a._electricity_total, L, "LCOS", "€/t")]] : [];
       if(key==="gas") return gasLines(rec, S);
       if(key==="store") return storeLines(rec);
       return [];
     };
-    stacked(document.getElementById("plot-lcos-alt"), routes, ALT_LCOS,
-      (k,r)=>(recs[r].alt||{})[k], altLines, totals,
+    stacked(document.getElementById("plot-lcos-alt"), routes, PURPOSE,
+      (k,r)=>(recs[r].purpose||{})[k], purposeLines, totals,
       {unit:"€/t", fmt:",.0f", basis:"LCOS", height:PAIR_H, yTitle:"LCOS  (€ / t steel)",
        totalLabel:"levelised cost of steel (LCOS)", totalLines:r=>totalsLines(recs[r])});
 
     // dashboard: the reported groups, with the capex/O&M split in the process hover
     const dashLines = (g, r) => {
-      const rec = recs[r], L = rec.lcos, a = rec.alt || {};
+      const rec = recs[r], L = rec.lcos, a = rec.purpose || {};
       if(g==="process") return [
         ["· annualised capex", amountOf(a.capex, L, "LCOS", "€/t")],
         ["· fixed O&M", amountOf(a.fixed_om, L, "LCOS", "€/t")],
@@ -690,7 +700,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       if(g==="iron_store" || g==="steel_store") return storeLines(rec, g);
       return [];
     };
-    if(!ALT_ONLY) stacked(document.getElementById("plot-lcos-dash"), routes,
+    if(!PURPOSE_ONLY) stacked(document.getElementById("plot-lcos-dash"), routes,
       COST_GROUPS.map(([g,lab,col])=>[g,lab,col]),
       (g,r)=>(recs[r].costs||{})[g], dashLines, totals,
       {unit:"€/t", fmt:",.0f", basis:"LCOS", height:PAIR_H, yTitle:"LCOS  (€ / t steel)",
@@ -740,7 +750,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const fmt = isLcoe ? ",.1f" : ",.2f";
     const basis = isLcoe ? "LCOE" : "LCOH";
 
-    const detail = (key, r, alt) => {
+    const detail = (key, r, split) => {
       const rec = recs[r];
       if(isLcoe){
         if(key==="res_capex"||key==="res_fom"||key==="renewables"){
@@ -753,7 +763,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         if(key==="grid_connection") return gridLines(rec).filter(l=>l[0]==="· connection");
         return [];
       }
-      const perMwh = (alt ? rec.alt_lcoh : rec.lcoh_parts)?.[key];
+      const perMwh = (split ? rec.lcoh_split : rec.lcoh_parts)?.[key];
       const out = perMwh!=null ? [["· on an LHV basis", amount(perMwh,"€/MWh LHV",1)]] : [];
       if(key==="electricity") out.push(["· priced at LCOE", amount(rec.lcoe,"€/MWh",1)]);
       return out;
@@ -770,12 +780,12 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       totalLines:tLines,
       absent:isLcoe ? null : (r=>!madeH2(r)), absentText:"no H₂",
       empty:isLcoe?"No electricity system in these routes.":"No route here builds an electrolyser."};
-    const altBands = isLcoe ? ALT_LCOE : ALT_LCOH;
-    const dashBands = isLcoe ? DASH_LCOE : DASH_LCOH;
-    stacked(document.getElementById(`plot-${metric}-alt`), routes, altBands,
-      (k,r)=>((isLcoe?recs[r].alt_lcoe:recs[r].alt_lcoh)||{})[k]*(isLcoe?1:scale),
+    const splitBands = isLcoe ? LCOE_SPLIT : LCOH_SPLIT;
+    const groupBands = isLcoe ? LCOE_GROUPS : LCOH_GROUPS;
+    stacked(document.getElementById(`plot-${metric}-alt`), routes, splitBands,
+      (k,r)=>((isLcoe?recs[r].lcoe_split:recs[r].lcoh_split)||{})[k]*(isLcoe?1:scale),
       (k,r)=>detail(k,r,true), totals, common);
-    if(!ALT_ONLY) stacked(document.getElementById(`plot-${metric}-dash`), routes, dashBands,
+    if(!PURPOSE_ONLY) stacked(document.getElementById(`plot-${metric}-dash`), routes, groupBands,
       (k,r)=>((isLcoe?recs[r].lcoe_parts:recs[r].lcoh_parts)||{})[k]*(isLcoe?1:scale),
       (k,r)=>detail(k,r,false), totals, common);
   }
