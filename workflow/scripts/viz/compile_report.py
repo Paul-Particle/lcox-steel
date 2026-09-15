@@ -1226,11 +1226,20 @@ def extract_summary(
             trans_cost += n.links.at[link, "capital_cost"] * cap
         summary["transmission_total_annual_cost_meur"] = trans_cost / 1e6
 
-    ac_buses = n.buses.index[n.buses.carrier == "AC"]
-    if len(ac_buses) > 1:
-        ext = n.generators[n.generators.p_nom_extendable]
-        for carrier, grp in ext.groupby("carrier"):
-            summary[f"{field_stem(carrier)}_total_gw_opt"] = grp["p_nom_opt"].sum() / 1e3
+    # A run offered several candidate sites names a generator per site, so no
+    # single `{tech}_gw_opt` says what that tech built and the total is reported
+    # beside them. Only the sited techs: a grid connection and a gas supply are
+    # one generator whatever the siting, and on an export route the destination's
+    # supply carries the same `AC` carrier as the home connection — summing those
+    # two adds a connection in one country to a connection in another.
+    extendable = n.generators[n.generators.p_nom_extendable]
+    sited = extendable[extendable["carrier"].isin(RES_TECHS)]
+    multi_site = len(sited) > sited["carrier"].nunique()
+    if multi_site:
+        for carrier, at_sites in sited.groupby("carrier"):
+            summary[f"{field_stem(carrier)}_total_gw_opt"] = (
+                at_sites["p_nom_opt"].sum() / 1e3
+            )
 
     # Emissions, on the basis the assumptions name. Reported in kg so the
     # report's two decimals still say something about a clean route.
