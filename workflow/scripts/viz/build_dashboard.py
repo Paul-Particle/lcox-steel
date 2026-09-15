@@ -129,7 +129,7 @@ H2_MIN = 0.02
 COST_GROUPS = [
     ["process",         "Process plant (capex+opex)", "#33434D"],
     ["ore_consumables", "Ore & consumables",          "#E2B681"],
-    ["gas",             "Natural gas (fuel)",         "#525F6A"],
+    ["gas",             "Natural gas (fuel + CO₂)",   "#525F6A"],
     ["iron_store",      "Iron stockpile",             "#B7C1C8"],
     ["transport",       "Freight",                    "#BDCCD9"],
     ["destination_power", "Destination power",        "#0293D2"],
@@ -189,11 +189,11 @@ def _num(v, default=0.0):
     return float(v)
 
 
-def _opt(v):
-    """Round to 1 dp, or None where the field is blank (so absent LCOH stays absent, not 0)."""
+def _opt(v, digits=1):
+    """Round to `digits`, or None where the field is blank (so absent LCOH stays absent, not 0)."""
     if pd.isna(v):
         return None
-    return round(float(v), 1)
+    return round(float(v), digits)
 
 
 def _axes(row):
@@ -375,7 +375,10 @@ def _record(row, lcos_row, cap_row):
         "emissions": _opt(row["emissions_kg_co2e_per_t_steel"]),
         "steel_mt": round(_num(row["steel_produced_mt"]), 4),
         "ng_gwh": round(_num(row["ng_gwh_lhv"]), 1),
-        "h2_share": round(_num(row["iron_from_h2_share"]), 3),
+        # Optional, not zero-filled: a blended run that took no H2 has a share of
+        # 0, and a route with no blend at all has none, which the card reads as
+        # two different things.
+        "h2_share": _opt(row["iron_from_h2_share"], 3),
         "costs": costs,
         "caps": caps,
         "lcoe_parts": lcoe_parts,
@@ -468,7 +471,7 @@ def build_payload(report_paths):
     _seed_stub()
     import scripts.viz.plot_lcos_bars as L
     import scripts.viz.plot_capacity_bars as C
-    from _run_display import run_label
+    from _run_display import run_labels
     from common._report_schema import read_report
 
     baseline = BASE_SCENARIO
@@ -483,8 +486,9 @@ def build_payload(report_paths):
         # file rather than one per run.
         gas_price = _gas_price(_scenario_of(report_path))
 
-        for _, row in df.iterrows():
-            label = run_label(row)
+        labels = run_labels(df)
+        for idx, row in df.iterrows():
+            label = labels[idx]
             if label not in lcos_df.index:   # no LCOS (h2-only) — nothing to compare
                 continue
             axes = _axes(row)

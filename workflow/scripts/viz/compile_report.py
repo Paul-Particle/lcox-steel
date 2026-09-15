@@ -466,9 +466,15 @@ def mark_best_in_country(df: pd.DataFrame, parents: dict, metric: str | None) ->
     """
     out = df.copy()
     out.insert(2, "country", out["area"].map(lambda a: parents.get(a, a)))
-    if metric is None or metric not in out.columns:
+    if metric is None:
         out["best_in_country"] = True
         return out
+    if metric not in out.columns:
+        raise ValueError(
+            f"report.best_zone_by names '{metric}', which no run reported. A zone "
+            f"ranking needs a column to rank on; the fields a run carries are "
+            f"declared in common/_report_schema.py"
+        )
     ranked = out.groupby(["country", "route", "start_date", "end_date"])[metric]
     out["best_in_country"] = (out[metric] == ranked.transform("min")) | out[metric].isna()
     return out
@@ -681,7 +687,7 @@ def _leaf_breakdown(
     gas_cfg = assumptions["natural_gas"]
     gas_mwh = (float(n.generators_t.p["gas_supply"].sum()) * annual_scale
                if "gas_supply" in n.generators.index else 0.0)
-    carbon_per_mwh = gas_cfg.get("co2_price_eur_per_t", 0.0) * gas_cfg["co2_t_per_mwh"]
+    carbon_per_mwh = gas_cfg["co2_price_eur_per_t"] * gas_cfg["co2_t_per_mwh"]
     leaves["gas_carbon"] = gas_mwh * carbon_per_mwh
     leaves["gas_fuel"] = breakdown["gas"] - leaves["gas_carbon"]
 
@@ -1299,6 +1305,12 @@ def extract_summary(
                 emitted["electricity_t"].get("electrolyser", 0.0)
                 * (sources["electricity"] / drawn_t) * 1e3 / h2_kg
             )
+        elif h2_kg > 0 and drawn_t == 0:
+            # Every MWh came from carriers this basis rates at zero, so the
+            # hydrogen carries nothing. That is the figure the RFNBO ceiling is
+            # read against, so it is reported rather than left blank. A run whose
+            # mix is unknown has a NaN here instead and stays blank.
+            summary["emissions_kg_co2e_per_kg_h2"] = 0.0
 
     # Electricity by who drew it, and how dirty their own hours were — the number
     # that separates a user chasing cheap renewable hours from one running flat.

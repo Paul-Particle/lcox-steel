@@ -125,28 +125,45 @@ def test_no_metric_configured_flags_everything():
     assert "country" in out.columns, "the country is reported either way"
 
 
-@pytest.mark.parametrize(
-    "row, expected",
-    [
-        ({"area": "NSW1", "route": "moe-eaf", "start_date": "20250101", "end_date": "20251231"},
-         "NSW1 moe-eaf"),
-        ({"area": "DEU", "route": "h2-dri-eaf", "start_date": "20230101", "end_date": "20241231"},
-         "DEU h2-dri-eaf 2023-2024"),
-    ],
-)
-def test_run_label_identifies_the_run(row, expected):
-    assert _run_display.run_label(pd.Series(row)) == expected
+def test_one_window_is_labelled_by_area_and_route_alone():
+    """A chart of a single window needs no date to tell its bars apart."""
+    df = _report([
+        ("s", "NSW1", "moe-eaf", "20250101", "20251231", 900.0),
+        ("s", "DEU", "h2-dri-eaf", "20250101", "20251231", 1010.0),
+    ])
+    assert list(_run_display.run_labels(df)) == ["NSW1 moe-eaf", "DEU h2-dri-eaf"]
 
 
 def test_run_labels_are_unique_across_a_multi_area_scenario():
-    """The bug this guards: a scenario spanning areas rendered every one as 'moe-eaf'."""
+    """A scenario spanning areas must not render every one as 'moe-eaf'."""
     df = _report([
         ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
         ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
         ("s", "DEU", "moe-eaf", "20250101", "20251231", 1010.0),
     ])
-    labels = df.apply(_run_display.run_label, axis=1)
+    assert _run_display.run_labels(df).is_unique
+
+
+def test_two_windows_of_one_area_are_told_apart_by_year():
+    """The frame decides, not the run: two single-year windows are each one year,
+    so a label read off the run alone would give both bars the same name."""
+    df = _report([
+        ("s", "DEU", "h2-dri-eaf", "20240101", "20241231", 900.0),
+        ("s", "DEU", "h2-dri-eaf", "20250101", "20251231", 820.0),
+    ])
+    labels = _run_display.run_labels(df)
+    assert list(labels) == ["DEU h2-dri-eaf 2024", "DEU h2-dri-eaf 2025"]
     assert labels.is_unique
+
+
+def test_a_window_that_crosses_new_year_names_both_years():
+    df = _report([
+        ("s", "DEU", "h2-dri-eaf", "20230101", "20241231", 900.0),
+        ("s", "DEU", "h2-dri-eaf", "20250101", "20251231", 820.0),
+    ])
+    assert list(_run_display.run_labels(df)) == [
+        "DEU h2-dri-eaf 2023-2024", "DEU h2-dri-eaf 2025",
+    ]
 
 
 def test_report_holds_the_selected_areas_and_the_diagnostic_holds_all(tmp_path):
