@@ -90,6 +90,56 @@ EMISSION_STEPS = (*ELECTRICITY_USERS, "reductant-ng",
                   "iron_transport", "steel_transport",
                   "battery_losses", "transmission_losses")
 
+# The links that buy ore, by the id `build_network` gives them: each carries an
+# `ore_eur_per_t` quote on its marginal cost. The furnace buys consumables
+# instead and the briquetting press buys nothing, so neither is here.
+ORE_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew")
+
+# The finest split of the levelised cost of steel the report carries: one leaf
+# per priced thing, each €/t steel, together the whole of it. The `cost_*_meur`
+# groups above are what these roll up into — every leaf belongs to exactly one
+# group, and `compile_report._leaf_breakdown` checks they still stack to the
+# total rather than trusting that they do.
+#
+# Two leaves per plant, per renewable and per electrolyser, because a component
+# whose annual cost is `annuity x capex + fixed opex` is two decisions and a
+# reader comparing routes wants them apart. The network carries only their sum,
+# so the share is taken from the quotes that priced it.
+#
+# In the stack order the cost-breakdown page draws them, grouped as
+# `viz/cost_taxonomy.GROUPS` groups them: feedstock, process, gas, hydrogen,
+# electricity, then the solid stores and the freight.
+LEAF_COSTS = (
+    "ore", "consumables",
+    *(part for link in PROCESS_LINKS
+      for part in (f"{field_stem(link)}_capex", f"{field_stem(link)}_fom")),
+    "gas_fuel", "gas_carbon",
+    "electrolyser_capex", "electrolyser_fom", "electrolyser_water", "h2_buffer",
+    *(part for tech in RES_TECHS
+      for part in (f"res_{field_stem(tech)}_capex", f"res_{field_stem(tech)}_fom")),
+    # A geography may build a generator none of the three techs names; its cost
+    # lands here undivided rather than going missing from the stack.
+    "res_other",
+    "battery_power", "battery_energy",
+    "grid_connection_capex", "grid_capacity_fee", "grid_market", "grid_fee",
+    "transmission", "destination_power",
+    "iron_store", "steel_store", "transport",
+)
+
+# The same levelised cost cut the other way — the taxonomy the cost-breakdown
+# page opens on. Also €/t steel and also the whole of LCOS, but it separates the
+# plant's capital from its upkeep and divides the electricity by what the
+# electricity was for: the share that made the hydrogen, the share the furnace
+# melted with, and the rest.
+ALT_LCOS_PARTS = ("ore", "capex", "fixed_om", "hydrogen", "eaf", "rest",
+                  "gas", "transport", "store")
+
+# What the single `hydrogen` band is made of and the electricity total the
+# `rest` band is the remainder of — carried so a hover can open those two up
+# without the page recomputing them.
+ALT_LCOS_DETAIL = ("hydrogen_electrolyser", "hydrogen_buffer",
+                   "hydrogen_electricity", "electricity_total")
+
 REPORT_FIELDS = {
     # What this run is a result for.
     "scenario": UNDEFINED,
@@ -164,6 +214,44 @@ REPORT_FIELDS = {
     "steel_shipped_kt": ZERO,
     "steel_store_kt": ZERO,
     "steel_store_hours_steel": UNDEFINED,
+
+    # The two fine cuts of the levelised cost of steel (see LEAF_COSTS and
+    # ALT_LCOS_PARTS). Each block is €/t steel and each stacks to
+    # `lcos_eur_per_t`, so a leaf a route has none of reads 0 — it contributed
+    # nothing, the same way its cost group does.
+    **{f"leaf_{leaf}_eur_per_t": ZERO for leaf in LEAF_COSTS},
+    **{f"alt_lcos_{part}_eur_per_t": ZERO for part in ALT_LCOS_PARTS},
+    **{f"alt_lcos_{part}_eur_per_t": ZERO for part in ALT_LCOS_DETAIL},
+    # The same capital/upkeep split on the two carriers, in their own units, so
+    # each block stacks to its own levelised cost the way the `lcoe_*` and
+    # `lcoh_*` parts above do — and blank on the same terms: zero where it adds
+    # into a total that exists, blank where the carrier does not.
+    "alt_lcoe_res_capex_eur_per_mwh": ZERO,
+    "alt_lcoe_res_fom_eur_per_mwh": ZERO,
+    "alt_lcoh_electrolyser_capex_eur_per_mwh_lhv": UNDEFINED,
+    "alt_lcoh_electrolyser_fom_eur_per_mwh_lhv": UNDEFINED,
+    "alt_lcoh_electrolyser_water_eur_per_mwh_lhv": UNDEFINED,
+
+    # What a tonne of steel took, for reading a leaf against the thing behind
+    # it. Each is measured off the run rather than taken from the coefficient
+    # that priced it, so a furnace that ran hot in cheap hours says so.
+    "eaf_el_mwh_per_t_steel": ZERO,
+    "electrolyser_el_mwh_per_t_steel": ZERO,
+    "h2_kg_per_t_steel": ZERO,
+    "gas_mwh_per_t_steel": ZERO,
+    # Blank rather than zero on a run that built no battery: it is the store's
+    # hours over its inverter rating, and neither exists to divide.
+    "battery_duration_hours": UNDEFINED,
+
+    # The capital recovery factor each plant's capex was annuitised at, and the
+    # ore quote that applied to it — both fixed by the scenario rather than
+    # chosen by the solve, but carried per run so the leaf split above can be
+    # checked against its inputs without opening the assumptions file.
+    **{f"annuity_factor_{field_stem(link)}": UNDEFINED for link in PROCESS_LINKS},
+    **{f"ore_quote_{field_stem(link)}_eur_per_t": UNDEFINED for link in ORE_LINKS},
+    # How much iron the furnace charged per tonne of steel, which is the ore
+    # quote's other half: it depends on what the route feeds it.
+    "eaf_iron_t_per_t_steel": UNDEFINED,
 
     # Built capacity.
     **{f"{field_stem(tech)}_gw_opt": ZERO for tech in RES_TECHS},
