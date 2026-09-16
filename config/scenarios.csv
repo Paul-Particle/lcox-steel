@@ -63,3 +63,18 @@ canada-2024-grid,all-routes,grid,emissions,ONT,20240101,20241231
 # generation to serve, so they return the price alone and say so; the report
 # then carries no emission intensity for those six areas. That gap is the point
 # of including them, not a reason to leave them out.
+h2-tank,h2-only|h2-dri-eaf|h2-dri-eaf-export,wind-onshore,bestsite-p95,all-areas,20250101,20251231
+h2-tank,h2-only|h2-dri-eaf|h2-dri-eaf-export,solar,bestsite-p95,all-areas,20250101,20251231
+h2-tank-grid,h2-only|h2-dri-eaf|h2-dri-eaf-export,wind-onshore,bestsite-p95,all-areas,20250101,20251231
+h2-tank-grid,h2-only|h2-dri-eaf|h2-dri-eaf-export,solar,bestsite-p95,all-areas,20250101,20251231
+h2-tank-grid,h2-only|h2-dri-eaf|h2-dri-eaf-export,grid,emissions,all-areas,20250101,20251231
+esp-ramp-20,h2-dri-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+esp-ramp-20,h2-dri-eaf,solar,bestsite-p95,ESP,20250101,20251231
+esp-ramp-20-grid,h2-dri-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+esp-ramp-20-grid,h2-dri-eaf,solar,bestsite-p95,ESP,20250101,20251231
+esp-ramp-20-grid,h2-dri-eaf,grid,emissions,ESP,20250101,20251231
+esp-ramp-05,h2-dri-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+esp-ramp-05,h2-dri-eaf,solar,bestsite-p95,ESP,20250101,20251231
+esp-ramp-05-grid,h2-dri-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+esp-ramp-05-grid,h2-dri-eaf,solar,bestsite-p95,ESP,20250101,20251231
+esp-ramp-05-grid,h2-dri-eaf,grid,emissions,ESP,20250101,20251231
