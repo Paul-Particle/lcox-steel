@@ -1,0 +1,16 @@
+# Overlay for the `esp-ramp-05` scenario, deep-merged over assumptions.yaml.
+#
+# Holds the electrolyser and the H2 shaft to 0.05 of nameplate per hour in either
+# direction, against a base case that limits neither. Both are plain linear constraints
+# between consecutive snapshots, so the network stays an LP.
+#
+# The pair is worth reading together rather than separately: the shaft sits near 99%
+# utilisation in every solved case and has a 0.5 minimum load it never approaches, so a
+# limit on it should cost close to nothing, while the electrolyser is the component that
+# actually swings and therefore the one with something to lose.
+electrolyser:
+  ramp_limit_up: 0.05
+  ramp_limit_down: 0.05
+dri-h2:
+  ramp_limit_up: 0.05
+  ramp_limit_down: 0.05

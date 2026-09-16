@@ -494,6 +494,7 @@ def _add_electrolyser(
         capital_cost=cap_cost,
         # Variable opex (water, consumables) per MWh electricity input (p0 side).
         marginal_cost=el_cfg.get("varopex_eur_per_mwh_el", 0.0),
+        **_ramp_limits(el_cfg),
     )
 
 
@@ -529,6 +530,18 @@ def _add_dri_load(
 def _add_steel_load(n: pypsa.Network, steel_t_per_h: float, bus: str = "steel") -> None:
     """Add the flat steel demand (t/h), at the plant gate or at the destination."""
     n.add("Load", "steel_load", bus=bus, carrier="steel", p_set=steel_t_per_h)
+
+
+def _ramp_limits(cfg: dict) -> dict:
+    """Ramp limits as Link kwargs, per unit of `p_nom` per snapshot.
+
+    Left out entirely when the tech's config does not set them, so the link keeps
+    PyPSA's NaN default and no ramp constraint is built. Both limits are plain
+    linear constraints on consecutive snapshots, so a network carrying them is
+    still an LP -- unit commitment is what a minimum-load-or-off condition needs,
+    and nothing here asks for one.
+    """
+    return {k: cfg[k] for k in ("ramp_limit_up", "ramp_limit_down") if k in cfg}
 
 
 def _process_capital_cost(cfg: dict, wacc: float, output_t_per_p0_unit: float) -> float:
@@ -572,6 +585,7 @@ def _add_dri_link(
         p_min_pu=dri_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(dri_cfg, wacc, t_iron_per_mwh_h2),
         marginal_cost=dri_cfg["ore_eur_per_t"] * t_iron_per_mwh_h2,
+        **_ramp_limits(dri_cfg),
     )
 
 
@@ -723,6 +737,7 @@ def _add_moe_link(n: pypsa.Network, moe_cfg: dict, wacc: float, elec_bus: str) -
         p_min_pu=moe_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(moe_cfg, wacc, t_iron_per_mwh),
         marginal_cost=moe_cfg["ore_eur_per_t"] * t_iron_per_mwh,
+        **_ramp_limits(moe_cfg),
     )
 
 
@@ -740,6 +755,7 @@ def _add_ew_link(n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str) -> 
         p_min_pu=ew_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(ew_cfg, wacc, t_iron_per_mwh),
         marginal_cost=ew_cfg["ore_eur_per_t"] * t_iron_per_mwh,
+        **_ramp_limits(ew_cfg),
     )
 
 

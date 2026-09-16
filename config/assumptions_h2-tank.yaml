@@ -1,0 +1,12 @@
+# Overlay for the `h2-tank` scenarios, deep-merged over assumptions.yaml.
+#
+# The base case gives every route a salt cavern at 350 EUR/MWh, which assumptions.yaml
+# itself calls a lower bound and deliberately so. This prices the same routes on the
+# register's tank-with-compressor figure instead: 60_050 EUR/MWh, about 170x the cavern.
+#
+# Storage is what lets an electrolyser buy cheap hours and deliver hydrogen steadily, so
+# a route that cannot afford a buffer has to run closer to flat and pay more per MWh for
+# the electricity it does take. What this measures is how much of each route's cost rests
+# on cheap geology being available where the plant is.
+h2_buffer:
+  capex_per_mwh_eur: 60050
