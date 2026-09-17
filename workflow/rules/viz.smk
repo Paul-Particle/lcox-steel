@@ -15,7 +15,7 @@ rule compile_report:
             "config/assumptions_{scenario}.yaml"
         ),
         networks=collect(
-            "results/{item.scenario}/{item.area}_{item.route}_{item.start_date}_{item.end_date}.nc",
+            "results/{item.scenario}/outputs/{item.area}_{item.route}_{item.start_date}_{item.end_date}.nc",
             item=lookup(query="scenario == '{scenario}'", within=runs_df),
         ),
         # The same grid series the solve priced its imports against, for the
@@ -44,8 +44,14 @@ rule compile_report:
         # ranking already resolved. The diagnostic keeps every zone and the
         # `best_in_country` flag, and is hidden because it answers a follow-up
         # question rather than being the thing to read.
-        report="results/report_{scenario}.csv",
-        diagnostic="results/.report_{scenario}_diag.csv",
+        report="results/{scenario}/report_{scenario}.csv",
+        diagnostic="results/{scenario}/.report_{scenario}_diag.csv",
+        # What priced the run, beside the run. The overlay is written even when
+        # the scenario has none, because "this changed nothing" is a fact worth
+        # recording and an absent file cannot say it.
+        overlay="results/{scenario}/assumptions_{scenario}.overlay.yaml",
+        base_assumptions="results/{scenario}/config/assumptions_base.yaml",
+        merged_assumptions="results/{scenario}/config/assumptions_{scenario}_merged.yaml",
     params:
         best_zone_by=lookup(dpath="report/best_zone_by", within=config, default=""),
     log:
@@ -61,8 +67,8 @@ rule plot_cf_map:
         offshore_regions="resources/shapes/{area}_offshore_geo.parquet",
         area_average_cf="resources/timeseries/{area}_{tech}_area-average_{start_date}_{end_date}.parquet",
     output:
-        png="results/plots/cf_map/{area}_{tech}_{start_date}_{end_date}_cf_map.png",
-        html="results/plots/cf_map/{area}_{tech}_{start_date}_{end_date}_cf_map.html",
+        png="results/diag_plots/cf_map/{area}_{tech}_{start_date}_{end_date}_cf_map.png",
+        html="results/diag_plots/cf_map/{area}_{tech}_{start_date}_{end_date}_cf_map.html",
     wildcard_constraints:
         tech=r"solar|wind-onshore|wind-offshore",
     log:
@@ -79,10 +85,10 @@ rule plot_cf_map:
 rule plot_capacity_bars:
     """One PNG/HTML per scenario — its runs go on the x-axis within each plot."""
     input:
-        report="results/report_{scenario}.csv",
+        report="results/{scenario}/report_{scenario}.csv",
     output:
-        png="results/plots/capacity_bars/{scenario}.png",
-        html="results/plots/capacity_bars/{scenario}.html",
+        png="results/{scenario}/plots/capacity_bars.png",
+        html="results/{scenario}/plots/capacity_bars.html",
     log:
         "logs/plot_capacity_bars/{scenario}.log",
     script:
@@ -95,10 +101,10 @@ rule plot_lcos_bars:
     Errors on scenarios whose only route is h2-only (no LCOS), so it is
     requested on demand rather than fanned out in `rule all`."""
     input:
-        report="results/report_{scenario}.csv",
+        report="results/{scenario}/report_{scenario}.csv",
     output:
-        png="results/plots/lcos_bars/{scenario}.png",
-        html="results/plots/lcos_bars/{scenario}.html",
+        png="results/{scenario}/plots/lcos_bars.png",
+        html="results/{scenario}/plots/lcos_bars.html",
     log:
         "logs/plot_lcos_bars/{scenario}.log",
     script:
@@ -108,10 +114,10 @@ rule plot_lcos_bars:
 rule plot_siting_map:
     """Multi-site only: geographic map of chosen sites + HVDC links for one run."""
     input:
-        network="results/{scenario}/{area}_{route}_{start_date}_{end_date}.nc",
+        network="results/{scenario}/outputs/{area}_{route}_{start_date}_{end_date}.nc",
     output:
-        png="results/plots/siting_map/{scenario}_{area}_{route}_{start_date}_{end_date}.png",
-        html="results/plots/siting_map/{scenario}_{area}_{route}_{start_date}_{end_date}.html",
+        png="results/{scenario}/plots/siting_map_{area}_{route}_{start_date}_{end_date}.png",
+        html="results/{scenario}/plots/siting_map_{area}_{route}_{start_date}_{end_date}.html",
     log:
         "logs/plot_siting_map/{scenario}_{area}_{route}_{start_date}_{end_date}.log",
     script:
@@ -121,10 +127,10 @@ rule plot_siting_map:
 rule plot_site_capacity_bars:
     """Multi-site only: per-site built capacity + HVDC link MW for one run."""
     input:
-        network="results/{scenario}/{area}_{route}_{start_date}_{end_date}.nc",
+        network="results/{scenario}/outputs/{area}_{route}_{start_date}_{end_date}.nc",
     output:
-        png="results/plots/site_capacity_bars/{scenario}_{area}_{route}_{start_date}_{end_date}.png",
-        html="results/plots/site_capacity_bars/{scenario}_{area}_{route}_{start_date}_{end_date}.html",
+        png="results/{scenario}/plots/site_capacity_bars_{area}_{route}_{start_date}_{end_date}.png",
+        html="results/{scenario}/plots/site_capacity_bars_{area}_{route}_{start_date}_{end_date}.html",
     log:
         "logs/plot_site_capacity_bars/{scenario}_{area}_{route}_{start_date}_{end_date}.log",
     script:

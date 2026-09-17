@@ -364,8 +364,10 @@ REPORT_FIELDS = {
     # the emission fields mean what they usually mean.
     "emissions_unavailable_reason": UNDEFINED,
 
-    # Which inputs produced the run (see common/_provenance.py).
+    # Which inputs produced the run, and which code (see common/_provenance.py).
+    # Two runs that agree on both agree on everything the model could control.
     "inputs_hash": UNDEFINED,
+    "code_hash": UNDEFINED,
 }
 
 ZERO_FILLED = tuple(field for field, fill in REPORT_FIELDS.items() if fill == ZERO)
@@ -377,7 +379,8 @@ IDENTITY_FIELDS = ("scenario", "area", "country", "route", "start_date", "end_da
                    "best_in_country", "lco_output_unit",
                    # Prose, not a measurement: everything outside this tuple is
                    # coerced to a number when a report is read back.
-                   "emissions_basis", "emissions_unavailable_reason", "inputs_hash")
+                   "emissions_basis", "emissions_unavailable_reason", "inputs_hash",
+                   "code_hash")
 
 # Fields only the diagnostic carries, for two separate reasons. The flag,
 # because the report has already acted on it, so a frame without it is not

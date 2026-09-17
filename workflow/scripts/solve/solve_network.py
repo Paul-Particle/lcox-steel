@@ -23,7 +23,8 @@ import pypsa
 from build_network import build_network, load_assumptions
 
 from common._logging import configure_logging
-from common._provenance import input_manifest
+from common._paths import REPO_ROOT
+from common._provenance import code_manifest, input_manifest
 from common._runs import zone_parents
 
 if "snakemake" not in globals():
@@ -286,10 +287,16 @@ def main() -> None:
     # stays tied to what produced it. compile_report lifts `inputs_hash` into a
     # report column; the per-file map stays here.
     n.meta.update(input_manifest([Path(raw) for raw in snakemake.input]))
+    # And the code that read them. Snakemake runs this file from a copy under
+    # .snakemake/scripts/, so it names its own repo path to be counted.
+    n.meta.update(code_manifest(
+        REPO_ROOT, extra_paths=(REPO_ROOT / "workflow/scripts/solve/solve_network.py",)
+    ))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     n.export_to_netcdf(out_path)
-    log.info(f"network saved to {out_path} (inputs_hash={n.meta['inputs_hash']})")
+    log.info(f"network saved to {out_path} "
+         f"(inputs_hash={n.meta['inputs_hash']}, code_hash={n.meta['code_hash']})")
 
 
 if __name__ == "__main__":

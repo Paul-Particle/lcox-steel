@@ -182,7 +182,7 @@ def attach(payload: dict, cases: dict) -> None:
             raise SystemExit(
                 f"{report.name} carries no cost leaves ({probe} is not in it), so "
                 f"there is nothing to break down. Recompile the reports — "
-                f"`snakemake results/report_{scenario}.csv --force` — which needs "
+                f"`snakemake results/{scenario}/report_{scenario}.csv --force` — which needs "
                 f"the scenario's solved networks under results/{scenario}/."
             )
         for _, row in runs.iterrows():

@@ -41,7 +41,7 @@ log = logging.getLogger(__name__)
 AREA = "DE_LU"
 YEAR = 2025
 CACHE = ROOT / "data" / "entsoe_cache" / AREA
-OUT = ROOT / "results" / "de_price_vs_residual_demand_2025.html"
+OUT = ROOT / "results" / "diag_plots" / "de_price_vs_residual_demand_2025.html"
 
 _DATA_TYPES = ["prices", "load_actual", "res"]
 BIN_WIDTH_MW = 500

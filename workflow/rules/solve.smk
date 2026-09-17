@@ -47,7 +47,7 @@ rule solve_network:
             ),
         ),
     output:
-        network="results/{scenario}/{area}_{route}_{start_date}_{end_date}.nc",
+        network="results/{scenario}/outputs/{area}_{route}_{start_date}_{end_date}.nc",
     log:
         "logs/solve_network/{scenario}_{area}_{route}_{start_date}_{end_date}.log",
     script:

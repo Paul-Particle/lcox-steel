@@ -79,13 +79,13 @@ include: "rules/viz.smk"
 rule demo:
     default_target: True
     input:
-        collect("results/report_{scenario}.csv", scenario=DEMO_SCENARIOS),
-        collect("results/plots/capacity_bars/{scenario}.png", scenario=DEMO_SCENARIOS),
+        collect("results/{scenario}/report_{scenario}.csv", scenario=DEMO_SCENARIOS),
+        collect("results/{scenario}/plots/capacity_bars.png", scenario=DEMO_SCENARIOS),
 
 
 rule all:
     input:
         # One report per scenario — its rows are that scenario's runs.
-        collect("results/report_{scenario}.csv", scenario=SCENARIOS),
+        collect("results/{scenario}/report_{scenario}.csv", scenario=SCENARIOS),
         # One comparison bar chart per scenario.
-        collect("results/plots/capacity_bars/{scenario}.png", scenario=SCENARIOS),
+        collect("results/{scenario}/plots/capacity_bars.png", scenario=SCENARIOS),
