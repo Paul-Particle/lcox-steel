@@ -1,0 +1,8 @@
+# Overlay for the `elyzr-capex-500` scenario, deep-merged over assumptions.yaml.
+#
+# One input moved and nothing else: electrolyser well below the alkaline quote.
+#
+# Part of the overnight sensitivity set. Routes are limited to the ones this
+# input can reach, so a run that could not respond to it is not solved at all.
+electrolyser:
+  capex_per_mw_eur: 500000

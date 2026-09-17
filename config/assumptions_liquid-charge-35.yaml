@@ -1,0 +1,10 @@
+# Overlay for the `liquid-charge-35` scenario, deep-merged over assumptions.yaml.
+#
+# One input moved and nothing else: the hot-metal charge credit halved: this is most of why MOE wins.
+#
+# Part of the overnight sensitivity set. Routes are limited to the ones this
+# input can reach, so a run that could not respond to it is not solved at all.
+eaf:
+  charge:
+    liquid:
+      el_mwh_per_t: 0.35
