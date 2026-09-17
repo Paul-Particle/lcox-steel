@@ -1,0 +1,8 @@
+# Overlay for the `ew-el-30` scenario, deep-merged over assumptions.yaml.
+#
+# One input moved and nothing else: electrowinning at the low end of the 2-3 MWh/t claim.
+#
+# Part of the overnight sensitivity set. Routes are limited to the ones this
+# input can reach, so a run that could not respond to it is not solved at all.
+ew:
+  el_mwh_per_t: 3.0

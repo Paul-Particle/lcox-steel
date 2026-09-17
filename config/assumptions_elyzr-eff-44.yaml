@@ -1,0 +1,8 @@
+# Overlay for the `elyzr-eff-44` scenario, deep-merged over assumptions.yaml.
+#
+# One input moved and nothing else: a better stack than the register's alkaline column.
+#
+# Part of the overnight sensitivity set. Routes are limited to the ones this
+# input can reach, so a run that could not respond to it is not solved at all.
+electrolyser:
+  efficiency_kwh_per_kg: 44.0

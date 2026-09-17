@@ -1,0 +1,8 @@
+# Overlay for the `batt-capex-150` scenario, deep-merged over assumptions.yaml.
+#
+# One input moved and nothing else: battery energy capacity well above today's.
+#
+# Part of the overnight sensitivity set. Routes are limited to the ones this
+# input can reach, so a run that could not respond to it is not solved at all.
+battery:
+  capex_per_mwh_eur: 150000

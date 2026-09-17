@@ -1,0 +1,8 @@
+# Overlay for the `moe-capex-2500` scenario, deep-merged over assumptions.yaml.
+#
+# One input moved and nothing else: MOE at the pessimistic end.
+#
+# Part of the overnight sensitivity set. Routes are limited to the ones this
+# input can reach, so a run that could not respond to it is not solved at all.
+moe:
+  capex_per_t_per_year_eur: 2500
