@@ -40,6 +40,26 @@ If this repository ever ships a broad multi-country, multi-year cache rather tha
 one series, the "small slice" argument weakens and the question is worth putting to
 ENTSO-E in writing.
 
+## `data/assumptions/Assumptions_yaml_inputs.xlsx`
+
+The techno-economic inputs `config/assumptions.yaml` is generated from, by
+`scratch/generate_assumptions.py`. One row per value: the dotted YAML key it
+writes to, the value, its unit, the key it replaced, and the row ID it was
+confirmed against.
+
+- **Source:** compiled by Future Cleantech Architects from approximately 150
+  third-party sources. This file is a single extract tab from a larger internal
+  workbook where each figure is attributed to its own source; the
+  `Confirmed row ID` column is the reference back into it.
+- **Form:** a compilation. The individual figures are facts drawn from their
+  respective publishers; the selection and arrangement are ours.
+
+**Licence status: not established per-source here.** The underlying publications
+carry their own terms, which are recorded in the master workbook rather than in
+this repository. Before quoting a figure externally, check its source entry
+there. Nothing in this file should be treated as open data on the strength of
+being committed.
+
 ## Everything else under `data/`
 
 The market caches (`entsoe_cache/`, `nem_cache/`, `ons_cache/`, `canada_cache/`) and the
