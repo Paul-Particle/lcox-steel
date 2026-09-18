@@ -65,7 +65,7 @@ ALL_ZONES = os.environ.get("DASHBOARD_ZONES", "all") != "best"
 # the Grid control, so both collapse onto one pill and the Grid axis alone
 # separates them. A scenario absent from here is not browsable: the EW-capex and
 # gas sweeps each answer a single-input question, which is read off
-# results/report_{scenario}.csv rather than clicked through here.
+# results/{scenario}/report_{scenario}.csv rather than clicked through here.
 SCENARIO_LABEL = {"base": "Base", "moe-turndown-70": "MOE turndown 70%"}
 DASHBOARD_SCENARIOS = {
     "standard-grid": "base",
@@ -257,7 +257,8 @@ def scenario_files():
     rows a second time to attach its leaf split — so the two cannot end up
     reading different files.
     """
-    pattern = ".report_*_diag.csv" if ALL_ZONES else "report_*.csv"
+    # One directory per scenario now, so the report is a level down.
+    pattern = "*/.report_*_diag.csv" if ALL_ZONES else "*/report_*.csv"
     found = {_scenario_of(p): p for p in sorted(RESULTS.glob(pattern))}
     return {s: found[s] for s in DASHBOARD_SCENARIOS if s in found}
 

@@ -1363,6 +1363,25 @@ def main() -> None:
         assumptions = deep_merge(
             assumptions, yaml.safe_load(Path(overlays[0]).read_text()) or {}
         )
+    # The run's own copy of what priced it. compile_report is where this belongs
+    # because it already holds all three -- the base, the overlay and the merge of
+    # them -- and a separate rule would have to repeat the merge to say the same
+    # thing. Written every time, including the empty overlay, so the absence of a
+    # change is recorded rather than merely not recorded.
+    Path(snakemake.output.base_assumptions).parent.mkdir(parents=True, exist_ok=True)
+    Path(snakemake.output.base_assumptions).write_text(
+        Path(snakemake.input.assumptions_base).read_text()
+    )
+    Path(snakemake.output.merged_assumptions).write_text(
+        "# The base with this scenario's overlay merged in: what actually priced the\n"
+        "# run, rather than the two files a reader would have to merge in their head.\n"
+        + yaml.safe_dump(assumptions, sort_keys=False)
+    )
+    Path(snakemake.output.overlay).write_text(
+        Path(overlays[0]).read_text() if overlays
+        else f"# {scenario_name} has no overlay: it ran on the base assumptions unchanged.\n"
+    )
+
     parents = zone_parents(snakemake.config["areas"])
 
     # The grid series each run was solved against. Only the emission fields read
@@ -1413,6 +1432,7 @@ def main() -> None:
         # Trailing the row, because it identifies the inputs rather than
         # describing them: the per-file map it stands for is in the network.
         summary["inputs_hash"] = n.meta["inputs_hash"]
+        summary["code_hash"] = n.meta.get("code_hash", "")
         rows.append(summary)
 
     flagged = mark_best_in_country(
