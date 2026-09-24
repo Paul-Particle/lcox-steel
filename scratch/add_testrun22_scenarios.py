@@ -89,7 +89,7 @@ for base_name, route, overlay, description in SCENARIOS:
                 f"# Part of testrun 2.2; see scratch/add_testrun22_scenarios.py.\n"
             )
             body = yaml.safe_dump(overlay, sort_keys=False)
-            (REPO / f"config/assumptions_{scenario}.yaml").write_text(header + body)
+            (REPO / f"config/overlays/{scenario}.yaml").write_text(header + body)
         lines += [f"{scenario},{route},{tech},{variant},ESP,{WINDOW[0]},{WINDOW[1]}"
                   for tech, variant in techs]
 
