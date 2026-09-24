@@ -33,6 +33,10 @@ if "snakemake" not in globals():
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
+# Grid-scale li-ion is built at 1-4 h, so a solved battery charging or discharging
+# faster than this is worth a look, though nothing in the model forbids it.
+MAX_PLAUSIBLE_C_RATE = 1.0
+
 
 def _area_representative_point(regions_path: Path) -> tuple[float, float]:
     """(lon, lat) of a point guaranteed to lie inside the area's own geometry.
@@ -286,6 +290,16 @@ def main() -> None:
             solver_options["run_crossover"] = os.environ.get("HIGHS_CROSSOVER", "off")
     n.optimize(solver_name="highs", solver_options=solver_options,
                extra_functionality=_tie_battery_inverter)
+
+    battery_energy_mwh = n.stores.at["battery", "e_nom_opt"]
+    inverter_mw = n.links.at["battery_charger", "p_nom_opt"]
+    if battery_energy_mwh > 1e-3:
+        c_rate = inverter_mw / battery_energy_mwh
+        if c_rate > MAX_PLAUSIBLE_C_RATE:
+            log.warning(
+                f"battery C-rate {c_rate:.2f} exceeds {MAX_PLAUSIBLE_C_RATE}: "
+                f"{inverter_mw:.0f} MW inverter on {battery_energy_mwh:.0f} MWh"
+            )
 
     # Every file the rule declared, fingerprinted into the network so the result
     # stays tied to what produced it. compile_report lifts `inputs_hash` into a
