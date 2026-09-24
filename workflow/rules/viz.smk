@@ -47,6 +47,22 @@ rule plot_capacity_bars:
         "../scripts/viz/plot_capacity_bars.py"
 
 
+rule plot_lcos_bars:
+    """Steel routes only: stacked LCOS cost-breakdown per scenario for one project.
+
+    Errors on projects with no steel-route scenarios (h2_only has no LCOS), so
+    it is requested on demand rather than fanned out in `rule all`."""
+    input:
+        report="results/report_{project}.csv",
+    output:
+        png="results/plots/lcos_bars/{project}.png",
+        html="results/plots/lcos_bars/{project}.html",
+    log:
+        "logs/plot_lcos_bars/{project}.log",
+    script:
+        "../scripts/viz/plot_lcos_bars.py"
+
+
 rule plot_siting_map:
     """Multi-site only: geographic map of chosen sites + HVDC links for one scenario."""
     input:

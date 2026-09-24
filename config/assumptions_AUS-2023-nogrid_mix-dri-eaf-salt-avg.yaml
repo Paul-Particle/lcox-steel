@@ -1,0 +1,5 @@
+route: mix_dri_eaf
+natural_gas:
+  price_eur_per_mwh: 25
+h2_buffer:
+  capex_per_mwh_eur: 350
