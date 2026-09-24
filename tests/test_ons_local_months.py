@@ -12,8 +12,8 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-import _helpers_grid  # sys.path set by conftest
-import _ons
+from scripts.grid import _helpers_grid
+from scripts.grid import _ons
 
 _local_months = _ons._local_months
 ONS_MARKET_TZ = _helpers_grid.ONS_MARKET_TZ

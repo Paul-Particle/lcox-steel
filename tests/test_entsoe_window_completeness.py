@@ -12,8 +12,8 @@ cache and skips without it.
 import pandas as pd
 import pytest
 
-import _entsoe as R  # sys.path set by conftest
-from _helpers_grid import assert_window_complete, iso
+from scripts.grid import _entsoe as R
+from scripts.grid._helpers_grid import assert_window_complete, iso
 from conftest import AREA, RAW_CACHE
 
 

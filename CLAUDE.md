@@ -1,5 +1,29 @@
 # Project conventions
 
+## The installed package: set it up before running anything
+`workflow/` is an installable package (`pyproject.toml`) with two top-level
+packages, `common` and `scripts`. Nothing puts `workflow/` on `sys.path` any
+more, so without the install every script, test and Snakemake run fails with
+`ModuleNotFoundError: No module named 'common'`. That error means the
+checkout is not installed, not that code is missing. The steps are in README
+"Setup → 2. The package, installed per checkout":
+
+- **One checkout on the machine:** `pip install -e . --no-deps` into the
+  `lcox-steel` conda env.
+- **Several checkouts** (git worktrees, `~/lcox-runs` copies): a `.venv` per
+  checkout layered on the conda env (`uv venv --system-site-packages`, then
+  `uv pip install -e . --no-deps`). Activate the conda env first, then the
+  venv, and run `python -m snakemake …` / `python -m pytest` with the venv's
+  Python, not the bare `snakemake` command. Before running anything in a
+  checkout, check it is the one installed: `python -c "import common;
+  print(common.__file__)"` must print a path inside that checkout.
+
+Imports are always absolute through the two packages:
+`from common._paths import DATA`, `from scripts.grid._helpers_grid import iso`,
+`from scripts.viz import compile_report`. Never import a sibling module by bare
+name and never add `sys.path` inserts; module names that start with a letter
+and digit (`d2_bestsite_p95`) import like any other.
+
 ## Logging
 - f-strings are fine in log calls (`log.info(f"...")`). The old PyPSA-Eur-style
   "%-style only" rule was dropped — lazy-eval/exception-safety wins don't

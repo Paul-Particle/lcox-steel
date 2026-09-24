@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lcox-steel"
+version = "0.1.0"
+description = "Levelised cost of green steel: PyPSA + Snakemake workflow"
+requires-python = ">=3.12"
+# The dependencies are the conda environment's (environment.yaml), so the package
+# is installed with --no-deps on top of it. See "Setup" in README.md.
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["workflow"]
+include = ["common*", "scripts*"]
+exclude = ["scripts.res_cf.reference*"]

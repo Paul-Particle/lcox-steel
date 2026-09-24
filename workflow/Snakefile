@@ -1,12 +1,9 @@
 configfile: "config/config.yaml"
 
 
-import sys
 from pathlib import Path
 
 import yaml
-
-sys.path.insert(0, str(Path(workflow.basedir)))
 
 # VM workaround: strip NUL bytes that occasionally corrupt source files.
 # The VM filesystem can write trailing NUL padding on flush; this scrubs them

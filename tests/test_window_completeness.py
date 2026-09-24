@@ -10,7 +10,7 @@ guard's behaviour on synthetic frames, so they need no raw cache and run anywher
 import pandas as pd
 import pytest
 
-import _helpers_grid  # sys.path set by conftest
+from scripts.grid import _helpers_grid
 
 _assert_window_complete = _helpers_grid.assert_window_complete
 

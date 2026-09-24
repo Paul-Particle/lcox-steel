@@ -39,7 +39,7 @@ from pathlib import Path
 import pandas as pd
 
 from common._paths import DATA
-from _helpers_grid import (
+from scripts.grid._helpers_grid import (
     ONS_MARKET_TZ,
     area_month_in_cache,
     assert_window_complete,
@@ -47,7 +47,7 @@ from _helpers_grid import (
     summarise_runs,
     to_utc_naive,
 )
-from download_ons import SUBSYSTEMS, read_area_year
+from scripts.grid.download_ons import SUBSYSTEMS, read_area_year
 
 # Module-level logger only — retrieve_grid_data.py installs the handlers.
 log = logging.getLogger(__name__)

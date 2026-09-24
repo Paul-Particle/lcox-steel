@@ -16,15 +16,12 @@ scenario in `config/scenarios.csv`, whose leaves are exactly the deviations.
 Output: results/html/assumptions.html — body-only, the hub's second tab.
 """
 import fnmatch
-import sys
 from pathlib import Path
 
 import pandas as pd
 import yaml
 
-sys.path.insert(0, str(Path(__file__).parent))    # sibling build_dashboard
-
-from build_dashboard import DASHBOARD_SCENARIOS, HTML_DIR, font_css   # noqa: E402
+from scripts.viz.dashboard.build_dashboard import DASHBOARD_SCENARIOS, HTML_DIR, font_css
 
 REPO = Path(__file__).resolve().parents[4]
 CONFIG = REPO / "config"

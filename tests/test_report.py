@@ -12,8 +12,8 @@ no cutouts, no solves, so they run anywhere.
 import pandas as pd
 import pytest
 
-import compile_report  # sys.path set by conftest
-import _run_display
+from scripts.viz import compile_report
+from scripts.viz import _run_display
 from common._report_schema import (
     DIAGNOSTIC_FIELDS,
     FIELD_ORDER,

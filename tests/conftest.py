@@ -1,7 +1,6 @@
 """Pytest fixtures for the grid-pipeline validation tests.
 
-Puts the workflow script dirs on ``sys.path`` so the ENTSO-E processing code can
-be imported, and exposes the two datasets the validation compares:
+Exposes the two datasets the validation compares:
 
 * ``pipeline_full_de_2023`` — the ``full``-variant frame for DE_LU / 2023, rebuilt
   from the local ENTSO-E raw monthly cache via the pipeline's own
@@ -11,31 +10,17 @@ be imported, and exposes the two datasets the validation compares:
 """
 
 from pathlib import Path
-import sys
 
 import pandas as pd
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from common._paths import DATA
+from scripts.grid import _entsoe
 
-# _entsoe imports ``common.*`` (workflow/) and its siblings
-# (_helpers_grid, download_entsoe) as top-level modules
-# (workflow/scripts/grid/); the viz scripts likewise import each other by bare
-# name. Each scripts/ dir suffixes its helper module with its own name, so a
-# second dir on this flat path cannot shadow the first's.
-for _p in (
-    REPO_ROOT / "workflow",
-    REPO_ROOT / "workflow" / "scripts" / "grid",
-    REPO_ROOT / "workflow" / "scripts" / "viz",
-    REPO_ROOT / "workflow" / "scripts" / "solve",
-):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # The raw cache is an expensive input, so it lives wherever the store does —
 # `LCOX_STORE` points every worktree at one copy (see workflow/common/_paths.py).
-from common._paths import DATA
-
 RAW_CACHE = DATA / "entsoe_cache"
 AREA = "DE_LU"
 MONTHS = [f"2023-{month:02d}" for month in range(1, 13)]
@@ -50,8 +35,6 @@ def pipeline_full_de_2023() -> pd.DataFrame:
             f"ENTSO-E raw cache not found ({probe}). Build it by running the grid "
             "pipeline for DE_LU 2023 (all six data types)."
         )
-
-    import _entsoe  # imported here so sys.path (set above) is in effect
 
     frames = [_entsoe._process_full_month(AREA, ym, RAW_CACHE) for ym in MONTHS]
     combined = (
