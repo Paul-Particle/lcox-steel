@@ -435,6 +435,8 @@ def _add_battery(
     annuity = annuity_factor(wacc, bat_cfg["lifetime_years"])
     store_bus = f"{bus}_battery"
     n.add("Bus", store_bus, carrier="battery")
+    # No C-rate limit ties power to energy, as in PyPSA-Eur: the optimiser picks
+    # durations long enough that a li-ion limit of 0.5-1C would not bind.
     n.add(
         "Store",
         "battery",
