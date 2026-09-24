@@ -4,6 +4,8 @@ configfile: "config/config.yaml"
 import sys
 from pathlib import Path
 
+import yaml
+
 sys.path.insert(0, str(Path(workflow.basedir)))
 
 # VM workaround: strip NUL bytes that occasionally corrupt source files.
@@ -23,7 +25,13 @@ onstart:
             p.write_bytes(data.replace(b'\x00', b''))
             print(f"VM workaround: Removed NUL bytes from {p.relative_to(_smk_root)}")
 
-from common._runs import ROUTE_PATTERN, build_runs_frame, load_scenarios, top_level_areas
+from common._runs import (
+    ROUTE_PATTERN,
+    build_destination_frame,
+    build_runs_frame,
+    load_scenarios,
+    top_level_areas,
+)
 
 # One row per input timeseries, validated, with `all-areas` cells resolved
 # against the area registry — so every row downstream, the solve rule's lookup
@@ -32,6 +40,17 @@ scenarios_df = load_scenarios("config/scenarios.csv", config["areas"])
 
 # One row per network to solve — `all-routes` and `a|b` cells expanded.
 runs_df = build_runs_frame(scenarios_df, config["areas"])
+
+# One row per `-export` run, naming the market its furnace stands in, so the
+# solve and report rules can ask for that market's series. Read from the base
+# assumptions only: a per-scenario overlay is merged inside the scripts, too
+# late for the DAG, so an overlay that moves the destination is rejected there
+# rather than quietly solved against the wrong country's prices.
+destinations_df = build_destination_frame(
+    runs_df,
+    yaml.safe_load(Path("config/assumptions.yaml").read_text())["destination"]["area"],
+    config["areas"],
+)
 
 # The areas make_area_geometry can build. It reads Natural Earth Admin 0, which
 # is countries only, so a zone's geometry is a committed source file instead
