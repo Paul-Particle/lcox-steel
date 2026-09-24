@@ -43,8 +43,9 @@ def test_the_two_markets_differ_only_where_they_are_documented_to():
     assert nem - entsoe == {"hydro"}
 
 
-def test_every_factor_carries_all_three_bases():
-    """A factor keyed on one basis only would be read on whichever basis the run
-    was on, silently — which is what the basis label exists to prevent."""
+def test_every_factor_carries_the_same_bases():
+    """A factor missing a basis the others have would fail only on a run on that
+    basis, so every carrier has to carry the same set."""
+    bases = set(next(iter(FACTORS.values())))
     for carrier, values in FACTORS.items():
-        assert set(values) == {"combustion", "delegated_act", "lifecycle"}, carrier
+        assert set(values) == bases, carrier

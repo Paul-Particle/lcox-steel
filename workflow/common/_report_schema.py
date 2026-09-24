@@ -313,7 +313,7 @@ REPORT_FIELDS = {
     # steel, which is why a figure here is not a CBAM or an ETS number. The
     # freight is measured all the same, at the foot of this block.
     #
-    # `emissions_basis` says which of the three factor bases produced them, so no
+    # `emissions_basis` says which factor basis produced them, so no
     # number here can be read on the wrong footing; a grid run's intensity always
     # comes from its own `variant: emissions` generation series, never from a
     # stand-in.

@@ -54,14 +54,6 @@ SKIPPED = {
     "natural_gas.co2_price_eur_per_t":
         "Zero in every scenario here, so no route pays anything for its carbon "
         "and no cost on any chart comes from it.",
-    "emissions.electricity_t_co2e_per_mwh.*.delegated_act":
-        "A second emission basis the run did not use.",
-    "emissions.electricity_t_co2e_per_mwh.*.lifecycle":
-        "A third emission basis the run did not use.",
-    "emissions.gas_upstream_t_co2e_per_mwh.delegated_act": "As above.",
-    "emissions.gas_upstream_t_co2e_per_mwh.lifecycle": "As above.",
-    "emissions.freight_kg_co2e_per_t_km.*.delegated_act": "As above.",
-    "emissions.freight_kg_co2e_per_t_km.*.lifecycle": "As above.",
 }
 
 # Plain rows: (path, label, unit) under a heading. The path is both where the
