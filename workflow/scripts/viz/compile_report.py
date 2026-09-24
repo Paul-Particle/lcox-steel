@@ -874,10 +874,11 @@ def _leaf_breakdown(
         fields["h2_kg_per_t_steel"] = _h2_produced_kg(n) / steel_t
     if "battery" in n.stores.index and "battery_charger" in n.links.index:
         power_mw = float(n.links.at["battery_charger", "p_nom_opt"])
+        energy_mwh = float(n.stores.at["battery", "e_nom_opt"])
         if power_mw > 0:
-            fields["battery_duration_hours"] = (
-                float(n.stores.at["battery", "e_nom_opt"]) / power_mw
-            )
+            fields["battery_duration_hours"] = energy_mwh / power_mw
+        if energy_mwh > 0:
+            fields["max_battery_c_rate"] = power_mw / energy_mwh
 
     # -- the inputs behind the split, so a cost can be checked against them
     for link in PROCESS_LINKS:
