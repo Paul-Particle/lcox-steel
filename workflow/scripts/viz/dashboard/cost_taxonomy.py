@@ -347,10 +347,12 @@ def spec(assumptions: dict) -> list:
     # A run priced at zero carbon has no carbon band: it would be worth 0 €/t on
     # every route, so it draws nothing and only puts the words "carbon price" in
     # front of a reader of a run that does not have one.
-    if gas.get("co2_price_eur_per_t", 0.0) > 0:
+    emissions = assumptions["emissions"]
+    if emissions["co2_price_eur_per_t"] > 0:
+        gas_process = emissions["natural_gas_reductant_t_co2e_per_mwh"]["process"]
         add("gas_carbon", "Natural gas — CO₂ price", "#7A8792",
-            [("carbon price", f"{gas['co2_price_eur_per_t']:,.0f} €/t CO₂"),
-             ("emission factor", f"{gas['co2_t_per_mwh']:.2f} t CO₂ / MWh LHV")])
+            [("carbon price", f"{emissions['co2_price_eur_per_t']:,.0f} €/t CO₂"),
+             ("emission factor", f"{gas_process:.2f} t CO₂ / MWh LHV")])
 
     el_cfg = assumptions["electrolyser"]
     add("electrolyser_capex", "Electrolyser — capital", "#6FA875",

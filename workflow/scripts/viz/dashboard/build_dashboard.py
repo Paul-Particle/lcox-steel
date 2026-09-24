@@ -409,7 +409,8 @@ def _gas_price(scenario):
 def _co2_t_per_mwh():
     """Gas combustion CO2 intensity (t/MWh LHV) from assumptions; constant as fallback."""
     base = yaml.safe_load((REPO / "config" / "assumptions.yaml").read_text()) or {}
-    return base.get("natural_gas", {}).get("co2_t_per_mwh", CO2_T_PER_MWH)
+    return (base.get("emissions", {}).get("natural_gas_reductant_t_co2e_per_mwh", {})
+            .get("process", CO2_T_PER_MWH))
 
 
 def _main_year(cases):

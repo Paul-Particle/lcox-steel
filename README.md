@@ -378,7 +378,7 @@ UTC hourly `DatetimeIndex`, leading `price` column (EUR/MWh). Three variants:
 | variant | columns | for |
 |---|---|---|
 | `dayahead` | `price` | a solve, and nothing else |
-| `emissions` | `price` + one per carrier, hourly | the default for grid rows — the solve buys at the price, the report weights the mix by `emissions.electricity_t_co2e_per_mwh` |
+| `emissions` | `price` + one per carrier, hourly | the default for grid rows — the solve buys at the price, the report weights the mix by the grid emission factors under `emissions` in `config/assumptions.yaml` |
 | `full` | all data types, native resolution | analysis; adds load, RES forecast and cross-border flows |
 
 The carrier column names are the shared vocabulary the downloaders emit

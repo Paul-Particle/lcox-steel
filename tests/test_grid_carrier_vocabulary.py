@@ -2,7 +2,7 @@
 
 This is what makes a single emission factor table serve ENTSO-E and the NEM: the
 two downloaders were deliberately given the same short carrier names, and those
-names are the keys of `emissions.electricity_t_co2e_per_mwh`. Nothing translates
+names are the keys of the grid emission factor table. Nothing translates
 between them anywhere, so the three have to be held to each other here — a
 carrier one downloader can emit and the table has no factor for makes the report
 refuse the run, and a factor for a carrier nobody emits is dead weight that
@@ -17,9 +17,10 @@ import download_entsoe
 import download_nem  # sys.path set by conftest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FACTORS = yaml.safe_load((REPO_ROOT / "config" / "assumptions.yaml").read_text())[
+EMISSIONS = yaml.safe_load((REPO_ROOT / "config" / "assumptions.yaml").read_text())[
     "emissions"
-]["electricity_t_co2e_per_mwh"]
+]
+FACTORS = EMISSIONS[EMISSIONS["basis"]]["electricity_t_co2e_per_mwh"]
 
 
 def test_every_carrier_either_downloader_can_emit_has_a_factor():
@@ -41,11 +42,3 @@ def test_the_two_markets_differ_only_where_they_are_documented_to():
     entsoe = set(download_entsoe.CARRIER_NAMES.values())
     nem = set(download_nem.CARRIER_PATTERNS)
     assert nem - entsoe == {"hydro"}
-
-
-def test_every_factor_carries_the_same_bases():
-    """A factor missing a basis the others have would fail only on a run on that
-    basis, so every carrier has to carry the same set."""
-    bases = set(next(iter(FACTORS.values())))
-    for carrier, values in FACTORS.items():
-        assert set(values) == bases, carrier

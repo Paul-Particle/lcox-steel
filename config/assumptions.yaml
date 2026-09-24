@@ -213,14 +213,7 @@ natural_gas:
   # benchmark comparable across countries, the same argument that governs the
   # other cross-country inputs.
   price_eur_per_mwh: 21.9       # midpoint of the register's low/high benchmark
-  # Combustion emissions, LHV basis. Direct emissions, not scope 2 like the
-  # rest of the emission accounting: this gives the NG-DRI comparison case an
-  # emissions figure, as a baseline for the scope 2 emissions of runs on a
-  # dirty grid.
-  co2_t_per_mwh: 0.20
-  # Carbon price applied to gas CO2 (goes into the gas marginal cost).
-  # Default 0 = pure fixed-gas-price benchmark; EU ETS 2023 avg ≈ 85 €/t.
-  co2_price_eur_per_t: 0
+  # Its emissions and the optional carbon price on them are under `emissions`.
 
 dri-ng:
   # Natural-gas DRI shaft (Midrex/HYL type) — the mature fossil benchmark.
@@ -371,8 +364,9 @@ transmission:
   indirect_route_factor: 1.25   # great-circle distance → routed cable length
 
 emissions:
-  # What the run's energy and freight put into the air. Accounting only — none
-  # of this reaches the objective, so a number here never changes a solve.
+  # What the run's energy and freight put into the air. Accounting only, apart
+  # from the carbon price below: none of the rest reaches the objective, so it
+  # never changes a solve.
   #
   # WHAT IS NOT COUNTED. The model's boundary stops where the melt does (see
   # build_network's module docstring), so the direct emissions of the process
@@ -383,56 +377,55 @@ emissions:
   # one. What is counted is the energy and the freight: grid and renewable
   # electricity, natural gas combustion, and the ships and trains.
   #
-  # Every factor below is keyed by basis, and `basis` picks the one a run
-  # uses. Reports carry the name of the basis they used so a number cannot be
-  # read on the wrong one. There is one basis so far:
-  #
-  #   combustion     what comes out of the stack, and nothing else. Renewables
-  #                  and nuclear are zero. This is what a grid CO2 monitor
-  #                  reports and what most "grid carbon intensity" figures mean.
-  basis: combustion
+  # Which set of grid emission factors below a run uses. Reports carry its name
+  # so a number cannot be read on the wrong one.
+  basis: default_grid_emission_factors
 
-  # t CO2e per MWh of electricity generated, by the carrier names the grid
-  # pipeline uses (see grid/download_entsoe.py and grid/download_nem.py, which
-  # were deliberately given one shared vocabulary — the same keys serve both
-  # markets). These keys are what a `variant: emissions` grid series has columns
-  # for, which is how the two meet. A carrier appearing in a generation series
-  # but missing here is an error, not a zero.
-  #
-  # combustion:    Agora Energiewende's Agorameter factors. The 1.57 shared by
-  #                the dirty catch-alls is deliberately punitive: they are
-  #                small, mixed, and mostly worse than lignite.
-  #
-  # Storage carriers are here for the vocabulary rather than for their factor:
-  # the report leaves them out of a mix altogether, both what a reservoir gives
-  # back and what it took to fill it, which is what makes stored energy carry
-  # the average of everything else. Counting the discharge at a factor of zero
-  # would instead read as free power and dilute the mix (a couple of per cent in
-  # DE, more in a hydro-heavy NEM region). Their round-trip loss is charged
-  # where it belongs, as extra electricity drawn.
-  electricity_t_co2e_per_mwh:
-    biomass:         { combustion: 0    }
-    brown_coal:      { combustion: 1.12 }
-    coal_gas:        { combustion: 1.57 }
-    energy_storage:  { combustion: 0    }
-    gas:             { combustion: 0.38 }
-    geothermal:      { combustion: 0    }
-    hard_coal:       { combustion: 0.82 }
-    hydro:           { combustion: 0    }   # NEM's undivided hydro
-    hydro_reservoir: { combustion: 0    }
-    hydro_river:     { combustion: 0    }
-    marine:          { combustion: 0    }
-    nuclear:         { combustion: 0    }
-    oil:             { combustion: 1.57 }
-    oil_shale:       { combustion: 1.57 }
-    other:           { combustion: 1.57 }
-    other_re:        { combustion: 0    }
-    peat:            { combustion: 1.57 }
-    pumped_storage:  { combustion: 0    }
-    solar:           { combustion: 0    }
-    waste:           { combustion: 1.57 }
-    wind_offshore:   { combustion: 0    }
-    wind_onshore:    { combustion: 0    }
+  default_grid_emission_factors:
+    # t CO2e per MWh of electricity generated: what comes out of the stack, and
+    # nothing else, so renewables and nuclear are zero. This is what a grid CO2
+    # monitor reports and what most "grid carbon intensity" figures mean.
+    # Agora Energiewende's Agorameter factors. The 1.57 shared by the dirty
+    # catch-alls is deliberately punitive: they are small, mixed, and mostly
+    # worse than lignite.
+    #
+    # Keyed by the carrier names the grid pipeline uses (see
+    # grid/download_entsoe.py and grid/download_nem.py, which were deliberately
+    # given one shared vocabulary — the same keys serve both markets). These
+    # keys are what a `variant: emissions` grid series has columns for, which is
+    # how the two meet. A carrier appearing in a generation series but missing
+    # here is an error, not a zero.
+    #
+    # Storage carriers are here for the vocabulary rather than for their factor:
+    # the report leaves them out of a mix altogether, both what a reservoir gives
+    # back and what it took to fill it, which is what makes stored energy carry
+    # the average of everything else. Counting the discharge at a factor of zero
+    # would instead read as free power and dilute the mix (a couple of per cent
+    # in DE, more in a hydro-heavy NEM region). Their round-trip loss is charged
+    # where it belongs, as extra electricity drawn.
+    electricity_t_co2e_per_mwh:
+      biomass:         0
+      brown_coal:      1.12
+      coal_gas:        1.57
+      energy_storage:  0
+      gas:             0.38
+      geothermal:      0
+      hard_coal:       0.82
+      hydro:           0        # NEM's undivided hydro
+      hydro_reservoir: 0
+      hydro_river:     0
+      marine:          0
+      nuclear:         0
+      oil:             1.57
+      oil_shale:       1.57
+      other:           1.57
+      other_re:        0
+      peat:            1.57
+      pumped_storage:  0
+      solar:           0
+      waste:           1.57
+      wind_offshore:   0
+      wind_onshore:    0
 
   # There is deliberately no per-area annual figure here, and none for the
   # destination either. Every intensity in the model comes from a generation
@@ -442,14 +435,21 @@ emissions:
   # is a mistake in the scenario table, not a case to paper over, so the report
   # says so and stops.
 
-  # Natural gas burned in a shaft, per MWh LHV. The combustion figure is
-  # `natural_gas.co2_t_per_mwh` (the NG-DRI baseline, see there), which the
-  # optional carbon price also uses, so it stays in one place; this is only the
-  # fuel's own supply chain on top —
+  # Natural gas burned in a shaft, t CO2e per MWh LHV. Direct emissions, not
+  # scope 2 like the grid factors above: they give the NG-DRI comparison case an
+  # emissions figure, as a baseline for the scope 2 emissions of runs on a dirty
+  # grid. `process` is combustion; `upstream` is the fuel's own supply chain —
   # extraction, processing, pipelines, and the methane that leaks on the way —
-  # which the combustion basis does not count.
-  gas_upstream_t_co2e_per_mwh:
-    combustion:    0
+  # zero for now, and kept in case we decide to count it.
+  natural_gas_reductant_t_co2e_per_mwh:
+    process:  0.20
+    upstream: 0
+
+  # € per t CO2e on the natural gas `process` emissions, added to the gas
+  # price. The default carbon price is zero and it's just kept here for option
+  # value; it does influence the run if it is set though. For scale, the EU ETS
+  # 2023 average was about 85 €/t.
+  co2_price_eur_per_t: 0
 
   # Freight, kg CO2e per t of cargo and km travelled. Diagnostic only for now:
   # only the diagnostic report carries freight emissions. Sea is a capesize bulk
@@ -460,11 +460,9 @@ emissions:
   #
   # Source: GLEC Framework v3.2, which is well-to-wake (bulk >200k dwt 3.1,
   # 60-100k dwt 5.2; rail electric 10.8, diesel 30.7 gCO2e/t*km). Capesize
-  # interpolates to ~3.5. The combustion figure drops the fuel's own supply
-  # chain, about 15 % of a ship's well-to-wake; for electric rail it is the
-  # generation behind the wire, which is a stack emission and stays.
+  # interpolates to ~3.5. These figures drop the fuel's own supply chain, about
+  # 15 % of a ship's well-to-wake; for electric rail they are the generation
+  # behind the wire, which is a stack emission and stays.
   freight_kg_co2e_per_t_km:
-    sea:
-      combustion:    0.0030
-    rail:
-      combustion:    0.0108
+    sea:  0.0030
+    rail: 0.0108

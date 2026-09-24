@@ -19,17 +19,19 @@ from common._report_schema import EMISSION_STEPS
 # A deliberately round factor table: coal at 1, gas at 0.5, wind free, so every
 # expected number below can be read off by hand.
 EMISSIONS = {
-    "basis": "test",
-    "electricity_t_co2e_per_mwh": {
-        "hard_coal":    {"test": 1.0},
-        "gas":          {"test": 0.5},
-        "wind_onshore": {"test": 0.0},
-        "solar":        {"test": 0.2},
+    "basis": "test_grid_emission_factors",
+    "test_grid_emission_factors": {
+        "electricity_t_co2e_per_mwh": {
+            "hard_coal":    1.0,
+            "gas":          0.5,
+            "wind_onshore": 0.0,
+            "solar":        0.2,
+        },
     },
-    "gas_upstream_t_co2e_per_mwh": {"test": 0.1},
-    "freight_kg_co2e_per_t_km": {"sea": {"test": 0.004}, "rail": {"test": 0.01}},
+    "natural_gas_reductant_t_co2e_per_mwh": {"process": 0.2, "upstream": 0.1},
+    "co2_price_eur_per_t": 0.0,
+    "freight_kg_co2e_per_t_km": {"sea": 0.004, "rail": 0.01},
 }
-NATURAL_GAS = {"co2_t_per_mwh": 0.2}
 # Four snapshots stand for the year, so an hourly MW is 2190 MWh annualised.
 SCALE = 8760 / 4
 
@@ -93,10 +95,10 @@ def _breakdown(n: pypsa.Network, legs: dict | None = None,
                destination_mix: pd.DataFrame | None = None) -> dict:
     """The function under test, with only the inputs a case varies named at the call.
 
-    The factor table, the gas figures and the two place names are the same in
+    The emission factors and the two place names are the same in
     every case, so they sit here rather than in eighteen argument lists."""
     return compile_report._emissions_breakdown(
-        n, EMISSIONS, NATURAL_GAS, "VIC1", legs, grid_mix, "DEU", destination_mix
+        n, EMISSIONS, "VIC1", legs, grid_mix, "DEU", destination_mix
     )
 
 
@@ -144,7 +146,8 @@ def test_a_flat_user_and_a_flexible_one_carry_different_intensities():
 
 def test_a_gas_shaft_carries_its_combustion_but_not_in_its_power_intensity():
     """Its step total includes the gas; its per-MWh figure must not, or it reads as
-    having bought impossibly dirty electricity."""
+    having bought impossibly dirty electricity. The gas is not scope 2: it is the
+    NG-DRI baseline the grid runs are compared against."""
     n = _network()
     n.add("Bus", "gas", carrier="gas")
     n.add("Generator", "grid_import", bus="electricity", carrier="AC")
@@ -232,7 +235,9 @@ def test_a_destination_furnace_without_its_market_s_series_is_an_error():
         _breakdown(n)
 
 
-def test_freight_is_charged_per_tonne_over_the_run_s_own_legs():
+def test_freight_is_a_diagnostic_charged_per_tonne_over_the_run_s_own_legs():
+    """Freight emissions are for the diagnostic only: charged per tonne shipped
+    over the run's own legs, and counted in no step and no total."""
     n = _network()
     n.add("Bus", "iron_destination", carrier="iron")
     n.add("Generator", "wind-onshore", bus="electricity", carrier="wind-onshore")
@@ -245,7 +250,7 @@ def test_freight_is_charged_per_tonne_over_the_run_s_own_legs():
     per_t = (0.004 * 10_000 + 0.01 * 300) / 1000.0
     shipped = pytest.approx(1.0 * 4 * SCALE * per_t)
     assert emitted["freight_by_leg"]["iron_transport"] == shipped
-    # Outside the boundary: no step carries it and no source counts it.
+    # A diagnostic outside the boundary: no step carries it, no source counts it.
     assert "iron_transport" not in emitted["by_step"]
     assert set(emitted["sources"]) == {"electricity", "gas"}
 

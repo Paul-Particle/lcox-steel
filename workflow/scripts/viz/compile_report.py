@@ -114,7 +114,8 @@ def _grid_intensity(
         raise ValueError(
             f"{area}: its grid series has generation columns the emission factor "
             f"table has no entry for: {sorted(unknown)}. Either they are carriers "
-            f"and belong in `emissions.electricity_t_co2e_per_mwh` in "
+            f"and belong in the `electricity_t_co2e_per_mwh` table under "
+            f"`emissions` in "
             f"config/assumptions.yaml, or the series is not a `variant: emissions` "
             f"one — a `full` series carries load and flow columns too."
         )
@@ -196,7 +197,7 @@ def _storage_carbon(
 
 
 def _emissions_breakdown(
-    n: pypsa.Network, emissions_cfg: dict, natural_gas_cfg: dict,
+    n: pypsa.Network, emissions_cfg: dict,
     area: str, transport_legs: dict | None, grid_mix: pd.DataFrame | None,
     destination_area: str, destination_mix: pd.DataFrame | None,
 ) -> dict[str, object]:
@@ -216,8 +217,9 @@ def _emissions_breakdown(
     It is also the one figure here that does not need a grid mix, so it stands
     when the rest cannot be read.
 
-    Accounting only: none of this reaches the objective, so nothing here can
-    move a solve. And it covers the run's energy alone — the process steps' own
+    Accounting only: nothing here reaches the objective (the optional carbon
+    price on gas is set in build_network), so nothing here can move a solve.
+    And it covers the run's energy alone — the process steps' own
     direct emissions are outside the model boundary, which is why the result is
     not a CBAM or an ETS figure. See the `emissions` block in
     config/assumptions.yaml.
@@ -228,9 +230,7 @@ def _emissions_breakdown(
     plant's own renewables mix with whatever it imports, and — on an export
     route — the destination's, which is a grid and nothing else.
     """
-    basis = emissions_cfg["basis"]
-    factors = {carrier: values[basis]
-               for carrier, values in emissions_cfg["electricity_t_co2e_per_mwh"].items()}
+    factors = emissions_cfg[emissions_cfg["basis"]]["electricity_t_co2e_per_mwh"]
     annual = _hours_per_year(n.snapshots) / len(n.snapshots)
 
     # PyPSA's netCDF export drops a time-varying column whose every value is the
@@ -356,20 +356,21 @@ def _emissions_breakdown(
     electricity_t = sum(electricity_by_user.values())
 
     # Gas combustion lands on whichever link burns it, so a blended shaft carries
-    # its own gas rather than having it broken out beside it.
-    gas_t_per_mwh = (natural_gas_cfg["co2_t_per_mwh"]
-                     + emissions_cfg["gas_upstream_t_co2e_per_mwh"][basis])
+    # its own gas rather than having it broken out beside it. Not scope 2: it is
+    # what gives the NG-DRI comparison case a figure to hold the grid runs against.
+    gas_factors = emissions_cfg["natural_gas_reductant_t_co2e_per_mwh"]
+    gas_t_per_mwh = gas_factors["process"] + gas_factors["upstream"]
     gas_t = 0.0
     for link in n.links.index[n.links.bus0 == "gas"]:
         burned = float(link_p0[link].sum()) * annual * gas_t_per_mwh
         emissions[link] = emissions.get(link, 0.0) + burned
         gas_t += burned
 
-    # Freight over the run's own legs, each mode at its own factor. Kept out of
-    # `emissions` so that no total counts it.
+    # Freight over the run's own legs, each mode at its own factor. A diagnostic:
+    # kept out of `emissions` so that no total counts it.
     freight = emissions_cfg["freight_kg_co2e_per_t_km"]
     legs = transport_legs or {}
-    t_co2e_per_t = sum(freight[mode][basis] * km for mode, km in legs.items()) / 1000.0
+    t_co2e_per_t = sum(freight[mode] * km for mode, km in legs.items()) / 1000.0
     freight_by_leg = {}
     for link in FREIGHT_LEGS:
         if link not in n.links.index:
@@ -691,10 +692,11 @@ def _leaf_breakdown(
     # -- natural gas: the fuel bill, and separately any carbon price on it. Both
     # ride on the gas generator's marginal cost, so the carbon comes out at the
     # rate it was charged and the fuel is what is left of the group.
-    gas_cfg = assumptions["natural_gas"]
+    emissions_cfg = assumptions["emissions"]
     gas_mwh = (float(n.generators_t.p["gas_supply"].sum()) * annual_scale
                if "gas_supply" in n.generators.index else 0.0)
-    carbon_per_mwh = gas_cfg["co2_price_eur_per_t"] * gas_cfg["co2_t_per_mwh"]
+    carbon_per_mwh = (emissions_cfg["co2_price_eur_per_t"]
+                      * emissions_cfg["natural_gas_reductant_t_co2e_per_mwh"]["process"])
     leaves["gas_carbon"] = gas_mwh * carbon_per_mwh
     leaves["gas_fuel"] = breakdown["gas"] - leaves["gas_carbon"]
 
@@ -1259,7 +1261,7 @@ def extract_summary(
     # Emissions, on the basis the assumptions name. Reported in kg so the
     # report's two decimals still say something about a clean route.
     emitted = _emissions_breakdown(
-        n, assumptions["emissions"], assumptions["natural_gas"],
+        n, assumptions["emissions"],
         run["area"], transport_legs, grid_mix,
         assumptions["destination"]["area"], destination_mix,
     )

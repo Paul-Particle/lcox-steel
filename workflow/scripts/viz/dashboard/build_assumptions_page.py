@@ -187,6 +187,10 @@ def fmt(value) -> str:
 
 def main() -> None:
     """Read the assumptions, the overlays and the scenario table; write the page."""
+    raise SystemExit(
+        "The assumptions page is paused while config/assumptions.yaml is being "
+        "restructured; this script still reads the old layout."
+    )
     assumptions = yaml.safe_load((CONFIG / "assumptions.yaml").read_text())
     config = yaml.safe_load((CONFIG / "config.yaml").read_text())
     scenarios = pd.read_csv(CONFIG / "scenarios.csv", comment="#")

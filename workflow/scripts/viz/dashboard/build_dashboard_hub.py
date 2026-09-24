@@ -5,7 +5,8 @@ artifact: a work-in-progress banner and a tab bar over isolated iframes.
 
 Inputs:
   * results/html/dashboard_v2.html         — built by build_dashboard_v2.py
-  * results/html/assumptions.html          — built by build_assumptions.py
+  * results/html/assumptions.html          — built by build_assumptions_page.py
+                                             (paused, see FRAGMENTS)
   * results/html/cost_breakdown.html       — built by build_cost_breakdown.py
   * hub_pages/network_schematic.html       — static source page (no generator)
   * hub_pages/workflow_dag.html            — static source page (no generator)
@@ -52,14 +53,19 @@ FAVICON = ("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22"
 # `cost_taxonomies.html` builds but is not in TAB_ORDER: it sets two ways of
 # cutting the same cost side by side, which the hub does not need to show. Add
 # its key to TAB_ORDER to publish it.
+#
+# The assumptions page is paused while config/assumptions.yaml is being
+# restructured: build_assumptions_page.py still reads the old layout. Put
+#     "assumptions": (HTML_DIR / "assumptions.html",        "Assumptions"),
+# back into FRAGMENTS, and "assumptions" after "breakdown" in TAB_ORDER, once
+# it reads the new one.
 FRAGMENTS = {
     "breakdown":   (HTML_DIR / "cost_breakdown.html",      "Cost breakdown"),
-    "assumptions": (HTML_DIR / "assumptions.html",        "Assumptions"),
     "compare":     (HTML_DIR / "dashboard_v2.html",       "Scenario comparison"),
     "schematic":   (HUB_PAGES / "network_schematic.html", "Network schematic"),
     "dag":         (HUB_PAGES / "workflow_dag.html",      "Workflow DAG"),
 }
-TAB_ORDER = ["breakdown", "assumptions", "compare", "schematic", "dag"]
+TAB_ORDER = ["breakdown", "compare", "schematic", "dag"]
 DEFAULT = "breakdown"
 
 
