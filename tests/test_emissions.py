@@ -8,6 +8,7 @@ networks with the dispatch written in — no cutouts, no solves, so they run
 anywhere and a change in `config/assumptions.yaml` cannot move them.
 """
 
+import numpy as np
 import pandas as pd
 import pypsa
 import pytest
@@ -265,9 +266,10 @@ def test_the_grid_s_intensity_comes_from_its_own_generation_mix():
     assert emitted["by_step"]["eaf"] == pytest.approx(10.0 * 4 * SCALE * 0.75)
 
 
-def test_a_grid_run_without_a_mix_is_an_error_not_a_default():
-    """There is nothing to stand in for a missing mix, so say so and stop. The
-    message has to name the fix, because the fix is one cell of scenarios.csv."""
+def test_a_grid_run_without_a_mix_reports_the_reason_not_a_number():
+    """Nothing stands in for a missing mix, so the emissions come back unknown
+    rather than zero — a market that publishes prices and no generation is a
+    limit of the source, not a mistake to stop on."""
     n = _network()
     n.add("Generator", "grid_import", bus="electricity", carrier="AC")
     n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
@@ -275,13 +277,15 @@ def test_a_grid_run_without_a_mix_is_an_error_not_a_default():
     _dispatch(n, "links", "p0", {"eaf": [5.0] * 4})
     _dispatch(n, "links", "p2", {"eaf": [10.0] * 4})
 
-    with pytest.raises(ValueError, match="variant: emissions"):
-        _breakdown(n)
+    emitted = _breakdown(n)
+    assert "no generation mix" in emitted["unavailable"]
+    assert np.isnan(emitted["sources"]["electricity"])
+    # The MWh the furnace drew is known whatever the mix was, and stays known.
+    assert emitted["electricity_mwh"]["eaf"] > 0
 
     # A price-only series is the same case: no carrier columns, no intensity.
     prices_only = pd.DataFrame({"price": [50.0] * 4}, index=n.snapshots)
-    with pytest.raises(ValueError, match="no generation mix"):
-        _breakdown(n, grid_mix=prices_only)
+    assert "no generation mix" in _breakdown(n, grid_mix=prices_only)["unavailable"]
 
 
 def test_an_islanded_run_needs_no_mix_at_all():

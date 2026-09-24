@@ -118,12 +118,20 @@ def retrieve_window(snakemake, read_year, eur_per_cad: float) -> None:
     start_date = snakemake.wildcards.start_date
     end_date = snakemake.wildcards.end_date
 
-    if variant != "dayahead":
+    if variant not in ("dayahead", "emissions"):
         raise ValueError(
             f"variant {variant!r} is not available for the Canadian markets — only "
-            f"'dayahead'. Per-carrier generation needs AESO's keyed API or its bulk "
-            f"metered-volume files, and for Ontario a separate XML report; neither "
-            f"is wired up."
+            f"'dayahead' and 'emissions'. Neither serves the load and flow columns "
+            f"a `full` series carries."
+        )
+    if variant == "emissions":
+        # Per-carrier generation needs AESO's keyed API or its bulk metered-volume
+        # files, and for Ontario a separate XML report; neither is wired up. The
+        # price is, so it is served, and the report reads the missing mix and
+        # carries no emission intensity for this area.
+        log.info(
+            "no per-carrier generation is wired up for this market — serving "
+            "prices alone for the emissions variant"
         )
 
     # Both markets sit west of UTC, so a UTC window opens during the *previous*

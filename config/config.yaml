@@ -97,19 +97,48 @@ areas:
   ESP:   { iso3: ESP, region: ES,  coarse: false, market: entsoe, market_area: ES }
   # No market of its own: a grid scenario naming AUS runs its zones instead.
   AUS:   { iso3: AUS, region: AUS, coarse: false, zones: [NSW1, QLD1, SA1, TAS1, VIC1] }
-  # Neither a market nor zones — islanded only until Brazil's subsystems are added.
-  BRA:   { iso3: BRA, region: BRA, coarse: false }
-  # No market of its own: a grid scenario naming CAN runs its two priced provinces
-  # instead. The other provinces are regulated cost-of-service utilities with no
-  # hourly price to retrieve, so they are not zones here.
-  CAN:   { iso3: CAN, region: CAN, coarse: false, zones: [AB, ONT] }
-  # Only the grid path is wired for these two: no cutout ships and their region
-  # shapes are unverified, so res_cf for them is untested. Ontario is ONT, not the
-  # province's usual ON, because YAML 1.1 reads a bare ON as boolean true — as the
-  # key it would become True, and as a market_area it would reach a filename as
-  # "True" without erroring.
+  # The SIN is one grid split into four price zones, so a grid scenario naming
+  # BRA runs the submarkets and an islanded one keeps the country whole. Their
+  # geometries are cut from Natural Earth Admin 1 by scratch/cut_brazil_submarkets.py
+  # (the mapping is electrical, not geographic — Acre and Rondonia are SE/CO, and
+  # Maranhao is N). Each takes the whole-Brazil cutout rather than a slice: a
+  # submarket's cells are a subset of the national grid, and the CF scripts select
+  # by geometry, not by the cutout's extent.
+  #
+  # Every market_area here is quoted. YAML 1.1 reads a bare N as boolean false,
+  # the same trap that made Ontario's key ONT.
+  BRA:   { iso3: BRA, region: BRA, coarse: false, zones: [BR_SE, BR_S, BR_NE, BR_N] }
+  BR_SE: { iso3: BRA, region: BR_SE, coarse: false, market: ons, market_area: "SE" }
+  BR_S:  { iso3: BRA, region: BR_S,  coarse: false, market: ons, market_area: "S" }
+  BR_NE: { iso3: BRA, region: BR_NE, coarse: false, market: ons, market_area: "NE" }
+  BR_N:  { iso3: BRA, region: BR_N,  coarse: false, market: ons, market_area: "N" }
+  # Alberta and Ontario are the only Canadian provinces with a wholesale market;
+  # the rest are regulated cost-of-service utilities with no hourly price. They
+  # are top-level areas rather than zones of a CAN entry because `all-areas`
+  # starts from the areas that are nobody's zone: under a CAN parent they would be
+  # unreachable islanded, and CAN itself has no cutout — Canada is 63,000 ERA5
+  # cells and a multi-hour download. Nothing ranks the two against each other as a
+  # result, which the NEM zones do get; they are reported side by side.
+  #
+  # Ontario is ONT, not the province's usual ON, because YAML 1.1 reads a bare ON
+  # as boolean true — as the key it would become True, and as a market_area it
+  # would reach a filename as "True" without erroring.
   AB:    { iso3: CAN, region: AB,  coarse: false, market: aeso, market_area: AB }
-  ONT:   { iso3: CAN, region: "ON", coarse: false, market: ieso, market_area: ONT }
+  # Ontario's HOEP series ends at 2025-04-30 23:00, where the Market Renewal
+  # Program replaced it with locational marginal prices that nothing here reads.
+  # `market_until` is what keeps ONT out of a grid scenario reaching past that
+  # date — `all-areas` drops it from the 2025 run and keeps it in a 2024 one,
+  # instead of the retrieve rule failing eight months short.
+  #
+  # HOEP is also a commodity-only price and leaves out the Global Adjustment,
+  # which is most of what an Ontario consumer actually pays — 2024 averages 20.6
+  # EUR/MWh against nearly a hundred in Germany, and that gap is the missing
+  # charge, not cheap power. So an Ontario LCOS computed from it is a wholesale
+  # energy component and never a delivered cost, and does not belong in a
+  # ranking against the all-in prices every other area carries. Adding a GA term
+  # is what would make it comparable.
+  ONT:   { iso3: CAN, region: "ON", coarse: false, market: ieso, market_area: ONT,
+           market_until: "20250430" }
   # The NEM regions. AEMO serves prices for all five; only VIC1 ships a cutout,
   # so the other four cost a CDS download the first time they are solved.
   # Victoria also ships its offshore parquet, which is why the default
@@ -146,7 +175,18 @@ res_cf:
   # 3 MW model so test runs are not built on fifteen-year-old wind.
   wind_onshore_turbine:  NREL_ReferenceTurbine_2020ATB_4MW
   wind_offshore_turbine: NREL_ReferenceTurbine_5MW_offshore
+  # A Huld-2010 fit of relative performance against irradiance and module
+  # temperature, not a module. atlite ships three panels — this, CdTe, and one
+  # 2006 amorphous Kaneka module — so there is nothing newer to move to, and the
+  # `efficiency: 0.1` in the file is inert: the conversion returns kWh per kWp,
+  # so module efficiency changes the area a MW needs and not the capacity factor.
+  # What is dated is the temperature coefficient the fit implies, -0.47 %/K
+  # against about -0.30 %/K for a current TOPCon module. That is worth roughly
+  # +1.6 % of annual CF in Germany and +5.8 % in tropical Brazil, so it matters
+  # most exactly where the model is comparing geographies.
   pv_panel:              CSi
+  # Within 0.25 % of the best fixed tilt in every area tested, so the rule of
+  # thumb is not what limits solar CF here.
   pv_orientation:        latitude_optimal
 
   # Wind CF computation flags — passed to atlite.Cutout.wind() in

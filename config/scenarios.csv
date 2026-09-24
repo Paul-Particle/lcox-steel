@@ -4,10 +4,62 @@ standard-islanded,all-routes,solar,bestsite-p95,all-areas,20250101,20251231
 standard-grid,all-routes,wind-onshore,bestsite-p95,all-areas,20250101,20251231
 standard-grid,all-routes,solar,bestsite-p95,all-areas,20250101,20251231
 standard-grid,all-routes,grid,emissions,all-areas,20250101,20251231
-sensitivity-test,h2-dri-eaf|moe-eaf,wind-onshore,bestsite-p95,VIC1,20250101,20251231
-sensitivity-test,h2-dri-eaf|moe-eaf,solar,bestsite-p95,VIC1,20250101,20251231
-# Every route has an -export twin now, and `all-routes` picks them up. Brazil
-# is parked rather than live because it needs a CDS cutout download first.
-# Kept here rather than in a file of its own so it follows the columns.
-# export-trade,all-routes,wind-onshore,bestsite-p95,BRA,20250101,20251231
-# export-trade,all-routes,solar,bestsite-p95,BRA,20250101,20251231
+moe-turndown-70,moe-eaf|moe-eaf-export,wind-onshore,bestsite-p95,all-areas,20250101,20251231
+moe-turndown-70,moe-eaf|moe-eaf-export,solar,bestsite-p95,all-areas,20250101,20251231
+moe-turndown-70-grid,moe-eaf|moe-eaf-export,wind-onshore,bestsite-p95,all-areas,20250101,20251231
+moe-turndown-70-grid,moe-eaf|moe-eaf-export,solar,bestsite-p95,all-areas,20250101,20251231
+moe-turndown-70-grid,moe-eaf|moe-eaf-export,grid,emissions,all-areas,20250101,20251231
+ew-capex-500,ew-eaf|moe-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+ew-capex-500,ew-eaf|moe-eaf,solar,bestsite-p95,DEU,20250101,20251231
+ew-capex-500,ew-eaf|moe-eaf,grid,emissions,SA1,20250101,20251231
+ew-capex-900,ew-eaf|moe-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+ew-capex-900,ew-eaf|moe-eaf,solar,bestsite-p95,DEU,20250101,20251231
+ew-capex-900,ew-eaf|moe-eaf,grid,emissions,SA1,20250101,20251231
+ew-capex-1200,ew-eaf|moe-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+ew-capex-1200,ew-eaf|moe-eaf,solar,bestsite-p95,DEU,20250101,20251231
+ew-capex-1200,ew-eaf|moe-eaf,grid,emissions,SA1,20250101,20251231
+ew-capex-1800,ew-eaf|moe-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+ew-capex-1800,ew-eaf|moe-eaf,solar,bestsite-p95,DEU,20250101,20251231
+ew-capex-1800,ew-eaf|moe-eaf,grid,emissions,SA1,20250101,20251231
+ew-capex-3000,ew-eaf|moe-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
+ew-capex-3000,ew-eaf|moe-eaf,solar,bestsite-p95,DEU,20250101,20251231
+ew-capex-3000,ew-eaf|moe-eaf,grid,emissions,SA1,20250101,20251231
+gas-30,ng-dri-eaf|h2-dri-eaf,wind-onshore,bestsite-p95,SA1,20250101,20251231
+gas-30,ng-dri-eaf|h2-dri-eaf,solar,bestsite-p95,DEU,20250101,20251231
+gas-30,ng-dri-eaf|h2-dri-eaf,grid,emissions,ESP,20250101,20251231
+gas-40,ng-dri-eaf|h2-dri-eaf,wind-onshore,bestsite-p95,SA1,20250101,20251231
+gas-40,ng-dri-eaf|h2-dri-eaf,solar,bestsite-p95,DEU,20250101,20251231
+gas-40,ng-dri-eaf|h2-dri-eaf,grid,emissions,ESP,20250101,20251231
+gas-50,ng-dri-eaf|h2-dri-eaf,wind-onshore,bestsite-p95,SA1,20250101,20251231
+gas-50,ng-dri-eaf|h2-dri-eaf,solar,bestsite-p95,DEU,20250101,20251231
+gas-50,ng-dri-eaf|h2-dri-eaf,grid,emissions,ESP,20250101,20251231
+gas-60,ng-dri-eaf|h2-dri-eaf,wind-onshore,bestsite-p95,SA1,20250101,20251231
+gas-60,ng-dri-eaf|h2-dri-eaf,solar,bestsite-p95,DEU,20250101,20251231
+gas-60,ng-dri-eaf|h2-dri-eaf,grid,emissions,ESP,20250101,20251231
+gas-70,ng-dri-eaf|h2-dri-eaf,wind-onshore,bestsite-p95,SA1,20250101,20251231
+gas-70,ng-dri-eaf|h2-dri-eaf,solar,bestsite-p95,DEU,20250101,20251231
+gas-70,ng-dri-eaf|h2-dri-eaf,grid,emissions,ESP,20250101,20251231
+# Ontario's last full HOEP year. AB rides along on the same window so the two
+# Canadian provinces are read on one year; AB's 2025 case stays in standard-grid.
+# One area per tech row, union across rows — the area cell is scenario-level.
+canada-2024-grid,all-routes,wind-onshore,bestsite-p95,ONT,20240101,20241231
+canada-2024-grid,all-routes,solar,bestsite-p95,AB,20240101,20241231
+canada-2024-grid,all-routes,grid,emissions,ONT,20240101,20241231
+# September 2026 test run: 2025 only, every route including the export twins,
+# iron melted in Spain, one uniform gas price and no carbon price.
+#
+# `all-areas` rather than a written-out list, because the area cell is a
+# scenario-level set: expand_scenario_rows drops each row's own area and
+# cross-joins the row against every area the scenario resolves to, so naming a
+# subset across several rows duplicates each (area, tech) pair and is rejected.
+# The registry in config.yaml is therefore what selects the geographies.
+#
+# Islanded resolves to AB, AUS, BRA, DEU, ESP, FRA, ONT — whole countries where
+# one exists, and the two Canadian provinces because Canada has no cutout.
+# Grid resolves those through their markets instead: the five NEM regions, the
+# four SIN submarkets, both provinces, and the three European countries.
+#
+# Every grid row asks for `emissions`. ONS, AESO and IESO have no per-carrier
+# generation to serve, so they return the price alone and say so; the report
+# then carries no emission intensity for those six areas. That gap is the point
+# of including them, not a reason to leave them out.
