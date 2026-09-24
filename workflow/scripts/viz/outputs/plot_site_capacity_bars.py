@@ -106,7 +106,7 @@ def main() -> None:
     n.import_from_netcdf(snakemake.input.network)
     if int((n.buses.carrier == "AC").sum()) <= 1:
         raise ValueError(
-            f"{scenario}/{run} is a single-site network — plot_site_capacity_bars "
+            f"{scenario}/{area} {route} is a single-site network — plot_site_capacity_bars "
             "is only meaningful for multi-site scenarios (those with a sites overlay)."
         )
     plot(build_site_table(n), Path(snakemake.output.png), scenario, f"{area} {route}")
