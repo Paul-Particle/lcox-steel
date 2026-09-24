@@ -13,8 +13,9 @@ Nothing here needs a new reported quantity. Every split is exact, because of how
     opex_per_t_per_year`, so fixed O&M is a config-fixed fraction of the annual
     cost, applied to the reported per-plant `plant_*_eur_per_t`;
   * likewise for renewables and the electrolyser, per MW;
-  * the battery folds energy capex into its per-MW cost at a fixed duration, so
-    the power/energy split is `capex_per_mw : max_hours x capex_per_mwh`;
+  * the battery prices power and energy separately and the solve sizes each, so
+    the power/energy split is `capex_per_mw x MW : capex_per_mwh x MWh` of what
+    the run actually built;
   * the gas bill and any carbon price both live on the gas_supply generator's
     marginal cost, and the reported gas energy separates them;
   * the electrolyser's variable opex is `varopex_eur_per_mwh_el` over the
@@ -147,12 +148,17 @@ def electrolyser_om_fraction(assumptions: dict) -> float:
     return _fixed_om_fraction(annual_capex, cfg["opex_per_mw_per_year_eur"])
 
 
-def battery_power_fraction(assumptions: dict) -> float:
-    """The power half of the battery's per-MW cost, which folds in `max_hours` of energy."""
+def battery_power_fraction(assumptions: dict, power_mw: float, energy_mwh: float) -> float:
+    """The power half of the battery's annual cost, at the duration this run chose.
+
+    Both halves are annuitised over the same life, so the annuity cancels and the
+    split is the raw capex ratio of what was actually built.
+    """
     cfg = assumptions["battery"]
-    energy = cfg["capex_per_mwh_eur"] * cfg["max_hours"]
-    total = cfg["capex_per_mw_eur"] + energy
-    return cfg["capex_per_mw_eur"] / total if total else 0.0
+    power = cfg["capex_per_mw_eur"] * power_mw
+    energy = cfg["capex_per_mwh_eur"] * energy_mwh
+    total = power + energy
+    return power / total if total else 0.0
 
 
 # ---- the leaf split ------------------------------------------------------
@@ -290,10 +296,16 @@ def leaf_costs(row: pd.Series, assumptions: dict) -> tuple[dict, dict]:
 
     battery_total = _group_eur_per_t(row, "battery", steel_t)
     if battery_total > 0:
-        power_fraction = battery_power_fraction(assumptions)
         battery_mwh = _value(row, "battery_mwh_opt")
+        battery_gw = _value(row, "battery_gw_opt")
+        power_fraction = battery_power_fraction(
+            assumptions, (battery_gw or 0.0) * 1e3, battery_mwh or 0.0
+        )
+        duration = (battery_mwh / (battery_gw * 1e3)
+                    if battery_mwh is not None and battery_gw else None)
         lines = [("energy built",
-                  f"{battery_mwh:,.0f} MWh" if battery_mwh is not None else None)]
+                  f"{battery_mwh:,.0f} MWh" if battery_mwh is not None else None),
+                 ("duration chosen", f"{duration:,.1f} h" if duration else None)]
         lines = [line for line in lines if line[1] is not None]
         add("battery_power", battery_total * power_fraction, lines)
         add("battery_energy", battery_total * (1.0 - power_fraction), lines)
@@ -569,7 +581,7 @@ def spec(assumptions: dict) -> list:
          ("lifetime", f"{battery['lifetime_years']:.0f} y"), wacc_line])
     add("battery_energy", "Battery — energy capacity", "electricity", "#E58AA0",
         [("capex quote", f"{battery['capex_per_mwh_eur'] / 1e6:,.2f} M€/MWh"),
-         ("duration", f"{battery['max_hours']:.0f} h at rated power"),
+         ("duration", "sized by the optimiser"),
          ("round-trip efficiency", f"{battery['efficiency_roundtrip'] * 100:.0f}%")])
 
     grid = assumptions["grid"]
