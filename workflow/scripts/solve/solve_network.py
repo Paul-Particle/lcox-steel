@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 
 # Grid-scale li-ion is built at 1-4 h, so a solved battery charging or discharging
 # faster than this is worth a look, though nothing in the model forbids it.
-MAX_PLAUSIBLE_C_RATE = 1.0
+MAX_BATTERY_C_RATE = 1.0
 
 
 def _area_representative_point(regions_path: Path) -> tuple[float, float]:
@@ -295,9 +295,9 @@ def main() -> None:
     inverter_mw = n.links.at["battery_charger", "p_nom_opt"]
     if battery_energy_mwh > 1e-3:
         c_rate = inverter_mw / battery_energy_mwh
-        if c_rate > MAX_PLAUSIBLE_C_RATE:
+        if c_rate > MAX_BATTERY_C_RATE:
             log.warning(
-                f"battery C-rate {c_rate:.2f} exceeds {MAX_PLAUSIBLE_C_RATE}: "
+                f"battery C-rate {c_rate:.2f} exceeds {MAX_BATTERY_C_RATE}: "
                 f"{inverter_mw:.0f} MW inverter on {battery_energy_mwh:.0f} MWh"
             )
 
