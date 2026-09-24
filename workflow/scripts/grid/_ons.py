@@ -38,6 +38,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from common._paths import DATA
 from _helpers_grid import (
     ONS_MARKET_TZ,
     area_month_in_cache,
@@ -210,7 +211,7 @@ def retrieve(snakemake, market_area: str) -> None:
     eur_per_brl = snakemake.params.eur_per_brl
     pld_limits = snakemake.params.pld_limits
 
-    cache_dir = Path("data/ons_cache")
+    cache_dir = DATA / "ons_cache"
     processed_cache_dir = Path("resources/ons")
     processed_cache_path = processed_cache_dir / f"{variant}.parquet"
 

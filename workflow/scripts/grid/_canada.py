@@ -22,6 +22,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 
+from common._paths import DATA
 from _helpers_grid import assert_window_complete, iso
 
 # Module-level logger only — retrieve_grid_data.py installs the handlers.
@@ -144,7 +145,7 @@ def retrieve_window(snakemake, read_year, eur_per_cad: float) -> None:
     # local year: Alberta at UTC-7/-6 and Ontario at UTC-5 each leave the window's
     # first hours in the year before. (NEM pads the far end instead, being east.)
     years = range(int(start_date[:4]) - 1, int(end_date[:4]) + 1)
-    cache_dir = Path("data/canada_cache")
+    cache_dir = DATA / "canada_cache"
     assembled = pd.concat([read_year(year, cache_dir) for year in years]).sort_index()
 
     window = slice(iso(start_date), f"{iso(end_date)} 23:59")
