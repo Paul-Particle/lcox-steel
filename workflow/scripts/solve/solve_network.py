@@ -126,13 +126,17 @@ def _assemble_multisite_cf(
 def _tie_battery_inverter(n: pypsa.Network, snapshots) -> None:
     """Charge and discharge share one inverter rating, so its capex is paid once.
 
-    A grid battery's power electronics are bidirectional and rated in MW, which
-    is what `battery.capex_per_mw_eur` prices. Without this the two links size
-    independently and only the charger is priced, leaving free discharge power.
+    A grid battery's power electronics are bidirectional and rated in MW at the
+    grid terminals, which is what `battery.capex_per_mw_eur` prices. A Link's
+    p_nom is measured at its bus0, the grid for the charger but the battery for
+    the discharger, so the discharger's rating is scaled by its efficiency to
+    put both on the grid side (as PyPSA-Eur's `add_battery_constraints` does).
     """
     p_nom = n.model.variables["Link-p_nom"]
+    discharge_efficiency = n.links.at["battery_discharger", "efficiency"]
     n.model.add_constraints(
-        p_nom.loc["battery_charger"] - p_nom.loc["battery_discharger"] == 0,
+        p_nom.loc["battery_charger"]
+        - discharge_efficiency * p_nom.loc["battery_discharger"] == 0,
         name="battery_inverter_rating",
     )
 
