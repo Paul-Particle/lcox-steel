@@ -1,0 +1,10 @@
+# Overlay for the `yield-108` scenario, deep-merged over assumptions.yaml.
+#
+# One input moved and nothing else: the register's generic EAF yield, which this run deliberately departed from.
+#
+# Part of the overnight sensitivity set. Routes are limited to the ones this
+# input can reach, so a run that could not respond to it is not solved at all.
+moe:
+  iron_t_per_t_steel: 1.08
+ew:
+  iron_t_per_t_steel: 1.08

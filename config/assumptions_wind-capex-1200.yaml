@@ -1,0 +1,9 @@
+# Overlay for the `wind-capex-1200` scenario, deep-merged over assumptions.yaml.
+#
+# One input moved and nothing else: onshore wind above the IRENA 2025 figure.
+#
+# Part of the overnight sensitivity set. Routes are limited to the ones this
+# input can reach, so a run that could not respond to it is not solved at all.
+res:
+  wind-onshore:
+    capex_per_mw_eur: 1200000

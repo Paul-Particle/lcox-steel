@@ -1,0 +1,8 @@
+# Overlay for the `wacc-10` scenario, deep-merged over assumptions.yaml.
+#
+# One input moved and nothing else: dearer capital than the one global rate.
+#
+# Part of the overnight sensitivity set. Routes are limited to the ones this
+# input can reach, so a run that could not respond to it is not solved at all.
+finance:
+  default_wacc: 0.10

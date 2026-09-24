@@ -187,13 +187,17 @@ def get_cell_coords(cf_year: xr.DataArray, y_idx: int, x_idx: int) -> tuple[floa
     return x, y
 
 def _to_dataframe(profiles: dict[str, pd.Series]) -> pd.DataFrame:
-    """Assemble the standard (time + per-tech CF) dataframe from co-located profiles."""
-    return pd.DataFrame({
-        "time": profiles["wind_onshore"].index,
-        "wind_onshore_cf": profiles["wind_onshore"].values,
-        "wind_offshore_cf": profiles["wind_offshore"].values,
-        "solar_cf": profiles["solar"].values,
-    })
+    """Assemble the standard (time + per-tech CF) dataframe from co-located profiles.
+
+    A tech the area has no eligible cell for is absent from `profiles` rather than
+    present and empty, so its column is written as NaN: the technology does not
+    exist there, which a zero would misreport as a built farm generating nothing.
+    """
+    columns = {"time": profiles["wind_onshore"].index}
+    for tech in TECHS:
+        profile = profiles.get(tech)
+        columns[f"{tech}_cf"] = np.nan if profile is None else profile.values
+    return pd.DataFrame(columns)
 
 
 def add_location_metadata(
@@ -207,11 +211,11 @@ def add_location_metadata(
     df["anchor_tech"] = anchor_tech or ""
     df["mix_label"] = mix_label or ""
     for tech in TECHS:
-        cell = selected_cells[tech]
-        df[f"{tech}_x"] = cell["x"]
-        df[f"{tech}_y"] = cell["y"]
-        df[f"{tech}_x_idx"] = cell["x_idx"]
-        df[f"{tech}_y_idx"] = cell["y_idx"]
+        cell = selected_cells.get(tech)
+        df[f"{tech}_x"] = np.nan if cell is None else cell["x"]
+        df[f"{tech}_y"] = np.nan if cell is None else cell["y"]
+        df[f"{tech}_x_idx"] = np.nan if cell is None else cell["x_idx"]
+        df[f"{tech}_y_idx"] = np.nan if cell is None else cell["y_idx"]
     return df
 
 

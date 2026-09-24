@@ -24,12 +24,20 @@ data/nem_cache/*
 data/entsoe_cache/*
 !data/entsoe_cache/entsoe_bidding_zones.csv
 data/canada_cache/*
+data/ons_cache/*
+data/canada_cache/*
 
 # Derived workflow outputs (rebuilt by snakemake), except the area geometries,
 # which are committed: building them needs the EEZ and Natural-Earth zips the
 # repo does not ship, and the demo has to run after a fresh clone.
 resources/*.parquet
-resources/timeseries/
+# Contents rather than the directory, because git will not descend into an
+# excluded directory and a re-include below it never fires.
+resources/timeseries/*
+# The one series the demo needs: its export twins melt iron in Spain, so they
+# price a destination market, and shipping it keeps the default target runnable
+# without an ENTSO-E key.
+!resources/timeseries/ESP_grid_emissions_20250101_20251231.parquet
 resources/shapes/
 !resources/shapes/*.parquet
 
@@ -66,6 +74,7 @@ cutouts/*
 # Raw/large geodata (download manually — see README)
 data/shapes/offshore_zones/
 data/shapes/ne_110m_admin_0_countries/
+data/shapes/ne_10m_admin_1_states_provinces/
 data/shapes/ne_10m_land/
 data/shapes/*.zip
 

@@ -1,0 +1,9 @@
+# Overlay for the `esp-ramp-05-dri` scenario, deep-merged over assumptions.yaml.
+#
+# Half of the esp-ramp-05 pair: 0.05 of nameplate per hour on dri-h2 alone, leaving
+# the electrolyser free. Run so the pair's cost can be attributed rather than assumed — the
+# shaft sits near 99% utilisation and never approaches its 0.5 floor, so the
+# expectation is that almost all of the pair's penalty belongs to the electrolyser.
+dri-h2:
+  ramp_limit_up: 0.05
+  ramp_limit_down: 0.05

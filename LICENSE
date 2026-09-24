@@ -1,3 +1,7 @@
+This licence covers the source code in this repository. It does not cover the
+data files, which carry third-party terms and are not ours to sub-license — see
+data/README.md for what they are and what governs each of them.
+
 Copyright 2025 Peter Ruschhaupt
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
