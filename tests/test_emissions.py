@@ -37,7 +37,7 @@ SCALE = 8760 / 4
 def _network() -> pypsa.Network:
     """A two-bus skeleton: an electricity bus feeding an iron bus through an EAF."""
     n = pypsa.Network()
-    n.set_snapshots(range(4))
+    n.set_snapshots(pd.date_range("2025-01-01", periods=4, freq="h"))
     n.add("Bus", "electricity", carrier="AC")
     n.add("Bus", "iron", carrier="iron")
     n.add("Bus", "steel", carrier="steel")

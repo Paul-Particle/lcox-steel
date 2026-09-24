@@ -70,10 +70,8 @@ import yaml
 
 from _helpers_solve import annuity_factor, deep_merge, dri_to_el_mw, haversine_km
 
-from common._constants import H2_LHV_KWH_PER_KG
+from common._constants import H2_LHV_KWH_PER_KG, HOURS_PER_YEAR
 from common._runs import EAF_CHARGE, ROUTES, route_stem
-
-HOURS_PER_YEAR = 8760.0
 
 # Route groups used when wiring buses/components. Every steel route reaches
 # the steel bus through the iron bus and the shared EAF link.

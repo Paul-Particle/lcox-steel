@@ -7,6 +7,7 @@ solve stamped into the network, so a number stays tied to its inputs. What the
 files look like is common/_report_schema.py's business.
 """
 
+import calendar
 import logging
 import re
 from pathlib import Path
@@ -61,6 +62,13 @@ def _carrier_key(carrier: str) -> str:
     `build_network._add_generators` resolves them against the res assumptions.
     """
     return field_stem(re.sub(r"_(east|west)_\d+$|_az\d+$", "", carrier))
+
+
+def _hours_per_year(snapshots: pd.DatetimeIndex) -> float:
+    """Mean length in hours of the calendar years the snapshots fall in."""
+    year_hours = [8784.0 if calendar.isleap(year) else 8760.0 for year in snapshots.year.unique()]
+    hours_per_year = float(np.mean(year_hours))
+    return hours_per_year
 
 
 def _grid_intensity(
@@ -223,7 +231,7 @@ def _emissions_breakdown(
     basis = emissions_cfg["basis"]
     factors = {carrier: values[basis]
                for carrier, values in emissions_cfg["electricity_t_co2e_per_mwh"].items()}
-    annual = 8760.0 / len(n.snapshots)
+    annual = _hours_per_year(n.snapshots) / len(n.snapshots)
 
     # PyPSA's netCDF export drops a time-varying column whose every value is the
     # default, so a component that never ran comes back missing from the
@@ -412,7 +420,7 @@ def _emissions_breakdown(
 
 
 def _h2_produced_kg(n: pypsa.Network) -> float:
-    """Annual H2 produced by the electrolyser, in kg, scaled to 8760 h.
+    """Annual H2 produced by the electrolyser, in kg, scaled to a year.
 
     Read from the electrolyser link's H2-side output rather than the dri_load,
     so the result reflects actual production. The two coincide when the model
@@ -422,7 +430,7 @@ def _h2_produced_kg(n: pypsa.Network) -> float:
     t_hours = len(n.snapshots)
     # PyPSA Link sign convention: p1 < 0 when the link injects power into bus1,
     # so -p1 is the (positive) H2 LHV output on the hydrogen bus.
-    h2_mwh_lhv = -float(n.links_t.p1["electrolyser"].sum()) * (8760.0 / t_hours)
+    h2_mwh_lhv = -float(n.links_t.p1["electrolyser"].sum()) * (_hours_per_year(n.snapshots) / t_hours)
     return h2_mwh_lhv / (H2_LHV_KWH_PER_KG / 1000.0)
 
 
@@ -520,12 +528,12 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
 
     Capital costs are already per-year (annualised CAPEX × p_nom_opt); variable
     costs — grid imports, ore, EAF consumables, electrolyser variable opex —
-    are scaled from the simulation period up to 8760 h so levelised costs stay
+    are scaled from the simulation period up to a year so levelised costs stay
     meaningful on partial-year runs. The reported total annual cost is the sum
     of these groups, so breakdown and total cannot drift apart.
     """
     t_hours = len(n.snapshots)
-    annual_scale = 8760.0 / t_hours
+    annual_scale = _hours_per_year(n.snapshots) / t_hours
 
     def link_capital(names) -> float:
         idx = [l for l in names if l in n.links.index and n.links.at[l, "p_nom_extendable"]]
@@ -637,7 +645,7 @@ def _leaf_breakdown(
     `losses_mwh`, and the generation both are supplied out of in
     `generation_mwh`.
     """
-    annual_scale = 8760.0 / len(n.snapshots)
+    annual_scale = _hours_per_year(n.snapshots) / len(n.snapshots)
     wacc = assumptions["finance"]["default_wacc"]
     leaves = dict.fromkeys(LEAF_COSTS, 0.0)
 
@@ -919,6 +927,7 @@ def extract_summary(
     that melts its iron at home.
     """
     breakdown = _cost_breakdown(n)
+    hours_per_year = _hours_per_year(n.snapshots)
     summary = {
         "scenario": scenario_name,
         **run,
@@ -938,7 +947,7 @@ def extract_summary(
         summary["lcoh_eur_per_mwh_lhv"] = lcoh_eur_per_kg * 1000.0 / H2_LHV_KWH_PER_KG
 
     if "steel_load" in n.loads.index:
-        steel_t_per_year = float(n.loads.at["steel_load", "p_set"]) * 8760.0
+        steel_t_per_year = float(n.loads.at["steel_load", "p_set"]) * hours_per_year
         summary["lcos_eur_per_t"] = total_annual_cost / steel_t_per_year
         summary["steel_produced_mt"] = steel_t_per_year / 1e6
 
@@ -969,7 +978,7 @@ def extract_summary(
     #          domestic twin by the MWh nobody was charged for.
     #   LCOH = (electrolyser capex/opex + H2 buffer + the electrolyser's electricity
     #          valued at LCOE) per MWh of H2 produced, LHV.
-    annual_scale = 8760.0 / len(n.snapshots)
+    annual_scale = hours_per_year / len(n.snapshots)
     elec_gens = [g for g in n.generators.index if g != "gas_supply"]
     elec_mwh = (float(n.generators_t.p[elec_gens].sum().sum()) * annual_scale) if elec_gens else 0.0
     elec_cost = sum(breakdown[k]
@@ -1033,7 +1042,7 @@ def extract_summary(
         if res_total > 0 and res_mwh > 0:
             summary["lcoe_renewables_own_eur_per_mwh"] = res_total / res_mwh
 
-        # Capacity factors (annual generation / nameplate × 8760) for the renewables
+        # Capacity factors (annual generation / nameplate × hours per year) for the renewables
         # and the grid connection, surfaced next to the built capacities.
         def _res_cap(prefix: str) -> float:
             idx = [g for g in res_idx if str(g).startswith(prefix)]
@@ -1042,11 +1051,11 @@ def extract_summary(
         for tech in RES_TECHS:
             cap = _res_cap(tech)
             if cap > 0:
-                summary[f"cf_{field_stem(tech)}"] = _res_mwh(tech) / (cap * 8760.0)
+                summary[f"cf_{field_stem(tech)}"] = _res_mwh(tech) / (cap * hours_per_year)
         if grid_mwh > 0:
             grid_p_nom = float(n.generators.at["grid_import", "p_nom_opt"])
             if grid_p_nom > 0:
-                summary["cf_grid_connection"] = grid_mwh / (grid_p_nom * 8760.0)
+                summary["cf_grid_connection"] = grid_mwh / (grid_p_nom * hours_per_year)
 
         # Split the average priced grid energy into the day-ahead market price and
         # the constant volumetric fee, and levelise the connection capex over the
@@ -1106,7 +1115,7 @@ def extract_summary(
     # "ore_consumables" group. Ore is the feedstock priced on the reduction/
     # electrolysis links; consumables is the EAF's marginal cost.
     if "steel_load" in n.loads.index:
-        steel_t = float(n.loads.at["steel_load", "p_set"]) * 8760.0
+        steel_t = float(n.loads.at["steel_load", "p_set"]) * hours_per_year
         if steel_t > 0:
             def _link_capex(link_name: str) -> float:
                 return (float(n.links.at[link_name, "capital_cost"] * n.links.at[link_name, "p_nom_opt"])
@@ -1141,7 +1150,7 @@ def extract_summary(
         )
 
     if "gas_supply" in n.generators.index:
-        gas_mwh = float(n.generators_t.p["gas_supply"].sum()) * (8760.0 / len(n.snapshots))
+        gas_mwh = float(n.generators_t.p["gas_supply"].sum()) * (hours_per_year / len(n.snapshots))
         summary["ng_gwh_lhv"] = gas_mwh / 1e3
     # How much of the iron came from the H2 shaft (production share, not capacity
     # share). Emitted for any DRI route so a pure H2-DRI reads 1.0 and a pure
@@ -1165,7 +1174,7 @@ def extract_summary(
                 store_t / steel_t_per_h if steel_t_per_h else float("nan")
             )
 
-    annual = 8760.0 / len(n.snapshots)
+    annual = hours_per_year / len(n.snapshots)
     for link, field in (("iron_transport", "iron_shipped_kt"),
                         ("steel_transport", "steel_shipped_kt")):
         if link in n.links.index:
