@@ -23,46 +23,50 @@ onstart:
             p.write_bytes(data.replace(b'\x00', b''))
             print(f"VM workaround: Removed NUL bytes from {p.relative_to(_smk_root)}")
 
-import pandas as pd
+from common._runs import ROUTE_PATTERN, build_runs_frame, load_scenarios, top_level_areas
 
-projects_df = pd.read_csv(
-    "config/projects.csv", dtype={"start_date": str, "end_date": str}
-)
+# One row per input timeseries, validated, with `all-areas` cells resolved
+# against the area registry — so every row downstream, the solve rule's lookup
+# included, names one real area.
+scenarios_df = load_scenarios("config/scenarios.csv", config["areas"])
 
-# (project, scenario, tech) is the natural row key in projects.csv; two rows
-# with the same triple would silently merge in the DAG and confuse downstream
-# lookup() calls, so reject the file at load time.
-_key = ["project", "scenario", "tech"]
-if projects_df.duplicated(subset=_key).any():
-    dups = projects_df[projects_df.duplicated(subset=_key, keep=False)][_key]
-    raise ValueError(f"projects.csv has duplicate (project, scenario, tech) rows:\n{dups}")
+# One row per network to solve — `all-routes` and `a|b` cells expanded.
+runs_df = build_runs_frame(scenarios_df, config["areas"])
 
-PROJECTS = projects_df["project"].unique()
+# The areas make_area_geometry can build. It reads Natural Earth Admin 0, which
+# is countries only, so a zone's geometry is a committed source file instead
+# (issue #64) — constraining the rule keeps it from claiming one and rebuilding
+# it as the whole country the next time the Admin 0 zip looks newer.
+COUNTRY_AREAS = "|".join(top_level_areas(config["areas"]))
+
+SCENARIOS = scenarios_df["scenario"].unique()
+# A scenario name is a free-form label — nothing here reads meaning out of it,
+# so the demo set is listed in config.yaml rather than matched on a prefix.
+DEMO_SCENARIOS = config["demo_scenarios"]
 
 
 include: "rules/_optional_shim.smk"
 include: "rules/grid.smk"
 include: "rules/res_cf.smk"
-include: "rules/h2_dri.smk"
+include: "rules/solve.smk"
 include: "rules/viz.smk"
 
 
 # Default target: a small, self-contained demo that runs after a fresh clone
 # with no CDS download, no EEZ/NE zips, and no API keys. It ships a pre-sliced
 # Victoria (AUS) cutout backup + derived geo parquets, and exercises the
-# best-site (07) and anchor-colocation (07b, multi-site PyPSA) RES-CF science
-# through to an h2_dri solve and a viz report. Run the full set of real
-# projects with `snakemake all`.
+# best-site and anchor-colocation (multi-site PyPSA) RES-CF science through to
+# a solve and a viz report. Run the full set with `snakemake all`.
 rule demo:
     default_target: True
     input:
-        "results/report_DEMO-VIC-2025.csv",
-        "results/plots/capacity_bars/DEMO-VIC-2025.png",
+        collect("results/report_{scenario}.csv", scenario=DEMO_SCENARIOS),
+        collect("results/plots/capacity_bars/{scenario}.png", scenario=DEMO_SCENARIOS),
 
 
 rule all:
     input:
-        # One report per project.
-        expand("results/report_{project}.csv", project=PROJECTS),
-        # One scenario-comparison bar chart per project.
-        expand("results/plots/capacity_bars/{project}.png", project=PROJECTS),
+        # One report per scenario — its rows are that scenario's runs.
+        collect("results/report_{scenario}.csv", scenario=SCENARIOS),
+        # One comparison bar chart per scenario.
+        collect("results/plots/capacity_bars/{scenario}.png", scenario=SCENARIOS),

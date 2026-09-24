@@ -1,9 +1,9 @@
-"""Bar chart comparing scenario capacities across projects.
+"""Bar chart comparing route capacities within one scenario.
 
 Snakemake rule: plot_capacity_bars (in viz.smk).
 
-One panel per unit class, stacked vertically over a shared scenario axis.
-Panels and bars with no data anywhere in the project are dropped:
+One panel per unit class, stacked vertically over a shared route axis.
+Panels and bars with no data anywhere in the scenario are dropped:
 
   Power (MW)      solar stacked by orientation · wind stacked by tech ·
                   battery · electrolyser · grid connection ·
@@ -24,6 +24,8 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
+from common._report_schema import PROCESS_LINKS, field_stem, read_report
+from _run_display import run_label
 from scripts.viz.style import (
     apply_header,
     blue_black,
@@ -63,11 +65,11 @@ WIND_SOLO_COLOR  = fca_blue
 _BAR_WIDTH = 0.12
 
 PROCESS_BARS = [
-    ("dri_t_per_h",            "H2-DRI shaft (t/h iron)",     blue_gray),
-    ("dri_ng_t_per_h",         "NG-DRI shaft (t/h iron)",     light_blue_gray),
-    ("eaf_t_per_h",            "EAF (t/h steel)",             very_dark_gray),
-    ("moe_t_per_h",            "MOE (t/h steel)",             highlight_blue),
-    ("electrowinning_t_per_h", "Electrowinning (t/h iron)",   turquois),
+    ("dri_h2_t_per_h", "H2-DRI shaft (t/h iron)",   blue_gray),
+    ("dri_ng_t_per_h", "NG-DRI shaft (t/h iron)",   light_blue_gray),
+    ("eaf_t_per_h",    "EAF (t/h steel)",           very_dark_gray),
+    ("moe_t_per_h",    "MOE (t/h steel)",           highlight_blue),
+    ("ew_t_per_h",     "Electrowinning (t/h iron)", turquois),
 ]
 
 STORAGE_BARS = [
@@ -75,10 +77,6 @@ STORAGE_BARS = [
     ("iron_store_hours_steel", "Iron store (h of steel output)",  gray),
     ("steel_store_hours_steel", "Steel inventory (h of steel output)", blue_gray),
 ]
-
-
-def load_report(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path)
 
 
 def _solar_cols(df):
@@ -96,43 +94,50 @@ def _wind_cols(df):
     # multisite `{tech}_total_gw_opt` aggregate so it isn't double-counted against
     # the per-site columns it sums.
     return [c for c in df.columns
-            if c.startswith(("wind-onshore", "wind-offshore"))
+            if c.startswith(("wind_onshore", "wind_offshore"))
             and c.endswith("_gw_opt") and not c.endswith("_total_gw_opt")]
 
 
+
+
+
 def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Reshape a report DataFrame into per-scenario rows of plottable capacities.
+    """Reshape a report DataFrame into per-route rows of plottable capacities.
 
     Converts GW columns to MW, expands orientation-resolved solar columns (falling
     back to a single `solar_mw` when none are present), and carries process
     capacities (t/h output) and stores (hours of demand) through in their native
-    units. Indexed by scenario label.
+    units. Indexed by run label.
     """
     solar_cols = _solar_cols(df)
     wind_cols  = _wind_cols(df)
     rows = []
     for _, r in df.iterrows():
-        row = {"label": str(r["scenario"])}
-        row["dri_h2_mw_lhv"]    = r.get("dri_h2_mw_lhv", float("nan"))
-        row["electrolyser_mw"]  = r.get("electrolyser_gw", 0) * 1e3
-        row["battery_mw"]       = r.get("battery_gw_opt", 0) * 1e3
-        row["grid_mw"]          = r.get("grid_import_gw_opt", 0) * 1e3
+        row = {"label": run_label(r)}
+        row["dri_h2_mw_lhv"]    = r["dri_h2_mw_lhv"]
+        row["electrolyser_mw"]  = r["electrolyser_gw"] * 1e3
+        row["battery_mw"]       = r["battery_gw_opt"] * 1e3
+        row["grid_mw"]          = r["grid_import_gw_opt"] * 1e3
         # If no orientation-resolved solar columns are present, fall back to the
         # plain solar_gw_opt column so single-orientation runs (e.g. DE baseline)
         # still show a solar bar.
         if solar_cols:
             for col in solar_cols:
                 az = col.replace("solar_", "").replace("_gw_opt", "")
-                row[f"solar_{az}_mw"] = r.get(col, 0) * 1e3
+                row[f"solar_{az}_mw"] = r[col] * 1e3
         elif "solar_gw_opt" in df.columns:
-            row["solar_mw"] = r.get("solar_gw_opt", 0) * 1e3
+            row["solar_mw"] = r["solar_gw_opt"] * 1e3
         for col in wind_cols:
-            row[f"{col.replace('_gw_opt','')}_mw"] = r.get(col, 0) * 1e3
-        for link in ("dri", "dri_ng", "eaf", "moe", "electrowinning"):
-            row[f"{link}_t_per_h"] = r.get(f"{link}_t_per_h_opt", 0)
-        row["h2_buffer_hours_dri"]    = r.get("h2_buffer_hours_dri", 0)
-        row["iron_store_hours_steel"] = r.get("iron_store_hours_steel", 0)
-        row["steel_store_hours_steel"] = r.get("steel_store_hours_steel", 0)
+            row[f"{col.replace('_gw_opt','')}_mw"] = r[col] * 1e3
+        # Every report row carries `{link}_t_per_h_opt` for each of
+        # PROCESS_LINKS (common/_report_schema.py), reading 0 on a route
+        # without that step.
+        for link in PROCESS_LINKS:
+            stem = field_stem(link)
+            row[f"{stem}_t_per_h"] = r[f"{stem}_t_per_h_opt"]
+        row["h2_buffer_hours_dri"]    = r["h2_buffer_hours_dri"]
+        row["iron_store_hours_steel"] = r["iron_store_hours_steel"]
+        row["steel_store_hours_steel"] = r["steel_store_hours_steel"]
         rows.append(row)
     return pd.DataFrame(rows).set_index("label")
 
@@ -149,8 +154,8 @@ def _pretty(col: str) -> str:
     """Humanize a plot_df column name for the legend, e.g.
     'solar_mw' → 'Solar (MW nominal)',
     'solar_az180_mw' → 'Solar az180 (MW nominal)',
-    'wind-onshore_mw' → 'Wind onshore (MW nominal)'."""
-    base = col.removesuffix("_mw").replace("-", " ").replace("_", " ")
+    'wind_onshore_mw' → 'Wind onshore (MW nominal)'."""
+    base = col.removesuffix("_mw").replace("_", " ")
     return f"{base.capitalize()} (MW nominal)"
 
 
@@ -215,7 +220,7 @@ def _build_panels(plot_df: pd.DataFrame) -> list[tuple[str, list]]:
 
     A slot is one x-offset position: ("stack", cols, cmap_range, solo_color,
     unit) or ("single", col, color, name, unit). Slots empty across the whole
-    project are dropped so they don't leave gaps and phantom legend entries;
+    scenario are dropped so they don't leave gaps and phantom legend entries;
     panels with no surviving slot are dropped entirely.
     """
     def _has_data(cols) -> bool:
@@ -224,7 +229,7 @@ def _build_panels(plot_df: pd.DataFrame) -> list[tuple[str, list]]:
 
     solar_mw_cols = [c for c in plot_df.columns if c.startswith("solar")]
     wind_mw_cols  = [c for c in plot_df.columns
-                     if c.startswith(("wind-onshore", "wind-offshore"))]
+                     if c.startswith(("wind_onshore", "wind_offshore"))]
 
     power_slots: list = []
     if _has_data(solar_mw_cols):
@@ -265,7 +270,7 @@ def _build_panels(plot_df: pd.DataFrame) -> list[tuple[str, list]]:
     return panels
 
 
-def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
+def plot(plot_df: pd.DataFrame, out: Path, scenario_label: str) -> None:
     """Assemble the panelled capacity bar chart and write it to PNG + HTML."""
     panels = _build_panels(plot_df)
 
@@ -306,8 +311,8 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
 
     apply_header(
         fig,
-        title=f"{project_label} capacity breakdown",
-        subtitle="Optimised builds by scenario; one panel per unit class",
+        title=f"{scenario_label} capacity breakdown",
+        subtitle="Optimised builds by route; one panel per unit class",
         fig_width=max(720, 220 * n_sc + 300),
         fig_height=180 + 270 * len(panels),
         margin_l=80, margin_r=280, margin_t=110, margin_b=80,
@@ -317,10 +322,10 @@ def plot(plot_df: pd.DataFrame, out: Path, project_label: str) -> None:
 
 
 def main() -> None:
-    """Load the project report and render its capacity bar chart."""
-    df = load_report(_REPORT_PATH)
-    project_label = ", ".join(dict.fromkeys(df["project"].astype(str)))
-    plot(build_plot_data(df), _OUT, project_label)
+    """Load the scenario report and render its capacity bar chart."""
+    df = read_report(_REPORT_PATH)
+    scenario_label = ", ".join(dict.fromkeys(df["scenario"].astype(str)))
+    plot(build_plot_data(df), _OUT, scenario_label)
 
 
 if __name__ == "__main__":
