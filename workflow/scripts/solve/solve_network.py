@@ -214,7 +214,7 @@ def main() -> None:
             )
 
     # optional() yields a Namedlist of 0 or 1 paths: present iff a
-    # config/assumptions_{scenario}.yaml file exists on disk.
+    # config/overlays/{scenario}.yaml file exists on disk.
     overlays = list(snakemake.input.assumptions_overlay)
     overlay_path = Path(overlays[0]) if overlays else None
     base_path = Path(snakemake.input.assumptions_base)

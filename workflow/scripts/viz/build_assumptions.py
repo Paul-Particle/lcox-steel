@@ -10,7 +10,7 @@ and which of them do not reach this run at all.
 Two things keep that honest. `SKIPPED` names the assumptions the page leaves out
 and why, and every leaf of the file must be either rendered or skipped, or the
 build stops — so an assumption added later cannot go quietly unlisted. The
-overlays are read the same way: `config/assumptions_{scenario}.yaml` for every
+overlays are read the same way: `config/overlays/{scenario}.yaml` for every
 scenario in `config/scenarios.csv`, whose leaves are exactly the deviations.
 
 Output: results/html/assumptions.html — body-only, the hub's second tab.
@@ -200,8 +200,8 @@ def main() -> None:
     # The overlays, which are exactly the deviations: an overlay file holds only
     # what it moves, so its leaves are the answer without a diff.
     moved = {}
-    for overlay_path in sorted(CONFIG.glob("assumptions_*.yaml")):
-        scenario = overlay_path.stem.removeprefix("assumptions_")
+    for overlay_path in sorted((CONFIG / "overlays").glob("*.yaml")):
+        scenario = overlay_path.stem
         if scenario not in run_scenarios:
             continue
         for path, value in leaves(yaml.safe_load(overlay_path.read_text())):

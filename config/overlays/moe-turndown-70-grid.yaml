@@ -11,7 +11,7 @@
 # hourly price instead of the weather — which is what this scenario measures.
 #
 # The file name is the mechanism: an overlay is found at
-# config/assumptions_{scenario}.yaml and nowhere else, so a scenario whose file is
+# config/overlays/{scenario}.yaml and nowhere else, so a scenario whose file is
 # missing solves on the base values and reports a null result rather than failing.
 moe:
   p_min_pu: 0.7

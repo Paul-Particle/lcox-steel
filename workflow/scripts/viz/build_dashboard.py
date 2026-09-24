@@ -399,7 +399,7 @@ def _gas_price(scenario):
     """
     base = yaml.safe_load((CONFIG_DIR / "assumptions.yaml").read_text()) or {}
     price = base.get("natural_gas", {}).get("price_eur_per_mwh")
-    overlay_path = CONFIG_DIR / f"assumptions_{scenario}.yaml"
+    overlay_path = CONFIG_DIR / "overlays" / f"{scenario}.yaml"
     if overlay_path.exists():
         overlay = yaml.safe_load(overlay_path.read_text()) or {}
         price = overlay.get("natural_gas", {}).get("price_eur_per_mwh", price)

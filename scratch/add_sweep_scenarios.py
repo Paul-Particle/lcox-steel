@@ -37,7 +37,7 @@ lines = []
 for prefix, block, key, routes, values, areas in SWEEPS:
     for value in values:
         scenario = f"{prefix}-{value}"
-        overlay = REPO / f"config/assumptions_{scenario}.yaml"
+        overlay = REPO / f"config/overlays/{scenario}.yaml"
         overlay.write_text(
             f"# One input moved, everything else as the base run. See the\n"
             f"# `{prefix}` sweep in scratch/add_sweep_scenarios.py for why this range.\n"

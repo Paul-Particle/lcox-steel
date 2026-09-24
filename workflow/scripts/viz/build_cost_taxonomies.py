@@ -110,7 +110,7 @@ def _assumptions(scenario: str) -> dict:
     yields nothing.
     """
     merged = yaml.safe_load((CONFIG_DIR / "assumptions.yaml").read_text())
-    overlay_path = CONFIG_DIR / f"assumptions_{scenario}.yaml"
+    overlay_path = CONFIG_DIR / "overlays" / f"{scenario}.yaml"
     if overlay_path.exists():
         # The same merge the solve used, so a nested override lands here the way
         # it landed in the network the report describes.

@@ -41,7 +41,7 @@ config/scenarios.csv ──► res_cf ─┬─► resources/timeseries/*.parque
                                      results/report_{scenario}.csv + plots/*.png|html + html/*.html
 ```
 
-A scenario is a name plus its optional `config/assumptions_{scenario}.yaml`
+A scenario is a name plus its optional `config/overlays/{scenario}.yaml`
 overlay. Its rows group by `(area, start_date, end_date)`; each group draws one
 or more capacity-factor series (one per RES tech) and/or a single grid price
 series, and is solved once per route. `viz` compiles the report and charts, one
@@ -104,7 +104,7 @@ lcox-steel/
 ├── config/
 │   ├── config.yaml                 # pipeline knobs (logging, entsoe, nem, res_cf)
 │   ├── assumptions.yaml            # base techno-economics (CAPEX, OPEX, WACC, lifetimes)
-│   ├── assumptions_{scenario}.yaml  # optional per-scenario overlay (presence = on)
+│   ├── overlays/{scenario}.yaml    # optional per-scenario overlay (presence = on)
 │   └── scenarios.csv               # one row per (run, tech) input
 ├── profiles/
 │   ├── default/config.yaml         # local-run defaults (keep-going, quiet, per-rule logs)
@@ -365,7 +365,7 @@ other — the identity rows at the top say which is which.
 |------|-------|
 | `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (turbines, CF flags, cutout settings), `areas` (the area registry), `demo_scenarios`. |
 | `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and — for the export routes — where the iron is melted (`destination`) and what it costs to ship it there (`transport`). Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the CSV, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
-| `config/assumptions_{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. It covers every run under that name. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. `destination.area` is the one key an overlay cannot move: which market an `-export` route melts in decides which timeseries the DAG has to fetch, so it is read from the base file before any job runs, and a run whose overlay disagrees is rejected rather than solved against the wrong country. |
+| `config/overlays/{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. It covers every run under that name. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. `destination.area` is the one key an overlay cannot move: which market an `-export` route melts in decides which timeseries the DAG has to fetch, so it is read from the base file before any job runs, and a run whose overlay disagrees is rejected rather than solved against the wrong country. |
 | `config/scenarios.csv` | Flat table, one row per `(run, tech)` input. Columns: `scenario, route, tech, variant, area, start_date, end_date`. Rows join into a network by `(scenario, area, start_date, end_date)`. `route` holds one route id, several separated by `|`, or `all-routes`; `area` holds one area or `all-areas`. `#` rows are planned scenarios and are not built. **The scenarios shipped are placeholders that exercise the machinery, not a study.** |
 
 ## Data formats

@@ -12,7 +12,7 @@ rule compile_report:
         # quote the run never saw.
         assumptions_base="config/assumptions.yaml",
         assumptions_overlay=optional(
-            "config/assumptions_{scenario}.yaml"
+            "config/overlays/{scenario}.yaml"
         ),
         networks=collect(
             "results/{item.scenario}/outputs/{item.area}_{item.route}_{item.start_date}_{item.end_date}.nc",
