@@ -184,7 +184,21 @@
   .edge.od { stroke-dasharray: 7 5; opacity: .72; }
   .edge.sec { display: none; stroke-width: 1.4; opacity: .82; }
   svg.faithful .edge.sec { display: inline; }
-  .edge.dimmed, .edge.od.dimmed, .edge.sec.dimmed { opacity: var(--dim); }
+  /* config-files level: the individual config files and their real edges */
+  .edge.cfg { display: none; stroke-width: 1.4; opacity: .85; }
+  svg.config .edge.cfg { display: inline; }
+  /* parse-time / params — config reaching a rule as values, not as a file.
+     Faint by default so the real file inputs read first; hovering either end
+     brings that node's own params forward. */
+  .edge.param { stroke-dasharray: 2 4; stroke-width: 1.2; opacity: .2; }
+  .edge.param.lit { opacity: .9; stroke-width: 1.7; }
+  .node.cfgonly { display: none; }
+  svg.config .node.cfgonly { display: inline; }
+  /* the lumped `config` source and its edges stand in for the files until the
+     files themselves are drawn */
+  svg.config .node.lumped, svg.config .edge.lumped { display: none; }
+  .edge.dimmed, .edge.od.dimmed, .edge.sec.dimmed, .edge.cfg.dimmed { opacity: var(--dim); }
+  .edge.param.dimmed { opacity: calc(var(--dim) * 0.6); }
   .edge-src  { stroke: var(--g-src); }
   .edge-res  { stroke: var(--g-res); }
   .edge-grid { stroke: var(--g-grid); }
@@ -240,6 +254,7 @@
     <span class="label">Detail</span>
     <button class="chip dchip" data-d="overview" aria-pressed="true">Overview</button>
     <button class="chip dchip" data-d="faithful" aria-pressed="false">Faithful (all file inputs)</button>
+    <button class="chip dchip" data-d="config" aria-pressed="false">Config files</button>
   </div>
   <div class="routecaption" id="caption"></div>
 
@@ -267,15 +282,23 @@
         <span class="lg"><span class="swline" style="border-color:var(--ink-faint)"></span>file dependency</span>
         <span class="lg"><span class="swline dash" style="border-color:var(--accent)"></span>into on-demand rule</span>
         <span class="lg"><span class="swline" style="border-color:var(--ink-faint);border-top-width:1.4px;opacity:.82"></span>region / offshore input (Faithful only)</span>
+        <span class="lg"><span class="swline" style="border-color:var(--g-src);border-top-width:1.4px"></span>config file input (Config files only)</span>
+        <span class="lg"><span class="swline" style="border-color:var(--g-src);border-top-style:dotted;border-top-width:2px;opacity:.6"></span>params / parse-time, not a file — hover to bring forward (Config files only)</span>
       </div>
     </div>
   </div>
 
   <div class="notes">
     <p><b>Simplified rule graph.</b> These are the rules; at run time each fans out over wildcards (<code>scenario</code>, <code>area</code>, <code>route</code>, <code>tech</code>, <code>variant</code>, dates…) into many jobs — one solve per run key, one report per scenario, and so on.</p>
-    <p><b>Overview vs Faithful:</b> Overview draws only the defining dependency (the cutout) into each CF rule. Switch to <b>Faithful</b> to also draw the geometry parquets every CF rule (and <code>cf_map</code>) really declares, and the one rule that reads <code>config/scenarios.csv</code> as a file — <code>compile_report</code>, for the variant each tech was solved with. <code>config.yaml</code> reaches the rules as params via <code>lookup</code>, and the scenario table also shapes the fan-out at parse time, so those stay annotations here rather than arrows.</p>
-    <p><b>Default target <code>demo</code></b> (and <code>all</code>) build the report + capacity bars. Dashed rules — <code>plot_cf_map</code>, <code>plot_lcos_bars</code>, <code>plot_siting_map</code>, <code>plot_site_capacity_bars</code> — are requested on demand. The grid parquets are <code>temp()</code>, deleted after the solve consumes them.</p>
-    <p><b>Not in this graph:</b> the browsable pages under <code>results/html/</code> — the dashboard, its v2, the cost taxonomies, and the hub carrying this diagram — are built by hand from the reports (<code>scripts/viz/build_*.py</code>), not by a rule. They sit a level above the workflow and are rebuilt whenever they change; the Snakemake outputs are <code>results/report_{scenario}.csv</code>, the solved networks, and the plots under <code>results/plots/</code>.</p>
+    <p><b>Three views of the same graph.</b> <b>Overview</b> draws only the defining dependency (the cutout) into each CF rule, and folds the whole config into one source box. <b>Faithful</b> adds the geometry parquets every CF rule (and <code>cf_map</code>) really declares, and what <code>compile_report</code> reads beyond the networks: the scenario table, the assumptions, and the grid series carrying the generation mix behind the imports.</p>
+
+    <p><b>Config files</b> opens that one config box into the four files it stands for, and draws what each actually does — because they do different things, and the single box hid that. <code>assumptions.yaml</code> and its optional per-scenario overlay are ordinary rule inputs, declared by both <code>solve_network</code> and <code>compile_report</code>, which is why a sweep that moves a quote re-solves the run <em>and</em> re-splits its cost. <code>scenarios.csv</code> is a file input to <code>compile_report</code> alone. The two dotted kinds are not file dependencies at all: <code>config.yaml</code> is loaded by <code>configfile:</code> and reaches eleven rules as <code>lookup(within=config)</code> params — never as an input, so editing it re-runs nothing on its own — while the scenario table is read at parse time into <code>scenarios_df</code> / <code>runs_df</code>, which is what decides how many jobs exist and which parquets each solve asks for.</p>
+    <p><b>Default target <code>demo</code></b> (and <code>all</code>) build the report + capacity bars. Dashed rules — <code>plot_cf_map</code>, <code>plot_lcos_bars</code>, <code>plot_siting_map</code>, <code>plot_site_capacity_bars</code> — are requested on demand. The grid parquets are <em>not</em> <code>temp()</code>: each one is the processed cache for its whole run, so a re-run reuses it and a changed date range writes a new name rather than invalidating anything.</p>
+    <p><b>One directory per scenario.</b> Everything a scenario produces lands under <code>results/{scenario}/</code>: the report and its hidden <code>_diag</code> sibling at the top, the solved networks in <code>outputs/</code>, the charts in <code>plots/</code>, and — written by <code>compile_report</code> — the assumptions that priced it, as an overlay file plus <code>config/</code> copies of the base and the merged result. The solve also stamps a digest of its inputs and of the code that ran into each network, so a result can be tied back to what produced it. The one exception is <code>plot_cf_map</code>, whose maps describe an area rather than a scenario and go to <code>results/diag_plots/</code>.</p>
+
+    <p><b>Export routes reach a second market.</b> A route ending in <code>-export</code> melts its iron abroad and buys the power for it there, so the solve and the report both pull that destination market's <code>emissions</code> series alongside the home one. Which market that is comes from <code>destination.area</code> in the base assumptions, read at parse time — a per-scenario overlay is merged too late to reshape the DAG, so an overlay that tries to move the destination is rejected rather than quietly solved against the wrong country's prices.</p>
+
+    <p><b>Not in this graph:</b> the browsable pages under <code>results/html/</code> — the dashboard, its v2, the cost breakdown, the assumptions page, and the hub carrying this diagram — are built by hand from the reports (<code>scripts/viz/build_*.py</code>), not by a rule. They sit a level above the workflow and are rebuilt whenever they change.</p>
     <p><b>Runs offline:</b> the demo ships a pre-sliced Victoria (AUS) cutout backup, so <code>retrieve_area_cutout</code> needs no CDS download; an <code>onstart</code> hook also scrubs stray VM NUL bytes from sources before any rule runs.</p>
   </div>
 
@@ -302,8 +325,19 @@
       title:"data/shapes/offshore_zones/eez_v12.zip", body:"Marine Exclusive Economic Zones v12 (zip).\nInput to make_offshore_geometry." },
     { id:"era5",     group:"src", x:510,  y:60, name:"ERA5 / CDS", kick:"SOURCE · WEATHER",
       title:"ERA5 reanalysis (Copernicus CDS API)", body:"Hourly reanalysis pulled by atlite.\nThe demo ships a pre-sliced Victoria cutout backup,\nso it runs with no CDS download." },
-    { id:"config",   group:"src", x:720,  y:60, name:"config", kick:"SOURCE · CONFIG",
-      title:"config/*.yaml + scenarios.csv", body:"config.yaml (area registry, pipeline knobs),\nscenarios.csv (one row per input timeseries),\nassumptions.yaml + an optional per-scenario overlay.\nDrives rule fan-out and the solve." },
+    { id:"config",   group:"src", x:720,  y:60, name:"config", kick:"SOURCE · CONFIG", lumped:true,
+      title:"config/*.yaml + scenarios.csv", body:"config.yaml (area registry, pipeline knobs),\nscenarios.csv (one row per input timeseries),\nassumptions.yaml + an optional per-scenario overlay.\nDrives rule fan-out and the solve. destination.area in the\nbase assumptions is read at parse time to name the market\neach -export run melts its iron in." },
+    // The same config, file by file — drawn only at the "Config files" level,
+    // where they replace the lumped `config` node above.
+    { id:"config_yaml", group:"src", x:670, y:34, name:"config.yaml", kick:"CONFIG · REGISTRY", cfgonly:true,
+      title:"config/config.yaml", body:"The area registry and the pipeline knobs.\nLoaded by `configfile:`, so it is never a rule input —\nit reaches eleven rules as params via lookup(within=config)\n(dotted here): the market and FX rates for retrieve_grid_data,\nthe iso3 / region / bbox for the geometries, the turbine and\npanel choices for every CF rule, best_zone_by for the report.\nIts `areas` map also resolves all-areas cells and names the\ndemo scenarios, so it shapes the fan-out at parse time." },
+    { id:"scen_csv", group:"src", x:845, y:34, name:"scenarios.csv", kick:"CONFIG · SCENARIOS", cfgonly:true,
+      title:"config/scenarios.csv", body:"One row per input timeseries: scenario, area, tech,\nvariant, date range.\nRead twice, and differently. At parse time load_scenarios\nvalidates it into scenarios_df, which build_runs_frame expands\ninto runs_df — that is what decides how many jobs exist and\nwhich parquets each solve asks for (dotted into the solve).\nAt run time compile_report reads the file itself, for the\nvariant each tech was solved with: the solve reads the parquet,\nnot its name, so the CSV is where that survives." },
+    { id:"assum_yaml", group:"src", x:670, y:110, name:"assumptions.yaml", kick:"CONFIG · ASSUMPTIONS", cfgonly:true,
+      title:"config/assumptions.yaml", body:"Costs, emission factors, freight legs, efficiencies.\nA real file input to both solve_network and compile_report:\nthe solve prices the run on it, and the report splits the\nsolved cost into leaves on the same quotes.\nAlso read at parse time for destination.area, which names\nthe market each -export run melts its iron in." },
+    { id:"overlay_yaml", group:"src", x:845, y:110, name:"overlay (optional)", kick:"CONFIG · OVERLAY", cfgonly:true,
+      title:"config/assumptions_{scenario}.yaml", body:"A per-scenario overlay merged over the base — how a\nsensitivity sweep moves one quote without copying the file.\nWired through the optional() shim in rules/_optional_shim.smk,\nso the input resolves to 0 or 1 paths at job-evaluation time\nand a scenario without one is not an error.\nBoth the solve and the report merge it, the same way, so a\ncost leaf is split on the numbers that priced it.\nA destination moved here is rejected: the DAG was already\nbuilt from the base." },
+
     { id:"entsoe_src", group:"src", x:1010, y:60, name:"ENTSO-E API", kick:"SOURCE · PRICES",
       title:"ENTSO-E Transparency API", body:"EU day-ahead electricity prices." },
     { id:"nem_src",  group:"src", x:1180, y:60, name:"AEMO NEM", kick:"SOURCE · PRICES",
@@ -313,7 +347,7 @@
     { id:"area_geometry", group:"res", x:150, y:196, name:"area_geometry", kick:"RES-CF RULE",
       title:"make_area_geometry", body:"scripts/res_cf/a_make_area_geometry.py\nin: Natural Earth zip\nout: resources/shapes/{area}_geo.parquet" },
     { id:"grid_data", group:"grid", x:1095, y:196, name:"grid_data", kick:"GRID RULE",
-      title:"retrieve_grid_data", body:"scripts/grid/retrieve_grid_data.py\nout: resources/timeseries/{area}_grid_{variant}_{dates}.parquet\nOne rule for both markets — the area registry says which.\nThe output is the processed cache: it is keyed by the whole\nrun, so a re-run reuses it. ENTSO-E throttled via entsoe_api=2." },
+      title:"retrieve_grid_data", body:"scripts/grid/retrieve_grid_data.py\nout: resources/timeseries/{area}_grid_{variant}_{dates}.parquet\nvariant: dayahead | emissions | full. dayahead is prices\nalone; the other two carry the generation mix behind them\ntoo, which is what the emissions accounting reads.\nOne rule for every market — the area registry says which.\nThe output is the processed cache: deliberately not temp(),\nand keyed by the whole run, so a re-run reuses it.\nENTSO-E throttled via entsoe_api=2." },
 
     // row 2
     { id:"offshore_geometry", group:"res", x:330, y:326, name:"offshore_geometry", kick:"RES-CF RULE",
@@ -335,35 +369,40 @@
     { id:"multi", group:"res", x:960, y:606, name:"multi", kick:"RES-CF RULE",
       title:"multi", body:"scripts/res_cf/d5_multi.py\nvariant: multi-n{N}\nPer-cell candidates for multi-site siting; {tech}@{cell} columns." },
     { id:"cf_map", group:"viz", x:1240, y:606, name:"cf_map", kick:"VIZ RULE", ondemand:true,
-      title:"plot_cf_map", body:"scripts/viz/plot_cf_map.py\nin: cutout + regions + the area-average CF\nout: results/plots/cf_map/*.png + .html\nOn-demand." },
+      title:"plot_cf_map", body:"scripts/viz/plot_cf_map.py\nin: cutout + regions + the area-average CF\nout: results/diag_plots/cf_map/*.png + .html\nOn-demand." },
 
     // row 5 — the hub
     { id:"solve", group:"opt", x:560, y:770, hub:true, name:"solve_network", kick:"OPTIMISE · solve",
-      title:"solve_network", body:"scripts/solve/solve_network.py\nin: assumptions (+ optional overlay) + area geometry\n    + the run's CF and grid parquets\nout: results/{scenario}/{area}_{route}_{dates}.nc\nOne network per run key: scenario, area, date range, route.\nStamps a content hash of every input into n.meta." },
+      title:"solve_network", body:"scripts/solve/solve_network.py\nin: assumptions (+ optional overlay) + area geometry\n    + the run's CF and grid parquets\n    + for an -export route, the destination market's own\n      emissions series — its furnace buys power there\nout: results/{scenario}/outputs/{area}_{route}_{dates}.nc\nOne network per run key: scenario, area, date range, route.\nStamps into n.meta a content digest of every input\n(inputs_hash) and of the repo modules that ran (code_hash),\nso a number that moved with the model can be told from one\nthat moved with an assumption." },
 
     // row 6
     { id:"report", group:"viz", x:430, y:906, name:"report", kick:"VIZ RULE · TARGET",
-      title:"compile_report", body:"scripts/viz/compile_report.py\nin: every solved network of one scenario + scenarios.csv\nout: results/report_{scenario}.csv\n   + results/.report_{scenario}_diag.csv (hidden)\nA column per run, a row per field, on the fixed schema in\ncommon/_report_schema.py — every run writes the same fields\nwhatever route it took. The report holds the selected areas;\nthe diagnostic keeps every zone and the best_in_country\nflag. Built by demo / all." },
+      title:"compile_report", body:"scripts/viz/compile_report.py\nin: every solved network of one scenario + scenarios.csv\n    + assumptions.yaml (+ the scenario's optional overlay),\n      merged here exactly as the solve merged it, so a cost\n      leaf is split on the quotes that priced it\n    + the grid series the solve priced imports against, and\n      the destination market's, for the mix behind them\nout: results/{scenario}/report_{scenario}.csv\n   + results/{scenario}/.report_{scenario}_diag.csv (hidden)\n   + assumptions_{scenario}.overlay.yaml, and config/ copies\n     of the base and merged assumptions, beside the run\nA column per run, a row per field, on the fixed schema in\ncommon/_report_schema.py — every run writes the same fields\nwhatever route it took. The report holds the selected areas;\nthe diagnostic keeps every zone and the best_in_country\nflag. Built by demo / all." },
     { id:"siting_map", group:"viz", x:760, y:906, name:"siting_map", kick:"VIZ RULE", ondemand:true,
-      title:"plot_siting_map", body:"scripts/viz/plot_siting_map.py\nin: results/{scenario}/{area}_{route}_{dates}.nc\nout: results/plots/siting_map/*\nMulti-site only; on-demand." },
+      title:"plot_siting_map", body:"scripts/viz/plot_siting_map.py\nin: results/{scenario}/outputs/{area}_{route}_{dates}.nc\nout: results/{scenario}/plots/siting_map_{run}.png + .html\nMulti-site only; on-demand." },
     { id:"site_capacity", group:"viz", x:950, y:906, name:"site_capacity", kick:"VIZ RULE", ondemand:true,
-      title:"plot_site_capacity_bars", body:"scripts/viz/plot_site_capacity_bars.py\nin: network .nc\nout: results/plots/site_capacity_bars/*\nMulti-site only; on-demand." },
+      title:"plot_site_capacity_bars", body:"scripts/viz/plot_site_capacity_bars.py\nin: network .nc\nout: results/{scenario}/plots/site_capacity_bars_{run}.png\n   + .html\nMulti-site only; on-demand." },
 
     // row 7
     { id:"capacity_bars", group:"viz", x:340, y:1036, name:"capacity_bars", kick:"VIZ RULE · TARGET",
-      title:"plot_capacity_bars", body:"scripts/viz/plot_capacity_bars.py\nin: report_{scenario}.csv\nout: results/plots/capacity_bars/{scenario}.png + .html\nDefault target (demo / all)." },
+      title:"plot_capacity_bars", body:"scripts/viz/plot_capacity_bars.py\nin: results/{scenario}/report_{scenario}.csv\nout: results/{scenario}/plots/capacity_bars.png + .html\nDefault target (demo / all)." },
     { id:"lcos_bars", group:"viz", x:540, y:1036, name:"lcos_bars", kick:"VIZ RULE", ondemand:true,
-      title:"plot_lcos_bars", body:"scripts/viz/plot_lcos_bars.py\nin: report_{scenario}.csv\nout: results/plots/lcos_bars/{scenario}.png + .html\nSteel routes only; on-demand." },
+      title:"plot_lcos_bars", body:"scripts/viz/plot_lcos_bars.py\nin: results/{scenario}/report_{scenario}.csv\nout: results/{scenario}/plots/lcos_bars.png + .html\nSteel routes only; on-demand." },
   ];
 
-  const E = (from, to, ondemand) => ({ from, to, ondemand: !!ondemand });
+  const E = (from, to, ondemand, lumped) => ({ from, to, ondemand: !!ondemand, lumped: !!lumped });
   // secondary = real file-dependency edge shown only in the Faithful view
-  const S = (from, to) => ({ from, to, ondemand: false, secondary: true });
+  const S = (from, to, lumped) => ({ from, to, ondemand: false, secondary: true, lumped: !!lumped });
+  // config = real file-dependency edge shown only in the Config files view
+  const C = (from, to) => ({ from, to, ondemand: false, config: true });
+  // param = config reaching a rule as values (lookup) or shaping the fan-out at
+  // parse time — not a file dependency, so it is drawn dotted
+  const P = (from, to) => ({ from, to, ondemand: false, config: true, param: true });
   const EDGES = [
     E("ne_zip", "area_geometry"),
     E("eez_zip", "offshore_geometry"),
     E("era5", "cutout"),
-    E("config", "solve"),
+    E("config", "solve", false, true),
     E("entsoe_src", "grid_data"),
     E("nem_src", "grid_data"),
     E("area_geometry", "offshore_geometry"),
@@ -397,9 +436,33 @@
     S("offshore_geometry", "anchor_colo"), S("offshore_geometry", "multi"),
     S("offshore_geometry", "cf_map"),
     // compile_report reads the scenario table for the variant each tech was
-    // solved with — the network does not carry it.
-    S("config", "report"),
+    // solved with, and the assumptions the solve priced the run on — the
+    // network carries neither.
+    S("config", "report", true),
+    // and the grid series the solve priced imports against, for the generation
+    // mix behind them, at both ends of an -export route.
+    S("grid_data", "report"),
     S("area_average", "cf_map"),
+
+    // --- Config files view only: the config broken into the files it is, with
+    //     the edges each one really has ---
+    // Real file inputs. assumptions.yaml + its overlay price the run in the
+    // solve and split the cost in the report; scenarios.csv is read as a file
+    // by compile_report alone.
+    C("assum_yaml", "solve"), C("assum_yaml", "report"),
+    C("overlay_yaml", "solve"), C("overlay_yaml", "report"),
+    C("scen_csv", "report"),
+    // Parse-time: the scenario table decides which jobs exist and which
+    // parquets each solve asks for, but is not itself an input to the solve.
+    P("scen_csv", "solve"),
+    // Params: the eleven rules that pull values out of config.yaml via
+    // lookup(within=config). solve_network declares no params block.
+    P("config_yaml", "area_geometry"), P("config_yaml", "offshore_geometry"),
+    P("config_yaml", "cutout"), P("config_yaml", "area_average"),
+    P("config_yaml", "bestsite_p95"), P("config_yaml", "anchor_colo"),
+    P("config_yaml", "tilt_mix"), P("config_yaml", "multi"),
+    P("config_yaml", "grid_data"), P("config_yaml", "report"),
+    P("config_yaml", "cf_map"),
   ];
 
   const nodeById = {};
@@ -442,7 +505,8 @@
     const grp = from.group;
     const el = document.createElementNS(SVG, "path");
     el.setAttribute("d", path(bottomAnchor(from), topAnchor(to)));
-    el.setAttribute("class", `edge flow edge-${grp}` + (e.ondemand ? " od" : "") + (e.secondary ? " sec" : ""));
+    el.setAttribute("class", `edge flow edge-${grp}` + (e.ondemand ? " od" : "") + (e.secondary ? " sec" : "")
+      + (e.config ? " cfg" : "") + (e.param ? " param" : "") + (e.lumped ? " lumped" : ""));
     el.setAttribute("marker-end", `url(#dot-${grp})`);
     gEdges.appendChild(el);
     return { spec: e, from, to, el };
@@ -453,7 +517,8 @@
   const nodeEls = NODES.map(n => {
     const [w, h] = size(n);
     const g = document.createElementNS(SVG, "g");
-    g.setAttribute("class", "node " + n.kind + (n.ondemand ? " od" : ""));
+    g.setAttribute("class", "node " + n.kind + (n.ondemand ? " od" : "")
+      + (n.cfgonly ? " cfgonly" : "") + (n.lumped ? " lumped" : ""));
     g.setAttribute("transform", `translate(${n.x - w/2},${n.y - h/2})`);
 
     const rect = document.createElementNS(SVG, "rect");
@@ -486,9 +551,9 @@
     hit.setAttribute("width", w); hit.setAttribute("height", h); hit.setAttribute("rx", 9);
     g.appendChild(hit);
 
-    g.addEventListener("mouseenter", (ev) => showTip(ev, n));
+    g.addEventListener("mouseenter", (ev) => { showTip(ev, n); light(n); });
     g.addEventListener("mousemove", moveTip);
-    g.addEventListener("mouseleave", hideTip);
+    g.addEventListener("mouseleave", () => { hideTip(); light(null); });
 
     gNodes.appendChild(g);
     return { spec: n, el: g };
@@ -512,17 +577,26 @@
   }
   function hideTip() { tip.classList.remove("show"); tip.setAttribute("aria-hidden", "true"); }
 
+  // Edges touching the hovered node. Only the dotted param edges restyle on
+  // this, but the class is set on every edge so the hook is there to reuse.
+  function light(n) {
+    edgeEls.forEach(({ from, to, el }) => el.classList.toggle("lit", n !== null && (from === n || to === n)));
+  }
+
   const CAPTIONS = {
     all: "The Snakemake rule graph, top-to-bottom by dependency depth. RES-CF science on the left, grid prices on the right, both converging on the per-run solve, then report + plots.",
     src: "<b>Sources</b> — external inputs: Natural Earth + EEZ shapes, ERA5 (via CDS), the ENTSO-E / AEMO price APIs, and the config (config.yaml, scenarios.csv, assumptions.yaml + an optional per-scenario overlay).",
     res: "<b>res_cf.smk</b> — build the area and offshore geometries, cut an ERA5 weather slice, then derive capacity-factor timeseries per method (d1–d5): area average, best-site P95, anchor co-location, solar tilt mix, and multi-site candidates. Every output lands in one flat resources/timeseries/ directory, named by the CSV row that asked for it.",
-    grid: "<b>grid.smk</b> — day-ahead price retrieval, one rule for both markets: ENTSO-E for Europe, AEMO NEM (via NEMOSIS) for Australia, chosen by the area registry. The output is the processed cache, keyed by the whole run.",
-    opt: "<b>solve.smk</b> — solve_network builds and solves one PyPSA network per run key (scenario, area, date range, route), pulling that run's CF and grid parquets plus the assumptions, and stamping a content hash of every input into the network.",
-    viz: "<b>viz.smk</b> — compile_report aggregates one scenario's solved networks into a report CSV on a fixed schema, a column per run (plus a hidden _diag.csv holding the zones it did not select); plots render from it (capacity bars is a default target) or straight from a network (siting / site-capacity / cf maps — on-demand). The pages under results/html/ are built outside the workflow.",
+    grid: "<b>grid.smk</b> — market series retrieval, one rule for every market, chosen by the area registry. The <code>dayahead</code> variant carries prices alone; <code>emissions</code> and <code>full</code> carry the generation mix behind them too. The output is the processed cache, keyed by the whole run — deliberately not <code>temp()</code>.",
+    opt: "<b>solve.smk</b> — solve_network builds and solves one PyPSA network per run key (scenario, area, date range, route), pulling that run's CF and grid parquets plus the assumptions, and — for an <code>-export</code> route — the destination market's own series, because the furnace there buys its power there. It stamps a digest of every input and of the code that ran into the network.",
+    viz: "<b>viz.smk</b> — compile_report aggregates one scenario's solved networks into a report CSV on a fixed schema, a column per run (plus a hidden _diag.csv holding the zones it did not select), and writes the assumptions that priced the run beside it. Plots render from the report (capacity bars is a default target) or straight from a network (siting / site-capacity — on-demand); cf maps land under results/diag_plots/. Everything a scenario produces sits under results/{scenario}/. The pages under results/html/ are built outside the workflow.",
   };
 
   let active = "all";
-  let faithful = false;
+  // Overview is the base graph. "faithful" and "config" each add one thing to
+  // it, and neither includes the other — the config files are easiest to read
+  // against the plain graph rather than the full file-dependency fan-in.
+  let detail = "overview";
   function apply() {
     nodeEls.forEach(({ spec, el }) => {
       el.classList.toggle("dimmed", !(active === "all" || spec.group === active));
@@ -530,12 +604,14 @@
     edgeEls.forEach(({ from, to, el }) => {
       el.classList.toggle("dimmed", !(active === "all" || from.group === active || to.group === active));
     });
-    svg.classList.toggle("faithful", faithful);
+    svg.classList.toggle("faithful", detail === "faithful");
+    svg.classList.toggle("config", detail === "config");
     let cap = CAPTIONS[active];
-    if (faithful) cap += "  <b>· Faithful:</b> the region / offshore parquet inputs into every CF rule (and cf_map) are now drawn — the real file-dependency fan-in.";
+    if (detail === "faithful") cap += "  <b>· Faithful:</b> the region / offshore parquet inputs into every CF rule (and cf_map), and the config + grid series into compile_report, are now drawn — the real file-dependency fan-in.";
+    if (detail === "config") cap += "  <b>· Config files:</b> on the plain graph, the lumped <code>config</code> source opened into the four files it stands for. Solid edges are real rule inputs — <code>assumptions.yaml</code> and its overlay into both the solve and the report, <code>scenarios.csv</code> into the report. Dotted edges are not file dependencies: <code>config.yaml</code> reaching eleven rules as <code>lookup</code> params, and the scenario table deciding at parse time which jobs exist — they are held back so the file inputs read first, so hover a node to bring its own forward.";
     document.getElementById("caption").innerHTML = cap;
     [...document.querySelectorAll("#chips .chip")].forEach(c => c.setAttribute("aria-pressed", c.dataset.g === active));
-    [...document.querySelectorAll("#detail .dchip")].forEach(c => c.setAttribute("aria-pressed", (c.dataset.d === "faithful") === faithful));
+    [...document.querySelectorAll("#detail .dchip")].forEach(c => c.setAttribute("aria-pressed", c.dataset.d === detail));
   }
 
   const chips = document.getElementById("chips");
@@ -557,7 +633,7 @@
   });
 
   [...document.querySelectorAll("#detail .dchip")].forEach(b => {
-    b.addEventListener("click", () => { faithful = (b.dataset.d === "faithful"); apply(); });
+    b.addEventListener("click", () => { detail = b.dataset.d; apply(); });
   });
 
   apply();
