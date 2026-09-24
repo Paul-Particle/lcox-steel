@@ -80,6 +80,11 @@ report:
 #   mainland_bbox:  optional [lon_min, lon_max, lat_min, lat_max] — keeps only
 #                   polygon parts whose centroid falls inside the box. Used
 #                   to drop overseas territories (e.g. metropolitan France).
+#   cutout_bbox:    optional [lon_min, lon_max, lat_min, lat_max] — the cutout
+#                   request's bounds, in place of the land ∪ offshore box
+#                   padded by `res_cf.cutout.bbox_pad_deg`.
+#   demo:           true for the no-download demo's own area, which
+#                   `all-areas` leaves out.
 #
 # Sub-national areas (the NEM regions) do not get their geometry from the
 # workflow. make_area_geometry reads Natural Earth Admin 0 — countries only —
@@ -139,15 +144,21 @@ areas:
   # is what would make it comparable.
   ONT:   { iso3: CAN, region: "ON", coarse: false, market: ieso, market_area: ONT,
            market_until: "20250430" }
-  # The NEM regions. AEMO serves prices for all five; only VIC1 ships a cutout,
-  # so the other four cost a CDS download the first time they are solved.
-  # Victoria also ships its offshore parquet, which is why the default
-  # `snakemake` run needs no CDS download and no EEZ/NE zips.
+  # The NEM regions. AEMO serves prices for all five; each costs a CDS download
+  # the first time it is solved.
   VIC1:  { iso3: AUS, region: VIC, coarse: false, market: nem, market_area: VIC1 }
   NSW1:  { iso3: AUS, region: NSW, coarse: false, market: nem, market_area: NSW1 }
   QLD1:  { iso3: AUS, region: QLD, coarse: false, market: nem, market_area: QLD1 }
   SA1:   { iso3: AUS, region: SA,  coarse: false, market: nem, market_area: SA1 }
   TAS1:  { iso3: AUS, region: TAS, coarse: false, market: nem, market_area: TAS1 }
+
+  # The demo's area: Victoria at 0.5°, over exactly the box of the cutout that
+  # ships in cutouts/DEMO_20250101_20251231_backup.nc, so the default `snakemake`
+  # run needs no CDS download and no EEZ/NE zips. Its geometries are VIC1's,
+  # committed as resources/shapes/DEMO_geo.parquet and DEMO_offshore_geo.parquet;
+  # being a demo area, the geometry rules never rebuild them.
+  DEMO:  { iso3: AUS, region: VIC, coarse: true, cutout_bbox: [141.0, 149.5, -39.0, -34.0],
+           demo: true }
 
 res_cf:
   offshore_max_distance_km: 200

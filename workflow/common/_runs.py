@@ -112,9 +112,11 @@ def zone_parents(areas: dict) -> dict:
 
 
 def top_level_areas(areas: dict) -> list[str]:
-    """The areas `all-areas` starts from — every area that is not someone's zone."""
+    """The areas `all-areas` starts from — every area that is not someone's zone or the demo's."""
     nested = {zone for cfg in areas.values() for zone in cfg.get("zones", [])}
-    return sorted(set(areas) - nested)
+    demo = {area for area, cfg in areas.items() if cfg.get("demo")}
+    top_level = sorted(set(areas) - nested - demo)
+    return top_level
 
 
 def resolve_market_areas(area: str, areas: dict, window: tuple = None) -> list[str]:

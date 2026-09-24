@@ -62,6 +62,9 @@ rule retrieve_area_cutout:
             dpath="areas/{area}/coarse", within=config, default=False
         ),
         bbox_pad_deg=lookup(dpath="res_cf/cutout/bbox_pad_deg", within=config),
+        cutout_bbox=lookup(
+            dpath="areas/{area}/cutout_bbox", within=config, default=None
+        ),
         monthly_requests=lookup(dpath="res_cf/cutout/monthly_requests", within=config),
         cds_poll_interval_s=lookup(dpath="res_cf/cutout/cds_poll_interval_s", within=config),
         cache_warn_size_gb=lookup(dpath="res_cf/cutout/cache_warn_size_gb", within=config),

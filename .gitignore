@@ -69,7 +69,7 @@ results/*.json
 # that one file can be excepted, and the exception comes after `*.nc`.
 cutouts/*
 *.nc
-!cutouts/VIC1_20250101_20251231_backup.nc
+!cutouts/DEMO_20250101_20251231_backup.nc
 
 # Raw/large geodata (download manually — see README)
 data/shapes/offshore_zones/

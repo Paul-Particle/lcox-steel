@@ -5,7 +5,9 @@ The cutout extent is the bounding box of the union of the onshore land geometry
 (01_build_regions) and the offshore zone geometry (01b_build_offshore_regions),
 padded by `bbox_pad_deg`. Unioning in the offshore zone matters: it can reach up
 to `offshore_max_distance_km` (~200 km) from the coast — far beyond a land-only
-bbox — so without it the offshore-wind cells get clipped out of the cutout.
+bbox — so without it the offshore-wind cells get clipped out of the cutout. An
+area's `cutout_bbox` replaces that box (the demo area uses it to match the cutout
+it ships).
 
 Caching: the download is keyed on its actual request parameters (bbox, dx/dy,
 time range) and reused from a persistent cache (common._cutout_cache) rather than
@@ -47,6 +49,7 @@ _END_DATE = "20231231"
 _OUTPUT_PATH = CUTOUTS / "de_20230101_20231231.nc"
 _COARSE = False
 _BBOX_PAD_DEG = 1.0
+_CUTOUT_BBOX = None
 _MONTHLY_REQUESTS = False
 _CDS_POLL_INTERVAL_S = 30.0
 _CACHE_WARN_SIZE_GB = 100.0
@@ -60,6 +63,7 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _OUTPUT_PATH = Path(snakemake.output[0])
     _COARSE = snakemake.params.coarse
     _BBOX_PAD_DEG = snakemake.params.bbox_pad_deg
+    _CUTOUT_BBOX = snakemake.params.cutout_bbox
     _MONTHLY_REQUESTS = snakemake.params.monthly_requests
     _CDS_POLL_INTERVAL_S = snakemake.params.cds_poll_interval_s
     _CACHE_WARN_SIZE_GB = snakemake.params.cache_warn_size_gb
@@ -93,9 +97,14 @@ def main():
     _OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     TMPDIR.mkdir(parents=True, exist_ok=True)
 
-    # Cutout bounds = bbox of the land ∪ offshore union, padded. Computed up front
-    # because the cache key is derived from the actual request parameters.
-    x, y = bounds_for(pad=_BBOX_PAD_DEG)
+    # Cutout bounds = bbox of the land ∪ offshore union, padded, unless the area
+    # names its own. Computed up front because the cache key is derived from the
+    # actual request parameters.
+    if _CUTOUT_BBOX:
+        lon_min, lon_max, lat_min, lat_max = _CUTOUT_BBOX
+        x, y = slice(lon_min, lon_max), slice(lat_min, lat_max)
+    else:
+        x, y = bounds_for(pad=_BBOX_PAD_DEG)
     dx = dy = 0.5 if _COARSE else None
     params = cache_params("era5", x, y, dx, dy, _START_DATE, _END_DATE)
     cached_cutout, _ = cache_paths(_AREA, params)

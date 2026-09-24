@@ -211,8 +211,8 @@ Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` per th
 
 The default target is a small, self-contained **demo** that runs after a fresh
 clone with **no CDS download, no EEZ/Natural-Earth zips, and no API keys**. It
-ships a pre-sliced Victoria (Australia) cutout backup plus the derived geometry
-parquets, and exercises the best-site (`d2`) and anchor-colocation (`d3`)
+ships a pre-sliced Victoria (Australia) cutout at 0.5° for its own `DEMO` area,
+plus that area's geometry parquets, and exercises the best-site (`d2`) and anchor-colocation (`d3`)
 capacity-factor science through a `solve` to a `viz` report:
 
 ```bash
@@ -326,7 +326,7 @@ placeholders. There are three:
 |---|---|
 | `standard-islanded` | every area, all routes, 2025, dedicated renewables only |
 | `standard-grid` | every area that has prices (Australia via its NEM zones), all routes, 2025 |
-| `sensitivity-test` | VIC1 only, two routes named explicitly — a machinery test |
+| `sensitivity-test` | the `DEMO` area (Victoria at 0.5°) only, routes named explicitly — a machinery test |
 
 `sensitivity-test` is the default `snakemake` target: it sits on the shipped
 Victoria cutout, so it runs after a fresh clone with no CDS download. Its single

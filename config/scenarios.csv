@@ -160,8 +160,8 @@ esp-ramp-05-dri,h2-dri-eaf,solar,bestsite-p95,ESP,20250101,20251231
 esp-ramp-05-dri-grid,h2-dri-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
 esp-ramp-05-dri-grid,h2-dri-eaf,solar,bestsite-p95,ESP,20250101,20251231
 esp-ramp-05-dri-grid,h2-dri-eaf,grid,emissions,ESP,20250101,20251231
-sensitivity-test,h2-dri-eaf|h2-dri-eaf-export|moe-eaf|moe-eaf-export,wind-onshore,bestsite-p95,VIC1,20250101,20251231
-sensitivity-test,h2-dri-eaf|h2-dri-eaf-export|moe-eaf|moe-eaf-export,solar,bestsite-p95,VIC1,20250101,20251231
+sensitivity-test,h2-dri-eaf|h2-dri-eaf-export|moe-eaf|moe-eaf-export,wind-onshore,bestsite-p95,DEMO,20250101,20251231
+sensitivity-test,h2-dri-eaf|h2-dri-eaf-export|moe-eaf|moe-eaf-export,solar,bestsite-p95,DEMO,20250101,20251231
 # Testrun 2.2: hydrogen storage price, minimum load and ramp limits, ESP only.
 esp-base,h2-dri-eaf,wind-onshore,bestsite-p95,ESP,20250101,20251231
 esp-base,h2-dri-eaf,solar,bestsite-p95,ESP,20250101,20251231

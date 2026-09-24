@@ -73,7 +73,7 @@ include: "rules/viz.smk"
 
 # Default target: a small, self-contained demo that runs after a fresh clone
 # with no CDS download, no EEZ/NE zips, and no API keys. It ships a pre-sliced
-# Victoria (AUS) cutout backup + derived geo parquets, and exercises the
+# Victoria (AUS) cutout for the DEMO area + its geo parquets, and exercises the
 # best-site and anchor-colocation (multi-site PyPSA) RES-CF science through to
 # a solve and a viz report. Run the full set with `snakemake all`.
 rule demo:
