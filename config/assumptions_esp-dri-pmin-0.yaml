@@ -1,0 +1,7 @@
+# Overlay for the `esp-dri-pmin-0` scenario, deep-merged over assumptions.yaml.
+#
+# H2 shaft with no minimum load and no ramp limit.
+#
+# Part of testrun 2.2; see scratch/add_testrun22_scenarios.py.
+dri-h2:
+  p_min_pu: 0.0
