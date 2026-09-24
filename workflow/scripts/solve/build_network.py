@@ -179,7 +179,7 @@ def build_network(
 
     _add_generators(n, cf_timeseries, assumptions["res"], wacc, multisite=multisite,
                     demand_site=demand_site,
-                    anchor_min_mw=assumptions.get("anchor", {}).get("min_capacity_mw", 0.0))
+                    anchor_min_mw=assumptions["anchor"]["min_capacity_mw"])
     _add_battery(n, assumptions["battery"], wacc, bus=elec_bus)
 
     if stem in _H2_ROUTES:

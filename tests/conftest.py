@@ -27,11 +27,16 @@ for _p in (
     REPO_ROOT / "workflow",
     REPO_ROOT / "workflow" / "scripts" / "grid",
     REPO_ROOT / "workflow" / "scripts" / "viz",
+    REPO_ROOT / "workflow" / "scripts" / "solve",
 ):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-RAW_CACHE = REPO_ROOT / "data" / "entsoe_cache"
+# The raw cache is an expensive input, so it lives wherever the store does —
+# `LCOX_STORE` points every worktree at one copy (see workflow/common/_paths.py).
+from common._paths import DATA
+
+RAW_CACHE = DATA / "entsoe_cache"
 AREA = "DE_LU"
 MONTHS = [f"2023-{month:02d}" for month in range(1, 13)]
 

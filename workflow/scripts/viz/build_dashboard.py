@@ -5,12 +5,13 @@ data payload (LCOS cost breakdown in €/t and optimised capacities, computed wi
 the exact pipeline reshaping in plot_lcos_bars / plot_capacity_bars) and renders
 the cost-breakdown and capacity charts client-side. That lets the page toggle:
 
-  * sensitivity — which scenario the run belongs to (a scenario is a name plus
-    its optional assumptions overlay), and
+  * sensitivity — which commissioned variant the run belongs to, out of the few
+    DASHBOARD_SCENARIOS declares browsable, and
   * capacity-factor method — the `variant` each RES tech was solved with.
 
 Both axes are report columns, so the page is assembled by grouping rows rather
-than by parsing names.
+than by parsing names. Whether a run bought grid power is its own axis, read off
+the same columns, so the base case needs no pill of its own on either side of it.
 
 The controls drive the charts, the LCOS table and the summary cards; the
 cross-geography LCOS overview stays on the baseline, cheapest-CF numbers.
@@ -18,8 +19,10 @@ Offline, no external hosts — safe to publish as an Artifact.
 """
 import base64
 import json
+import os
 import sys
 import types
+from collections import Counter
 from pathlib import Path
 
 import pandas as pd
@@ -34,14 +37,49 @@ OUT = HTML_DIR / "dashboard.html"
 TEMPLATE_HTML = Path(__file__).with_name("dashboard_template.html")
 CONFIG_DIR = REPO / "config"
 
-# Display names for the areas the registry can name. An area with no entry shows
-# its own code, which is what a newly added zone should do until it is named.
+# Display names for the areas the registry can name — each area's own name, not
+# its full label. An area with no entry shows its own code, which is what a newly
+# added zone should do until it is named. A zone is shown under its country,
+# "Canada · Alberta", composed in `_geo_label` from the registry's own `iso3`
+# rather than written out per zone: put a new submarket in the registry and it
+# names itself under the right country.
 GEO_NAMES = {
     "DEU": "Germany", "ESP": "Spain", "FRA": "France",
-    "AUS": "Australia", "BRA": "Brazil",
+    "AUS": "Australia", "BRA": "Brazil", "CAN": "Canada",
     "NSW1": "New South Wales", "QLD1": "Queensland", "SA1": "South Australia",
     "TAS1": "Tasmania", "VIC1": "Victoria",
+    "BR_N": "Norte", "BR_NE": "Nordeste",
+    "BR_SE": "Sudeste/C-Oeste", "BR_S": "Sul",
+    "AB": "Alberta", "ONT": "Ontario",
 }
+
+# The report keeps one zone per country — `report.best_zone_by` in
+# config/config.yaml picks it — and the hidden diagnostic beside it keeps every
+# zone that solved, flagged. The pages are built from the diagnostic so each NEM
+# region and Brazilian submarket browses as its own geography rather than one
+# standing in for the country. `DASHBOARD_ZONES=best` builds from the reports.
+ALL_ZONES = os.environ.get("DASHBOARD_ZONES", "all") != "best"
+
+# The scenarios the pages carry, and what the Sensitivity control calls each one.
+# `standard-grid` and `standard-islanded` are the same base case either side of
+# the Grid control, so both collapse onto one pill and the Grid axis alone
+# separates them. A scenario absent from here is not browsable: the EW-capex and
+# gas sweeps each answer a single-input question, which is read off
+# results/report_{scenario}.csv rather than clicked through here.
+SCENARIO_LABEL = {"base": "Base", "moe-turndown-70": "MOE turndown 70%"}
+DASHBOARD_SCENARIOS = {
+    "standard-grid": "base",
+    "standard-islanded": "base",
+    # Canada on 2024, because Ontario's price series has no full 2025. It is the
+    # base case on another weather year, not a sensitivity, so it shares the pill
+    # and separates on the year axis instead.
+    "canada-2024-grid": "base",
+    "moe-turndown-70": "moe-turndown-70",
+    # The same sensitivity, grid-connected. It was islanded-only until now, which
+    # is why its pill was dead on every grid geography.
+    "moe-turndown-70-grid": "moe-turndown-70",
+}
+BASE_SCENARIO = "base"
 
 # Display names for the capacity-factor variants. A variant with no entry shows
 # its own id, so a new CF method reaches the page without a code change.
@@ -64,13 +102,16 @@ ROUTE_ORDER = ["h2-dri-eaf", "h2-dri-eaf-export",
                "ew-eaf", "ew-eaf-export",
                "mix-dri-eaf", "mix-dri-eaf-export",
                "ng-dri-eaf", "ng-dri-eaf-export"]
-ROUTE_LABEL = {"h2-dri-eaf": "H2-DRI-EAF", "moe-eaf": "MOE", "ew-eaf": "Electrowinning",
-               "mix-dri-eaf": "NG-H2-DRI-EAF", "ng-dri-eaf": "NG-DRI-EAF",
-               "h2-dri-eaf-export": "H2-DRI-EAF · export",
+# Every route melts in an EAF, so naming it distinguishes nothing and only makes
+# the label longer — which costs most on the capacity panels, where the labels sit
+# tilted. What the name has to carry is the reduction step the routes differ on.
+ROUTE_LABEL = {"h2-dri-eaf": "H2-DRI", "moe-eaf": "MOE", "ew-eaf": "Electrowinning",
+               "mix-dri-eaf": "NG-H2-DRI", "ng-dri-eaf": "NG-DRI",
+               "h2-dri-eaf-export": "H2-DRI · export",
                "moe-eaf-export": "MOE · export",
                "ew-eaf-export": "Electrowinning · export",
-               "mix-dri-eaf-export": "NG-H2-DRI-EAF · export",
-               "ng-dri-eaf-export": "NG-DRI-EAF · export"}
+               "mix-dri-eaf-export": "NG-H2-DRI · export",
+               "ng-dri-eaf-export": "NG-DRI · export"}
 # Blues = clean; sand = transitional (partial gas); red = fossil. An export twin
 # takes its domestic route's hue, lightened, so a pair reads as a pair.
 ROUTE_COLOR = {"h2-dri-eaf": "#0A5680", "moe-eaf": "#0293D2", "ew-eaf": "#83D1DD",
@@ -88,7 +129,7 @@ H2_MIN = 0.02
 COST_GROUPS = [
     ["process",         "Process plant (capex+opex)", "#33434D"],
     ["ore_consumables", "Ore & consumables",          "#E2B681"],
-    ["gas",             "Natural gas (fuel)",         "#525F6A"],
+    ["gas",             "Natural gas (fuel + CO₂)",   "#525F6A"],
     ["iron_store",      "Iron stockpile",             "#B7C1C8"],
     ["transport",       "Freight",                    "#BDCCD9"],
     ["destination_power", "Destination power",        "#0293D2"],
@@ -148,20 +189,19 @@ def _num(v, default=0.0):
     return float(v)
 
 
-def _opt(v):
-    """Round to 1 dp, or None where the field is blank (so absent LCOH stays absent, not 0)."""
+def _opt(v, digits=1):
+    """Round to `digits`, or None where the field is blank (so absent LCOH stays absent, not 0)."""
     if pd.isna(v):
         return None
-    return round(float(v), 1)
+    return round(float(v), digits)
 
 
 def _axes(row):
     """The six axes the page browses, read off one report row.
 
-    Each is a column now: the area, the weather year, whether a grid price was
-    among the run's inputs, the route, the scenario it belongs to, and the CF
-    method its renewables were solved with. The old build parsed all but the
-    first two out of a project and scenario name.
+    Each is a column: the area, the weather year, whether a grid price was among
+    the run's inputs, the route, the scenario it belongs to, and the CF method
+    its renewables were solved with.
     """
     variants = {
         col[: -len("_variant")]: row[col]
@@ -174,23 +214,52 @@ def _axes(row):
         "year": str(row["start_date"])[:4],
         "grid": "grid" if "grid" in variants else "nogrid",
         "route": row["route"],
-        "variant": row["scenario"],
+        "variant": DASHBOARD_SCENARIOS[row["scenario"]],
         # A run whose techs were solved with different methods is named by all of
         # them, rather than being filed under whichever came first.
         "cf": "+".join(cf_methods) or "na",
     }
 
 
-def _baseline_scenario(scenarios):
-    """The scenario the overview rests on and the others fall back to.
+def _geo_country(geo):
+    """The country an area sits in, as the area registry's `iso3` declares it.
 
-    A scenario is a name plus an optional assumptions overlay, so the one with no
-    overlay is the base case. If every scenario overrides something the first by
-    name stands in — the comparison has to be against something.
+    An area whose iso3 is its own key is a whole country; anything else is one of
+    that country's market zones. The report's own `country` column cannot answer
+    this — Alberta and Ontario are top-level areas there, so it names each of them
+    as its own country rather than as Canada.
     """
-    plain = [s for s in scenarios if not (CONFIG_DIR / f"assumptions_{s}.yaml").exists()]
-    baseline = sorted(plain or scenarios)[0]
-    return baseline
+    areas = yaml.safe_load((CONFIG_DIR / "config.yaml").read_text())["areas"]
+    return areas.get(geo, {}).get("iso3", geo)
+
+
+def _geo_label(geo, country):
+    """"Germany", or "Canada · Alberta" for an area that is one country's zone."""
+    name = GEO_NAMES.get(geo, geo)
+    if country == geo:
+        return name
+    return f"{GEO_NAMES.get(country, country)} · {name}"
+
+
+def _scenario_of(report_path):
+    """The scenario a file holds runs for, whether it is a report or its diagnostic."""
+    stem = report_path.stem
+    if stem.endswith("_diag"):
+        return stem[len(".report_"):-len("_diag")]
+    return stem[len("report_"):]
+
+
+def scenario_files():
+    """The files the pages are built from, as {scenario: path}.
+
+    One file per browsable scenario, discovered on disk rather than listed
+    anywhere. Every reader goes through here — the taxonomy page walks the same
+    rows a second time to attach its leaf split — so the two cannot end up
+    reading different files.
+    """
+    pattern = ".report_*_diag.csv" if ALL_ZONES else "report_*.csv"
+    found = {_scenario_of(p): p for p in sorted(RESULTS.glob(pattern))}
+    return {s: found[s] for s in DASHBOARD_SCENARIOS if s in found}
 
 
 def _record(row, lcos_row, cap_row):
@@ -227,6 +296,7 @@ def _record(row, lcos_row, cap_row):
         ("lcoe_grid_connection_eur_per_mwh", "grid_connection"),
         ("lcoe_grid_energy_eur_per_mwh", "grid_energy"),
         ("lcoe_transmission_eur_per_mwh", "transmission"),
+        ("lcoe_destination_power_eur_per_mwh", "destination_power"),
     ):
         v = _opt(row[col])
         if v is not None:
@@ -259,6 +329,11 @@ def _record(row, lcos_row, cap_row):
     for col, key in (
         ("plant_dri_h2_eur_per_t", "dri"),
         ("plant_dri_ng_eur_per_t", "dri_ng"),
+        # The blended shaft and the briquetting press were absent, so on a
+        # blended or an export route the per-plant lines came to well under the
+        # process group they are meant to add up to.
+        ("plant_dri_mix_eur_per_t", "dri_mix"),
+        ("plant_briquetting_eur_per_t", "briquetting"),
         ("plant_eaf_eur_per_t", "eaf"),
         ("plant_moe_eur_per_t", "moe"),
         ("plant_ew_eur_per_t", "electrowinning"),
@@ -290,9 +365,18 @@ def _record(row, lcos_row, cap_row):
         "lcos": round(_num(row["lcos_eur_per_t"]), 0),
         "lcoe": _opt(row["lcoe_eur_per_mwh"]),
         "lcoh": _opt(row["lcoh_eur_per_mwh_lhv"]),
+        # The same cost per kg, which the report carries on every route that
+        # makes hydrogen, because the cost-breakdown page charts it in that unit.
+        "lcoh_kg": round(_num(row["lcoh_eur_per_kg"]), 3) or None,
+        # Blank wherever the area publishes prices but no generation mix, which is
+        # most of the grid side; the page says so rather than printing a zero.
+        "emissions": _opt(row["emissions_kg_co2e_per_t_steel"]),
         "steel_mt": round(_num(row["steel_produced_mt"]), 4),
         "ng_gwh": round(_num(row["ng_gwh_lhv"]), 1),
-        "h2_share": round(_num(row["iron_from_h2_share"]), 3),
+        # Optional, not zero-filled: a blended run that took no H2 has a share of
+        # 0, and a route with no blend at all has none, which the card reads as
+        # two different things.
+        "h2_share": _opt(row["iron_from_h2_share"], 3),
         "costs": costs,
         "caps": caps,
         "lcoe_parts": lcoe_parts,
@@ -327,18 +411,32 @@ def _co2_t_per_mwh():
     return base.get("natural_gas", {}).get("co2_t_per_mwh", CO2_T_PER_MWH)
 
 
+def _main_year(cases):
+    """The weather year most of the run is on — the others are gap-fillers.
+
+    The page names a geography's year only when it is not this one, so a run on a
+    single year says nothing about years at all.
+    """
+    return Counter(p.rsplit("-", 2)[1] for p in cases).most_common(1)[0][0]
+
+
 def _default_view(cases, baseline, cf_options):
     """The pair of scenarios the page opens on, chosen from what was solved.
 
-    The old build named a geography, year and sensitivity outright, so the page
-    opened on an "unavailable" notice whenever that one run had not been solved.
-    B differs from A by route alone; a null axis means B tracks A.
+    Chosen from what was solved rather than named outright, so the page always
+    opens on a run that exists. B differs from A by route alone; a null axis
+    means B tracks A.
     """
     # The first project that has a route worth opening on. Sorting alone can land
-    # on one whose runs are all still solving, which has nothing to show.
-    project = next((p for p in sorted(cases)
+    # on one whose runs are all still solving, which has nothing to show — and on
+    # the year with the fewest runs, since a gap-filling scenario on an earlier
+    # weather year sorts ahead of the main one. Open on the year most of the run is
+    # in, so the page starts where the results are.
+    main_year = _main_year(cases)
+    ordered = sorted(cases, key=lambda p: (p.rsplit("-", 2)[1] != main_year, p))
+    project = next((p for p in ordered
                     if any(route in cases[p] for route in ROUTE_ORDER)),
-                   sorted(cases)[0])
+                   ordered[0])
     geo, year, grid = project.rsplit("-", 2)
     routes = [route for route in ROUTE_ORDER if route in cases[project]]
     primary = "h2-dri-eaf" if "h2-dri-eaf" in routes else routes[0]
@@ -364,18 +462,16 @@ def build_payload(report_paths):
     synth[geo][year][grid][route] = baseline cheapest-CF record — for the overview.
 
     One report holds one scenario's runs, spanning areas, years and routes, so a
-    single file can contribute to several projects. That is the inversion from
-    the old build, where a file *was* a project.
+    single file can contribute to several projects.
     """
     sys.path.insert(0, str(REPO / "workflow"))
     _seed_stub()
     import scripts.viz.plot_lcos_bars as L
     import scripts.viz.plot_capacity_bars as C
-    from _run_display import run_label
+    from _run_display import run_labels
     from common._report_schema import read_report
 
-    scenarios = sorted(p.stem[len("report_"):] for p in report_paths)
-    baseline = _baseline_scenario(scenarios)
+    baseline = BASE_SCENARIO
 
     cases, synth, gas = {}, {}, {}
     geos, years, cf_methods = set(), set(), set()
@@ -383,9 +479,13 @@ def build_payload(report_paths):
         df = read_report(report_path)
         lcos_df = L.build_plot_data(df)   # €/t cost groups, indexed by run label
         cap_df = C.build_plot_data(df)    # capacities, indexed by run label
+        # One overlay covers a whole scenario, so the gas price is one lookup per
+        # file rather than one per run.
+        gas_price = _gas_price(_scenario_of(report_path))
 
-        for _, row in df.iterrows():
-            label = run_label(row)
+        labels = run_labels(df)
+        for idx, row in df.iterrows():
+            label = labels[idx]
             if label not in lcos_df.index:   # no LCOS (h2-only) — nothing to compare
                 continue
             axes = _axes(row)
@@ -393,7 +493,7 @@ def build_payload(report_paths):
             geos.add(geo)
             years.add(year)
             cf_methods.add(axes["cf"])
-            gas.setdefault(geo, {}).setdefault(year, {})[grid] = _gas_price(axes["variant"])
+            gas.setdefault(geo, {}).setdefault(year, {})[grid] = gas_price
 
             rec = _record(row, lcos_df.loc[label], cap_df.loc[label])
             project = f"{geo}-{year}-{grid}"
@@ -411,20 +511,33 @@ def build_payload(report_paths):
                         "lcoe": rec["lcoe"], "lcoh": rec["lcoh"],
                     }
 
-    # Which routes a scenario actually solved — the page greys out the rest
-    # rather than offering a combination that has no record behind it.
-    variant_routes = {}
-    for case in cases.values():
-        for route, by_scenario in case.items():
-            for scenario in by_scenario:
-                variant_routes.setdefault(scenario, set()).add(route)
+    # The scenarios something was actually filed under. Which routes each one
+    # covers is not summarised here: a sensitivity is solved for the runs it was
+    # commissioned for, so "does this apply" is a question about a geography and
+    # a route together, and the pages read that off `cases` where it is exact.
+    solved_scenarios = sorted({scenario for case in cases.values()
+                               for by_scenario in case.values()
+                               for scenario in by_scenario})
+
+    # Geography browses by country: the whole-territory run first, then that
+    # country's zones, countries in name order. The registry says which country an
+    # area is in, so nothing here has to know which zones belong together — a new
+    # submarket sorts beside its siblings and labels itself on its own.
+    geo_country = {geo: _geo_country(geo) for geo in geos}
+    geo_names = {geo: _geo_label(geo, country) for geo, country in geo_country.items()}
+
+    def geo_sort_key(geo):
+        country = geo_country[geo]
+        return (GEO_NAMES.get(country, country), geo != country, geo_names[geo])
 
     axis_options = {
-        "geos": sorted(geos),
+        "geos": sorted(geos, key=geo_sort_key),
+        "geo_names": geo_names,
+        "geo_country": geo_country,
         "years": sorted(years),
+        "main_year": _main_year(cases),
         "base_variant": baseline,
-        "variant_label": {s: s for s in scenarios},
-        "variant_routes": {s: sorted(r) for s, r in variant_routes.items()},
+        "variant_label": {s: SCENARIO_LABEL.get(s, s) for s in solved_scenarios},
         "cf_options": [[c, CF_NAMES.get(c, c)] for c in sorted(cf_methods)],
     }
     if not cases:
@@ -463,13 +576,11 @@ def build_html(template_path: Path, augment=None):
     payload add to it before serialisation — the cost-taxonomy page attaches its
     leaf-level split that way, rather than growing every page's payload.
     """
-    # Whatever has been compiled: one report per scenario, discovered on disk
-    # rather than listed anywhere. The hidden `_diag.csv` siblings are not
-    # reports — they hold the zones the report already decided against.
-    report_paths = sorted(RESULTS.glob("report_*.csv"))
+    report_paths = list(scenario_files().values())
     if not report_paths:
         raise FileNotFoundError(
-            f"no scenario reports in {RESULTS} — run `snakemake` to compile some"
+            f"no report in {RESULTS} for any of {sorted(DASHBOARD_SCENARIOS)} "
+            f"— run `snakemake` to compile some"
         )
     cases, synth, gas, axis_options = build_payload(report_paths)
 
@@ -484,12 +595,11 @@ def build_html(template_path: Path, augment=None):
 
     payload = {
         "cases": cases, "synth": synth, "gas": gas, "template": template,
-        "geo_names": GEO_NAMES,
         "clean_routes": CLEAN_ROUTES, "route_order": ROUTE_ORDER,
         "route_label": ROUTE_LABEL, "route_color": ROUTE_COLOR,
         "co2_t_per_mwh": _co2_t_per_mwh(), "h2_min": H2_MIN,
         "cost_groups": COST_GROUPS, "cap_panels": CAP_PANELS,
-        # geos, years, base_variant, variant_label, variant_routes, cf_options —
+        # geos, geo_names, years, base_variant, variant_label, cf_options —
         # every one of them read off the reports rather than declared here, so a
         # new area, year, scenario or CF method reaches the page on its own.
         **axis_options,

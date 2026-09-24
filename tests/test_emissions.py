@@ -243,8 +243,11 @@ def test_freight_is_charged_per_tonne_over_the_run_s_own_legs():
     emitted = _breakdown(n, legs={"sea": 10_000, "rail": 300})
 
     per_t = (0.004 * 10_000 + 0.01 * 300) / 1000.0
-    assert emitted["by_step"]["iron_transport"] == pytest.approx(1.0 * 4 * SCALE * per_t)
-    assert emitted["sources"]["freight"] == pytest.approx(emitted["by_step"]["iron_transport"])
+    shipped = pytest.approx(1.0 * 4 * SCALE * per_t)
+    assert emitted["freight_by_leg"]["iron_transport"] == shipped
+    # Outside the boundary: no step carries it and no source counts it.
+    assert "iron_transport" not in emitted["by_step"]
+    assert set(emitted["sources"]) == {"electricity", "gas"}
 
 
 def test_the_grid_s_intensity_comes_from_its_own_generation_mix():
@@ -385,7 +388,8 @@ def test_stored_energy_carries_the_hours_it_charged_in():
 def test_a_battery_that_never_ran_is_not_a_missing_column():
     """PyPSA's netCDF export drops an all-zero dispatch column, so a run that
     built no battery comes back with one in the index and none in the frame. An
-    optimum like that is ordinary, and used to take the whole report down."""
+    optimum like that is ordinary, so the report has to read it as a battery that
+    never ran rather than as a missing column."""
     n = _network()
     n.add("Generator", "solar", bus="electricity", carrier="solar")
     n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
@@ -404,7 +408,7 @@ def test_a_battery_that_never_ran_is_not_a_missing_column():
 
 def test_a_mix_from_another_window_is_an_error_not_a_clean_hour():
     """Reindexing a series onto snapshots it does not cover gives NaN, and a NaN
-    intensity used to become a zero one — a provenance error reading as
+    intensity must not become a zero one: a provenance error would read as
     zero-carbon electricity."""
     n = _network()
     n.add("Generator", "grid_import", bus="electricity", carrier="AC")

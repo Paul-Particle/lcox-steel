@@ -9,14 +9,23 @@ reach it.
 import pandas as pd
 
 
-def run_label(row: pd.Series) -> str:
-    """A bar's label: the run key minus the scenario, which the title carries.
+def run_labels(runs: pd.DataFrame) -> pd.Series:
+    """A label per run: the run key minus the scenario, which the title carries.
 
-    The route alone no longer identifies a row — a scenario spanning areas would
-    render every one of them under the same name. The date range joins in only
-    when the chart actually spans more than one year, so the common
-    single-year case stays short.
+    Labelled against the frame as a whole, because whether the date range is
+    needed to tell two bars apart is a property of the chart and not of either
+    bar: the range joins in when `runs` holds more than one window, and a window
+    that crosses new year names both years.
+
+    Callers that plot a subset pass the whole frame and select afterwards, so a
+    run keeps one label across every chart built from the same report.
     """
-    label = f"{row['area']} {row['route']}"
-    years = {str(row["start_date"])[:4], str(row["end_date"])[:4]}
-    return label if len(years) == 1 else f"{label} {'-'.join(sorted(years))}"
+    label = runs["area"].astype(str) + " " + runs["route"].astype(str)
+    windows = runs[["start_date", "end_date"]].drop_duplicates()
+    if len(windows) == 1:
+        return label
+
+    start_year = runs["start_date"].astype(str).str[:4]
+    end_year = runs["end_date"].astype(str).str[:4]
+    span = start_year.where(start_year == end_year, start_year + "-" + end_year)
+    return label + " " + span

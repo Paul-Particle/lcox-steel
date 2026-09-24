@@ -21,11 +21,10 @@ masks NaN before comparing and tolerates hundreds of missing hours.
   Oct 2025; NEM tables are 5-min), so instead of a fixed grid the guard flags any
   gap larger than `full_gap_tolerance` — which only occurs on truncation.
 
-The guard is what now catches a month going missing. Both sources used to keep a
-shared processed cache and ask "is this month already in it?" — a question that
-had to be asked in market time, and got a whole month of December dropped when it
-wasn't. Each run now processes its own months, so there is no membership question
-left to get wrong, and `test_nem_market_month_cache.py` went with it.
+The guard is what catches a month going missing. Each run processes its own
+months rather than asking whether a month is already in a shared processed
+cache, so there is no membership question to answer in market time and none to
+get wrong.
 
 These tests use synthetic frames, so they need no raw cache and run anywhere.
 

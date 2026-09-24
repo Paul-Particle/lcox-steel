@@ -30,15 +30,41 @@
   .ct-root *{box-sizing:border-box;}
   .ct-wrap{max-width:1480px;margin:0 auto;padding:30px 24px 68px;}
 
-  .ct-head{display:flex;justify-content:space-between;align-items:flex-end;
-    gap:24px;flex-wrap:wrap;padding-bottom:4px;}
+  .ct-head{padding-bottom:4px;}
+  /* The title keeps the scenario readout on its own line; the intro below spans
+     the full width so the summary and the caveat can sit side by side. */
+  .ct-headline{display:flex;justify-content:space-between;align-items:flex-end;
+    gap:24px;flex-wrap:wrap;}
   .ct-brand{display:flex;align-items:center;gap:11px;margin-bottom:10px;}
   .ct-dot{width:12px;height:12px;border-radius:50%;background:var(--accent);flex:none;}
   .ct-brand span{font-family:var(--mono);font-size:11px;letter-spacing:.2em;
     text-transform:uppercase;color:var(--accent-2);font-weight:600;}
   .ct-title{font-size:clamp(24px,3.2vw,34px);font-weight:700;letter-spacing:-.02em;
     margin:0;text-wrap:balance;line-height:1.06;}
-  .ct-sub{color:var(--muted);font-size:14px;margin:9px 0 0;max-width:74ch;}
+  /* The run summary and the caveat about its weakest data sit side by side, so a
+     reader meets both before the first chart. They stack on a narrow screen. */
+  .ct-intro{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin-top:9px;}
+  .ct-intro>*{flex:1 1 360px;min-width:0;margin:0;}
+  .ct-sub{color:var(--muted);font-size:14px;}
+  .ct-sub b{color:var(--ink);font-weight:600;}
+  /* House sand-yellow (style.py `sand_yellow`), shared by this note and the
+     geography pills it is about, so the two read as one flag. */
+  .ct-warn{--warn:#A9741F;--warn-bg:rgba(226,182,129,.26);--warn-line:rgba(192,138,58,.50);
+    position:relative;padding:10px 14px 10px 16px;
+    background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:4px;
+    font-size:13px;color:var(--muted);}
+  @media (prefers-color-scheme:dark){
+    .ct-warn{--warn:#E2B681;--warn-bg:rgba(226,182,129,.14);--warn-line:rgba(226,182,129,.38);}
+  }
+  :root[data-theme="dark"] .ct-warn{--warn:#E2B681;--warn-bg:rgba(226,182,129,.14);
+    --warn-line:rgba(226,182,129,.38);}
+  :root[data-theme="light"] .ct-warn{--warn:#A9741F;--warn-bg:rgba(226,182,129,.26);
+    --warn-line:rgba(192,138,58,.50);}
+  .ct-warn::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
+    background:var(--warn);border-radius:4px 0 0 4px;}
+  .ct-warn b{color:var(--warn);font-weight:700;}
+  /* The same rule inside a panel header, where it sits under the description. */
+  .ct-warn-inline{margin:8px 0 2px;max-width:104ch;font-size:12.5px;}
   .ct-meta{font-family:var(--mono);font-size:11px;color:var(--faint);
     text-align:right;line-height:1.7;}
 
@@ -47,10 +73,24 @@
     gap:12px 18px;background:var(--panel);border:1px solid var(--border);
     border-radius:12px;box-shadow:var(--shadow);padding:15px 18px;margin-top:20px;}
   .ct-ax{display:flex;flex-direction:column;gap:6px;min-width:0;}
+  /* One pill per zone is more than a shared column can hold without towering over
+     the other axes, so geography takes a row to itself. */
+  .ct-ax-geo{grid-column:1/-1;}
   .mxlab{font-family:var(--mono);font-size:10px;letter-spacing:.13em;
     text-transform:uppercase;color:var(--muted);font-weight:600;}
+  /* The grid-mode heading over each geography row — quieter than the axis label
+     above it, so the two read as a heading and its subheading. */
+  .ct-sublab{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--faint);font-weight:600;margin-top:3px;}
   .ct-pills{display:flex;gap:3px;background:var(--panel-2);padding:3px;
     border-radius:9px;border:1px solid var(--border);flex-wrap:wrap;}
+  /* A readout, not a control: it shares the matrix row so the number travels with
+     the selection, and carries no border a reader could mistake for a button. */
+  .ct-readout{font-family:var(--tw);font-size:13px;font-weight:600;color:var(--ink);
+    padding:8px 2px;line-height:1.35;}
+  .ct-readout .sub{display:block;font-weight:400;font-size:11.5px;color:var(--faint);}
+  /* Forces the wrap that gives each country its own line of zone pills. */
+  .ct-break{flex-basis:100%;height:0;margin:0;}
   .ct-pill{border:0;background:transparent;color:var(--muted);font-family:var(--tw);
     font-size:13px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer;
     line-height:1.2;}
@@ -58,6 +98,25 @@
   .ct-pill[aria-pressed="true"]{background:var(--accent);color:#fff;}
   .ct-pill:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;}
   .ct-pill:disabled{opacity:.3;cursor:not-allowed;}
+  /* Canada and Brazil: the grid data the note beside the intro is about, in the
+     same sand-yellow, so a reader meets the caveat on the control as well. */
+  .ct-pill.flagged{--flag:#A9741F;--flag-bg:rgba(226,182,129,.30);
+    --flag-line:rgba(192,138,58,.55);
+    color:var(--flag);background:var(--flag-bg);
+    box-shadow:inset 0 0 0 1px var(--flag-line);}
+  .ct-pill.flagged:hover{color:var(--flag);}
+  .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#3B2A10;box-shadow:none;}
+  @media (prefers-color-scheme:dark){
+    .ct-pill.flagged{--flag:#E2B681;--flag-bg:rgba(226,182,129,.16);
+      --flag-line:rgba(226,182,129,.42);}
+    .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#3B2A10;}
+  }
+  :root[data-theme="dark"] .ct-pill.flagged{--flag:#E2B681;
+    --flag-bg:rgba(226,182,129,.16);--flag-line:rgba(226,182,129,.42);}
+  :root[data-theme="dark"] .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#3B2A10;}
+  :root[data-theme="light"] .ct-pill.flagged{--flag:#A9741F;
+    --flag-bg:rgba(226,182,129,.30);--flag-line:rgba(192,138,58,.55);}
+  :root[data-theme="light"] .ct-pill.flagged[aria-pressed="true"]{background:#E2B681;color:#3B2A10;}
   .ct-note{font-size:12px;color:var(--faint);margin:9px 2px 0;font-family:var(--mono);}
 
   .ct-legend{display:flex;gap:26px;flex-wrap:wrap;margin:20px 0 0;}
@@ -80,10 +139,18 @@
   @media (max-width:1040px){.ct-pair{grid-template-columns:1fr;}}
   /* The single-taxonomy build keeps the alternative column and drops the other,
      so the remaining chart takes the full width rather than half of it. */
-  .ct-wrap.alt-only .ct-pair{grid-template-columns:1fr;}
-  .ct-wrap.alt-only .ct-col.dash,
-  .ct-wrap.alt-only .ct-key.dash,
-  .ct-wrap.alt-only .ct-col-h{display:none;}
+  .ct-wrap.purpose-only .ct-pair{grid-template-columns:1fr;}
+  .ct-wrap.purpose-only .ct-col.dash,
+  .ct-wrap.purpose-only .ct-key.dash,
+  .ct-wrap.purpose-only .ct-col-h{display:none;}
+  /* Prose that only makes sense beside the other taxonomy, and the wording that
+     replaces it when this page shows one. Nothing on the single-taxonomy page
+     should name a comparison the reader cannot see. */
+  .ct-wrap.purpose-only .pair-only{display:none;}
+  .ct-wrap:not(.purpose-only) .solo-only{display:none;}
+  /* The legend tells the two taxonomies apart, which is not a question this page
+     asks when it shows one — the chart legends already name every band. */
+  .ct-wrap.purpose-only .ct-legend{display:none;}
   .ct-col{min-width:0;}
   .ct-col-h{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:8px 0 2px;
     border-bottom:1px solid var(--hair);margin-bottom:6px;}
@@ -98,22 +165,43 @@
 
   .ct-root code{font-family:var(--mono);font-size:.88em;background:var(--panel-2);
     border:1px solid var(--hair);border-radius:4px;padding:0 4px;}
-  .ct-foot{margin-top:26px;padding-top:14px;border-top:1px solid var(--border);
-    font-size:11.5px;color:var(--faint);line-height:1.6;}
 </style>
 
 <div class="ct-root">
- <div class="ct-wrap /*ALT_ONLY_CLASS*/">
+ <div class="ct-wrap /*PURPOSE_ONLY_CLASS*/">
   <header class="ct-head">
-    <div>
-      <div class="ct-brand"><span class="ct-dot"></span><span>Cost breakdown · two taxonomies</span></div>
-      <h1 class="ct-title">Plotting alternatives</h1>
-      <p class="ct-sub">Two ways to cut the same levelised cost, side by side: the alternative
-        taxonomy next to the one the dashboard already uses. Both are drawn from the same results
-        and both close exactly on the total, so all that differs is where the cuts fall. Hover any
-        segment for the inputs behind it.</p>
+    <div class="ct-headline">
+      <div>
+        <div class="ct-brand"><span class="ct-dot"></span><span>Green steel model · cost breakdown</span></div>
+        <h1 class="ct-title">Test run 2 · 2026-09-14</h1>
+      </div>
+      <div class="ct-meta" id="ct-meta"></div>
     </div>
-    <div class="ct-meta" id="ct-meta"></div>
+    <div class="ct-intro">
+      <p class="ct-sub">Every steel route including its export twin, across <b>13 grid-connected
+        zones</b> and <b>7 islanded geographies</b> on the 2025 weather year, plus <b>Alberta and
+        Ontario on 2024</b> — 282 networks
+        on assumptions moved onto the research workbook's Model Input Register. Renewables are
+        sited best-site&nbsp;P95 (an upper bound on resource quality) and are onshore wind and
+        solar only — <b>no offshore wind was run</b>, so a coastal geography's best resource is
+        absent and its islanded cost is an upper bound for that reason too; hydrogen storage is a
+        salt cavern at 350&nbsp;€/MWh (a lower bound); the grid charge is a single
+        140&nbsp;k€/MW/yr capacity fee with no volumetric part; one gas price everywhere.
+        Iron is exported to Spain, finished steel stays where it was made. The
+        <b>Geography</b> rows carry the grid-connected and islanded halves, and a pill sets both
+        the place and which half it is on; the
+        <b>Sensitivity</b> control carries the one commissioned variant, MOE turndown at 70%, now
+        run on both halves — worth 55–131&nbsp;€/t islanded and almost nothing on grid.
+        Hover any segment for the inputs behind it.</p>
+      <p class="ct-warn"><b>Brazilian and Canadian grid data is not verified and incomplete.</b>
+        The four Brazilian submarkets and both Canadian provinces
+        publish a market price but no generation mix, so those runs report emission intensity as
+        unknown rather than as a number. Ontario runs on <b>2024</b>, its last full year before the
+        Market Renewal Program replaced HOEP on 2025-05-01, and HOEP is commodity-only: it leaves
+        out the Global Adjustment, which is most of what an Ontario consumer pays. That series
+        averages <b>20.6&nbsp;€/MWh against Germany's 89.3</b>, and the gap is the missing charge
+        rather than cheap power — which is the point worth looking at, not the ranking.</p>
+    </div>
   </header>
 
   <div class="ct-mx" id="ct-mx"></div>
@@ -130,9 +218,12 @@
   <section class="ct-panel">
     <div class="ct-panel-h">
       <h2>LCOS — levelised cost of steel <span class="unit">· € / t liquid steel</span></h2>
-      <p>Where the choice between the two actually changes the picture. Both stacks sum to the same
+      <p class="pair-only">Where the choice between the two actually changes the picture. Both stacks sum to the same
         LCOS per route; the alternative folds the electrolyser, the H₂ buffer and the electricity
         that made the hydrogen into a single block, while the dashboard keeps them apart.</p>
+      <p class="solo-only">The whole cost of a tonne of liquid steel, stacked. The electrolyser, the
+        H₂ buffer and the electricity that made the hydrogen are folded into one hydrogen block, so
+        what a route pays for hydrogen reads as a single figure rather than three.</p>
     </div>
     <div class="ct-pair">
       <div class="ct-col alt">
@@ -151,9 +242,15 @@
   <section class="ct-panel">
     <div class="ct-panel-h">
       <h2>LCOE — levelised cost of electricity <span class="unit">· € / MWh delivered</span></h2>
-      <p>Each route sizes its own electricity system, so LCOE is a per-route number. The two
+      <p class="pair-only">Each route sizes its own electricity system, so LCOE is a per-route number. The two
         taxonomies differ only in that the alternative separates renewables capital from its fixed
         O&amp;M — shown side by side anyway, so the pair can be read the same way throughout.</p>
+      <p class="solo-only">Each route sizes its own electricity system, so LCOE is a per-route number
+        rather than one figure for the geography. Renewables carry their capital apart from their
+        fixed O&amp;M.</p>
+      <p class="solo-only">LCOE is route-wide: an export route's <b>destination power</b> band is
+        the electricity its melt draws abroad, counted here because those megawatt-hours are in
+        the denominator either way.</p>
     </div>
     <div class="ct-pair">
       <div class="ct-col alt">
@@ -172,8 +269,12 @@
   <section class="ct-panel">
     <div class="ct-panel-h">
       <h2>LCOH — levelised cost of hydrogen <span class="unit">· € / kg H₂</span></h2>
-      <p>Only the routes that build an electrolyser have one. The alternative splits the
+      <p class="pair-only">Only the routes that build an electrolyser have one. The alternative splits the
         electrolyser three ways — capital, fixed O&amp;M and the water/variable opex it consumes.</p>
+      <p class="solo-only">Every route is on the axis. A route that builds an electrolyser carries it
+        split three ways — capital, fixed O&amp;M and the water/variable opex it consumes. A route
+        marked <b>no H₂</b> bought none: the blended-reductant route takes that option wherever grid
+        power is available, so on the grid side it is the fossil route under another name.</p>
     </div>
     <div class="ct-pair">
       <div class="ct-col alt">
@@ -191,10 +292,10 @@
 
   <section class="ct-panel">
     <div class="ct-panel-h">
-      <h2>Every part the model actually has
+      <h2>Detailed cost breakdown
         <span class="unit">· € / t liquid steel</span></h2>
       <p>The same LCOS as above, cut as finely as the model allows — each plant's annualised
-        capital apart from its fixed O&amp;M, the gas bill apart from any carbon price, the
+        capital apart from its fixed O&amp;M, the
         electrolyser's water apart from its capital, renewables by technology, the battery's power
         apart from its energy, the grid connection apart from the energy it carries. Hover a
         segment for the quotes and quantities that produce it, its share of the group it belongs
@@ -214,7 +315,6 @@
     <div class="ct-caps" id="ct-caps"></div>
   </section>
 
-  <p class="ct-foot" id="ct-foot"></p>
  </div>
 </div>
 
@@ -223,36 +323,63 @@
 const PAYLOAD = /*PAYLOAD_JSON*/;
 (function(){
   const {cases:CASES, gas:GAS, template:FCA, geos:GEOS, years:YEARS, geo_names:GN,
+    geo_country:GEO_COUNTRY, main_year:MAIN_YEAR,
     route_order:ROUTE_ORDER, route_label:RLAB, cost_groups:COST_GROUPS,
-    cap_panels:CAP_PANELS, variant_routes:VARIANT_ROUTES, variant_label:VLAB,
-    leaf_specs:LEAF_SPECS, leaf_groups:LEAF_GROUPS, alt_lcos_bands:ALT_LCOS,
-    alt_lcoe_bands:ALT_LCOE, dash_lcoe_bands:DASH_LCOE, alt_lcoh_bands:ALT_LCOH,
-    dash_lcoh_bands:DASH_LCOH, h2_lhv_kwh_per_kg:H2LHV,
+    cap_panels:CAP_PANELS, variant_label:VLAB,
+    leaf_specs:LEAF_SPECS, leaf_groups:LEAF_GROUPS, purpose_bands:PURPOSE,
+    lcoe_split_bands:LCOE_SPLIT, lcoe_group_bands:LCOE_GROUPS,
+    lcoh_split_bands:LCOH_SPLIT, lcoh_group_bands:LCOH_GROUPS,
+    h2_lhv_kwh_per_kg:H2LHV,
+    process_plants:PLANTS,
     base_variant:BASE, cf_options:CF_OPTS, default_view:DEFAULT} = PAYLOAD;
-  // Hidden by the single-taxonomy build, which shows the alternative alone.
-  const ALT_ONLY = /*ALT_ONLY*/false;
+  // Hidden by the single-taxonomy build, which keeps the purpose split alone.
+  const PURPOSE_ONLY = /*PURPOSE_ONLY*/false;
 
   const CONF = {responsive:true, displaylogo:false,
-    modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines"]};
+    modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d","toggleSpikelines",
+      // The artifact viewer blocks a page-initiated save, so the camera would be a
+      // button that does nothing for anyone reading this where it is published.
+      "toImage"]};
   // Charts sit on a constant white "print" surface in both themes, the convention the
   // v2 dashboard uses — a screenshot is publication-ready either way.
   const PRINT = {ink:"#1B242B", muted:"#525F6A", grid:"#E4E9ED", border:"#CDD5DB", paper:"#FFFFFF"};
   // The detail chart carries up to ~31 bands, so it is given far more vertical room
   // than the pair charts — the thinnest bands still need to be worth hovering.
-  const PAIR_H = 430, DETAIL_H = 1180, CAP_H = 340;
+  const PAIR_H = 430;
+  // The detail chart carries up to ~31 bands, so it is given far more vertical room
+  // than the pair charts — the thinnest bands still need to be worth hovering.
+  // DETAIL_PLOT_PX is the drawing area the bands get, which the thin-band threshold
+  // below is measured against; the height derives from it and the margins, so
+  // changing one cannot silently change what counts as thin.
+  const DETAIL_TOP = 26, DETAIL_PLOT_PX = 954, DETAIL_BOTTOM = 200;
+  const DETAIL_H = DETAIL_TOP + DETAIL_PLOT_PX + DETAIL_BOTTOM;
+  // These panels are narrow — several to a row — so the route labels tilt and reach
+  // CAP_LABEL_PX below the axis, and the legends wrap to as many as three lines.
+  // The bottom margin is built from the parts rather than guessed at, so the legend
+  // clears the labels by CAP_GAP_PX and still has room under it: all three measured
+  // off the built page, at 1440 px wide where the panels are narrowest.
+  const CAP_TOP = 20, CAP_PLOT_PX = 202;
+  const CAP_LABEL_PX = 100, CAP_GAP_PX = 52, CAP_LEGEND_PX = 70;
+  const CAP_BOTTOM = CAP_LABEL_PX + CAP_GAP_PX + CAP_LEGEND_PX + 16;
+  const CAP_H = CAP_TOP + CAP_PLOT_PX + CAP_BOTTOM;
   // Below this many pixels a stacked band is not a usable pointer target, so its
   // hover detail is folded into a neighbour instead (see renderDetail).
   const THIN_PX = 9;
 
   // ---- scenario state -------------------------------------------------
   // Routes are the bars on every chart, so the matrix moves everything else.
-  const AXES = ["geo","year","grid","cf","variant"];
-  const AXLAB = {geo:"Geography", year:"Weather year", grid:"Grid",
+  // Grid leads: it is the axis that separates the two halves of the run, and the
+  // one worth reaching for first. Geography trails because it carries a pill per
+  // zone and takes a row of its own (see .ct-ax-geo).
+  // Neither grid mode nor year is a control. Geography is browsed in two rows, one
+  // per grid mode, so the pill sets the mode; and a geography is browsed on the
+  // year it was run for, so the pill carries that too. The readout above states
+  // both for whatever is selected.
+  const AXES = ["cf","variant","geo"];
+  const AXLAB = {geo:"Geography",
                  cf:"Capacity factor", variant:"Sensitivity"};
   const OPTS = {
     geo:  GEOS.map(g=>[g, GN[g]||g]),
-    year: YEARS.map(y=>[String(y), String(y)]),
-    grid: [["grid","Grid"],["nogrid","Islanded"]],
     cf:   CF_OPTS,
     variant: Object.keys(VLAB).map(v=>[v, VLAB[v]]),
   };
@@ -261,19 +388,63 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   const S = {geo:DEFAULT.a.geo, year:DEFAULT.a.year, grid:DEFAULT.a.grid,
              cf:DEFAULT.a.cf, variant:DEFAULT.a.variant};
 
+  // The countries whose grid data the note beside the intro is about. Their pills
+  // carry the same sand-yellow, so the caveat travels with the control.
+  // The countries whose *grid* data the note beside the intro is about. Their
+  // grid pills carry the same sand-yellow, so the caveat travels with the control.
+  const FLAGGED_COUNTRIES = ["BRA", "CAN"];
+
   const proj = s => `${s.geo}-${s.year}-${s.grid}`;
   const projectHas = s => !!CASES[proj(s)];
   const geoName = g => GN[g]||g;
-  const variantOk = (route,v) => v===BASE || (VARIANT_ROUTES[v]||[]).includes(route);
-  // ng-dri-eaf has no renewables, so it carries no capacity-factor variants.
-  const cfKey = (s,route) => route==="ng-dri-eaf" ? "na" : s.cf;
+  // A record under the selected capacity-factor method, or the only one there.
+  // A route that builds no renewables — ng-dri-eaf — is filed under whatever
+  // method its scenario carried, which is "na" when the scenario named none and
+  // the same bestsite-p95 as everything else when its tech rows covered all
+  // routes, as they do here. Demanding "na" outright dropped the domestic NG-DRI
+  // run off every chart while its export twin, spelled differently, stayed.
+  function cfRec(byCf, s){
+    if(!byCf) return null;
+    if(byCf[s.cf]) return byCf[s.cf];
+    const keys = Object.keys(byCf);
+    return keys.length === 1 ? byCf[keys[0]] : null;
+  }
+  // The record stored under exactly the selected sensitivity, with no fall back to
+  // the base case. A sensitivity is solved for the runs it was commissioned for —
+  // MOE turndown only islanded — so asking CASES directly is what tells the page
+  // whether the pill has anything of its own here. VARIANT_ROUTES cannot: it says
+  // which routes a sensitivity solved anywhere, not which it solved in this
+  // geography, so it reads as available on grid geographies that never ran it.
+  const ownRec = (s,route) => cfRec(CASES[proj(s)]?.[route]?.[s.variant], s);
   function recFor(s, route){
     const rc = CASES[proj(s)]?.[route]; if(!rc) return null;
-    const v = rc[variantOk(route,s.variant) ? s.variant : BASE] || rc[BASE];
-    return v ? (v[cfKey(s,route)] || null) : null;
+    return cfRec(rc[s.variant] || rc[BASE], s);
   }
   // The routes this scenario can actually plot, in the canonical order.
   const routesAt = s => ROUTE_ORDER.filter(r => recFor(s,r));
+  // What a tonne of steel put into the air, beside what it cost. The figure is
+  // per route, so a selection covering ten routes has ten of them: the readout
+  // spans them and says how many stand behind it. An area that publishes prices
+  // but no generation mix yields none, and most of the grid side is such an area.
+  function emissionsReadout(){
+    const routes = routesAt(S);
+    const known = routes.filter(r => recFor(S,r).emissions != null);
+    if(!known.length) return {text:"data currently not available", title:""};
+    const values = known.map(r => recFor(S,r).emissions);
+    const low = Math.min(...values), high = Math.max(...values);
+    const span = (low===high ? nf(low,0) : nf(low,0) + "\u2013" + nf(high,0))
+      + " kg CO\u2082e/t steel";
+    // The range says how far apart the routes are; which route sits where is on
+    // hover, in the order the charts draw them.
+    const title = known.map(r => `${RLAB[r]||r}: ${nf(recFor(S,r).emissions,0)}`).join("\n");
+    const missing = routes.filter(r => !known.includes(r)).map(r => RLAB[r]||r);
+    return {
+      text: span + (missing.length
+        ? `<span class="sub">${known.length} of ${routes.length} routes</span>` : ""),
+      title: title + (missing.length
+        ? "\n\nNo published generation mix behind: " + missing.join(", ") : ""),
+    };
+  }
   const gasPrice = s => GAS[s.geo]?.[s.year]?.[s.grid];
 
   // ---- formatting -----------------------------------------------------
@@ -338,7 +509,16 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     // different number of them — summing here would print 108.4 on one side of the
     // pair and 108.5 on the other for the same scenario.
     const sums = X.map((_,i)=>traces.reduce((s,t)=>s+(t.y[i]||0),0));
-    const shown = X.map((_,i)=>totals[i]!=null ? totals[i] : sums[i]);
+    // A route the metric does not exist for keeps its slot on the axis so the panels
+    // share one route order, but prints nothing: a zero there would read as "free"
+    // rather than "this route makes none of it".
+    const absent = opt.absent || (()=>false);
+    const shown = X.map((_,i)=>absent(routes[i]) ? null
+                                                 : (totals[i]!=null ? totals[i] : sums[i]));
+    // What stands where the number would be. Saying the route makes none of this
+    // answers the reader's question in the chart; a gap leaves them wondering
+    // whether the run failed.
+    const absentText = opt.absentText || "";
     const tTpl=[], tCd=[];
     X.forEach((_,i)=>{
       const detail = (opt.totalLines?opt.totalLines(routes[i]):[])||[];
@@ -347,13 +527,17 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       let t = `${opt.totalLabel}: %{customdata[0]} ${opt.unit}`;
       detail.forEach((d,j)=>{ t += `<br>${d[0]} %{customdata[${j+1}]}`; });
       tTpl.push(t+"<extra></extra>");
-      tCd.push([nf(shown[i], opt.totalDp!=null?opt.totalDp:0), ...detail.map(d=>d[1])]);
+      tCd.push([shown[i]==null ? "n/a" : nf(shown[i], opt.totalDp!=null?opt.totalDp:0),
+                ...detail.map(d=>d[1])]);
     });
     const w = Math.max(1, ...tCd.map(r=>r.length));
     const totalTrace = {type:"scatter", x:X, y:sums, mode:"text",
-      text:shown.map(v=>nf(v, opt.totalDp!=null?opt.totalDp:0)),
+      text:shown.map(v=>v==null ? absentText : nf(v, opt.totalDp!=null?opt.totalDp:0)),
       textposition:"top center", cliponaxis:false, showlegend:false,
       textfont:{size:13, color:PRINT.ink}};
+    if(shown.some(v=>v==null))
+      totalTrace.textfont = {size:shown.map(v=>v==null?11:13),
+                             color:shown.map(v=>v==null?PRINT.muted:PRINT.ink)};
     // On a finely split chart most bands are only a pixel or two tall, and the
     // totals annotation sitting on top of the stack wins the "closest point" race
     // for them. There the annotation gives up its own hover so every band stays
@@ -420,11 +604,25 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
                 amountOf(cd(rec,"consumables"), rec.lcos, "LCOS", "€/t")]);
     return out;
   }
-  const PLANT_LABELS = [["dri","H2-DRI shaft"],["dri_ng","NG-DRI shaft"],["moe","MOE"],
-    ["ladle","Ladle metallurgy"],["electrowinning","Electrowinning"],["eaf","EAF"]];
+  // Keyed as `cost_detail` keys the per-plant costs. Every plant a route can
+  // build is here — the blended shaft and the briquetting press included — so
+  // the lines come to the plant total they sit under. The MOE route's ladle
+  // metallurgy is the shared EAF, priced down by an overlay, so it is not a
+  // plant of its own.
+  const PLANT_LABELS = [["dri","H2-DRI shaft"],["dri_mix","Blended shaft"],
+    ["dri_ng","NG-DRI shaft"],["moe","MOE"],["electrowinning","Electrowinning"],
+    ["briquetting","Briquetting press"],["eaf","EAF"]];
   function plantLines(rec){
     return PLANT_LABELS.filter(([k])=>cd(rec,k)!=null)
       .map(([k,lab])=>["· "+lab, amountOf(cd(rec,k), rec.lcos, "LCOS", "€/t")]);
+  }
+  // The same plants, but each one's own half of its annual cost: under the
+  // capital band the capital, under the upkeep band the upkeep. Both halves are
+  // reported leaves, so the lines under a band add up to the band.
+  function plantHalfLines(rec, half){
+    return (PLANTS||[]).filter(([stem])=>(rec.leaves||{})[stem+half]!=null)
+      .map(([stem,lab])=>["· "+lab,
+        amountOf((rec.leaves)[stem+half], rec.lcos, "LCOS", "€/t")]);
   }
   function gasLines(rec, s){
     return rec.ng_gwh>0 ? [["gas price:", amount(gasPrice(s),"€/MWh LHV",1)]] : [];
@@ -440,41 +638,56 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     routes.forEach(r=>recs[r]=recFor(S,r));
     const totals = routes.map(r=>recs[r].lcos);
 
-    // alternative: the circulated bands, with the composite blocks explained
-    const altLines = (key, r) => {
-      const rec = recs[r], a = rec.alt || {}, L = rec.lcos;
+    // by purpose: what each euro was spent for, with the composite bands opened up
+    const purposeLines = (key, r) => {
+      const rec = recs[r], a = rec.purpose || {}, L = rec.lcos;
       if(key==="ore") return oreLines(rec);
       if(key==="capex" || key==="fixed_om"){
-        // The per-plant detail is the same list either way; the band label says which
-        // half of each plant's annual cost is being shown.
-        return plantLines(rec).concat([["· of the plant total, this band is",
-          pct(a[key], (a.capex||0)+(a.fixed_om||0))]]);
+        // Each plant's own half of its annual cost, so the lines under this band
+        // sum to the band. A line carrying the whole of a plant would appear
+        // under both halves and neither band's detail would add up.
+        return plantHalfLines(rec, key==="capex" ? "_capex" : "_fom")
+          .concat([["· of the plant total, this band is",
+                    pct(a[key], (a.capex||0)+(a.fixed_om||0))]]);
       }
       if(key==="hydrogen"){
         const out = rec.lcoh!=null ? [["hydrogen LCOH:", amount(rec.lcoh,"€/MWh LHV",1)]] : [];
-        [["_electrolyser","· electrolyser plant"],["_h2_buffer","· H₂ buffer"],
+        [["_hydrogen_electrolyser","· electrolyser plant"],["_hydrogen_buffer","· H₂ buffer"],
          ["_hydrogen_electricity","· electricity to make the H₂"]].forEach(([k,lab])=>{
           if(a[k]>0) out.push([lab, amountOf(a[k], L, "LCOS", "€/t")]); });
         return out;
       }
-      if(key==="eaf") return a.eaf>0 ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
-        ["· furnace demand", amount(a._eaf_mwh_per_t,"MWh/t steel",2)]] : [];
-      if(key==="rest") return [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
-        ["· electricity system, all in", amountOf(a._electricity_total, L, "LCOS", "€/t")],
-        ["· less the H₂ and EAF melt shares",
-         amount((a._hydrogen_electricity||0)+(a.eaf||0), "€/t")]];
+      // The five electricity bands are one bill divided by the job each
+      // megawatt-hour did, so each one names its own draw and the price it paid.
+      if(key==="reduction") return a.reduction>0
+        ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
+           ["· drawn making the iron", amount(a._reduction_mwh_per_t,"MWh/t steel",2)],
+           ["· of the electricity bill", pct(a.reduction, a._electricity_total)]] : [];
+      if(key==="melt") return a.melt>0
+        ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
+           ["· furnace demand", amount(a._melt_mwh_per_t,"MWh/t steel",2)],
+           ["· of the electricity bill", pct(a.melt, a._electricity_total)]] : [];
+      if(key==="handling") return a.handling>0
+        ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
+           ["· drawn by the briquetting press", ""],
+           ["· of the electricity bill", pct(a.handling, a._electricity_total)]] : [];
+      if(key==="losses") return a.losses>0
+        ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
+           ["· the battery's round trip and the lines, drawn by nothing", ""],
+           ["· of the electricity bill", pct(a.losses, a._electricity_total)],
+           ["· electricity system, all in", amountOf(a._electricity_total, L, "LCOS", "€/t")]] : [];
       if(key==="gas") return gasLines(rec, S);
       if(key==="store") return storeLines(rec);
       return [];
     };
-    stacked(document.getElementById("plot-lcos-alt"), routes, ALT_LCOS,
-      (k,r)=>(recs[r].alt||{})[k], altLines, totals,
+    stacked(document.getElementById("plot-lcos-alt"), routes, PURPOSE,
+      (k,r)=>(recs[r].purpose||{})[k], purposeLines, totals,
       {unit:"€/t", fmt:",.0f", basis:"LCOS", height:PAIR_H, yTitle:"LCOS  (€ / t steel)",
        totalLabel:"levelised cost of steel (LCOS)", totalLines:r=>totalsLines(recs[r])});
 
     // dashboard: the reported groups, with the capex/O&M split in the process hover
     const dashLines = (g, r) => {
-      const rec = recs[r], L = rec.lcos, a = rec.alt || {};
+      const rec = recs[r], L = rec.lcos, a = rec.purpose || {};
       if(g==="process") return [
         ["· annualised capex", amountOf(a.capex, L, "LCOS", "€/t")],
         ["· fixed O&M", amountOf(a.fixed_om, L, "LCOS", "€/t")],
@@ -491,7 +704,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       if(g==="iron_store" || g==="steel_store") return storeLines(rec, g);
       return [];
     };
-    if(!ALT_ONLY) stacked(document.getElementById("plot-lcos-dash"), routes,
+    if(!PURPOSE_ONLY) stacked(document.getElementById("plot-lcos-dash"), routes,
       COST_GROUPS.map(([g,lab,col])=>[g,lab,col]),
       (g,r)=>(recs[r].costs||{})[g], dashLines, totals,
       {unit:"€/t", fmt:",.0f", basis:"LCOS", height:PAIR_H, yTitle:"LCOS  (€ / t steel)",
@@ -514,18 +727,34 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // ---- LCOE / LCOH pairs ----------------------------------------------
   function renderCarrier(metric){
     const isLcoe = metric==="lcoe";
-    const routes = routesAt(S).filter(r=>{
-      const rec = recFor(S,r); return rec && (isLcoe ? rec.lcoe!=null : rec.lcoh!=null); });
+    // LCOH keeps every route that solved, so this panel's bars line up with the LCOS
+    // panel above it and a reader can scan one route down the page. Only the routes
+    // that build an electrolyser have a hydrogen cost; the rest stand empty, which
+    // `absent` below makes explicit rather than printing a zero for them.
+    const routes = isLcoe
+      ? routesAt(S).filter(r=>recFor(S,r)?.lcoe!=null)
+      : routesAt(S).filter(r=>recFor(S,r));
     const recs = {}; routes.forEach(r=>recs[r]=recFor(S,r));
     // LCOH is charted per kg, which is how the mockup quoted it; the reports are per
     // MWh LHV, so scale and restate the LHV figure in the hover.
     const scale = isLcoe ? 1 : H2LHV/1000;
-    const totals = routes.map(r=>(isLcoe?recs[r].lcoe:recs[r].lcoh*scale));
+    // A route that bought no hydrogen has no levelised cost of it, whatever the
+    // report says. The blended-reductant route rejects hydrogen outright wherever
+    // grid power is available — `iron_from_h2_share` is 0.000 in every grid area —
+    // and the LCOH the run still writes there is a quotient with nothing in its
+    // denominator: Sudeste/C-Oeste reports -366.9 €/MWh, Norte -9.2. Plot a
+    // hydrogen cost only where hydrogen was actually made.
+    const madeH2 = r => recs[r].lcoh!=null && recs[r].lcoh > 0 && recs[r].h2_share > 0;
+    // The per-kg total is the report's own `lcoh_eur_per_kg`, not this page's
+    // conversion of the per-MWh figure — the bands still scale, because they are
+    // reported per MWh LHV.
+    const totals = routes.map(r=>(isLcoe ? recs[r].lcoe
+                                         : (madeH2(r) ? recs[r].lcoh_kg : null)));
     const unit = isLcoe ? "€/MWh" : "€/kg";
     const fmt = isLcoe ? ",.1f" : ",.2f";
     const basis = isLcoe ? "LCOE" : "LCOH";
 
-    const detail = (key, r, alt) => {
+    const detail = (key, r, split) => {
       const rec = recs[r];
       if(isLcoe){
         if(key==="res_capex"||key==="res_fom"||key==="renewables"){
@@ -538,7 +767,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         if(key==="grid_connection") return gridLines(rec).filter(l=>l[0]==="· connection");
         return [];
       }
-      const perMwh = (alt ? rec.alt_lcoh : rec.lcoh_parts)?.[key];
+      const perMwh = (split ? rec.lcoh_split : rec.lcoh_parts)?.[key];
       const out = perMwh!=null ? [["· on an LHV basis", amount(perMwh,"€/MWh LHV",1)]] : [];
       if(key==="electricity") out.push(["· priced at LCOE", amount(rec.lcoe,"€/MWh",1)]);
       return out;
@@ -553,13 +782,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       yTitle:isLcoe?"LCOE  (€ / MWh)":"LCOH  (€ / kg H₂)",
       totalLabel:isLcoe?"levelised cost of electricity (LCOE)":"levelised cost of hydrogen (LCOH)",
       totalLines:tLines,
+      absent:isLcoe ? null : (r=>!madeH2(r)), absentText:"no H₂",
       empty:isLcoe?"No electricity system in these routes.":"No route here builds an electrolyser."};
-    const altBands = isLcoe ? ALT_LCOE : ALT_LCOH;
-    const dashBands = isLcoe ? DASH_LCOE : DASH_LCOH;
-    stacked(document.getElementById(`plot-${metric}-alt`), routes, altBands,
-      (k,r)=>((isLcoe?recs[r].alt_lcoe:recs[r].alt_lcoh)||{})[k]*(isLcoe?1:scale),
+    const splitBands = isLcoe ? LCOE_SPLIT : LCOH_SPLIT;
+    const groupBands = isLcoe ? LCOE_GROUPS : LCOH_GROUPS;
+    stacked(document.getElementById(`plot-${metric}-alt`), routes, splitBands,
+      (k,r)=>((isLcoe?recs[r].lcoe_split:recs[r].lcoh_split)||{})[k]*(isLcoe?1:scale),
       (k,r)=>detail(k,r,true), totals, common);
-    if(!ALT_ONLY) stacked(document.getElementById(`plot-${metric}-dash`), routes, dashBands,
+    if(!PURPOSE_ONLY) stacked(document.getElementById(`plot-${metric}-dash`), routes, groupBands,
       (k,r)=>((isLcoe?recs[r].lcoe_parts:recs[r].lcoh_parts)||{})[k]*(isLcoe?1:scale),
       (k,r)=>detail(k,r,false), totals, common);
   }
@@ -578,20 +808,21 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const constantsFor = (key, r) =>
       (LEAF_SPECS[recs[r].spec] || LEAF_SPEC).find(e=>e[0]===key)?.[4] || [];
     // Only leaves some route in this scenario actually has — latent ones (offshore
-    // wind, a carbon price, HVDC) would otherwise sit in the legend drawing nothing.
+    // wind, HVDC) would otherwise sit in the legend drawing nothing.
     const bands = LEAF_SPEC.filter(([key])=>routes.some(r=>(recs[r].leaves||{})[key]))
                            .map(([key,label,,colour])=>[key,label,colour]);
     const groupOf = {}, labelOf = {};
     LEAF_SPEC.forEach(([key,label,group])=>{ groupOf[key]=group; labelOf[key]=label; });
     const valueOf = (key,r) => (recs[r].leaves||{})[key] || 0;
-    const groupTotal = (group,r) => LEAF_SPEC.reduce(
-      (s,[k,,g])=> g===group ? s+valueOf(k,r) : s, 0);
+    // The group's own reported total, not a sum of the rounded leaves in the
+    // payload — so a leaf's share of its group is a share of the whole group.
+    const groupTotal = (group,r) => (recs[r].groups||{})[group] || 0;
 
     // A band worth a euro or two on a 700 €/t bar is a pixel tall — real, but no
     // pointer can land on it. Each one's detail is therefore folded into a band that
     // *is* hoverable: the largest band of its own group, so it keeps its context, and
     // only failing that the largest band on the bar. Nothing becomes unreachable.
-    const plotPx = DETAIL_H - 26 - 200;                 // minus the top/bottom margins
+    const plotPx = DETAIL_PLOT_PX;                      // the drawing area, margins off
     const thinLimit = THIN_PX * Math.max(...totals) * 1.06 / plotPx;
     const folded = {};
     routes.forEach(r=>{
@@ -646,7 +877,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     };
     stacked(el, routes, bands, (k,r)=>(recs[r].leaves||{})[k], lines, totals,
       {unit:"€/t", fmt:",.1f", basis:"LCOS", height:DETAIL_H, bargap:0.45,
-       yTitle:"LCOS  (€ / t steel)", bottom:200, legendY:-0.075, legendSize:10.5,
+       yTitle:"LCOS  (€ / t steel)", bottom:DETAIL_BOTTOM, legendY:-0.075, legendSize:10.5,
        totalHover:false, totalLabel:"levelised cost of steel (LCOS)"});
   }
 
@@ -678,13 +909,27 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       // All three panels group rather than stack: the point of having them here is to
       // compare how each route splits its build, and a stack hides that behind the
       // total. Storage hours and process steps would not be additive anyway.
+      //
+      // Grouped bars of different technologies sit side by side with nothing saying
+      // where one route's group ends, so a rule between the categories draws the
+      // boundary. The horizontal grid comes off in exchange: two sets of lines
+      // compete, and these are the ones carrying the meaning.
+      const dividers = routes.slice(1).map((_,i)=>({
+        type:"line", xref:"x", yref:"paper", x0:i+0.5, x1:i+0.5, y0:0, y1:1,
+        line:{color:PRINT.border, width:1, dash:"dot"}, layer:"below",
+      }));
       Plotly.react(el, traces, base({
         barmode:"group", height:CAP_H, bargap:0.28, bargroupgap:0.08,
-        margin:{l:58, r:14, t:20, b:118},
-        legend:{orientation:"h", x:0, y:-0.2, xanchor:"left", yanchor:"top",
+        margin:{l:58, r:14, t:CAP_TOP, b:CAP_BOTTOM}, shapes:dividers,
+        // Paper units are fractions of the drawing area, so the drop below the axis
+        // is those pixels over CAP_PLOT_PX.
+        legend:{orientation:"h", x:0, y:-((CAP_LABEL_PX + CAP_GAP_PX) / CAP_PLOT_PX),
+          xanchor:"left", yanchor:"top",
           bgcolor:"rgba(0,0,0,0)", font:{size:10.5, color:PRINT.muted}},
-        xaxis:axis({type:"category", automargin:true, tickfont:{size:11, color:PRINT.muted}}),
-        yaxis:axis({rangemode:"tozero", title:{text:unit, font:{size:11, color:PRINT.muted}}}),
+        xaxis:axis({type:"category", automargin:true, showgrid:false,
+          tickfont:{size:11, color:PRINT.muted}}),
+        yaxis:axis({rangemode:"tozero", showgrid:false,
+          title:{text:unit, font:{size:11, color:PRINT.muted}}}),
       }), CONF);
     });
   }
@@ -699,24 +944,98 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   }
   // An axis value is offered only when some project/route combination exists for it,
   // so the matrix never lands the page on an unsolved point.
+  // Land on a selection that has runs behind it. Year is the axis this matters
+  // for: only Canada ran 2024, so choosing it from Germany has to move the
+  // geography rather than refuse the click. `fixed` is the axis the user just set,
+  // which stays put while the others give way.
+  function landOnSolved(fixed){
+    if(projectHas(S) && routesAt(S).length) return;
+    const years = fixed==="year" ? [S.year] : YEARS.map(String);
+    const modes = fixed==="grid" ? [S.grid] : ["grid","nogrid"];
+    for(const y of years) for(const g of GEOS) for(const gr of modes){
+      const probe = {...S, geo:g, year:y, grid:gr};
+      if(projectHas(probe) && routesAt(probe).length){
+        S.geo=g; S.year=y; S.grid=gr; return;
+      }
+    }
+  }
   function axisDisabled(axis, value){
     const probe = {...S, [axis]:value};
     if(!projectHas(probe)) return true;
-    if(axis==="variant") return !ROUTE_ORDER.some(r=>variantOk(r,value) && recFor(probe,r));
+    if(axis==="variant") return !ROUTE_ORDER.some(r=>ownRec(probe,r));
     return !routesAt(probe).length;
   }
   function buildMatrix(){
     const host = document.getElementById("ct-mx"); host.innerHTML = "";
     AXES.forEach(axis=>{
-      const box = document.createElement("div"); box.className = "ct-ax";
+      const box = document.createElement("div"); box.className = "ct-ax ct-ax-" + axis;
       const lab = document.createElement("div"); lab.className = "mxlab";
       lab.textContent = AXLAB[axis];
+      box.appendChild(lab);
+      if(axis === "geo"){ buildGeoRows(box); }
+      else {
+        const pills = document.createElement("div"); pills.className = "ct-pills";
+        OPTS[axis].forEach(([value,label])=>{
+          pills.appendChild(pill(label, S[axis]===value, axisDisabled(axis,value),
+            ()=>{ S[axis]=value; landOnSolved(axis); refresh(); }));
+        });
+        box.appendChild(pills);
+      }
+      host.appendChild(box);
+    });
+    // Beside the two axis controls rather than under the geography row, which
+    // spans the full width and would push a one-line readout onto a row of its own.
+    const emis = document.createElement("div"); emis.className = "ct-ax ct-ax-emis";
+    const emisLab = document.createElement("div"); emisLab.className = "mxlab";
+    emisLab.textContent = "Estimated emissions";
+    const emisVal = document.createElement("div"); emisVal.className = "ct-readout";
+    const readout = emissionsReadout();
+    emisVal.innerHTML = readout.text;
+    if(readout.title) emisVal.title = readout.title;
+    emis.appendChild(emisLab); emis.appendChild(emisVal);
+    host.insertBefore(emis, host.querySelector(".ct-ax-geo"));
+  }
+  // Geography gets a row per grid mode rather than one row with half its pills
+  // greyed out. A country's zones sit on one side of the split or the other —
+  // Brazil's submarkets are grid-only, Brazil entire is islanded-only — so which
+  // row a pill is in is the useful thing about it, and clicking one sets the
+  // geography and the grid mode together. GEOS arrives sorted by country, so a
+  // country's whole-territory run leads its own zones in both rows.
+  // A pill is a geography on the year it was run for, and it names that year when
+  // the year is worth knowing: either the geography was run on more than one, or
+  // it is not the year the rest of the run is on. So Alberta's two cases both say
+  // which they are, Ontario says 2024 because it has no full 2025, and a run on a
+  // single year says nothing about years anywhere.
+  const geoPillLabel = (g,y,yearsHere) =>
+    geoName(g) + ((yearsHere > 1 || y !== MAIN_YEAR) ? " · " + y : "");
+  function buildGeoRows(box){
+    [["grid","Grid"],["nogrid","Islanded"]].forEach(([mode,label])=>{
+      const here = [];
+      GEOS.forEach(g=>[MAIN_YEAR, ...YEARS.map(String).filter(y=>y!==MAIN_YEAR)]
+        .forEach(y=>{ if(CASES[`${g}-${y}-${mode}`]) here.push([g,y]); }));
+      if(!here.length) return;
+      const yearsHere = {};
+      here.forEach(([g])=>yearsHere[g] = (yearsHere[g]||0) + 1);
+      const sub = document.createElement("div");
+      sub.className = "ct-sublab"; sub.textContent = label;
       const pills = document.createElement("div"); pills.className = "ct-pills";
-      OPTS[axis].forEach(([value,label])=>{
-        pills.appendChild(pill(label, S[axis]===value, axisDisabled(axis,value),
-          ()=>{ S[axis]=value; refresh(); }));
+      let country = null;
+      here.forEach(([g,y])=>{
+        // GEOS arrives grouped by country, so a change of country starts a line:
+        // a zero-height item that fills the row makes the flex container wrap.
+        if(country !== null && GEO_COUNTRY[g] !== country)
+          pills.appendChild(document.createElement("div")).className = "ct-break";
+        country = GEO_COUNTRY[g];
+        const p = pill(geoPillLabel(g,y,yearsHere[g]),
+          S.geo===g && S.year===y && S.grid===mode, false,
+          ()=>{ S.geo=g; S.year=y; S.grid=mode; refresh(); });
+        // Grid only: what the note flags is the price series these countries
+        // publish, and an islanded run buys no grid power at all.
+        if(mode === "grid" && FLAGGED_COUNTRIES.includes(country))
+          p.classList.add("flagged");
+        pills.appendChild(p);
       });
-      box.appendChild(lab); box.appendChild(pills); host.appendChild(box);
+      box.appendChild(sub); box.appendChild(pills);
     });
   }
   function renderChrome(){
@@ -729,21 +1048,10 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     // Say plainly where a selection could not be honoured for every route.
     const notes = [];
     if(S.variant!==BASE){
-      const off = routes.filter(r=>!variantOk(r,S.variant)).map(r=>RLAB[r]||r);
+      const off = routes.filter(r=>!ownRec(S,r)).map(r=>RLAB[r]||r);
       if(off.length) notes.push(`${VLAB[S.variant]} does not apply to ${off.join(", ")} — shown at baseline.`);
     }
-    const na = routes.filter(r=>r==="ng-dri-eaf");
-    if(na.length) notes.push("NG-DRI-EAF has no renewables, so the capacity-factor basis does not apply to it.");
     document.getElementById("ct-clamp").textContent = notes.join("  ");
-    document.getElementById("ct-foot").innerHTML =
-      "Cross-chart logic, shared by both taxonomies: the electricity segment in LCOS/LCOH is priced "
-      + "at LCOE; the hydrogen segment in LCOS is LCOH × kg&nbsp;H₂/t; LCOI (not shown) is LCOS minus "
-      + "the EAF stage. Every split is exact — a plant's annual cost is "
-      + "<code>annuity × capex + fixed opex</code>, so capital and O&amp;M separate by a config ratio; "
-      + "the same holds for renewables, the electrolyser, the battery's power and energy, and the grid "
-      + "connection's capex and capacity charge. Two rows of the alternative stay empty because "
-      + "the model does not carry them — ore/iron freight and scrap or HBI purchase. Regenerate with "
-      + "<code>python workflow/scripts/viz/build_cost_taxonomies.py</code>.";
   }
 
   function refresh(){
@@ -773,15 +1081,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     }));
   }
 
-  // Land on a selection that actually has results, whatever the default said.
-  if(!projectHas(S) || !routesAt(S).length){
-    outer: for(const g of GEOS) for(const y of YEARS) for(const gr of ["grid","nogrid"]){
-      const probe = {...S, geo:g, year:String(y), grid:gr};
-      if(projectHas(probe) && routesAt(probe).length){
-        S.geo=g; S.year=String(y); S.grid=gr; break outer;
-      }
-    }
-  }
+  landOnSolved(null);   // whatever the default said, open on something solved
   refresh();
   // Plotly sizes to the container, so a theme flip needs no re-render; a resize does.
   let resizeTimer = null;

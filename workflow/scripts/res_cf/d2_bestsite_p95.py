@@ -252,6 +252,21 @@ def main() -> None:
             valid_mask = w_flat > 0
             cell_max = float(np.nanmax(np.where(valid_mask, v_flat, np.nan))) if np.any(valid_mask) else np.nan
 
+            # An area can have no cell a tech can use — a landlocked one has no
+            # offshore geometry. The techs that do have cells still have a series
+            # to write, so record this one as considered and carry on.
+            if not np.any(valid_mask):
+                log.info(f"{area} | {tech}: no eligible cell in this area, skipping")
+                summary_rows.append({
+                    "area": area,
+                    "tech": tech,
+                    "national_mean": nat_mean,
+                    "p90": p90,
+                    "p95": p95,
+                    "max": cell_max,
+                })
+                continue
+
             y_idx, x_idx = pick_p95_cell(cell_mean, weights)
             x, y = get_cell_coords(cf_year, y_idx, x_idx)
             selected_cells[tech] = {"x": x, "y": y, "x_idx": int(x_idx), "y_idx": int(y_idx)}

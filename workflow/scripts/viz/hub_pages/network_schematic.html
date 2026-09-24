@@ -341,7 +341,7 @@
     <p><b>Electricity draw (dashed):</b> the DRI, NG-DRI and EAF steps are PyPSA multi-links — <code>bus2 = electricity</code> with a negative <code>efficiency2</code>, so they pull auxiliary power alongside their main feed.</p>
     <p><b>Stores decouple time:</b> the H2 buffer, iron stockpile and finished-steel inventory are all cyclic and extendable; the steel store is capped at 8 weeks of production so flexibility can't degenerate into whole-year arbitrage.</p>
     <p><b>Multi-site (not drawn):</b> in multi-site mode each candidate site gets its own <code>electricity_{site}</code> bus and an extendable HVDC link to the demand site; capex and losses scale with routed distance, so siting emerges from the LP.</p>
-    <p><b>Planned MOE + EAF sensitivity cases (dashed, accent):</b> today <code>_add_moe_link</code> folds ladle metallurgy into a single electricity -> steel link. Two sensitivity cases are planned: a <b>hot-linked EAF</b> that taps <b>hot iron</b> (a molten, non-storable bus — no store) onto the shared iron bus so the existing EAF finishes it, versus the cheaper heated ladle metallurgy of the base link — which is why <code>assumptions.yaml</code> keeps the <code>ladle</code> costs as separate numbers.</p>
+    <p><b>MOE + EAF:</b> <code>_add_moe_link</code> takes electricity to <b>liquid iron</b> on the shared iron bus, and the shared EAF finishes it. Hot metal cannot wait, so the domestic route builds no iron store and the cell feeds the furnace hour for hour; a scenario that wants cheaper ladle metallurgy prices the shared EAF down through an overlay rather than adding a component.</p>
     <p><b>Planned imported-iron path (dashed, off by default):</b> a second <code>imported_iron</code> bus (no store — buy-as-needed merchant sponge iron / HBI) reaches the shared iron bus via a <code>bulk_shipping_iron</code> freight link, and can also feed the EAF directly. Not implemented in <code>build_network.py</code> yet.</p>
   </div>
 
@@ -419,9 +419,9 @@
       body:"Load · flat steel demand\n1.0 Mt/yr ÷ 8760 h = 114.2 t/h" },
 
     { id:"moe",         kind:"link", color:"steel",name:"MOE + EAF",
-      sub:["sensitivity cases: hot linked EAF", "vs. cheaper heated ladle metallurgy"],
+      sub:["liquid iron onto the shared iron bus", "finished in the shared EAF"],
       tipTitle:"MOE + EAF", w:173, h:78, x:718, y:624, routes:["moe-eaf"],
-      body:"Link  electricity -> steel (EAF-heated ladle folded in)\nel 4.0 + 0.1 MWh/t -> eff = 1/4.1 t/MWh\nore €160/t · p_min 0.95 · capex €(900+50)/(t·yr)\nSensitivity cases (dashed):\n · hot-linked EAF: tap hot iron -> shared iron bus -> EAF\n · cheaper heated ladle metallurgy: the folded-in base link" },
+      body:"Link  electricity -> liquid iron (finished in the shared EAF)\nel 3.181 MWh/t -> eff = 1/3.181 t/MWh\ncapex €1416/(t·yr) · opex €70/(t·yr) · p_min 0.95\nHot metal, so no iron store: the cell feeds the EAF hour for hour.\nOn the export twin it is let go cold and charged as plates." },
 
     { id:"hot_iron",    kind:"bus",  color:"iron", name:"hot iron",   unit:"t/h · molten", x:852, y:548, routes:["moe-eaf"], planned:true,
       body:"Bus · carrier iron (molten) — PLANNED\nHot metal tapped from MOE, fed into the shared\niron bus so the existing EAF finishes it.\nNon-storable, so no store attaches here.\nNot in the model yet." },
@@ -657,7 +657,7 @@
     expansions: "<b>Everything + planned expansions.</b> All routes overlaid together with the dashed components not yet in the model — the MOE hot-linked-EAF path (hot iron onto the shared iron bus) and the imported-iron path (merchant iron bulk-shipped in, feeding the iron bus and EAF).",
     "h2-only": "<b>h2-only</b> — electricity -> electrolyser -> H2 (+ buffer) -> flat H2 load. The LCOH model: no steel chain.",
     "h2-dri-eaf": "<b>h2-dri-eaf</b> — electrolyser -> H2 (+ buffer) -> DRI shaft -> sponge iron (+ store) -> EAF -> steel.",
-    "moe-eaf": "<b>MOE + EAF</b> — molten oxide electrolysis takes electricity straight to liquid steel (ladle folded into the link). No storable intermediate. The planned hot-linked-EAF sensitivity (tap hot iron onto the shared iron bus, finished in the existing EAF) shows under <b>expansions</b>.",
+    "moe-eaf": "<b>MOE + EAF</b> — molten oxide electrolysis takes electricity to liquid iron on the shared iron bus, and the shared EAF melts it to steel. Hot metal is not storable, so the domestic route builds no iron store and the cell runs with the furnace.",
     "ew-eaf": "<b>ew-eaf</b> — iron electrowinning: electricity -> iron plates (+ store) -> EAF -> steel.",
     "ng-dri-eaf": "<b>ng-dri-eaf</b> — the fossil benchmark: gas supply -> NG-DRI shaft -> sponge iron (+ store) -> EAF -> steel.",
     "mix-dri-eaf": "<b>mix-dri-eaf</b> — H2 and NG DRI shafts side by side on one iron bus -> EAF -> steel; the optimiser picks the split.",

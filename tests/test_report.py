@@ -14,7 +14,12 @@ import pytest
 
 import compile_report  # sys.path set by conftest
 import _run_display
-from common._report_schema import FIELD_ORDER, IDENTITY_FIELDS, read_report
+from common._report_schema import (
+    DIAGNOSTIC_FIELDS,
+    FIELD_ORDER,
+    IDENTITY_FIELDS,
+    read_report,
+)
 from common._runs import zone_parents
 
 AREAS = {
@@ -120,28 +125,45 @@ def test_no_metric_configured_flags_everything():
     assert "country" in out.columns, "the country is reported either way"
 
 
-@pytest.mark.parametrize(
-    "row, expected",
-    [
-        ({"area": "NSW1", "route": "moe-eaf", "start_date": "20250101", "end_date": "20251231"},
-         "NSW1 moe-eaf"),
-        ({"area": "DEU", "route": "h2-dri-eaf", "start_date": "20230101", "end_date": "20241231"},
-         "DEU h2-dri-eaf 2023-2024"),
-    ],
-)
-def test_run_label_identifies_the_run(row, expected):
-    assert _run_display.run_label(pd.Series(row)) == expected
+def test_one_window_is_labelled_by_area_and_route_alone():
+    """A chart of a single window needs no date to tell its bars apart."""
+    df = _report([
+        ("s", "NSW1", "moe-eaf", "20250101", "20251231", 900.0),
+        ("s", "DEU", "h2-dri-eaf", "20250101", "20251231", 1010.0),
+    ])
+    assert list(_run_display.run_labels(df)) == ["NSW1 moe-eaf", "DEU h2-dri-eaf"]
 
 
 def test_run_labels_are_unique_across_a_multi_area_scenario():
-    """The bug this guards: a scenario spanning areas rendered every one as 'moe-eaf'."""
+    """A scenario spanning areas must not render every one as 'moe-eaf'."""
     df = _report([
         ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
         ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
         ("s", "DEU", "moe-eaf", "20250101", "20251231", 1010.0),
     ])
-    labels = df.apply(_run_display.run_label, axis=1)
+    assert _run_display.run_labels(df).is_unique
+
+
+def test_two_windows_of_one_area_are_told_apart_by_year():
+    """The frame decides, not the run: two single-year windows are each one year,
+    so a label read off the run alone would give both bars the same name."""
+    df = _report([
+        ("s", "DEU", "h2-dri-eaf", "20240101", "20241231", 900.0),
+        ("s", "DEU", "h2-dri-eaf", "20250101", "20251231", 820.0),
+    ])
+    labels = _run_display.run_labels(df)
+    assert list(labels) == ["DEU h2-dri-eaf 2024", "DEU h2-dri-eaf 2025"]
     assert labels.is_unique
+
+
+def test_a_window_that_crosses_new_year_names_both_years():
+    df = _report([
+        ("s", "DEU", "h2-dri-eaf", "20230101", "20241231", 900.0),
+        ("s", "DEU", "h2-dri-eaf", "20250101", "20251231", 820.0),
+    ])
+    assert list(_run_display.run_labels(df)) == [
+        "DEU h2-dri-eaf 2023-2024", "DEU h2-dri-eaf 2025",
+    ]
 
 
 def test_report_holds_the_selected_areas_and_the_diagnostic_holds_all(tmp_path):
@@ -227,7 +249,7 @@ def test_every_route_writes_the_same_fields(tmp_path):
     compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
     report = read_report(report_path)
 
-    declared = [f for f in FIELD_ORDER if f != "best_in_country"]
+    declared = [f for f in FIELD_ORDER if f not in DIAGNOSTIC_FIELDS]
     assert list(report.columns) == declared
 
 
@@ -264,7 +286,7 @@ def test_run_specific_fields_follow_the_declared_ones(tmp_path):
     assert report.at["s_1", "solar_c00_gw_opt"] == 1.4
 
 
-def test_the_diagnostic_is_the_report_plus_the_flag(tmp_path):
+def test_the_diagnostic_is_the_report_plus_the_held_back_fields(tmp_path):
     df = _report([
         ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
         ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
@@ -276,7 +298,48 @@ def test_the_diagnostic_is_the_report_plus_the_flag(tmp_path):
 
     report = set(read_report(report_path).columns)
     diagnostic = set(read_report(diagnostic_path).columns)
-    assert diagnostic - report == {"best_in_country"}
+    assert diagnostic - report == set(DIAGNOSTIC_FIELDS)
+
+
+def test_the_freight_a_run_reports_is_held_back_from_the_report(tmp_path):
+    """A route that ships writes its freight, and only the diagnostic carries it.
+
+    No total on either side counts it, so the two files agree on every field
+    they share and differ only in that the report has no freight at all.
+    """
+    df = _report([("s", "VIC1", "moe-eaf-export", "20250101", "20251231", 900.0)])
+    df["emissions_kg_co2e_per_t_steel"] = 157.4
+    df["emissions_freight_kt_co2e_per_year"] = 215.0
+    df["emissions_steel_transport_kg_co2e_per_t_steel"] = 215.0
+    df["emissions_moe_kg_co2e_per_t_steel"] = 149.3
+    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
+
+    report_path = tmp_path / "report_s.csv"
+    diagnostic_path = tmp_path / ".report_s_diag.csv"
+    compile_report.write_report(flagged, report_path, diagnostic_path)
+    report = read_report(report_path).iloc[0]
+    diagnostic = read_report(diagnostic_path).iloc[0]
+
+    assert "emissions_steel_transport_kg_co2e_per_t_steel" not in report.index
+    assert "emissions_freight_kt_co2e_per_year" not in report.index
+    assert diagnostic["emissions_steel_transport_kg_co2e_per_t_steel"] == 215.0
+    # The total counts neither file's freight, so the two agree on it.
+    assert report["emissions_kg_co2e_per_t_steel"] == 157.4
+    assert diagnostic["emissions_kg_co2e_per_t_steel"] == 157.4
+
+
+def test_a_freight_field_no_run_produced_still_reaches_the_diagnostic(tmp_path):
+    """The diagnostic declares every field, so which file one lands in is fixed."""
+    df = _report([("s", "VIC1", "h2-only", "20250101", "20251231", 4.1)])
+    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
+
+    report_path = tmp_path / "report_s.csv"
+    diagnostic_path = tmp_path / ".report_s_diag.csv"
+    compile_report.write_report(flagged, report_path, diagnostic_path)
+
+    diagnostic = read_report(diagnostic_path)
+    assert diagnostic.at["s_1", "emissions_steel_transport_kg_co2e_per_t_steel"] == 0.0
+    assert diagnostic.at["s_1", "emissions_freight_kt_co2e_per_year"] == 0.0
 
 
 def test_a_report_reads_back_as_it_was_written(tmp_path):
