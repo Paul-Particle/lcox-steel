@@ -79,7 +79,7 @@ rule plot_cf_map:
         wind_offshore_turbine=lookup(dpath="res_cf/wind_offshore_turbine", within=config),
         region=lookup(dpath="areas/{area}/region", within=config),
     script:
-        "../scripts/viz/plot_cf_map.py"
+        "../scripts/viz/diagnostics/plot_cf_map.py"
 
 
 rule plot_capacity_bars:
@@ -92,7 +92,7 @@ rule plot_capacity_bars:
     log:
         "logs/plot_capacity_bars/{scenario}.log",
     script:
-        "../scripts/viz/plot_capacity_bars.py"
+        "../scripts/viz/outputs/plot_capacity_bars.py"
 
 
 rule plot_lcos_bars:
@@ -108,7 +108,7 @@ rule plot_lcos_bars:
     log:
         "logs/plot_lcos_bars/{scenario}.log",
     script:
-        "../scripts/viz/plot_lcos_bars.py"
+        "../scripts/viz/outputs/plot_lcos_bars.py"
 
 
 rule plot_siting_map:
@@ -121,7 +121,7 @@ rule plot_siting_map:
     log:
         "logs/plot_siting_map/{scenario}_{area}_{route}_{start_date}_{end_date}.log",
     script:
-        "../scripts/viz/plot_siting_map.py"
+        "../scripts/viz/diagnostics/plot_siting_map.py"
 
 
 rule plot_site_capacity_bars:
@@ -134,4 +134,4 @@ rule plot_site_capacity_bars:
     log:
         "logs/plot_site_capacity_bars/{scenario}_{area}_{route}_{start_date}_{end_date}.log",
     script:
-        "../scripts/viz/plot_site_capacity_bars.py"
+        "../scripts/viz/outputs/plot_site_capacity_bars.py"

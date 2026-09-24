@@ -88,9 +88,11 @@ lcox-steel/
 │   │   │   └── _helpers_solve.py   # annuity factor + electrolyser sizing
 │   │   └── viz/                    # reporting + Plotly figures
 │   │       ├── compile_report.py   # post-solve cost accounting → per-scenario CSV
-│   │       ├── plot_capacity_bars.py  # per-run capacity bar chart
-│   │       ├── plot_lcos_bars.py   # per-run cost-group breakdown in €/t steel
-│   │       ├── plot_cf_map.py      # spatial mean-CF heatmap with P95 site marked
+│   │       ├── outputs/            # result plots: capacity bars, LCOS breakdown, per-site capacity
+│   │       ├── diagnostics/        # checks: CF heatmap, siting map, DE price vs residual demand
+│   │       ├── dashboard/          # HTML dashboard builders + cost taxonomy
+│   │       │   ├── templates/      # the pages' HTML templates
+│   │       │   └── hub_pages/      # static hub pages (network schematic, workflow DAG)
 │   │       ├── _run_display.py     # run labels + best-zone filter, shared by the plots
 │   │       └── style.py            # FCA Plotly template + colormap
 │   └── common/                     # shared, cross-pipeline Python

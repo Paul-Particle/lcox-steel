@@ -118,7 +118,7 @@ REDUCTION_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew", "reductant-h2")
 # Each leaf with the parent group it rolls up into, in the stack order the
 # cost-breakdown page draws them. One list, so a leaf cannot be in the report
 # without a group to belong to. What a group is called and what colour it is
-# drawn in stays viz/cost_taxonomy.GROUPS' business; which group a leaf is in is
+# drawn in stays viz/dashboard/cost_taxonomy.GROUPS' business; which group a leaf is in is
 # structural and lives here.
 LEAF_COSTS_BY_GROUP = (
     ("ore", "feedstock"),

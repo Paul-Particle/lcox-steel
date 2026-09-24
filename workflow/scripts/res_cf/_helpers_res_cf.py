@@ -285,7 +285,7 @@ def geom_area_weights(cutout, geom) -> np.ndarray:
     atlite's indicatormatrix gives each cell's fractional overlap with `geom`
     (computed in EPSG:4326); scaling by cos_lat_weights turns those degree-area
     fractions into physical-area weights (issue #37). Cells outside `geom` get
-    weight 0. Shared by scripts 03b, 07, 07b and viz/plot_cf_map so the whole
+    weight 0. Shared by scripts 03b, 07, 07b and viz/diagnostics/plot_cf_map so the whole
     pipeline uses one definition of area weighting.
     """
     indicator = cutout.indicatormatrix([geom]).tocsr()
@@ -302,7 +302,7 @@ def pick_p95_cell(cell_mean, weights: np.ndarray, q: float = 0.95) -> tuple[int,
     `cell_mean` is a 2-D (y, x) grid of annual-mean CF (xr.DataArray or ndarray);
     `weights` is the matching (y, x) grid from geom_area_weights. Cells with
     weight 0 (outside the region) are excluded. This is the single definition of
-    "the P95 cell" shared by scripts 03b, 07, 07b and viz/plot_cf_map.
+    "the P95 cell" shared by scripts 03b, 07, 07b and viz/diagnostics/plot_cf_map.
     """
     vals2d = np.asarray(getattr(cell_mean, "values", cell_mean))
     w = np.asarray(weights)

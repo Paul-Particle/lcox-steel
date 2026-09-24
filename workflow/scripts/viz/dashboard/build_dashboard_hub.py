@@ -32,7 +32,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[3]        # workflow/scripts/viz/ -> repo root
+REPO = Path(__file__).resolve().parents[4]        # workflow/scripts/viz/dashboard/ -> repo root
 HTML_DIR = REPO / "results" / "html"               # where the built pages live
 HUB_PAGES = Path(__file__).with_name("hub_pages")  # tracked static source pages
 OUT_PATH = HTML_DIR / "dashboard_hub.html"                    # body-only, for the artifact

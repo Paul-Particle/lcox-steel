@@ -298,7 +298,7 @@
 
     <p><b>Export routes reach a second market.</b> A route ending in <code>-export</code> melts its iron abroad and buys the power for it there, so the solve and the report both pull that destination market's <code>emissions</code> series alongside the home one. Which market that is comes from <code>destination.area</code> in the base assumptions, read at parse time — a per-scenario overlay is merged too late to reshape the DAG, so an overlay that tries to move the destination is rejected rather than quietly solved against the wrong country's prices.</p>
 
-    <p><b>Not in this graph:</b> the browsable pages under <code>results/html/</code> — the dashboard, its v2, the cost breakdown, the assumptions page, and the hub carrying this diagram — are built by hand from the reports (<code>scripts/viz/build_*.py</code>), not by a rule. They sit a level above the workflow and are rebuilt whenever they change.</p>
+    <p><b>Not in this graph:</b> the browsable pages under <code>results/html/</code> — the dashboard, its v2, the cost breakdown, the assumptions page, and the hub carrying this diagram — are built by hand from the reports (<code>scripts/viz/dashboard/build_*.py</code>), not by a rule. They sit a level above the workflow and are rebuilt whenever they change.</p>
     <p><b>Runs offline:</b> the demo ships a pre-sliced Victoria (AUS) cutout backup, so <code>retrieve_area_cutout</code> needs no CDS download; an <code>onstart</code> hook also scrubs stray VM NUL bytes from sources before any rule runs.</p>
   </div>
 
@@ -369,7 +369,7 @@
     { id:"multi", group:"res", x:960, y:606, name:"multi", kick:"RES-CF RULE",
       title:"multi", body:"scripts/res_cf/d5_multi.py\nvariant: multi-n{N}\nPer-cell candidates for multi-site siting; {tech}@{cell} columns." },
     { id:"cf_map", group:"viz", x:1240, y:606, name:"cf_map", kick:"VIZ RULE", ondemand:true,
-      title:"plot_cf_map", body:"scripts/viz/plot_cf_map.py\nin: cutout + regions + the area-average CF\nout: results/diag_plots/cf_map/*.png + .html\nOn-demand." },
+      title:"plot_cf_map", body:"scripts/viz/diagnostics/plot_cf_map.py\nin: cutout + regions + the area-average CF\nout: results/diag_plots/cf_map/*.png + .html\nOn-demand." },
 
     // row 5 — the hub
     { id:"solve", group:"opt", x:560, y:770, hub:true, name:"solve_network", kick:"OPTIMISE · solve",
@@ -379,15 +379,15 @@
     { id:"report", group:"viz", x:430, y:906, name:"report", kick:"VIZ RULE · TARGET",
       title:"compile_report", body:"scripts/viz/compile_report.py\nin: every solved network of one scenario + scenarios.csv\n    + assumptions.yaml (+ the scenario's optional overlay),\n      merged here exactly as the solve merged it, so a cost\n      leaf is split on the quotes that priced it\n    + the grid series the solve priced imports against, and\n      the destination market's, for the mix behind them\nout: results/{scenario}/report_{scenario}.csv\n   + results/{scenario}/.report_{scenario}_diag.csv (hidden)\n   + assumptions_{scenario}.overlay.yaml, and config/ copies\n     of the base and merged assumptions, beside the run\nA column per run, a row per field, on the fixed schema in\ncommon/_report_schema.py — every run writes the same fields\nwhatever route it took. The report holds the selected areas;\nthe diagnostic keeps every zone and the best_in_country\nflag. Built by demo / all." },
     { id:"siting_map", group:"viz", x:760, y:906, name:"siting_map", kick:"VIZ RULE", ondemand:true,
-      title:"plot_siting_map", body:"scripts/viz/plot_siting_map.py\nin: results/{scenario}/outputs/{area}_{route}_{dates}.nc\nout: results/{scenario}/plots/siting_map_{run}.png + .html\nMulti-site only; on-demand." },
+      title:"plot_siting_map", body:"scripts/viz/diagnostics/plot_siting_map.py\nin: results/{scenario}/outputs/{area}_{route}_{dates}.nc\nout: results/{scenario}/plots/siting_map_{run}.png + .html\nMulti-site only; on-demand." },
     { id:"site_capacity", group:"viz", x:950, y:906, name:"site_capacity", kick:"VIZ RULE", ondemand:true,
-      title:"plot_site_capacity_bars", body:"scripts/viz/plot_site_capacity_bars.py\nin: network .nc\nout: results/{scenario}/plots/site_capacity_bars_{run}.png\n   + .html\nMulti-site only; on-demand." },
+      title:"plot_site_capacity_bars", body:"scripts/viz/outputs/plot_site_capacity_bars.py\nin: network .nc\nout: results/{scenario}/plots/site_capacity_bars_{run}.png\n   + .html\nMulti-site only; on-demand." },
 
     // row 7
     { id:"capacity_bars", group:"viz", x:340, y:1036, name:"capacity_bars", kick:"VIZ RULE · TARGET",
-      title:"plot_capacity_bars", body:"scripts/viz/plot_capacity_bars.py\nin: results/{scenario}/report_{scenario}.csv\nout: results/{scenario}/plots/capacity_bars.png + .html\nDefault target (demo / all)." },
+      title:"plot_capacity_bars", body:"scripts/viz/outputs/plot_capacity_bars.py\nin: results/{scenario}/report_{scenario}.csv\nout: results/{scenario}/plots/capacity_bars.png + .html\nDefault target (demo / all)." },
     { id:"lcos_bars", group:"viz", x:540, y:1036, name:"lcos_bars", kick:"VIZ RULE", ondemand:true,
-      title:"plot_lcos_bars", body:"scripts/viz/plot_lcos_bars.py\nin: results/{scenario}/report_{scenario}.csv\nout: results/{scenario}/plots/lcos_bars.png + .html\nSteel routes only; on-demand." },
+      title:"plot_lcos_bars", body:"scripts/viz/outputs/plot_lcos_bars.py\nin: results/{scenario}/report_{scenario}.csv\nout: results/{scenario}/plots/lcos_bars.png + .html\nSteel routes only; on-demand." },
   ];
 
   const E = (from, to, ondemand, lumped) => ({ from, to, ondemand: !!ondemand, lumped: !!lumped });

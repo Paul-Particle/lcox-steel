@@ -26,10 +26,10 @@ sys.path.insert(0, str(Path(__file__).parent))    # sibling build_dashboard
 
 from build_dashboard import DASHBOARD_SCENARIOS, HTML_DIR, font_css   # noqa: E402
 
-REPO = Path(__file__).resolve().parents[3]
+REPO = Path(__file__).resolve().parents[4]
 CONFIG = REPO / "config"
 RESULTS = REPO / "results"
-TEMPLATE_HTML = Path(__file__).with_name("assumptions_template.html")
+TEMPLATE_HTML = Path(__file__).parent / "templates" / "assumptions_template.html"
 # Where the assumptions are actually chosen and checked. The share link only —
 # the Teams client appends the opening user's address and a client fingerprint to
 # it, and neither belongs on a page other people open.

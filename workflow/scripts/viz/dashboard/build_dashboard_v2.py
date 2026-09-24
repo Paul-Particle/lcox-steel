@@ -10,7 +10,7 @@ from pathlib import Path
 
 from build_dashboard import HTML_DIR, build_html
 
-TEMPLATE_V2 = Path(__file__).with_name("dashboard_v2_template.html")
+TEMPLATE_V2 = Path(__file__).parent / "templates" / "dashboard_v2_template.html"
 OUT_V2 = HTML_DIR / "dashboard_v2.html"
 
 

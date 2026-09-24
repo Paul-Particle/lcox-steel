@@ -29,12 +29,12 @@ import pandas as pd
 import yaml
 from plotly.utils import PlotlyJSONEncoder
 
-REPO = Path(__file__).resolve().parents[3]  # workflow/scripts/viz/ -> repo root
+REPO = Path(__file__).resolve().parents[4]  # workflow/scripts/viz/dashboard/ -> repo root
 RESULTS = REPO / "results"
 # The built pages live together, away from the reports and the plot outputs.
 HTML_DIR = RESULTS / "html"
 OUT = HTML_DIR / "dashboard.html"
-TEMPLATE_HTML = Path(__file__).with_name("dashboard_template.html")
+TEMPLATE_HTML = Path(__file__).parent / "templates" / "dashboard_template.html"
 CONFIG_DIR = REPO / "config"
 
 # Display names for the areas the registry can name — each area's own name, not
@@ -467,9 +467,9 @@ def build_payload(report_paths):
     """
     sys.path.insert(0, str(REPO / "workflow"))
     _seed_stub()
-    import scripts.viz.plot_lcos_bars as L
-    import scripts.viz.plot_capacity_bars as C
-    from _run_display import run_labels
+    import scripts.viz.outputs.plot_lcos_bars as L
+    import scripts.viz.outputs.plot_capacity_bars as C
+    from scripts.viz._run_display import run_labels
     from common._report_schema import read_report
 
     baseline = BASE_SCENARIO
@@ -588,7 +588,7 @@ def build_html(template_path: Path, augment=None):
     # FCA plotly template (shared by the overview and the client-rendered charts).
     sys.path.insert(0, str(REPO / "workflow"))
     _seed_stub()
-    import scripts.viz.plot_lcos_bars as L
+    import scripts.viz.outputs.plot_lcos_bars as L
     tpl = L.fca_template
     template = tpl.to_plotly_json() if hasattr(tpl, "to_plotly_json") else tpl
 

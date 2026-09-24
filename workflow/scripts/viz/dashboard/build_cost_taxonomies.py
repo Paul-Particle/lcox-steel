@@ -30,7 +30,7 @@ from pathlib import Path
 
 import yaml
 
-REPO = Path(__file__).resolve().parents[3]        # workflow/scripts/viz/ -> repo root
+REPO = Path(__file__).resolve().parents[4]        # workflow/scripts/viz/dashboard/ -> repo root
 sys.path.insert(0, str(Path(__file__).parent))    # sibling build_dashboard, cost_taxonomy
 sys.path.insert(0, str(REPO / "workflow"))        # common.*, scripts.*
 
@@ -41,7 +41,7 @@ from common._report_schema import field_stem, read_report                 # noqa
 from scripts.solve._helpers_solve import deep_merge                       # noqa: E402
 
 OUT_PATH = HTML_DIR / "cost_taxonomies.html"
-TEMPLATE_HTML = Path(__file__).with_name("cost_taxonomies_template.html")
+TEMPLATE_HTML = Path(__file__).parent / "templates" / "cost_taxonomies_template.html"
 CONFIG_DIR = REPO / "config"
 
 # ---- band specs, published to the client -------------------------------------

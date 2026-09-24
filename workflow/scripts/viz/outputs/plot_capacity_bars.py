@@ -25,7 +25,7 @@ if "snakemake" not in globals():
 
 from common._logging import configure_logging
 from common._report_schema import PROCESS_LINKS, field_stem, read_report
-from _run_display import run_labels
+from scripts.viz._run_display import run_labels
 from scripts.viz.style import (
     apply_header,
     blue_black,

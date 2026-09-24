@@ -5,7 +5,7 @@ Residual demand = actual load − wind forecast (on+offshore) − solar forecast
 Data: ENTSO-E DE-LU bidding zone, hourly, full year 2025.
 
 Usage (from project root):
-    python workflow/scripts/viz/de_price_vs_residual_demand.py
+    python workflow/scripts/viz/diagnostics/de_price_vs_residual_demand.py
 
 Output: results/de_price_vs_residual_demand_2025.html
 
@@ -16,7 +16,7 @@ import logging
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / "workflow" / "scripts" / "grid"))
 sys.path.insert(0, str(ROOT / "workflow"))
 
