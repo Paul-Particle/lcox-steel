@@ -131,7 +131,12 @@ Run Snakemake from the repo root — it auto-discovers `workflow/Snakefile`.
 conda env create -f environment.yaml
 conda activate lcox-steel
 git config core.hooksPath .githooks
+plotly_get_chrome -y        # once per machine: Chrome for Testing (~325 MB)
 ```
+
+Static plot export (`write_image`, kaleido v1) needs a Chrome binary. Without one
+every PNG/SVG output fails with "Kaleido requires Google Chrome to be installed";
+a Chrome already in `/Applications` works as well. HTML outputs need nothing.
 
 > [!TIP]
 > The `commit-msg` hook strips email addresses from commit messages for privacy.
