@@ -118,8 +118,7 @@ lcox-steel/
 ├── .atlite-cache/                  # atlite scratch dir (gitignored)
 ├── results/                        # PyPSA networks (.nc), report CSVs, plots
 ├── environment.yaml                # conda environment (lcox-steel)
-├── CLAUDE.md                       # project conventions (logging, Snakefile style)
-└── TODO.md                         # roadmap / known WIP
+└── CLAUDE.md                       # project conventions (logging, Snakefile style)
 ```
 
 Run Snakemake from the repo root — it auto-discovers `workflow/Snakefile`.
@@ -174,8 +173,7 @@ else is gitignored):
   is a hand-maintained list of recognised zone codes (`DE_LU`, `FR`, `NO_1`, …).
   `retrieve_entsoe` validates the `area` wildcard against it before any API call,
   raising on an unrecognised code. Update it by hand when ENTSO-E adds/retires a
-  zone. (A planned migration derives it from the `entsoe` library's `Area` enum —
-  see `TODO.md`.)
+  zone. (Deriving it from the `entsoe` library's `Area` enum instead is issue #17.)
 - **NEM Registration and Exemption List** —
   `data/nem_cache/NEM Registration and Exemption List.xlsx` is a committed AEMO
   snapshot (~1 MB). AEMO's hosting is flaky (it 403s NEMOSIS's default User-Agent,
@@ -520,9 +518,8 @@ QC-validates, and stores the result. Keying on the real parameters means a
 `mainland_bbox` / `offshore_max_distance_km` edit correctly re-downloads instead
 of silently reusing a differently-bounded cutout. The legacy sibling
 `cutouts/{name}_backup.nc` still works as a fallback (`mv foo.nc foo_backup.nc`
-to pin one) and is promoted into the cache on use. Coverage-aware reuse (slicing
-a sub-request out of a larger cached cutout; partial-month fills) is a deferred
-follow-up — see `TODO.md`.
+to pin one) and is promoted into the cache on use. Only an exact request match is
+reused; a larger cached cutout that covers a request is not sliced down to it.
 
 Every finished cutout — freshly downloaded, cached, or from a backup — passes
 structural QC (`workflow/common/_cutout_qc.py`) before the rule succeeds:
@@ -660,7 +657,5 @@ unchanged — per-rule files still land under `logs/{rule}/`.
 ## Conventions & roadmap
 
 Project conventions (logging style, Snakefile/`.smk` rules, the two script
-patterns) live in `CLAUDE.md`. Known WIP and planned work — the ENTSO-E zone-list
-migration, coverage-aware cutout-cache reuse (the keyed cache and CDS download
-monitoring already landed) — are tracked in
-`TODO.md`.
+patterns) live in `CLAUDE.md`. Planned work and known issues are tracked in the
+GitHub issues.
