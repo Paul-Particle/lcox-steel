@@ -28,15 +28,10 @@ comes from the schema's `LEAF_GROUP`, the same map the report groups by.
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 import pandas as pd
 
-REPO = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(REPO / "workflow"))
-
-from common._report_schema import (  # noqa: E402
+from common._report_schema import (
     ELECTRICITY_JOBS,
     LEAF_COSTS,
     LEAF_GROUP,

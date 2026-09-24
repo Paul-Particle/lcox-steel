@@ -11,21 +11,15 @@ partial row and a final row are the same row.
 
 Run from the repo root with the project env; takes no arguments.
 """
-import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pandas as pd
 import pypsa
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT / "workflow"))
-sys.path.insert(0, str(REPO_ROOT / "workflow/scripts"))
-sys.path.insert(0, str(REPO_ROOT / "workflow/scripts/viz"))
-
+from common._paths import REPO_ROOT
 from common._runs import build_runs_frame, load_scenarios, zone_parents
-from viz.compile_report import (
+from scripts.viz.compile_report import (
     extract_summary,
     input_variants,
     mark_best_in_country,

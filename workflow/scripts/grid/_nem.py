@@ -18,13 +18,13 @@ from pathlib import Path
 import pandas as pd
 
 from common._paths import DATA
-from _helpers_grid import (
+from scripts.grid._helpers_grid import (
     assert_window_complete,
     iso,
     iter_months_str,
     to_utc_naive,
 )
-from download_nem import DOWNLOADERS
+from scripts.grid.download_nem import DOWNLOADERS
 
 # Module-level logger only — retrieve_grid_data.py installs the handlers.
 log = logging.getLogger(__name__)

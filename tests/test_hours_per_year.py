@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-import compile_report  # sys.path set by conftest
+from scripts.viz import compile_report
 
 
 @pytest.mark.parametrize("year", [2024, 2025])

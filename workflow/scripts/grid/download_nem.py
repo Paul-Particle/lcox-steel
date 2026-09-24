@@ -9,7 +9,7 @@ any NEMOSIS call; they are activated by the `import _nemosis_patches` line
 below, which must remain the first import in this file.
 """
 
-import _nemosis_patches  # noqa: F401  — applies AEMO compatibility patches on import; must be first
+from scripts.grid import _nemosis_patches  # noqa: F401  — applies AEMO compatibility patches on import; must be first
 import logging
 from pathlib import Path
 

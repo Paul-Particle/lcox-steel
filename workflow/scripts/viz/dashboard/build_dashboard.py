@@ -466,7 +466,6 @@ def build_payload(report_paths):
     One report holds one scenario's runs, spanning areas, years and routes, so a
     single file can contribute to several projects.
     """
-    sys.path.insert(0, str(REPO / "workflow"))
     _seed_stub()
     import scripts.viz.outputs.plot_lcos_bars as L
     import scripts.viz.outputs.plot_capacity_bars as C
@@ -587,7 +586,6 @@ def build_html(template_path: Path, augment=None):
     cases, synth, gas, axis_options = build_payload(report_paths)
 
     # FCA plotly template (shared by the overview and the client-rendered charts).
-    sys.path.insert(0, str(REPO / "workflow"))
     _seed_stub()
     import scripts.viz.outputs.plot_lcos_bars as L
     tpl = L.fca_template

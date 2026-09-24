@@ -13,7 +13,7 @@ import pandas as pd
 import pypsa
 import pytest
 
-import compile_report  # sys.path set by conftest
+from scripts.viz import compile_report
 from common._report_schema import EMISSION_STEPS
 
 # A deliberately round factor table: coal at 1, gas at 0.5, wind free, so every

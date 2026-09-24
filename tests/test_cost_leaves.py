@@ -16,8 +16,8 @@ import pandas as pd
 import pytest
 import yaml
 
-import compile_report  # sys.path set by conftest
-from build_network import build_network
+from scripts.viz import compile_report
+from scripts.solve.build_network import build_network
 from common._report_schema import (
     ELECTRICITY_USERS,
     LEAF_COSTS,

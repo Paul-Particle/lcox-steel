@@ -25,21 +25,17 @@ plot, and `attach` says so rather than failing on a missing column.
 Run it directly — it is not a pipeline rule.
 """
 import json
-import sys
 from pathlib import Path
 
 import yaml
 
+from scripts.viz.dashboard import cost_taxonomy
+from scripts.viz.dashboard.build_dashboard import HTML_DIR, _axes, build_html, scenario_files
+from common._constants import H2_LHV_KWH_PER_KG
+from common._report_schema import field_stem, read_report
+from scripts.solve._helpers_solve import deep_merge
+
 REPO = Path(__file__).resolve().parents[4]        # workflow/scripts/viz/dashboard/ -> repo root
-sys.path.insert(0, str(Path(__file__).parent))    # sibling build_dashboard, cost_taxonomy
-sys.path.insert(0, str(REPO / "workflow"))        # common.*, scripts.*
-
-import cost_taxonomy                                                      # noqa: E402
-from build_dashboard import HTML_DIR, _axes, build_html, scenario_files      # noqa: E402
-from common._constants import H2_LHV_KWH_PER_KG                           # noqa: E402
-from common._report_schema import field_stem, read_report                 # noqa: E402
-from scripts.solve._helpers_solve import deep_merge                       # noqa: E402
-
 OUT_PATH = HTML_DIR / "cost_taxonomies.html"
 TEMPLATE_HTML = Path(__file__).parent / "templates" / "cost_taxonomies_template.html"
 CONFIG_DIR = REPO / "config"

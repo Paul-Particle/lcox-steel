@@ -13,8 +13,8 @@ from pathlib import Path
 
 import yaml
 
-import download_entsoe
-import download_nem  # sys.path set by conftest
+from scripts.grid import download_entsoe
+from scripts.grid import download_nem
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EMISSIONS = yaml.safe_load((REPO_ROOT / "config" / "assumptions.yaml").read_text())[

@@ -13,7 +13,7 @@ at the path it would use exercises the parsing with no network.
 import pandas as pd
 import pytest
 
-import _canada  # sys.path set by conftest
+from scripts.grid import _canada
 
 AESO_PREAMBLE = 'Pool Price\n\n""\n\nDate (HE),Price ($),30Ravg ($),AIL Demand (MW)\n'
 IESO_PREAMBLE = (
