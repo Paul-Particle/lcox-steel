@@ -9,17 +9,12 @@ every Mar–Sep-ending window (verified on real DE_LU 2023 data).
 The unit check runs anywhere. The end-to-end check needs the local ENTSO-E raw price
 cache and skips without it.
 """
-from pathlib import Path
-
 import pandas as pd
 import pytest
 
 import _entsoe as R  # sys.path set by conftest
 from _helpers_grid import assert_window_complete, iso
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-RAW_CACHE = REPO_ROOT / "data" / "entsoe_cache"
-AREA = "DE_LU"
+from conftest import AREA, RAW_CACHE
 
 
 # ── unit: the pad month is appended ─────────────────────────────────────────────

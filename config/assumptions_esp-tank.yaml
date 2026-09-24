@@ -1,0 +1,7 @@
+# Overlay for the `esp-tank` scenario, deep-merged over assumptions.yaml.
+#
+# Hydrogen storage priced as tank with compressor, no ramp limit.
+#
+# Part of testrun 2.2; see scratch/add_testrun22_scenarios.py.
+h2_buffer:
+  capex_per_mwh_eur: 60050

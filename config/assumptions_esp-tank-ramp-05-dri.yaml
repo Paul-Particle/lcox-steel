@@ -1,0 +1,10 @@
+# Overlay for the `esp-tank-ramp-05-dri` scenario, deep-merged over assumptions.yaml.
+#
+# Tank storage; H2 shaft alone held to 0.05 of nameplate per hour.
+#
+# Part of testrun 2.2; see scratch/add_testrun22_scenarios.py.
+h2_buffer:
+  capex_per_mwh_eur: 60050
+dri-h2:
+  ramp_limit_up: 0.05
+  ramp_limit_down: 0.05

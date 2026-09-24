@@ -714,7 +714,6 @@ def _add_eaf_link(
         p_nom_extendable=True,
         efficiency=t_steel_per_t_iron,
         efficiency2=-el_mwh_per_t * t_steel_per_t_iron,
-        p_min_pu=eaf_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(eaf_cfg, wacc, t_steel_per_t_iron),
         marginal_cost=eaf_cfg["consumables_eur_per_t"] * t_steel_per_t_iron,
     )

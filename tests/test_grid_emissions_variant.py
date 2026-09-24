@@ -162,7 +162,7 @@ def test_a_carrier_that_stops_reporting_is_none_of_it_running(tmp_path, monkeypa
     # The cache here is deliberately two days rather than a month, which the
     # raw-month check would otherwise call truncated and re-fetch for real.
     monkeypatch.setattr(_entsoe, "_ensure_raw_months", lambda *_, **__: None)
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_entsoe, "DATA", tmp_path / "data")
 
     out_path = tmp_path / "out.parquet"
     snakemake = SimpleNamespace(

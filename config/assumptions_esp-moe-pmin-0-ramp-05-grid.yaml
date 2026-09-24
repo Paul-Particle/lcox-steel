@@ -1,0 +1,9 @@
+# Overlay for the `esp-moe-pmin-0-ramp-05-grid` scenario, deep-merged over assumptions.yaml.
+#
+# MOE cell with minimum load 0.0, held to 0.05 of nameplate per hour.
+#
+# Part of testrun 2.2; see scratch/add_testrun22_scenarios.py.
+moe:
+  p_min_pu: 0.0
+  ramp_limit_up: 0.05
+  ramp_limit_down: 0.05

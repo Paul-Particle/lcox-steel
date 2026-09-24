@@ -136,7 +136,6 @@ eaf:
   opex_per_t_per_year_eur: 91
   lifetime_years: 20
   consumables_eur_per_t: 40           # electrodes, fluxes, alloys, carbon; per t steel
-  p_min_pu: 0.4
 
   # Electricity by how hot the iron arrives (common._runs.EAF_CHARGE says which
   # state a route delivers). Melting is nearly all of an EAF's electricity, so

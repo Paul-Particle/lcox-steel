@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from common._paths import DATA
 from _helpers_grid import assert_window_complete, iso, to_utc_naive
 from download_entsoe import (
     CONSUMPTION_SUFFIX,
@@ -208,7 +209,7 @@ def retrieve(snakemake, area: str) -> None:
     start_date = snakemake.wildcards.start_date
     end_date   = snakemake.wildcards.end_date
 
-    raw_cache_dir = Path("data/entsoe_cache")
+    raw_cache_dir = DATA / "entsoe_cache"
 
     if variant not in VARIANTS:
         raise ValueError(f"Unknown variant {variant!r}. Expected one of {sorted(VARIANTS)}.")
