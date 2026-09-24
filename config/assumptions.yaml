@@ -2,7 +2,7 @@ finance:
   default_wacc: 0.07
 
 # Everything in this file is a default. A per-scenario
-# `config/assumptions_{scenario}.yaml` overlay is deep-merged on top of it and
+# `config/overlays/{scenario}.yaml` overlay is deep-merged on top of it and
 # is the only thing that overrides these values; nothing sits beneath them.
 #
 # Routes are not selected here. One solve builds exactly one route, taken from
@@ -213,7 +213,11 @@ natural_gas:
   # benchmark comparable across countries, the same argument that governs the
   # other cross-country inputs.
   price_eur_per_mwh: 21.9       # midpoint of the register's low/high benchmark
-  co2_t_per_mwh: 0.20           # combustion emissions, LHV basis
+  # Combustion emissions, LHV basis. Direct emissions, not scope 2 like the
+  # rest of the emission accounting: this gives the NG-DRI comparison case an
+  # emissions figure, as a baseline for the scope 2 emissions of runs on a
+  # dirty grid.
+  co2_t_per_mwh: 0.20
   # Carbon price applied to gas CO2 (goes into the gas marginal cost).
   # Default 0 = pure fixed-gas-price benchmark; EU ETS 2023 avg ≈ 85 €/t.
   co2_price_eur_per_t: 0
@@ -439,14 +443,16 @@ emissions:
   # says so and stops.
 
   # Natural gas burned in a shaft, per MWh LHV. The combustion figure is
-  # `natural_gas.co2_t_per_mwh`, which the optional carbon price also uses, so
-  # it stays in one place; this is only the fuel's own supply chain on top —
+  # `natural_gas.co2_t_per_mwh` (the NG-DRI baseline, see there), which the
+  # optional carbon price also uses, so it stays in one place; this is only the
+  # fuel's own supply chain on top —
   # extraction, processing, pipelines, and the methane that leaks on the way —
   # which the combustion basis does not count.
   gas_upstream_t_co2e_per_mwh:
     combustion:    0
 
-  # Freight, kg CO2e per t of cargo and km travelled. Sea is a capesize bulk
+  # Freight, kg CO2e per t of cargo and km travelled. Diagnostic only for now:
+  # only the diagnostic report carries freight emissions. Sea is a capesize bulk
   # carrier; scale up by about half for panamax parcels, which are dearer per
   # t*km. Rail is European electric traction — note that its emissions are
   # already inside whatever grid the railway buys from, so this is a footprint
