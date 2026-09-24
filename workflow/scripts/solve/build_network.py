@@ -752,7 +752,6 @@ def _add_ew_link(n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str) -> 
         carrier="ew",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh,
-        p_min_pu=ew_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(ew_cfg, wacc, t_iron_per_mwh),
         marginal_cost=ew_cfg["ore_eur_per_t"] * t_iron_per_mwh,
         **_ramp_limits(ew_cfg),

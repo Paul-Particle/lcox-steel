@@ -202,7 +202,7 @@ ew:
   # A point above the MOE cell's because the plate arrives cold and solid and
   # pays a melt-in oxidation and dust penalty that liquid iron never does.
   iron_t_per_t_steel: 1.04
-  p_min_pu: 0.2                       # marketed as load-following
+  # Marketed as load-following, so it takes PyPSA's default minimum load of 0.
 
 natural_gas:
   # Flat gas price for the fossil routes, €/MWh LHV. Fed to the gas_supply
