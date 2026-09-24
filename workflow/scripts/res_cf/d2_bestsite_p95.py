@@ -62,8 +62,6 @@ import pandas as pd
 import xarray as xr
 import atlite
 import geopandas as gpd
-import yaml
-from shapely.geometry import box
 import logging
 if "snakemake" not in globals():
     from common._stubs import snakemake
