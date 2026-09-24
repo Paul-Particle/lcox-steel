@@ -7,6 +7,29 @@ The `entsoe` Python library already enumerates all bidding zones via its `entsoe
 enum. Replace the CSV with a file generated from that enum, or validate directly against
 it in `retrieve_entsoe.py`, so the list stays up to date automatically without manual edits.
 
+## Multi-area processed cache: same latent bug in retrieve_entsoe and retrieve_nem
+
+`retrieve_ons` originally inherited the cache-merge idiom from its two siblings:
+
+```python
+cached = pd.concat([cached] + new_frames)
+cached = cached[~cached.index.duplicated(keep="last")].sort_index()
+```
+
+That is wrong whenever one variant's cache holds **more than one area**. Areas share
+timestamps but occupy different MultiIndex columns, so the concat makes one duplicate
+row per area (NaN in every other area's columns) and `keep="last"` keeps only the area
+processed most recently — blanking the rest. It is invisible in normal use because each
+area's rule output is written *before* the next area overwrites the cache, so only a
+re-read shows the damage; the symptom is that the cache never warms and every run
+reprocesses from scratch.
+
+Fixed in `retrieve_ons._merge_into_cache` (uses `combine_first`, covered by
+`tests/test_ons_cache_merge.py`). **Not fixed in `retrieve_entsoe` or `retrieve_nem`** —
+it has never fired there because `config/projects.csv` only ever asks for one area per
+source (`DE_LU`, `VIC1`). It will fire the day a second bidding zone or NEM region is
+added. Port `_merge_into_cache` to both when that happens, or pre-emptively.
+
 ## Cutout cache (like the grid data cache)
 
 **Level 1 — keyed exact-match cache: DONE** (`common/_cutout_cache.py`). Each download is
