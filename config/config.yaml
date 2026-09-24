@@ -190,11 +190,13 @@ res_cf:
   pv_orientation:        latitude_optimal
 
   # Wind CF computation flags — passed to atlite.Cutout.wind() in
-  # d1_area_average, d2_bestsite_p95, d5_multi.
-  # smooth=True             smooths the turbine power curve
+  # d1_area_average, d2_bestsite_p95 (and d3 through it), d5_multi.
+  # smooth                  atlite's smoothed power curve. Its parameters are a fit
+  #                         to Danish feed-in data (Andresen et al. 2015), so it acts
+  #                         as one country's correction applied to every area; off.
   # add_cutout_windspeed    preserves atlite's built-in 25 m/s cutoff during smoothing
   wind_cf:
-    smooth: true
+    smooth: false
     add_cutout_windspeed: true
 
   # Land-sea eligibility for ONSHORE CF (issue #41). Coarse ERA5 coastal cells

@@ -94,9 +94,9 @@ live under that path, so worktrees share downloads (`common/_paths.py`).
 | `wind-offshore` | `wind_offshore_turbine` |
 | `solar` | `pv_panel`, `pv_orientation` |
 
-Wind uses `wind_cf.smooth` (atlite's smoothed power curve, which approximates a
-farm better than a single turbine) and `wind_cf.add_cutout_windspeed` (keeps the
-cut-out wind speed when smoothing). `d4` uses `pv_panel` but sets its own
+Wind uses `wind_cf.smooth` (atlite's smoothed power curve, off by default; see
+the comment in `config/config.yaml`) and `wind_cf.add_cutout_windspeed` (keeps
+the cut-out wind speed when smoothing). `d4` uses `pv_panel` but sets its own
 orientations. All series are clipped to [0, 1] and indexed by an hourly
 `DatetimeIndex` named `time`.
 
