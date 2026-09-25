@@ -213,7 +213,9 @@ The default target is a small, self-contained **demo** that runs after a fresh
 clone with **no CDS download, no EEZ/Natural-Earth zips, and no API keys**. It
 ships a pre-sliced Victoria (Australia) cutout at 0.5° for its own `DEMO` area,
 plus that area's geometry parquets, and exercises the best-site (`d2`) and anchor-colocation (`d3`)
-capacity-factor science through a `solve` to a `viz` report:
+capacity-factor science through a `solve` to a `viz` report. Its export twins melt
+their iron in `ES_SYN`, a made-up Spain-like market (its overlay sets
+`destination.area`), so their destination figures are illustrative only:
 
 ```bash
 snakemake --profile profiles/default --cores 4        # builds the demo scenarios
@@ -367,7 +369,7 @@ other — the identity rows at the top say which is which.
 |------|-------|
 | `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (turbines, CF flags, cutout settings), `areas` (the area registry), `demo_scenarios`. |
 | `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and — for the export routes — where the iron is melted (`destination`) and what it costs to ship it there (`transport`). Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the CSV, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
-| `config/overlays/{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. It covers every run under that name. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. `destination.area` is the one key an overlay cannot move: which market an `-export` route melts in decides which timeseries the DAG has to fetch, so it is read from the base file before any job runs, and a run whose overlay disagrees is rejected rather than solved against the wrong country. |
+| `config/overlays/{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. It covers every run under that name. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. An overlay may also move `destination.area`, the market an `-export` route melts in; because that decides which timeseries the DAG fetches, `build_destination_frame` reads it from the overlay at DAG time as well. |
 | `config/scenarios.csv` | Flat table, one row per `(run, tech)` input. Columns: `scenario, route, tech, variant, area, start_date, end_date`. Rows join into a network by `(scenario, area, start_date, end_date)`. `route` holds one route id, several separated by `|`, or `all-routes`; `area` holds one area or `all-areas`. `#` rows are planned scenarios and are not built. **The scenarios shipped are placeholders that exercise the machinery, not a study.** |
 
 ## Data formats
@@ -387,8 +389,9 @@ factor table serve every market. `full` is not a mix source despite carrying the
 carriers: it is at native resolution, so reading an hour off it would take the
 `:00` instant for the hour's mean.
 
-Five sources sit behind `retrieve_grid_data`, and they do not all serve all three
-variants. A scenario's grid row names one variant for every area it covers, so a
+Five real sources and the demo's synthetic one sit behind `retrieve_grid_data`,
+and they do not all serve all three variants. A scenario's grid row names one
+variant for every area it covers, so a
 source that has no generation to publish answers an `emissions` request with the
 price alone and says so in its log, rather than refusing and taking the price down
 with it:
@@ -397,6 +400,7 @@ with it:
 |---|---|---|---|
 | `entsoe` | DEU, ESP, FRA | all three | yes, per carrier |
 | `nem` | the five NEM regions | all three | yes, per carrier |
+| `synthetic` | ES_SYN | `dayahead`, `emissions` | yes, made up — the demo's destination, never part of `all-areas` |
 | `ons` | the four SIN submarkets | `dayahead`, `full` | **no** — the balance dataset aggregates everything thermal into one column, and no single emission factor describes gas, coal, oil, biomass and nuclear together |
 | `aeso` | AB | `dayahead` | **no** — per-carrier generation needs AESO's keyed API or its bulk metered-volume files |
 | `ieso` | ONT | `dayahead` | **no** — Ontario needs a separate XML report |

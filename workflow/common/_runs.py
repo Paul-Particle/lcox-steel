@@ -11,7 +11,10 @@ DAG-build time, so neither ever reaches a wildcard or a filename.
 Deliberately free of heavy imports: the Snakefile reads this on every DAG build.
 """
 
+from pathlib import Path
+
 import pandas as pd
+import yaml
 
 # An `-export` route builds the same chain as the route it is named after and
 # then ships the iron to a furnace somewhere else.
@@ -200,7 +203,7 @@ def build_runs_frame(scenarios: pd.DataFrame, areas: dict) -> pd.DataFrame:
 
 
 def build_destination_frame(
-    runs: pd.DataFrame, destination_area: str, areas: dict
+    runs: pd.DataFrame, config_dir: Path, areas: dict
 ) -> pd.DataFrame:
     """(scenario, start_date, end_date, route, destination) — one row per export run.
 
@@ -210,24 +213,41 @@ def build_destination_frame(
     and asks for nothing, which is what keeps a scenario that builds none of the
     export twins free of a market download.
 
+    The destination is `destination.area` in the base assumptions unless the
+    scenario's overlay moves it, which is read here for that reason: the scripts
+    merge the overlay too, and both have to name the same market.
+
     The producing area is dropped: where the iron came from does not change
     where it is melted, and one row per (scenario, window, route) is what the
     solve rule's lookup joins on.
     """
-    if not areas.get(destination_area, {}).get("market"):
-        raise ValueError(
-            f"`destination.area` in config/assumptions.yaml names {destination_area!r}, "
-            f"which is not an area that trades in a wholesale market. An `-export` "
-            f"route prices its furnace against a market's hourly series, so this has "
-            f"to be one of {sorted(a for a, cfg in areas.items() if cfg.get('market'))}."
-        )
-    exports = runs[runs["route"].str.endswith(EXPORT_SUFFIX)]
-    return (
-        exports.drop(columns="area")
+    base_area = yaml.safe_load((config_dir / "assumptions.yaml").read_text())["destination"]["area"]
+    exports = (
+        runs[runs["route"].str.endswith(EXPORT_SUFFIX)]
+        .drop(columns="area")
         .drop_duplicates()
-        .assign(destination=destination_area)
+    )
+    destination_by_scenario = {}
+    for scenario in exports["scenario"].unique():
+        overlay_path = config_dir / "overlays" / f"{scenario}.yaml"
+        overlay = yaml.safe_load(overlay_path.read_text()) if overlay_path.exists() else None
+        destination_by_scenario[scenario] = (
+            (overlay or {}).get("destination", {}).get("area", base_area)
+        )
+    for scenario, destination_area in destination_by_scenario.items():
+        if not areas.get(destination_area, {}).get("market"):
+            raise ValueError(
+                f"scenario {scenario!r} puts its `destination.area` in "
+                f"{destination_area!r}, which is not an area that trades in a "
+                f"wholesale market. An `-export` route prices its furnace against a "
+                f"market's hourly series, so this has to be one of "
+                f"{sorted(a for a, cfg in areas.items() if cfg.get('market'))}."
+            )
+    destinations = (
+        exports.assign(destination=exports["scenario"].map(destination_by_scenario))
         .reset_index(drop=True)
     )
+    return destinations
 
 
 def expand_scenario_rows(scenarios: pd.DataFrame, areas: dict) -> pd.DataFrame:

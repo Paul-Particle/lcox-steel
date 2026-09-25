@@ -31,13 +31,7 @@ data/canada_cache/*
 # which are committed: building them needs the EEZ and Natural-Earth zips the
 # repo does not ship, and the demo has to run after a fresh clone.
 resources/*.parquet
-# Contents rather than the directory, because git will not descend into an
-# excluded directory and a re-include below it never fires.
-resources/timeseries/*
-# The one series the demo needs: its export twins melt iron in Spain, so they
-# price a destination market, and shipping it keeps the default target runnable
-# without an ENTSO-E key.
-!resources/timeseries/ESP_grid_emissions_20250101_20251231.parquet
+resources/timeseries/
 resources/shapes/
 !resources/shapes/*.parquet
 

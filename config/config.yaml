@@ -67,8 +67,9 @@ report:
 #   region:         tag stored in the geo parquet (mostly ISO-2, but AUS/BRA
 #                   stayed ISO-3 historically — kept that way to avoid
 #                   regenerating the geometry and chasing downstream)
-#   market:         which wholesale market this area trades in, `entsoe` or
-#                   `nem`; absent where no price series exists.
+#   market:         which wholesale market this area trades in — `entsoe`,
+#                   `nem`, `ons`, `aeso`, `ieso`, or `synthetic` for the
+#                   demo's made-up one; absent where no price series exists.
 #   market_area:    the code that market knows this area by — the ENTSO-E
 #                   bidding zone or AEMO NEM region. Also an alias: writing it
 #                   in the CSV resolves to this area, so DE_LU and DEU both work.
@@ -83,8 +84,8 @@ report:
 #   cutout_bbox:    optional [lon_min, lon_max, lat_min, lat_max] — the cutout
 #                   request's bounds, in place of the land ∪ offshore box
 #                   padded by `res_cf.cutout.bbox_pad_deg`.
-#   demo:           true for the no-download demo's own area, which
-#                   `all-areas` leaves out.
+#   demo:           true for an area that exists only for the no-download
+#                   demo, which `all-areas` leaves out.
 #
 # Sub-national areas (the NEM regions) do not get their geometry from the
 # workflow. make_area_geometry reads Natural Earth Admin 0 — countries only —
@@ -152,13 +153,16 @@ areas:
   SA1:   { iso3: AUS, region: SA,  coarse: false, market: nem, market_area: SA1 }
   TAS1:  { iso3: AUS, region: TAS, coarse: false, market: nem, market_area: TAS1 }
 
-  # The demo's area: Victoria at 0.5°, over exactly the box of the cutout that
+  # The demo's areas. DEMO is Victoria at 0.5°, over exactly the box of the cutout that
   # ships in cutouts/DEMO_20250101_20251231_backup.nc, so the default `snakemake`
   # run needs no CDS download and no EEZ/NE zips. Its geometries are VIC1's,
   # committed as resources/shapes/DEMO_geo.parquet and DEMO_offshore_geo.parquet;
   # being a demo area, the geometry rules never rebuild them.
   DEMO:  { iso3: AUS, region: VIC, coarse: true, cutout_bbox: [141.0, 149.5, -39.0, -34.0],
            demo: true }
+  # Where the demo's export twins melt their iron: a Spain-like market that
+  # grid/_synthetic.py makes up, so the demo needs no ENTSO-E key.
+  ES_SYN: { iso3: ESP, market: synthetic, demo: true }
 
 res_cf:
   offshore_max_distance_km: 200

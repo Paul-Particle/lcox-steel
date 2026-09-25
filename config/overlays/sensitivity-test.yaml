@@ -6,3 +6,7 @@ h2_buffer:
   capex_per_mwh_eur: 350
 moe:
   p_min_pu: 0.7
+# The demo scenario: its export twins melt in a made-up Spain-like market, so the
+# demo needs no ENTSO-E key and the repository ships no market data.
+destination:
+  area: ES_SYN
