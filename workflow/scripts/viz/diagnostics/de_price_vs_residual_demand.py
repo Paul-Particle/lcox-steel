@@ -13,20 +13,16 @@ Missing cache months are auto-fetched via the ENTSO-E API (reads ENTSOE_API_KEY
 from .env).
 """
 import logging
-import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(ROOT / "workflow" / "scripts" / "grid"))
-sys.path.insert(0, str(ROOT / "workflow"))
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from dotenv import load_dotenv
 
-from _helpers_grid import to_utc_naive
-from download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client
+from common._paths import DATA, REPO_ROOT, RESULTS
+from scripts.grid._helpers_grid import to_utc_naive
+from scripts.grid.download_entsoe import DOWNLOADERS, download_with_retry, get_entsoe_client
 from scripts.viz.style import (
     apply_header,
     blue_black,
@@ -40,8 +36,8 @@ log = logging.getLogger(__name__)
 
 AREA = "DE_LU"
 YEAR = 2025
-CACHE = ROOT / "data" / "entsoe_cache" / AREA
-OUT = ROOT / "results" / "diag_plots" / "de_price_vs_residual_demand_2025.html"
+CACHE = DATA / "entsoe_cache" / AREA
+OUT = RESULTS / "diag_plots" / "de_price_vs_residual_demand_2025.html"
 
 _DATA_TYPES = ["prices", "load_actual", "res"]
 BIN_WIDTH_MW = 500
@@ -58,7 +54,7 @@ def _ensure_months(months: list[str]) -> None:
             if path.exists():
                 continue
             if client is None:
-                load_dotenv(ROOT / ".env")
+                load_dotenv(REPO_ROOT / ".env")
                 client = get_entsoe_client()
             start = pd.Timestamp(f"{ym}-01", tz="Europe/Brussels")
             end = start + pd.offsets.MonthBegin(1)

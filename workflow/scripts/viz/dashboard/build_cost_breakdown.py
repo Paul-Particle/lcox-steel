@@ -7,8 +7,8 @@ cannot drift apart.
 
 Output: results/html/cost_breakdown.html — body-only, for the hub.
 """
-from build_cost_taxonomies import TEMPLATE_HTML, attach
-from build_dashboard import HTML_DIR, build_html
+from scripts.viz.dashboard.build_cost_taxonomies import TEMPLATE_HTML, attach
+from scripts.viz.dashboard.build_dashboard import HTML_DIR, build_html
 
 OUT_PATH = HTML_DIR / "cost_breakdown.html"
 

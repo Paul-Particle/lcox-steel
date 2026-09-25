@@ -4,10 +4,8 @@ Scripts import this with:
 
     from common._paths import DATA, RESOURCES, TIMESERIES, CUTOUTS
 
-This works because `workflow/` is on sys.path (added by
-`workflow/rules/common.smk` under Snakemake; scripts that run standalone add it
-themselves). For standalone runs from elsewhere, add
-`sys.path.insert(0, "<repo>/workflow")` first.
+`common` and `scripts` are importable because the repo is installed as a
+package (see "Setup" in README.md).
 """
 
 import os

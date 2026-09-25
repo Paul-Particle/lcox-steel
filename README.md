@@ -53,7 +53,7 @@ cross-country comparison table directly.
 ```
 lcox-steel/
 ├── workflow/                       # Snakemake workflow (standard layout)
-│   ├── Snakefile                   # configfile + sys.path + includes + rule all
+│   ├── Snakefile                   # configfile + includes + rule all
 │   ├── rules/
 │   │   ├── _optional_shim.smk      # local stand-in for Snakemake's optional() (not shipped yet)
 │   │   ├── grid.smk                # one retrieval rule, dispatching on the area's market
@@ -120,6 +120,7 @@ lcox-steel/
 ├── .atlite-cache/                  # atlite scratch dir (gitignored)
 ├── results/                        # PyPSA networks (.nc), report CSVs, plots
 ├── environment.yaml                # conda environment (lcox-steel)
+├── pyproject.toml                  # declares workflow/ as the installable package (see Setup)
 └── CLAUDE.md                       # project conventions (logging, Snakefile style)
 ```
 
@@ -144,7 +145,40 @@ a Chrome already in `/Applications` works as well. HTML outputs need nothing.
 > The `commit-msg` hook strips email addresses from commit messages for privacy.
 > Bypass it for a single commit with `git commit --no-verify`.
 
-### 2. External data files
+### 2. The package, installed per checkout
+
+The code under `workflow/` is an installable package (`pyproject.toml`), with
+two top-level packages: `common` and `scripts`. Every module imports the others
+through them (`from common._paths import DATA`,
+`from scripts.grid._helpers_grid import iso`), in Snakemake scripts, tests and
+standalone runs alike. The dependencies are the conda environment's, so the
+package itself is installed with `--no-deps`.
+
+An editable install points at one checkout. **With a single checkout**, install
+it straight into the environment:
+
+```bash
+pip install -e . --no-deps
+```
+
+**With several checkouts on one machine** (git worktrees, copies under
+`~/lcox-runs`), give each its own small venv layered on the conda environment,
+so each imports its own code. Installing all of them into the shared
+environment would leave every checkout importing whichever was installed last.
+
+```bash
+conda activate lcox-steel     # the venv needs the env's PROJ_DATA / GDAL_DATA
+uv venv --system-site-packages --python "$CONDA_PREFIX/bin/python" .venv
+uv pip install --python .venv/bin/python -e . --no-deps
+source .venv/bin/activate     # in each new shell, after conda activate
+```
+
+Inside such a venv, run Snakemake and pytest through the venv's Python:
+`python -m snakemake …` and `python -m pytest`. The bare `snakemake` command
+belongs to the conda environment and would run outside the venv. With the
+single-checkout install, `snakemake` works as it is.
+
+### 3. External data files
 
 Geographic datasets must be downloaded manually and dropped in as ZIPs — the
 pipeline reads them directly via geopandas, no extraction step needed.
@@ -191,7 +225,7 @@ else is gitignored):
   (served as XLSX despite the extension) and drop it into `data/nem_cache/` as
   `.xls` or `.xlsx`.
 
-### 3. API keys
+### 4. API keys
 
 **ENTSO-E** — email transparency@entsoe.eu with "Restful API access" in the
 subject, then add the key to a gitignored `.env` in the repo root:
@@ -200,7 +234,7 @@ subject, then add the key to a gitignored `.env` in the repo root:
 ENTSOE_API_KEY=<your-key>
 ```
 
-### 4. ERA5 access (atlite cutouts)
+### 5. ERA5 access (atlite cutouts)
 
 Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` per the
 [atlite CDS setup instructions](https://atlite.readthedocs.io/en/latest/installation.html).

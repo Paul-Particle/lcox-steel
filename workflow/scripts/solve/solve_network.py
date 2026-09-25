@@ -20,7 +20,7 @@ import geopandas as gpd
 import pyarrow.parquet as pq
 import pypsa
 
-from build_network import build_network, load_assumptions
+from scripts.solve.build_network import build_network, load_assumptions
 
 from common._logging import configure_logging
 from common._paths import REPO_ROOT

@@ -16,9 +16,9 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-import _entsoe  # sys.path set by conftest
-import download_entsoe
-from _helpers_grid import assert_window_complete
+from scripts.grid import _entsoe
+from scripts.grid import download_entsoe
+from scripts.grid._helpers_grid import assert_window_complete
 from common._report_schema import field_stem
 
 AREA = "DE_LU"

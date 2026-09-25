@@ -21,11 +21,11 @@ if "snakemake" not in globals():
     from common._stubs import snakemake
 
 from common._logging import configure_logging
-import _canada
-import _entsoe
-import _nem
-import _ons
-import _synthetic
+from scripts.grid import _canada
+from scripts.grid import _entsoe
+from scripts.grid import _nem
+from scripts.grid import _ons
+from scripts.grid import _synthetic
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)

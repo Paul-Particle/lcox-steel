@@ -22,8 +22,8 @@ from pathlib import Path
 import pandas as pd
 
 from common._paths import DATA
-from _helpers_grid import assert_window_complete, iso, to_utc_naive
-from download_entsoe import (
+from scripts.grid._helpers_grid import assert_window_complete, iso, to_utc_naive
+from scripts.grid.download_entsoe import (
     CONSUMPTION_SUFFIX,
     DOWNLOADERS,
     download_with_retry,

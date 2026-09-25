@@ -23,7 +23,7 @@ import pandas as pd
 import requests
 
 from common._paths import DATA
-from _helpers_grid import assert_window_complete, iso
+from scripts.grid._helpers_grid import assert_window_complete, iso
 
 # Module-level logger only — retrieve_grid_data.py installs the handlers.
 log = logging.getLogger(__name__)

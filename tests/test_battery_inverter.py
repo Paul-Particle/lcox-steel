@@ -10,7 +10,7 @@ measured on the grid side in both directions.
 import pypsa
 import pytest
 
-from solve_network import _tie_battery_inverter
+from scripts.solve.solve_network import _tie_battery_inverter
 
 CHARGER_CAPEX = 1.0
 ETA = 0.9
