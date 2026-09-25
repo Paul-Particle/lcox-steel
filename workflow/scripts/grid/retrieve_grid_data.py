@@ -25,6 +25,7 @@ import _canada
 import _entsoe
 import _nem
 import _ons
+import _synthetic
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ SOURCES = {
     "ieso": _canada.retrieve_ieso,
     "nem": _nem.retrieve,
     "ons": _ons.retrieve,
+    "synthetic": _synthetic.retrieve,
 }
 
 

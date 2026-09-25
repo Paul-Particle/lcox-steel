@@ -95,6 +95,9 @@ areas:
   DEU:   { iso3: DEU, region: DE,  coarse: false, market: entsoe, market_area: DE_LU }
   FRA:   { iso3: FRA, region: FR,  coarse: false, market: entsoe, market_area: FR, mainland_bbox: [-10, 15, 41, 52] }
   ESP:   { iso3: ESP, region: ES,  coarse: false, market: entsoe, market_area: ES }
+  # Made up by the workflow, not a real market: the demo melts its export twins'
+  # iron here so it runs with no ENTSO-E key. `all-areas` never includes it.
+  ES_SYN: { iso3: ESP, market: synthetic }
   # No market of its own: a grid scenario naming AUS runs its zones instead.
   AUS:   { iso3: AUS, region: AUS, coarse: false, zones: [NSW1, QLD1, SA1, TAS1, VIC1] }
   # The SIN is one grid split into four price zones, so a grid scenario naming

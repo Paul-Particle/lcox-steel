@@ -284,7 +284,8 @@ destination:
   # counted against that market's own hourly series — the same download every
   # grid run uses, at `variant: emissions`, so its price and its generation mix
   # come from one file. Nothing about the destination is a hand-set number any
-  # more; changing this line changes both the bill and the carbon.
+  # more; changing this line changes both the bill and the carbon. A scenario's
+  # overlay may move it too, as the demo's does.
   #
   # Connection charges come from the `grid` block, which carries one set of
   # figures for every area.
