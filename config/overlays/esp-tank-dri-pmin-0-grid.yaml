@@ -1,0 +1,9 @@
+# Overlay for the `esp-tank-dri-pmin-0-grid` scenario, deep-merged over assumptions.yaml.
+#
+# Tank storage; H2 shaft with no minimum load and no ramp limit.
+#
+# Part of testrun 2.2; see scratch/add_testrun22_scenarios.py.
+h2_buffer:
+  capex_per_mwh_eur: 60050
+dri-h2:
+  p_min_pu: 0.0

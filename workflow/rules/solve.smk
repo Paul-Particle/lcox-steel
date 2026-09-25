@@ -7,7 +7,7 @@ rule solve_network:
     input:
         assumptions_base="config/assumptions.yaml",
         assumptions_overlay=optional(
-            "config/assumptions_{scenario}.yaml"
+            "config/overlays/{scenario}.yaml"
         ),
         # The plant sits at the area's own representative point, so multi-site
         # scenarios need no hand-placed demand site.

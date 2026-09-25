@@ -41,7 +41,7 @@ config/scenarios.csv ──► res_cf ─┬─► resources/timeseries/*.parque
                                      results/report_{scenario}.csv + plots/*.png|html + html/*.html
 ```
 
-A scenario is a name plus its optional `config/assumptions_{scenario}.yaml`
+A scenario is a name plus its optional `config/overlays/{scenario}.yaml`
 overlay. Its rows group by `(area, start_date, end_date)`; each group draws one
 or more capacity-factor series (one per RES tech) and/or a single grid price
 series, and is solved once per route. `viz` compiles the report and charts, one
@@ -88,9 +88,11 @@ lcox-steel/
 │   │   │   └── _helpers_solve.py   # annuity factor + electrolyser sizing
 │   │   └── viz/                    # reporting + Plotly figures
 │   │       ├── compile_report.py   # post-solve cost accounting → per-scenario CSV
-│   │       ├── plot_capacity_bars.py  # per-run capacity bar chart
-│   │       ├── plot_lcos_bars.py   # per-run cost-group breakdown in €/t steel
-│   │       ├── plot_cf_map.py      # spatial mean-CF heatmap with P95 site marked
+│   │       ├── outputs/            # result plots: capacity bars, LCOS breakdown, per-site capacity
+│   │       ├── diagnostics/        # checks: CF heatmap, siting map, DE price vs residual demand
+│   │       ├── dashboard/          # HTML dashboard builders + cost taxonomy
+│   │       │   ├── templates/      # the pages' HTML templates
+│   │       │   └── hub_pages/      # static hub pages (network schematic, workflow DAG)
 │   │       ├── _run_display.py     # run labels + best-zone filter, shared by the plots
 │   │       └── style.py            # FCA Plotly template + colormap
 │   └── common/                     # shared, cross-pipeline Python
@@ -104,7 +106,7 @@ lcox-steel/
 ├── config/
 │   ├── config.yaml                 # pipeline knobs (logging, entsoe, nem, res_cf)
 │   ├── assumptions.yaml            # base techno-economics (CAPEX, OPEX, WACC, lifetimes)
-│   ├── assumptions_{scenario}.yaml  # optional per-scenario overlay (presence = on)
+│   ├── overlays/{scenario}.yaml    # optional per-scenario overlay (presence = on)
 │   └── scenarios.csv               # one row per (run, tech) input
 ├── profiles/
 │   ├── default/config.yaml         # local-run defaults (keep-going, quiet, per-rule logs)
@@ -118,8 +120,7 @@ lcox-steel/
 ├── .atlite-cache/                  # atlite scratch dir (gitignored)
 ├── results/                        # PyPSA networks (.nc), report CSVs, plots
 ├── environment.yaml                # conda environment (lcox-steel)
-├── CLAUDE.md                       # project conventions (logging, Snakefile style)
-└── TODO.md                         # roadmap / known WIP
+└── CLAUDE.md                       # project conventions (logging, Snakefile style)
 ```
 
 Run Snakemake from the repo root — it auto-discovers `workflow/Snakefile`.
@@ -132,7 +133,12 @@ Run Snakemake from the repo root — it auto-discovers `workflow/Snakefile`.
 conda env create -f environment.yaml
 conda activate lcox-steel
 git config core.hooksPath .githooks
+plotly_get_chrome -y        # once per machine: Chrome for Testing (~325 MB)
 ```
+
+Static plot export (`write_image`, kaleido v1) needs a Chrome binary. Without one
+every PNG/SVG output fails with "Kaleido requires Google Chrome to be installed";
+a Chrome already in `/Applications` works as well. HTML outputs need nothing.
 
 > [!TIP]
 > The `commit-msg` hook strips email addresses from commit messages for privacy.
@@ -174,8 +180,7 @@ else is gitignored):
   is a hand-maintained list of recognised zone codes (`DE_LU`, `FR`, `NO_1`, …).
   `retrieve_entsoe` validates the `area` wildcard against it before any API call,
   raising on an unrecognised code. Update it by hand when ENTSO-E adds/retires a
-  zone. (A planned migration derives it from the `entsoe` library's `Area` enum —
-  see `TODO.md`.)
+  zone. (Deriving it from the `entsoe` library's `Area` enum instead is issue #17.)
 - **NEM Registration and Exemption List** —
   `data/nem_cache/NEM Registration and Exemption List.xlsx` is a committed AEMO
   snapshot (~1 MB). AEMO's hosting is flaky (it 403s NEMOSIS's default User-Agent,
@@ -206,9 +211,11 @@ Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` per th
 
 The default target is a small, self-contained **demo** that runs after a fresh
 clone with **no CDS download, no EEZ/Natural-Earth zips, and no API keys**. It
-ships a pre-sliced Victoria (Australia) cutout backup plus the derived geometry
-parquets, and exercises the best-site (`d2`) and anchor-colocation (`d3`)
-capacity-factor science through a `solve` to a `viz` report:
+ships a pre-sliced Victoria (Australia) cutout at 0.5° for its own `DEMO` area,
+plus that area's geometry parquets, and exercises the best-site (`d2`) and anchor-colocation (`d3`)
+capacity-factor science through a `solve` to a `viz` report. Its export twins melt
+their iron in `ES_SYN`, a made-up Spain-like market (its overlay sets
+`destination.area`), so their destination figures are illustrative only:
 
 ```bash
 snakemake --profile profiles/default --cores 4        # builds the demo scenarios
@@ -321,7 +328,7 @@ placeholders. There are three:
 |---|---|
 | `standard-islanded` | every area, all routes, 2025, dedicated renewables only |
 | `standard-grid` | every area that has prices (Australia via its NEM zones), all routes, 2025 |
-| `sensitivity-test` | VIC1 only, two routes named explicitly — a machinery test |
+| `sensitivity-test` | the `DEMO` area (Victoria at 0.5°) only, routes named explicitly — a machinery test |
 
 `sensitivity-test` is the default `snakemake` target: it sits on the shipped
 Victoria cutout, so it runs after a fresh clone with no CDS download. Its single
@@ -362,7 +369,7 @@ other — the identity rows at the top say which is which.
 |------|-------|
 | `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (turbines, CF flags, cutout settings), `areas` (the area registry), `demo_scenarios`. |
 | `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and — for the export routes — where the iron is melted (`destination`) and what it costs to ship it there (`transport`). Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the CSV, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
-| `config/assumptions_{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. It covers every run under that name. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. `destination.area` is the one key an overlay cannot move: which market an `-export` route melts in decides which timeseries the DAG has to fetch, so it is read from the base file before any job runs, and a run whose overlay disagrees is rejected rather than solved against the wrong country. |
+| `config/overlays/{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. It covers every run under that name. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. An overlay may also move `destination.area`, the market an `-export` route melts in; because that decides which timeseries the DAG fetches, `build_destination_frame` reads it from the overlay at DAG time as well. |
 | `config/scenarios.csv` | Flat table, one row per `(run, tech)` input. Columns: `scenario, route, tech, variant, area, start_date, end_date`. Rows join into a network by `(scenario, area, start_date, end_date)`. `route` holds one route id, several separated by `|`, or `all-routes`; `area` holds one area or `all-areas`. `#` rows are planned scenarios and are not built. **The scenarios shipped are placeholders that exercise the machinery, not a study.** |
 
 ## Data formats
@@ -373,7 +380,7 @@ UTC hourly `DatetimeIndex`, leading `price` column (EUR/MWh). Three variants:
 | variant | columns | for |
 |---|---|---|
 | `dayahead` | `price` | a solve, and nothing else |
-| `emissions` | `price` + one per carrier, hourly | the default for grid rows — the solve buys at the price, the report weights the mix by `emissions.electricity_t_co2e_per_mwh` |
+| `emissions` | `price` + one per carrier, hourly | the default for grid rows — the solve buys at the price, the report weights the mix by the grid emission factors under `emissions` in `config/assumptions.yaml` |
 | `full` | all data types, native resolution | analysis; adds load, RES forecast and cross-border flows |
 
 The carrier column names are the shared vocabulary the downloaders emit
@@ -382,8 +389,9 @@ factor table serve every market. `full` is not a mix source despite carrying the
 carriers: it is at native resolution, so reading an hour off it would take the
 `:00` instant for the hour's mean.
 
-Five sources sit behind `retrieve_grid_data`, and they do not all serve all three
-variants. A scenario's grid row names one variant for every area it covers, so a
+Five real sources and the demo's synthetic one sit behind `retrieve_grid_data`,
+and they do not all serve all three variants. A scenario's grid row names one
+variant for every area it covers, so a
 source that has no generation to publish answers an `emissions` request with the
 price alone and says so in its log, rather than refusing and taking the price down
 with it:
@@ -392,6 +400,7 @@ with it:
 |---|---|---|---|
 | `entsoe` | DEU, ESP, FRA | all three | yes, per carrier |
 | `nem` | the five NEM regions | all three | yes, per carrier |
+| `synthetic` | ES_SYN | `dayahead`, `emissions` | yes, made up — the demo's destination, never part of `all-areas` |
 | `ons` | the four SIN submarkets | `dayahead`, `full` | **no** — the balance dataset aggregates everything thermal into one column, and no single emission factor describes gas, coal, oil, biomass and nuclear together |
 | `aeso` | AB | `dayahead` | **no** — per-carrier generation needs AESO's keyed API or its bulk metered-volume files |
 | `ieso` | ONT | `dayahead` | **no** — Ontario needs a separate XML report |
@@ -520,9 +529,8 @@ QC-validates, and stores the result. Keying on the real parameters means a
 `mainland_bbox` / `offshore_max_distance_km` edit correctly re-downloads instead
 of silently reusing a differently-bounded cutout. The legacy sibling
 `cutouts/{name}_backup.nc` still works as a fallback (`mv foo.nc foo_backup.nc`
-to pin one) and is promoted into the cache on use. Coverage-aware reuse (slicing
-a sub-request out of a larger cached cutout; partial-month fills) is a deferred
-follow-up — see `TODO.md`.
+to pin one) and is promoted into the cache on use. Only an exact request match is
+reused; a larger cached cutout that covers a request is not sliced down to it.
 
 Every finished cutout — freshly downloaded, cached, or from a backup — passes
 structural QC (`workflow/common/_cutout_qc.py`) before the rule succeeds:
@@ -660,7 +668,5 @@ unchanged — per-rule files still land under `logs/{rule}/`.
 ## Conventions & roadmap
 
 Project conventions (logging style, Snakefile/`.smk` rules, the two script
-patterns) live in `CLAUDE.md`. Known WIP and planned work — the ENTSO-E zone-list
-migration, coverage-aware cutout-cache reuse (the keyed cache and CDS download
-monitoring already landed) — are tracked in
-`TODO.md`.
+patterns) live in `CLAUDE.md`. Planned work and known issues are tracked in the
+GitHub issues.

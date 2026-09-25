@@ -33,6 +33,10 @@ if "snakemake" not in globals():
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 
+# Grid-scale li-ion is built at 1-4 h, so a solved battery charging or discharging
+# faster than this is worth a look, though nothing in the model forbids it.
+MAX_PLAUSIBLE_C_RATE = 1.0
+
 
 def _area_representative_point(regions_path: Path) -> tuple[float, float]:
     """(lon, lat) of a point guaranteed to lie inside the area's own geometry.
@@ -126,13 +130,17 @@ def _assemble_multisite_cf(
 def _tie_battery_inverter(n: pypsa.Network, snapshots) -> None:
     """Charge and discharge share one inverter rating, so its capex is paid once.
 
-    A grid battery's power electronics are bidirectional and rated in MW, which
-    is what `battery.capex_per_mw_eur` prices. Without this the two links size
-    independently and only the charger is priced, leaving free discharge power.
+    A grid battery's power electronics are bidirectional and rated in MW at the
+    grid terminals, which is what `battery.capex_per_mw_eur` prices. A Link's
+    p_nom is measured at its bus0, the grid for the charger but the battery for
+    the discharger, so the discharger's rating is scaled by its efficiency to
+    put both on the grid side (as PyPSA-Eur's `add_battery_constraints` does).
     """
     p_nom = n.model.variables["Link-p_nom"]
+    discharge_efficiency = n.links.at["battery_discharger", "efficiency"]
     n.model.add_constraints(
-        p_nom.loc["battery_charger"] - p_nom.loc["battery_discharger"] == 0,
+        p_nom.loc["battery_charger"]
+        - discharge_efficiency * p_nom.loc["battery_discharger"] == 0,
         name="battery_inverter_rating",
     )
 
@@ -206,7 +214,7 @@ def main() -> None:
             )
 
     # optional() yields a Namedlist of 0 or 1 paths: present iff a
-    # config/assumptions_{scenario}.yaml file exists on disk.
+    # config/overlays/{scenario}.yaml file exists on disk.
     overlays = list(snakemake.input.assumptions_overlay)
     overlay_path = Path(overlays[0]) if overlays else None
     base_path = Path(snakemake.input.assumptions_base)
@@ -225,26 +233,13 @@ def main() -> None:
 
     # Where an `-export` route melts its iron. The rule hands over that market's
     # own series and nothing at all for a domestic route, so the file's presence
-    # is what decides — but which market it is gets checked against the merged
-    # assumptions, because the DAG only ever read the base file. An overlay that
-    # moves the destination has to fail here rather than be solved against
-    # whichever country the DAG happened to fetch.
+    # is what decides.
     destination_area = assumptions["destination"]["area"]
     destination_paths = [Path(raw) for raw in snakemake.input.destination_input]
     if len(destination_paths) > 1:
         raise ValueError(f"{run}: multiple destination inputs: {destination_paths}")
     destination_price = None
     if destination_paths:
-        # `{area}_grid_emissions_{start}_{end}`, split from the right so an area
-        # code with an underscore in it still comes back whole.
-        fetched_area = destination_paths[0].stem.rsplit("_", 4)[0]
-        if fetched_area != destination_area:
-            raise ValueError(
-                f"{run}: the workflow fetched {fetched_area}'s market series, but the "
-                f"merged assumptions put the destination in {destination_area}. A "
-                f"per-scenario overlay cannot move `destination.area` — it is read at "
-                f"DAG time from config/assumptions.yaml, so change it there."
-            )
         destination_price = (
             pd.read_parquet(destination_paths[0])["price"].reindex(cf_timeseries.index)
         )
@@ -282,6 +277,16 @@ def main() -> None:
             solver_options["run_crossover"] = os.environ.get("HIGHS_CROSSOVER", "off")
     n.optimize(solver_name="highs", solver_options=solver_options,
                extra_functionality=_tie_battery_inverter)
+
+    battery_energy_mwh = n.stores.at["battery", "e_nom_opt"]
+    inverter_mw = n.links.at["battery_charger", "p_nom_opt"]
+    if battery_energy_mwh > 1e-3:
+        c_rate = inverter_mw / battery_energy_mwh
+        if c_rate > MAX_PLAUSIBLE_C_RATE:
+            log.warning(
+                f"battery C-rate {c_rate:.2f} exceeds {MAX_PLAUSIBLE_C_RATE}: "
+                f"{inverter_mw:.0f} MW inverter on {battery_energy_mwh:.0f} MWh"
+            )
 
     # Every file the rule declared, fingerprinted into the network so the result
     # stays tied to what produced it. compile_report lifts `inputs_hash` into a

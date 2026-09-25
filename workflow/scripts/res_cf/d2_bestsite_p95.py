@@ -19,7 +19,7 @@ Method
 ------
 - Reads an annual Atlite cutout
 - Computes hourly CF per grid cell for each technology using:
-    - wind: smoothed turbine power curve (smooth=True)
+    - wind: turbine power curve (smoothing per `wind_cf.smooth`)
     - solar: standard PV conversion
 - Computes annual mean CF per grid cell
 - Builds area-based cell weights via atlite's indicatormatrix (area-fraction
@@ -62,8 +62,6 @@ import pandas as pd
 import xarray as xr
 import atlite
 import geopandas as gpd
-import yaml
-from shapely.geometry import box
 import logging
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -111,7 +109,7 @@ PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
 
 WIND_ONSHORE_TURBINE  = WIND_TURBINE
 WIND_CF_CFG           = RES_CF_CFG.get("wind_cf", {})
-WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
+WIND_SMOOTH           = WIND_CF_CFG.get("smooth", False)
 WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
 # Land-sea eligibility cutoff (#41). Onshore only — offshore passes 0 below.
 MIN_LAND_FRACTION     = float(RES_CF_CFG.get("min_land_fraction", 0.0))

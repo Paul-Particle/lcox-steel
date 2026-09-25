@@ -70,10 +70,8 @@ import yaml
 
 from _helpers_solve import annuity_factor, deep_merge, dri_to_el_mw, haversine_km
 
-from common._constants import H2_LHV_KWH_PER_KG
+from common._constants import H2_LHV_KWH_PER_KG, HOURS_PER_YEAR
 from common._runs import EAF_CHARGE, ROUTES, route_stem
-
-HOURS_PER_YEAR = 8760.0
 
 # Route groups used when wiring buses/components. Every steel route reaches
 # the steel bus through the iron bus and the shared EAF link.
@@ -210,7 +208,7 @@ def build_network(
         if stem in _H2_DRI_ROUTES:
             _add_dri_link(n, plant, assumptions["dri-h2"], wacc, elec_bus)
         if stem in _GAS_ROUTES:
-            _add_gas_supply(n, assumptions["natural_gas"])
+            _add_gas_supply(n, assumptions["natural_gas"], assumptions["emissions"])
         if stem == "ng-dri-eaf":
             _add_ng_dri_link(n, assumptions["dri-ng"], wacc, elec_bus)
         if stem in _MIX_ROUTES:
@@ -435,6 +433,8 @@ def _add_battery(
     annuity = annuity_factor(wacc, bat_cfg["lifetime_years"])
     store_bus = f"{bus}_battery"
     n.add("Bus", store_bus, carrier="battery")
+    # No C-rate limit ties power to energy, as in PyPSA-Eur: the optimiser picks
+    # durations long enough that a li-ion limit of 0.5-1C would not bind.
     n.add(
         "Store",
         "battery",
@@ -644,7 +644,7 @@ def _add_mix_dri_links(
     )
 
 
-def _add_gas_supply(n: pypsa.Network, ng_cfg: dict) -> None:
+def _add_gas_supply(n: pypsa.Network, ng_cfg: dict, emissions_cfg: dict) -> None:
     """Unlimited natural-gas supply (MW CH4 LHV) at a flat price on the gas bus.
 
     An extendable zero-capex generator, so the optimiser draws freely; the
@@ -653,7 +653,8 @@ def _add_gas_supply(n: pypsa.Network, ng_cfg: dict) -> None:
     its own cost group in reports.
     """
     marginal = ng_cfg["price_eur_per_mwh"] + (
-        ng_cfg["co2_t_per_mwh"] * ng_cfg["co2_price_eur_per_t"]
+        emissions_cfg["natural_gas_reductant_t_co2e_per_mwh"]["process"]
+        * emissions_cfg["co2_price_eur_per_t"]
     )
     n.add(
         "Generator",
@@ -713,7 +714,6 @@ def _add_eaf_link(
         p_nom_extendable=True,
         efficiency=t_steel_per_t_iron,
         efficiency2=-el_mwh_per_t * t_steel_per_t_iron,
-        p_min_pu=eaf_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(eaf_cfg, wacc, t_steel_per_t_iron),
         marginal_cost=eaf_cfg["consumables_eur_per_t"] * t_steel_per_t_iron,
     )
@@ -752,7 +752,6 @@ def _add_ew_link(n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str) -> 
         carrier="ew",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh,
-        p_min_pu=ew_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(ew_cfg, wacc, t_iron_per_mwh),
         marginal_cost=ew_cfg["ore_eur_per_t"] * t_iron_per_mwh,
         **_ramp_limits(ew_cfg),

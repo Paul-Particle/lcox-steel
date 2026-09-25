@@ -1,0 +1,7 @@
+# Overlay for the `esp-moe-pmin-70` scenario, deep-merged over assumptions.yaml.
+#
+# MOE cell with minimum load 0.7, no ramp limit.
+#
+# Part of testrun 2.2; see scratch/add_testrun22_scenarios.py.
+moe:
+  p_min_pu: 0.7

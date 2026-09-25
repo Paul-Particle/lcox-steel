@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from common._paths import DATA
 from _helpers_grid import (
     assert_window_complete,
     iso,
@@ -124,7 +125,7 @@ def retrieve(snakemake, area: str) -> None:
     end_date    = snakemake.wildcards.end_date
     eur_per_aud = snakemake.params.eur_per_aud
 
-    cache_dir = Path("data/nem_cache")
+    cache_dir = DATA / "nem_cache"
 
     if variant not in VARIANTS:
         raise ValueError(f"Unknown variant {variant!r}. Expected one of {sorted(VARIANTS)}.")

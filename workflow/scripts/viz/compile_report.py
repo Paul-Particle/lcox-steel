@@ -7,6 +7,7 @@ solve stamped into the network, so a number stays tied to its inputs. What the
 files look like is common/_report_schema.py's business.
 """
 
+import calendar
 import logging
 import re
 from pathlib import Path
@@ -63,6 +64,13 @@ def _carrier_key(carrier: str) -> str:
     return field_stem(re.sub(r"_(east|west)_\d+$|_az\d+$", "", carrier))
 
 
+def _hours_per_year(snapshots: pd.DatetimeIndex) -> float:
+    """Mean length in hours of the calendar years the snapshots fall in."""
+    year_hours = [8784.0 if calendar.isleap(year) else 8760.0 for year in snapshots.year.unique()]
+    hours_per_year = float(np.mean(year_hours))
+    return hours_per_year
+
+
 def _grid_intensity(
     area: str, grid_mix: pd.DataFrame | None,
     factors: dict[str, float], snapshots: pd.Index,
@@ -106,7 +114,8 @@ def _grid_intensity(
         raise ValueError(
             f"{area}: its grid series has generation columns the emission factor "
             f"table has no entry for: {sorted(unknown)}. Either they are carriers "
-            f"and belong in `emissions.electricity_t_co2e_per_mwh` in "
+            f"and belong in the `electricity_t_co2e_per_mwh` table under "
+            f"`emissions` in "
             f"config/assumptions.yaml, or the series is not a `variant: emissions` "
             f"one — a `full` series carries load and flow columns too."
         )
@@ -188,7 +197,7 @@ def _storage_carbon(
 
 
 def _emissions_breakdown(
-    n: pypsa.Network, emissions_cfg: dict, natural_gas_cfg: dict,
+    n: pypsa.Network, emissions_cfg: dict,
     area: str, transport_legs: dict | None, grid_mix: pd.DataFrame | None,
     destination_area: str, destination_mix: pd.DataFrame | None,
 ) -> dict[str, object]:
@@ -208,8 +217,9 @@ def _emissions_breakdown(
     It is also the one figure here that does not need a grid mix, so it stands
     when the rest cannot be read.
 
-    Accounting only: none of this reaches the objective, so nothing here can
-    move a solve. And it covers the run's energy alone — the process steps' own
+    Accounting only: nothing here reaches the objective (the optional carbon
+    price on gas is set in build_network), so nothing here can move a solve.
+    And it covers the run's energy alone — the process steps' own
     direct emissions are outside the model boundary, which is why the result is
     not a CBAM or an ETS figure. See the `emissions` block in
     config/assumptions.yaml.
@@ -220,10 +230,8 @@ def _emissions_breakdown(
     plant's own renewables mix with whatever it imports, and — on an export
     route — the destination's, which is a grid and nothing else.
     """
-    basis = emissions_cfg["basis"]
-    factors = {carrier: values[basis]
-               for carrier, values in emissions_cfg["electricity_t_co2e_per_mwh"].items()}
-    annual = 8760.0 / len(n.snapshots)
+    factors = emissions_cfg[emissions_cfg["basis"]]["electricity_t_co2e_per_mwh"]
+    annual = _hours_per_year(n.snapshots) / len(n.snapshots)
 
     # PyPSA's netCDF export drops a time-varying column whose every value is the
     # default, so a component that never ran comes back missing from the
@@ -348,20 +356,21 @@ def _emissions_breakdown(
     electricity_t = sum(electricity_by_user.values())
 
     # Gas combustion lands on whichever link burns it, so a blended shaft carries
-    # its own gas rather than having it broken out beside it.
-    gas_t_per_mwh = (natural_gas_cfg["co2_t_per_mwh"]
-                     + emissions_cfg["gas_upstream_t_co2e_per_mwh"][basis])
+    # its own gas rather than having it broken out beside it. Not scope 2: it is
+    # what gives the NG-DRI comparison case a figure to hold the grid runs against.
+    gas_factors = emissions_cfg["natural_gas_reductant_t_co2e_per_mwh"]
+    gas_t_per_mwh = gas_factors["process"] + gas_factors["upstream"]
     gas_t = 0.0
     for link in n.links.index[n.links.bus0 == "gas"]:
         burned = float(link_p0[link].sum()) * annual * gas_t_per_mwh
         emissions[link] = emissions.get(link, 0.0) + burned
         gas_t += burned
 
-    # Freight over the run's own legs, each mode at its own factor. Kept out of
-    # `emissions` so that no total counts it.
+    # Freight over the run's own legs, each mode at its own factor. A diagnostic:
+    # kept out of `emissions` so that no total counts it.
     freight = emissions_cfg["freight_kg_co2e_per_t_km"]
     legs = transport_legs or {}
-    t_co2e_per_t = sum(freight[mode][basis] * km for mode, km in legs.items()) / 1000.0
+    t_co2e_per_t = sum(freight[mode] * km for mode, km in legs.items()) / 1000.0
     freight_by_leg = {}
     for link in FREIGHT_LEGS:
         if link not in n.links.index:
@@ -412,7 +421,7 @@ def _emissions_breakdown(
 
 
 def _h2_produced_kg(n: pypsa.Network) -> float:
-    """Annual H2 produced by the electrolyser, in kg, scaled to 8760 h.
+    """Annual H2 produced by the electrolyser, in kg, scaled to a year.
 
     Read from the electrolyser link's H2-side output rather than the dri_load,
     so the result reflects actual production. The two coincide when the model
@@ -422,7 +431,7 @@ def _h2_produced_kg(n: pypsa.Network) -> float:
     t_hours = len(n.snapshots)
     # PyPSA Link sign convention: p1 < 0 when the link injects power into bus1,
     # so -p1 is the (positive) H2 LHV output on the hydrogen bus.
-    h2_mwh_lhv = -float(n.links_t.p1["electrolyser"].sum()) * (8760.0 / t_hours)
+    h2_mwh_lhv = -float(n.links_t.p1["electrolyser"].sum()) * (_hours_per_year(n.snapshots) / t_hours)
     return h2_mwh_lhv / (H2_LHV_KWH_PER_KG / 1000.0)
 
 
@@ -520,12 +529,12 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
 
     Capital costs are already per-year (annualised CAPEX × p_nom_opt); variable
     costs — grid imports, ore, EAF consumables, electrolyser variable opex —
-    are scaled from the simulation period up to 8760 h so levelised costs stay
+    are scaled from the simulation period up to a year so levelised costs stay
     meaningful on partial-year runs. The reported total annual cost is the sum
     of these groups, so breakdown and total cannot drift apart.
     """
     t_hours = len(n.snapshots)
-    annual_scale = 8760.0 / t_hours
+    annual_scale = _hours_per_year(n.snapshots) / t_hours
 
     def link_capital(names) -> float:
         idx = [l for l in names if l in n.links.index and n.links.at[l, "p_nom_extendable"]]
@@ -637,7 +646,7 @@ def _leaf_breakdown(
     `losses_mwh`, and the generation both are supplied out of in
     `generation_mwh`.
     """
-    annual_scale = 8760.0 / len(n.snapshots)
+    annual_scale = _hours_per_year(n.snapshots) / len(n.snapshots)
     wacc = assumptions["finance"]["default_wacc"]
     leaves = dict.fromkeys(LEAF_COSTS, 0.0)
 
@@ -683,10 +692,11 @@ def _leaf_breakdown(
     # -- natural gas: the fuel bill, and separately any carbon price on it. Both
     # ride on the gas generator's marginal cost, so the carbon comes out at the
     # rate it was charged and the fuel is what is left of the group.
-    gas_cfg = assumptions["natural_gas"]
+    emissions_cfg = assumptions["emissions"]
     gas_mwh = (float(n.generators_t.p["gas_supply"].sum()) * annual_scale
                if "gas_supply" in n.generators.index else 0.0)
-    carbon_per_mwh = gas_cfg["co2_price_eur_per_t"] * gas_cfg["co2_t_per_mwh"]
+    carbon_per_mwh = (emissions_cfg["co2_price_eur_per_t"]
+                      * emissions_cfg["natural_gas_reductant_t_co2e_per_mwh"]["process"])
     leaves["gas_carbon"] = gas_mwh * carbon_per_mwh
     leaves["gas_fuel"] = breakdown["gas"] - leaves["gas_carbon"]
 
@@ -874,10 +884,11 @@ def _leaf_breakdown(
         fields["h2_kg_per_t_steel"] = _h2_produced_kg(n) / steel_t
     if "battery" in n.stores.index and "battery_charger" in n.links.index:
         power_mw = float(n.links.at["battery_charger", "p_nom_opt"])
+        energy_mwh = float(n.stores.at["battery", "e_nom_opt"])
         if power_mw > 0:
-            fields["battery_duration_hours"] = (
-                float(n.stores.at["battery", "e_nom_opt"]) / power_mw
-            )
+            fields["battery_duration_hours"] = energy_mwh / power_mw
+        if energy_mwh > 0:
+            fields["max_battery_c_rate"] = power_mw / energy_mwh
 
     # -- the inputs behind the split, so a cost can be checked against them
     for link in PROCESS_LINKS:
@@ -918,6 +929,7 @@ def extract_summary(
     that melts its iron at home.
     """
     breakdown = _cost_breakdown(n)
+    hours_per_year = _hours_per_year(n.snapshots)
     summary = {
         "scenario": scenario_name,
         **run,
@@ -937,7 +949,7 @@ def extract_summary(
         summary["lcoh_eur_per_mwh_lhv"] = lcoh_eur_per_kg * 1000.0 / H2_LHV_KWH_PER_KG
 
     if "steel_load" in n.loads.index:
-        steel_t_per_year = float(n.loads.at["steel_load", "p_set"]) * 8760.0
+        steel_t_per_year = float(n.loads.at["steel_load", "p_set"]) * hours_per_year
         summary["lcos_eur_per_t"] = total_annual_cost / steel_t_per_year
         summary["steel_produced_mt"] = steel_t_per_year / 1e6
 
@@ -968,7 +980,7 @@ def extract_summary(
     #          domestic twin by the MWh nobody was charged for.
     #   LCOH = (electrolyser capex/opex + H2 buffer + the electrolyser's electricity
     #          valued at LCOE) per MWh of H2 produced, LHV.
-    annual_scale = 8760.0 / len(n.snapshots)
+    annual_scale = hours_per_year / len(n.snapshots)
     elec_gens = [g for g in n.generators.index if g != "gas_supply"]
     elec_mwh = (float(n.generators_t.p[elec_gens].sum().sum()) * annual_scale) if elec_gens else 0.0
     elec_cost = sum(breakdown[k]
@@ -1032,7 +1044,7 @@ def extract_summary(
         if res_total > 0 and res_mwh > 0:
             summary["lcoe_renewables_own_eur_per_mwh"] = res_total / res_mwh
 
-        # Capacity factors (annual generation / nameplate × 8760) for the renewables
+        # Capacity factors (annual generation / nameplate × hours per year) for the renewables
         # and the grid connection, surfaced next to the built capacities.
         def _res_cap(prefix: str) -> float:
             idx = [g for g in res_idx if str(g).startswith(prefix)]
@@ -1041,11 +1053,11 @@ def extract_summary(
         for tech in RES_TECHS:
             cap = _res_cap(tech)
             if cap > 0:
-                summary[f"cf_{field_stem(tech)}"] = _res_mwh(tech) / (cap * 8760.0)
+                summary[f"cf_{field_stem(tech)}"] = _res_mwh(tech) / (cap * hours_per_year)
         if grid_mwh > 0:
             grid_p_nom = float(n.generators.at["grid_import", "p_nom_opt"])
             if grid_p_nom > 0:
-                summary["cf_grid_connection"] = grid_mwh / (grid_p_nom * 8760.0)
+                summary["cf_grid_connection"] = grid_mwh / (grid_p_nom * hours_per_year)
 
         # Split the average priced grid energy into the day-ahead market price and
         # the constant volumetric fee, and levelise the connection capex over the
@@ -1105,7 +1117,7 @@ def extract_summary(
     # "ore_consumables" group. Ore is the feedstock priced on the reduction/
     # electrolysis links; consumables is the EAF's marginal cost.
     if "steel_load" in n.loads.index:
-        steel_t = float(n.loads.at["steel_load", "p_set"]) * 8760.0
+        steel_t = float(n.loads.at["steel_load", "p_set"]) * hours_per_year
         if steel_t > 0:
             def _link_capex(link_name: str) -> float:
                 return (float(n.links.at[link_name, "capital_cost"] * n.links.at[link_name, "p_nom_opt"])
@@ -1140,7 +1152,7 @@ def extract_summary(
         )
 
     if "gas_supply" in n.generators.index:
-        gas_mwh = float(n.generators_t.p["gas_supply"].sum()) * (8760.0 / len(n.snapshots))
+        gas_mwh = float(n.generators_t.p["gas_supply"].sum()) * (hours_per_year / len(n.snapshots))
         summary["ng_gwh_lhv"] = gas_mwh / 1e3
     # How much of the iron came from the H2 shaft (production share, not capacity
     # share). Emitted for any DRI route so a pure H2-DRI reads 1.0 and a pure
@@ -1164,7 +1176,7 @@ def extract_summary(
                 store_t / steel_t_per_h if steel_t_per_h else float("nan")
             )
 
-    annual = 8760.0 / len(n.snapshots)
+    annual = hours_per_year / len(n.snapshots)
     for link, field in (("iron_transport", "iron_shipped_kt"),
                         ("steel_transport", "steel_shipped_kt")):
         if link in n.links.index:
@@ -1249,7 +1261,7 @@ def extract_summary(
     # Emissions, on the basis the assumptions name. Reported in kg so the
     # report's two decimals still say something about a clean route.
     emitted = _emissions_breakdown(
-        n, assumptions["emissions"], assumptions["natural_gas"],
+        n, assumptions["emissions"],
         run["area"], transport_legs, grid_mix,
         assumptions["destination"]["area"], destination_mix,
     )

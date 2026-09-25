@@ -118,7 +118,7 @@ REDUCTION_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew", "reductant-h2")
 # Each leaf with the parent group it rolls up into, in the stack order the
 # cost-breakdown page draws them. One list, so a leaf cannot be in the report
 # without a group to belong to. What a group is called and what colour it is
-# drawn in stays viz/cost_taxonomy.GROUPS' business; which group a leaf is in is
+# drawn in stays viz/dashboard/cost_taxonomy.GROUPS' business; which group a leaf is in is
 # structural and lives here.
 LEAF_COSTS_BY_GROUP = (
     ("ore", "feedstock"),
@@ -280,6 +280,9 @@ REPORT_FIELDS = {
     # Blank rather than zero on a run that built no battery: it is the store's
     # hours over its inverter rating, and neither exists to divide.
     "battery_duration_hours": UNDEFINED,
+    # The same ratio the other way up: the fastest the built battery can charge
+    # or discharge, as a share of its energy per hour.
+    "max_battery_c_rate": UNDEFINED,
 
     # The capital recovery factor each plant's capex was annuitised at, and the
     # ore quote that applied to it — both fixed by the scenario rather than
@@ -310,7 +313,7 @@ REPORT_FIELDS = {
     # steel, which is why a figure here is not a CBAM or an ETS number. The
     # freight is measured all the same, at the foot of this block.
     #
-    # `emissions_basis` says which of the three factor bases produced them, so no
+    # `emissions_basis` says which factor basis produced them, so no
     # number here can be read on the wrong footing; a grid run's intensity always
     # comes from its own `variant: emissions` generation series, never from a
     # stand-in.
@@ -382,15 +385,18 @@ IDENTITY_FIELDS = ("scenario", "area", "country", "route", "start_date", "end_da
                    "emissions_basis", "emissions_unavailable_reason", "inputs_hash",
                    "code_hash")
 
-# Fields only the diagnostic carries, for two separate reasons. The flag,
+# Fields only the diagnostic carries, for three separate reasons. The flag,
 # because the report has already acted on it, so a frame without it is not
 # missing anything. The freight, because it is outside the boundary the rest of
 # the emission fields are inside, and a figure that no total counts reads as one
-# that some total does.
+# that some total does. The battery C-rate, because the report already carries
+# it as `battery_duration_hours`; the diagnostic states it in the terms the
+# solve's plausibility warning uses.
 DIAGNOSTIC_FIELDS = ("best_in_country",
                      "emissions_freight_kt_co2e_per_year",
                      *(f"emissions_{field_stem(leg)}_kg_co2e_per_t_steel"
-                       for leg in FREIGHT_LEGS))
+                       for leg in FREIGHT_LEGS),
+                     "max_battery_c_rate")
 
 FIELD_ORDER = tuple(IDENTITY_FIELDS) + tuple(
     field for field in REPORT_FIELDS if field not in IDENTITY_FIELDS

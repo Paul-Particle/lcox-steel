@@ -2,7 +2,7 @@ finance:
   default_wacc: 0.07
 
 # Everything in this file is a default. A per-scenario
-# `config/assumptions_{scenario}.yaml` overlay is deep-merged on top of it and
+# `config/overlays/{scenario}.yaml` overlay is deep-merged on top of it and
 # is the only thing that overrides these values; nothing sits beneath them.
 #
 # Routes are not selected here. One solve builds exactly one route, taken from
@@ -136,7 +136,6 @@ eaf:
   opex_per_t_per_year_eur: 91
   lifetime_years: 20
   consumables_eur_per_t: 40           # electrodes, fluxes, alloys, carbon; per t steel
-  p_min_pu: 0.4
 
   # Electricity by how hot the iron arrives (common._runs.EAF_CHARGE says which
   # state a route delivers). Melting is nearly all of an EAF's electricity, so
@@ -203,7 +202,7 @@ ew:
   # A point above the MOE cell's because the plate arrives cold and solid and
   # pays a melt-in oxidation and dust penalty that liquid iron never does.
   iron_t_per_t_steel: 1.04
-  p_min_pu: 0.2                       # marketed as load-following
+  # Marketed as load-following, so it takes PyPSA's default minimum load of 0.
 
 natural_gas:
   # Flat gas price for the fossil routes, €/MWh LHV. Fed to the gas_supply
@@ -213,10 +212,7 @@ natural_gas:
   # benchmark comparable across countries, the same argument that governs the
   # other cross-country inputs.
   price_eur_per_mwh: 21.9       # midpoint of the register's low/high benchmark
-  co2_t_per_mwh: 0.20           # combustion emissions, LHV basis
-  # Carbon price applied to gas CO2 (goes into the gas marginal cost).
-  # Default 0 = pure fixed-gas-price benchmark; EU ETS 2023 avg ≈ 85 €/t.
-  co2_price_eur_per_t: 0
+  # Its emissions and the optional carbon price on them are under `emissions`.
 
 dri-ng:
   # Natural-gas DRI shaft (Midrex/HYL type) — the mature fossil benchmark.
@@ -284,7 +280,8 @@ destination:
   # counted against that market's own hourly series — the same download every
   # grid run uses, at `variant: emissions`, so its price and its generation mix
   # come from one file. Nothing about the destination is a hand-set number any
-  # more; changing this line changes both the bill and the carbon.
+  # more; changing this line changes both the bill and the carbon. A scenario's
+  # overlay may move it too, as the demo's does.
   #
   # Connection charges come from the `grid` block, which carries one set of
   # figures for every area.
@@ -345,6 +342,7 @@ transport:
     ESP: { rail: 400 }
     BRA: { sea: 8_945 }                    # register: Brazil -> Spain
     AUS: { sea: 17_960 }                   # register: Australia -> Spain
+    DEMO: { sea: 17_960 }                  # the demo's Victoria ships as Australia does
     AB:  { rail: 1_150, sea: 15_400 }      # Edmonton -> Vancouver -> Spain via Panama
     ONT: { rail: 550, sea: 5_900 }         # Hamilton -> Montreal -> Spain
 
@@ -367,8 +365,9 @@ transmission:
   indirect_route_factor: 1.25   # great-circle distance → routed cable length
 
 emissions:
-  # What the run's energy and freight put into the air. Accounting only — none
-  # of this reaches the objective, so a number here never changes a solve.
+  # What the run's energy and freight put into the air. Accounting only, apart
+  # from the carbon price below: none of the rest reaches the objective, so it
+  # never changes a solve.
   #
   # WHAT IS NOT COUNTED. The model's boundary stops where the melt does (see
   # build_network's module docstring), so the direct emissions of the process
@@ -379,89 +378,55 @@ emissions:
   # one. What is counted is the energy and the freight: grid and renewable
   # electricity, natural gas combustion, and the ships and trains.
   #
-  # THREE BASES, because "the" emission factor of a MWh is a question, not a
-  # fact, and the three answers differ by more than the routes do:
-  #
-  #   combustion     what comes out of the stack, and nothing else. Renewables
-  #                  and nuclear are zero. This is what a grid CO2 monitor
-  #                  reports and what most "grid carbon intensity" figures mean.
-  #   delegated_act  combustion plus the fuel's own supply chain — mining,
-  #                  processing, transport — and nothing else. Renewables are
-  #                  still zero because they burn nothing. This is the basis
-  #                  EU renewable-hydrogen law uses, so it is the one to quote
-  #                  against the RFNBO threshold of 28.2 gCO2eq/MJ H2 LHV,
-  #                  which is 3.38 kg CO2e per kg of H2.
-  #   lifecycle      an independent full-LCA estimate that also carries the
-  #                  plant: steel, concrete, manufacture, decommissioning. The
-  #                  only basis on which a wind turbine is not free, and so the
-  #                  only one on which an islanded renewable plant reports
-  #                  anything at all. On the other two an islanded run reads
-  #                  zero, which is true on that basis and misleading as a
-  #                  statement about the world.
-  #
-  # Pick one. Reports carry the name of the basis they used so a number cannot
-  # be read on the wrong one. `combustion` is the default because it is the
-  # column whose provenance we actually know.
-  basis: combustion
+  # Which set of grid emission factors below a run uses. Reports carry its name
+  # so a number cannot be read on the wrong one.
+  basis: default_grid_emission_factors
 
-  # t CO2e per MWh of electricity generated, by the carrier names the grid
-  # pipeline uses (see grid/download_entsoe.py and grid/download_nem.py, which
-  # were deliberately given one shared vocabulary — the same keys serve both
-  # markets). These keys are what a `variant: emissions` grid series has columns
-  # for, which is how the two meet. A carrier appearing in a generation series
-  # but missing here is an error, not a zero.
-  #
-  # combustion:    Agora Energiewende's Agorameter factors. The 1.57 shared by
-  #                the dirty catch-alls is deliberately punitive: they are
-  #                small, mixed, and mostly worse than lignite.
-  # delegated_act: combustion + upstream, where upstream is
-  #                   u [gCO2eq/MJ fuel] * 3600 / eta * 1e-6
-  #                with u from Part C of Commission Delegated Regulation (EU)
-  #                2023/1185 — hard coal 15.9, brown coal 1.7, petroleum
-  #                products 11.6, natural gas 12.7, nuclear 1.2 — and eta the
-  #                net electrical efficiency below. The act mandates eta = 0.33
-  #                for nuclear; the rest are fleet-average eyeballs and are the
-  #                weakest part of this column.
-  #                   brown_coal 0.38  hard_coal 0.42  gas   0.48  coal_gas 0.40
-  #                   oil        0.38  oil_shale 0.33  peat  0.35  waste    0.25
-  #                   other      0.40  biomass   0.33  nuclear 0.33
-  #                Biomass upstream is zero here because RED treats sustainable
-  #                biogenic CO2 as zero; that is a legal convention, not physics.
-  # lifecycle:     IPCC AR5 Annex III medians where AR5 has the technology
-  #                (marked *). The rest are extrapolations and the least
-  #                defensible numbers in this file.
-  #
-  # Storage carriers are here for the vocabulary rather than for their factor:
-  # the report leaves them out of a mix altogether, both what a reservoir gives
-  # back and what it took to fill it, which is what makes stored energy carry
-  # the average of everything else. Counting the discharge at a factor of zero
-  # would instead read as free power and dilute the mix (a couple of per cent in
-  # DE, more in a hydro-heavy NEM region). Their round-trip loss is charged
-  # where it belongs, as extra electricity drawn.
-  electricity_t_co2e_per_mwh:
-    #                 combustion  delegated_act  lifecycle
-    biomass:        { combustion: 0,        delegated_act: 0,      lifecycle: 0.230 }   # * AR5 dedicated biomass
-    brown_coal:     { combustion: 1.12,     delegated_act: 1.136,  lifecycle: 1.100 }
-    coal_gas:       { combustion: 1.57,     delegated_act: 1.713,  lifecycle: 0.900 }
-    energy_storage: { combustion: 0,        delegated_act: 0,      lifecycle: 0     }
-    gas:            { combustion: 0.38,     delegated_act: 0.475,  lifecycle: 0.490 }   # * AR5 CCGT
-    geothermal:     { combustion: 0,        delegated_act: 0,      lifecycle: 0.038 }   # * AR5
-    hard_coal:      { combustion: 0.82,     delegated_act: 0.956,  lifecycle: 0.820 }   # * AR5 pulverised coal
-    hydro:          { combustion: 0,        delegated_act: 0,      lifecycle: 0.024 }   # * AR5; NEM's undivided hydro
-    hydro_reservoir: { combustion: 0,       delegated_act: 0,      lifecycle: 0.024 }   # * AR5
-    hydro_river:    { combustion: 0,        delegated_act: 0,      lifecycle: 0.024 }   # * AR5
-    marine:         { combustion: 0,        delegated_act: 0,      lifecycle: 0.017 }
-    nuclear:        { combustion: 0,        delegated_act: 0.013,  lifecycle: 0.012 }   # * AR5
-    oil:            { combustion: 1.57,     delegated_act: 1.680,  lifecycle: 0.780 }
-    oil_shale:      { combustion: 1.57,     delegated_act: 1.697,  lifecycle: 1.100 }
-    other:          { combustion: 1.57,     delegated_act: 1.713,  lifecycle: 0.700 }
-    other_re:       { combustion: 0,        delegated_act: 0,      lifecycle: 0.038 }
-    peat:           { combustion: 1.57,     delegated_act: 1.689,  lifecycle: 1.100 }
-    pumped_storage: { combustion: 0,        delegated_act: 0,      lifecycle: 0     }
-    solar:          { combustion: 0,        delegated_act: 0,      lifecycle: 0.048 }   # * AR5 utility PV
-    waste:          { combustion: 1.57,     delegated_act: 1.737,  lifecycle: 0.700 }
-    wind_offshore:  { combustion: 0,        delegated_act: 0,      lifecycle: 0.012 }   # * AR5
-    wind_onshore:   { combustion: 0,        delegated_act: 0,      lifecycle: 0.011 }   # * AR5
+  default_grid_emission_factors:
+    # t CO2e per MWh of electricity generated: what comes out of the stack, and
+    # nothing else, so renewables and nuclear are zero. This is what a grid CO2
+    # monitor reports and what most "grid carbon intensity" figures mean.
+    # Agora Energiewende's Agorameter factors. The 1.57 shared by the dirty
+    # catch-alls is deliberately punitive: they are small, mixed, and mostly
+    # worse than lignite.
+    #
+    # Keyed by the carrier names the grid pipeline uses (see
+    # grid/download_entsoe.py and grid/download_nem.py, which were deliberately
+    # given one shared vocabulary — the same keys serve both markets). These
+    # keys are what a `variant: emissions` grid series has columns for, which is
+    # how the two meet. A carrier appearing in a generation series but missing
+    # here is an error, not a zero.
+    #
+    # Storage carriers are here for the vocabulary rather than for their factor:
+    # the report leaves them out of a mix altogether, both what a reservoir gives
+    # back and what it took to fill it, which is what makes stored energy carry
+    # the average of everything else. Counting the discharge at a factor of zero
+    # would instead read as free power and dilute the mix (a couple of per cent
+    # in DE, more in a hydro-heavy NEM region). Their round-trip loss is charged
+    # where it belongs, as extra electricity drawn.
+    electricity_t_co2e_per_mwh:
+      biomass:         0
+      brown_coal:      1.12
+      coal_gas:        1.57
+      energy_storage:  0
+      gas:             0.38
+      geothermal:      0
+      hard_coal:       0.82
+      hydro:           0        # NEM's undivided hydro
+      hydro_reservoir: 0
+      hydro_river:     0
+      marine:          0
+      nuclear:         0
+      oil:             1.57
+      oil_shale:       1.57
+      other:           1.57
+      other_re:        0
+      peat:            1.57
+      pumped_storage:  0
+      solar:           0
+      waste:           1.57
+      wind_offshore:   0
+      wind_onshore:    0
 
   # There is deliberately no per-area annual figure here, and none for the
   # destination either. Every intensity in the model comes from a generation
@@ -471,17 +436,24 @@ emissions:
   # is a mistake in the scenario table, not a case to paper over, so the report
   # says so and stops.
 
-  # Natural gas burned in a shaft, per MWh LHV. The combustion figure is
-  # `natural_gas.co2_t_per_mwh`, which the optional carbon price also uses, so
-  # it stays in one place; this is only the fuel's own supply chain on top —
-  # extraction, processing, pipelines, and the methane that leaks on the way:
-  #   12.7 gCO2eq/MJ * 3600 * 1e-6 = 0.046 t/MWh, from Part C as above.
-  gas_upstream_t_co2e_per_mwh:
-    combustion:    0
-    delegated_act: 0.046
-    lifecycle:     0.055
+  # Natural gas burned in a shaft, t CO2e per MWh LHV. Direct emissions, not
+  # scope 2 like the grid factors above: they give the NG-DRI comparison case an
+  # emissions figure, as a baseline for the scope 2 emissions of runs on a dirty
+  # grid. `process` is combustion; `upstream` is the fuel's own supply chain —
+  # extraction, processing, pipelines, and the methane that leaks on the way —
+  # zero for now, and kept in case we decide to count it.
+  natural_gas_reductant_t_co2e_per_mwh:
+    process:  0.20
+    upstream: 0
 
-  # Freight, kg CO2e per t of cargo and km travelled. Sea is a capesize bulk
+  # € per t CO2e on the natural gas `process` emissions, added to the gas
+  # price. The default carbon price is zero and it's just kept here for option
+  # value; it does influence the run if it is set though. For scale, the EU ETS
+  # 2023 average was about 85 €/t.
+  co2_price_eur_per_t: 0
+
+  # Freight, kg CO2e per t of cargo and km travelled. Diagnostic only for now:
+  # only the diagnostic report carries freight emissions. Sea is a capesize bulk
   # carrier; scale up by about half for panamax parcels, which are dearer per
   # t*km. Rail is European electric traction — note that its emissions are
   # already inside whatever grid the railway buys from, so this is a footprint
@@ -489,18 +461,9 @@ emissions:
   #
   # Source: GLEC Framework v3.2, which is well-to-wake (bulk >200k dwt 3.1,
   # 60-100k dwt 5.2; rail electric 10.8, diesel 30.7 gCO2e/t*km). Capesize
-  # interpolates to ~3.5. Keyed by basis so a freight tonne-km is counted on the
-  # same footing as a MWh: the GLEC figure is the `delegated_act` column, the
-  # `combustion` one drops the fuel's own supply chain (~15 % of a ship's
-  # well-to-wake; for electric rail it is the generation behind the wire, which
-  # is a stack emission and stays), and `lifecycle` adds the vessel and the
-  # rolling stock.
+  # interpolates to ~3.5. These figures drop the fuel's own supply chain, about
+  # 15 % of a ship's well-to-wake; for electric rail they are the generation
+  # behind the wire, which is a stack emission and stays.
   freight_kg_co2e_per_t_km:
-    sea:
-      combustion:    0.0030
-      delegated_act: 0.0035
-      lifecycle:     0.0037
-    rail:
-      combustion:    0.0108
-      delegated_act: 0.0119
-      lifecycle:     0.0125
+    sea:  0.0030
+    rail: 0.0108

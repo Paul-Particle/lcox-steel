@@ -56,7 +56,7 @@ _WIND_ONSHORE_TURBINE = "Vestas_V112_3MW"
 _WIND_OFFSHORE_TURBINE = "NREL_ReferenceTurbine_5MW_offshore"
 _PV_PANEL = "CSi"
 _PV_ORIENTATION = "latitude_optimal"
-_WIND_CF = {"smooth": True, "add_cutout_windspeed": True}
+_WIND_CF = {"smooth": False, "add_cutout_windspeed": True}
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _AREA = snakemake.wildcards.area
@@ -76,7 +76,7 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _WIND_CF = snakemake.params.wind_cf
 
 
-_WIND_SMOOTH = _WIND_CF.get("smooth", True)
+_WIND_SMOOTH = _WIND_CF.get("smooth", False)
 _WIND_ADD_CUTOUT_WS = _WIND_CF.get("add_cutout_windspeed", True)
 
 
