@@ -66,14 +66,20 @@ covered by its LICENSE. It holds no data from the ENTSO-E Transparency Platform.
 
 ## `data/assumptions/Assumptions_yaml_inputs.xlsx`
 
-The techno-economic inputs `config/assumptions.yaml` is generated from, by
-`scratch/generate_assumptions.py`. One row per value: the dotted YAML key it
-writes to, the value, its unit, the key it replaced, and the row ID it was
-confirmed against.
+Two tabs:
+
+- `assumptions_inputs` — the techno-economic inputs `config/assumptions.yaml`
+  is generated from, by `scratch/generate_assumptions.py`. One row per value:
+  the dotted YAML key it writes to, the value, its unit, the key it replaced,
+  and the row ID it was confirmed against.
+- `scenarios_clean` — the scenarios to run, one row each (locations, route,
+  power supply, RES configuration, site variant, date range, sensitivity
+  overrides). Nothing reads it yet; it is meant to replace the hand-written
+  scenario table the model currently runs from.
 
 - **Source:** compiled by Future Cleantech Architects from approximately 150
-  third-party sources. This file is a single extract tab from a larger internal
-  workbook where each figure is attributed to its own source; the
+  third-party sources. The `assumptions_inputs` tab is extracted from a larger
+  internal workbook where each figure is attributed to its own source; the
   `Confirmed row ID` column is the reference back into it.
 - **Form:** a compilation. The individual figures are facts drawn from their
   respective publishers; the selection and arrangement are ours.
