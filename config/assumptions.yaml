@@ -1,5 +1,13 @@
+# GENERATED FILE: edit config/.assumptions.yaml instead, then run
+#   python -m common.generate_inputs
+# Every value tagged `!register` there is filled in here from the input
+# workbook, converted from USD to EUR at 1.13 USD/EUR, with the register
+# row ID, the workbook's key, value and unit in the comment above it.
+
 finance:
-  default_wacc: 0.07
+  # register eu-other = 91: finance.other.eu_wacc 0.071, finance.res.eu_wacc 0.035, finance.other.noneu_wacc 0.111, finance.res.noneu_wacc 0.077 %
+  # alternatives in EUR: eu-res = 0.035, noneu-other = 0.111, noneu-res = 0.077
+  default_wacc: 0.071
 
 # Everything in this file is a default. A per-scenario
 # `config/overlays/{scenario}.yaml` overlay is deep-merged on top of it and
@@ -11,7 +19,8 @@ finance:
 
 plant:
   dri_mt_per_year: 0.526  # 100 MW H2 LHV input × 8760 h / 33.33 kWh/kg / 50 kg/t
-  h2_intensity_kg_per_t_dri: 50.0
+  # register 107: dri_h2.kg_h2_per_t_dri 50.2295 kg H2/t DRI
+  h2_intensity_kg_per_t_dri: 50.2295
   # Floor for electrolyser sizing — the optimiser may grow it further when the
   # extra capacity earns its capex via buffer-mediated arbitrage of cheap RES.
   # Used by the h2_only route only; steel routes size the electrolyser freely
@@ -25,25 +34,44 @@ plant:
 # the other cross-country inputs in this file.
 res:
   wind-onshore:
-    capex_per_mw_eur: 864_000
-    opex_per_mw_per_year_eur: 21_600
+    # register base = 5: res.wind-onshore.capex_usd_per_mw_base 976000, res.wind-onshore.capex_usd_per_mw_low 632000, res.wind-onshore.capex_usd_per_mw_high 2208000 USD/MW
+    # alternatives in EUR: low = 559292, high = 1953980
+    capex_per_mw_eur: 863717
+    # register base = 25: res.wind-onshore.opex_usd_per_mw_per_year_base 24400, res.wind-onshore.opex_usd_per_mw_per_year_low 15800, res.wind-onshore.opex_usd_per_mw_per_year_high 55200 USD/MW/year
+    # alternatives in EUR: low = 13982.3, high = 48849.6
+    opex_per_mw_per_year_eur: 21592.9
+    # register 93: res.financing_period 20 years
     lifetime_years: 20
   solar:
-    capex_per_mw_eur: 590_000
-    opex_per_mw_per_year_eur: 11_800
+    # register base = 2: res.solar.capex_usd_per_mw_base 667000, res.solar.capex_usd_per_mw_low 383000, res.solar.capex_usd_per_mw_high 1211000 USD/MW
+    # alternatives in EUR: low = 338938, high = 1071680
+    capex_per_mw_eur: 590265
+    # register base = 22: res.solar.opex_usd_per_mw_per_year_base 13340, res.solar.opex_usd_per_mw_per_year_low 7660, res.solar.opex_usd_per_mw_per_year_high 24220 USD/MW/year
+    # alternatives in EUR: low = 6778.76, high = 21433.6
+    opex_per_mw_per_year_eur: 11805.3
+    # register 93: res.financing_period 20 years
     lifetime_years: 20
   wind-offshore:
-    capex_per_mw_eur: 2_594_000
-    opex_per_mw_per_year_eur: 64_800
+    # register base = 8: res.wind-offshore.capex_usd_per_mw_base 2931000, res.wind-offshore.capex_usd_per_mw_low 1321000, res.wind-offshore.capex_usd_per_mw_high 5800000 USD/MW
+    # alternatives in EUR: low = 1169030, high = 5132740
+    capex_per_mw_eur: 2593810
+    # register base = 28: res.wind-offshore.opex_usd_per_mw_per_year_base 73275, res.wind-offshore.opex_usd_per_mw_per_year_low 33025, res.wind-offshore.opex_usd_per_mw_per_year_high 145000 USD/MW/year
+    # alternatives in EUR: low = 29225.7, high = 128319
+    opex_per_mw_per_year_eur: 64845.1
+    # register 93: res.financing_period 20 years
     lifetime_years: 20
 
 electrolyser:
   # Alkaline. The register carries alkaline and PEM side by side throughout; this
   # run is priced on the alkaline column.
-  capex_per_mw_eur: 928_000
-  opex_per_mw_per_year_eur: 18_600   # 2 % of capex
+  # register 1: electrolyser.capex_usd_per_mw_base 1049000 USD/MW
+  capex_per_mw_eur: 928319
+  # register 21: electrolyser.opex_usd_per_mw_per_year_base 20980 USD/MW/year
+  opex_per_mw_per_year_eur: 18566.4   # 2 % of capex
+  # register 94: electrolyser.financing_period 30 years
   lifetime_years: 30
-  efficiency_kwh_per_kg: 48.3
+  # register 99: electrolyser.efficiency_kwh_per_kg 48.3043 kWh/kg H2
+  efficiency_kwh_per_kg: 48.3043
   # Variable opex per MWh electricity input (water, consumables); applied as
   # marginal_cost on the link's p0 side.
   varopex_eur_per_mwh_el: 1.0
@@ -52,16 +80,23 @@ battery:
   # Duration is not set here: energy and power capacity are priced separately
   # and sized separately, so the optimiser picks the hours. capex_per_mw_eur
   # buys one bidirectional inverter, charging and discharging at that rating.
-  capex_per_mw_eur: 138_000   # power capacity cost
-  capex_per_mwh_eur: 89_600   # energy capacity cost
+  # register global = 12: battery.capex_usd_per_mw_global 156429, battery.capex_usd_per_mw_eu 242374 2025 USD/MW
+  # alternatives in EUR: europe = 214490
+  capex_per_mw_eur: 138433   # power capacity cost
+  # register global = 11: battery.capex_usd_per_mwh_global 101343, battery.capex_usd_per_mwh_eu 157022 2025 USD/MWh
+  # alternatives in EUR: europe = 138957
+  capex_per_mwh_eur: 89683.8   # energy capacity cost
+  # register 95: battery.financing_period 20 years
   lifetime_years: 20
+  # register 139: battery.efficiency_roundtrip 0.85 %
   efficiency_roundtrip: 0.85
 
 h2_buffer:
-  # Salt cavern, the storage every route is given by default here — a lower
-  # bound, and deliberately so. The register's tank-with-compressor figure is
-  # 60_050 EUR/MWh; set that to price the routes on tanks instead.
-  capex_per_mwh_eur: 350
+  # Tank with compressor. A salt cavern, at about 350 EUR/MWh, is the low-cost
+  # sensitivity case.
+  # register 19: h2_buffer.capex_usd_per_mwh 67856.5 2025 USD/MWh
+  capex_per_mwh_eur: 60050
+  # register 97: h2_buffer.financing_period 30 years
   lifetime_years: 30
   # e_nom_extendable always True — PyPSA finds optimal buffer size
 
@@ -81,15 +116,22 @@ dri-h2:
   # near 780 €/(t steel/yr), which is the range built and announced projects sit
   # in — Thyssenkrupp's 2.5 Mt/yr Duisburg plant at ~€2 bn is ~800 €/(t/yr)
   # including its melters. Agora apply a further 1.8x for brownfield integration.
-  capex_per_t_per_year_eur: 566
+  # register 15: dri.capex_usd_per_t 640 USD/t DRI
+  capex_per_t_per_year_eur: 566.372
   # All-in fixed operating cost: labour, maintenance and overhead, which is why
   # it is an eighth of capex rather than the few per cent a maintenance-only
   # figure would be. The mean of the register's Australian, Brazilian and
   # European figures, one value being all this file can hold.
-  opex_per_t_per_year_eur: 70
+  # register default = mean of 32, 33, 34: iron.fom_usd_per_t_capacity_per_year_aus 84.9417, iron.fom_usd_per_t_capacity_per_year_bra 73.8, iron.fom_usd_per_t_capacity_per_year_eu 79.65 USD/t iron product capacity/year
+  # alternatives in EUR: aus = 75.1696, bra = 65.3097, eu = 70.4867
+  opex_per_t_per_year_eur: 70.322
+  # register 92: IS.financing_period 20 years
   lifetime_years: 20
-  el_mwh_per_t: 1.006                 # 177 kWh/t auxiliaries + 828 kWh/t electric heat
-  ore_eur_per_t: 238                  # DR-grade pellets, per t of DRI
+  # register sum of 109, 124: dri_h2.el_mwh_per_t 0.828153, dri_ng.el_mwh_per_t 0.176825 MWh/t DRI
+  el_mwh_per_t: 1.00498                 # 177 kWh/t auxiliaries + 828 kWh/t electric heat
+  # register 145: dri.ore_usd_per_t 269.221 2025 USD/t DRI
+  ore_eur_per_t: 238.249                  # DR-grade pellets, per t of DRI
+  # register 132: eaf_dri.iron_t_per_t_steel 1.17 t DRI/t liquid steel
   iron_t_per_t_steel: 1.17            # DR pellets: gangue plus metallisation loss
   p_min_pu: 0.5
 
@@ -102,17 +144,25 @@ dri-mix:
   # Both single-fuel shafts sit at the same 295 €2022/(t DRI/yr), so a
   # dual-capable one is taken at that level too. See dri-h2 for where the
   # figure comes from and why it is not the familiar 230.
-  capex_per_t_per_year_eur: 566
-  opex_per_t_per_year_eur: 70
+  # register 15: dri.capex_usd_per_t 640 USD/t DRI
+  capex_per_t_per_year_eur: 566.372
+  # register default = mean of 32, 33, 34: iron.fom_usd_per_t_capacity_per_year_aus 84.9417, iron.fom_usd_per_t_capacity_per_year_bra 73.8, iron.fom_usd_per_t_capacity_per_year_eu 79.65 USD/t iron product capacity/year
+  # alternatives in EUR: aus = 75.1696, bra = 65.3097, eu = 70.4867
+  opex_per_t_per_year_eur: 70.322
+  # register 92: IS.financing_period 20 years
   lifetime_years: 20
   # Shaft auxiliaries alone, as the NG shaft. The H2 feed's preheat is charged
   # where it belongs, on the H2 side, and the register splits the H2 shaft the
   # same way: 178 kWh/t of machine drive plus 828 kWh/t of electric heat is the
   # single-fuel H2 shaft's 1.006, so the blend's corners meet the routes it sits
   # between.
-  el_mwh_per_t: 0.178
-  h2_preheat_el_mwh_per_t: 0.828
-  ore_eur_per_t: 238                  # DR-grade pellets, as the other shafts
+  # register 124: dri_ng.el_mwh_per_t 0.176825 MWh/t DRI
+  el_mwh_per_t: 0.176825
+  # register 109: dri_h2.el_mwh_per_t 0.828153 MWh/t DRI
+  h2_preheat_el_mwh_per_t: 0.828153
+  # register 145: dri.ore_usd_per_t 269.221 2025 USD/t DRI
+  ore_eur_per_t: 238.249                  # DR-grade pellets, as the other shafts
+  # register 132: eaf_dri.iron_t_per_t_steel 1.17 t DRI/t liquid steel
   iron_t_per_t_steel: 1.17
   p_min_pu: 0.5
   # A small buffer on the reductant bus, fixed rather than sized by the
@@ -130,10 +180,14 @@ eaf:
   # written down by a scenario overlay, e.g.
   #   eaf: {capex_per_t_per_year_eur: 50, opex_per_t_per_year_eur: 1.5}
   # Per tonne of annual liquid steel, which is the basis an EAF is quoted on.
-  capex_per_t_per_year_eur: 363
+  # register 16: eaf.capex_usd_per_t 410 USD/t liquid steel
+  capex_per_t_per_year_eur: 362.832
   # As the shaft's: all-in, labour and overhead included, and the mean of the
   # register's three regions.
-  opex_per_t_per_year_eur: 91
+  # register default = mean of 35, 36, 37: eaf.fom_usd_per_t_capacity_per_year_aus 106.074, eaf.fom_usd_per_t_capacity_per_year_bra 100, eaf.fom_usd_per_t_capacity_per_year_eu 101.333 USD/t liquid steel capacity/year
+  # alternatives in EUR: aus = 93.8709, bra = 88.4956, eu = 89.6755
+  opex_per_t_per_year_eur: 90.6807
+  # register 92: IS.financing_period 20 years
   lifetime_years: 20
   consumables_eur_per_t: 40           # electrodes, fluxes, alloys, carbon; per t steel
 
@@ -144,20 +198,24 @@ eaf:
     briquettes:
       # 25 °C HBI off a ship. The register's dearest charge: briquettes are
       # dense, and they arrive with the gangue the shaft could not take out.
-      el_mwh_per_t: 0.569
+      # register 133: eaf_hbi.el_mwh_per_t 0.569444 MWh/t liquid steel
+      el_mwh_per_t: 0.569444
     plates:
       # 25 °C electrowon plates, or MOE iron let go cold and solid. Cold like
       # the briquettes, but nearly gangue-free, so less of the melt is spent on
       # material that ends up in the slag.
-      el_mwh_per_t: 0.450
+      # register 135: eaf_ewin.el_mwh_per_t 0.45 MWh/t liquid steel
+      el_mwh_per_t: 0.45
     hot:
       # ~650 °C: sponge iron walked straight from the shaft to the furnace.
-      el_mwh_per_t: 0.447
+      # register 131: eaf_dri.el_mwh_per_t 0.447222 MWh/t liquid steel
+      el_mwh_per_t: 0.447222
     liquid:
       # ~1550 °C from the MOE cell, so the melt is already done. What is left
       # covers getting the metal across to the furnace, the heat it loses on the
       # way, holding the bath and superheating to tapping temperature.
-      el_mwh_per_t: 0.183
+      # register 137: eaf_moe.el_mwh_per_t 0.183333 MWh/t liquid steel
+      el_mwh_per_t: 0.183333
 
 moe:
   # Molten oxide electrolysis (Boston Metal type), electricity → liquid iron.
@@ -165,16 +223,22 @@ moe:
   # highly uncertain (pre-commercial). The cell can barely turn down (freeze
   # risk), hence p_min_pu near 1. Output is hot metal, so there is no store on
   # the iron bus: the cell feeds the EAF directly, hour for hour.
-  capex_per_t_per_year_eur: 1416
+  # register 17: moe.capex_usd_per_t 1600 USD/t electrolytic iron
+  capex_per_t_per_year_eur: 1415.93
   # The register gives the shaft, the MOE cell and the electrowinning cell one
   # fixed-operating-cost row between them, so all three carry the same figure.
-  opex_per_t_per_year_eur: 70
+  # register default = mean of 32, 33, 34: iron.fom_usd_per_t_capacity_per_year_aus 84.9417, iron.fom_usd_per_t_capacity_per_year_bra 73.8, iron.fom_usd_per_t_capacity_per_year_eu 79.65 USD/t iron product capacity/year
+  # alternatives in EUR: aus = 75.1696, bra = 65.3097, eu = 70.4867
+  opex_per_t_per_year_eur: 70.322
+  # register 92: IS.financing_period 20 years
   lifetime_years: 20
-  el_mwh_per_t: 3.181                 # per t liquid iron, mid ore grade
+  # register 114: moe.el_mwh_per_t 3.18084 MWh/t Liquid Iron
+  el_mwh_per_t: 3.18084                 # per t liquid iron, mid ore grade
   # Concentrate rather than DR-grade pellets, which is most of why it is cheaper
   # per tonne of iron than the shaft's: 1.54 t at the register's iron-ore fines
   # price, against 1.38 t of pellets carrying a DR premium.
-  ore_eur_per_t: 159
+  # register 147: moe.ore_usd_per_t_liquid_iron 180.069 2025 USD/ t Liquid Iron 
+  ore_eur_per_t: 159.353
   # The cell is its own slag channel: gangue stays ionic in the electrolyte and
   # leaves as a bleed, so what reaches the furnace is carbon-free, silicon-free
   # iron. That is the whole difference from hot metal, which takes about 1.08 a
@@ -191,12 +255,18 @@ ew:
   # Low-temperature aqueous iron electrowinning (Electra type), electricity →
   # solid iron plates. ~2–3 MWh/t iron claimed; capex very uncertain
   # (500–3000 €/(t/yr) span in public estimates — sweep this).
-  capex_per_t_per_year_eur: 708
-  opex_per_t_per_year_eur: 70         # shares the register's row with DRI and MOE
+  # register 18: ewin.capex_usd_per_t 800 USD/t electrolytic iron
+  capex_per_t_per_year_eur: 707.965
+  # register default = mean of 32, 33, 34: iron.fom_usd_per_t_capacity_per_year_aus 84.9417, iron.fom_usd_per_t_capacity_per_year_bra 73.8, iron.fom_usd_per_t_capacity_per_year_eu 79.65 USD/t iron product capacity/year
+  # alternatives in EUR: aus = 75.1696, bra = 65.3097, eu = 70.4867
+  opex_per_t_per_year_eur: 70.322         # shares the register's row with DRI and MOE
+  # register 92: IS.financing_period 20 years
   lifetime_years: 20
+  # register 120: ewin.el_mwh_per_t 3.739 MWh/t iron plate
   el_mwh_per_t: 3.739                 # per t iron plate, excluding ore prep
   # The same concentrate the MOE cell takes, at the same price.
-  ore_eur_per_t: 159
+  # register 146: ewin.ore_usd_per_t_electrolytic_iron 180.429 2025 USD/ t Electrolytic Iron 
+  ore_eur_per_t: 159.672
   # Plates are above 99 % iron — the gangue is refined out of the leach liquor
   # rather than slagged off downstream — so there is almost none to lose to slag.
   # A point above the MOE cell's because the plate arrives cold and solid and
@@ -211,19 +281,29 @@ natural_gas:
   # per-area assumptions mechanism yet. A single price also keeps the fossil
   # benchmark comparable across countries, the same argument that governs the
   # other cross-country inputs.
-  price_eur_per_mwh: 21.9       # midpoint of the register's low/high benchmark
+  # register default = mean of 149, 150: natural_gas.price_usd_per_mwh_high 27.2971, natural_gas.price_usd_per_mwh_low 22.1789 USD/MWh
+  # alternatives in EUR: high = 24.1568, low = 19.6274
+  price_eur_per_mwh: 21.8921       # midpoint of the register's low/high benchmark
   # Its emissions and the optional carbon price on them are under `emissions`.
 
 dri-ng:
   # Natural-gas DRI shaft (Midrex/HYL type) — the mature fossil benchmark.
   # Same shaft capex level as the H2 shaft (see dri-h2 for the source); gas use
   # ~10 GJ/t DRI. Electricity is lower than the H2 shaft (no H2 preheat).
-  capex_per_t_per_year_eur: 566
-  opex_per_t_per_year_eur: 70
+  # register 15: dri.capex_usd_per_t 640 USD/t DRI
+  capex_per_t_per_year_eur: 566.372
+  # register default = mean of 32, 33, 34: iron.fom_usd_per_t_capacity_per_year_aus 84.9417, iron.fom_usd_per_t_capacity_per_year_bra 73.8, iron.fom_usd_per_t_capacity_per_year_eu 79.65 USD/t iron product capacity/year
+  # alternatives in EUR: aus = 75.1696, bra = 65.3097, eu = 70.4867
+  opex_per_t_per_year_eur: 70.322
+  # register 92: IS.financing_period 20 years
   lifetime_years: 20
-  gas_mwh_per_t: 3.469                # LHV, per t DRI: reductant plus heat
-  el_mwh_per_t: 0.178                 # machine drive and auxiliaries
-  ore_eur_per_t: 238                  # DR-grade pellets, same as H2 DRI
+  # register 128: dri_ng.gas_mwh_per_t 3.46942 MWh/t DRI
+  gas_mwh_per_t: 3.46942                # LHV, per t DRI: reductant plus heat
+  # register 124: dri_ng.el_mwh_per_t 0.176825 MWh/t DRI
+  el_mwh_per_t: 0.176825                 # machine drive and auxiliaries
+  # register 145: dri.ore_usd_per_t 269.221 2025 USD/t DRI
+  ore_eur_per_t: 238.249                  # DR-grade pellets, same as H2 DRI
+  # register 132: eaf_dri.iron_t_per_t_steel 1.17 t DRI/t liquid steel
   iron_t_per_t_steel: 1.17            # same pellets as the H2 shaft, same yield
   p_min_pu: 0.5
 
@@ -236,6 +316,7 @@ briquetting:
   capex_per_t_per_year_eur: 40
   opex_per_t_per_year_eur: 1.2        # ≈3 % of capex
   lifetime_years: 20
+  # register 141: briquetting.el_mwh_per_t_hbi 0.01 MWh/t HBI
   el_mwh_per_t: 0.01                  # press, screening and handling
   yield_t_per_t: 0.98                 # fines lost on screening
 
@@ -244,7 +325,9 @@ iron_store:
   # an export route waiting on a ship (shed + handling). Routes that hand the
   # furnace hot metal or hot sponge iron have nowhere to put it and get none.
   # Cheap but deliberately non-zero so the optimal size is unique and reportable.
-  capex_per_t_eur: 21
+  # register 20: iron_steel_store.capex_usd_per_t 23.654 2021 USD/t DRI
+  capex_per_t_eur: 20.9327
+  # register 98: iron_steel_store.financing_period 100 years
   lifetime_years: 100
 
 steel_store:
@@ -308,24 +391,13 @@ transport:
   # export route pays no steel freight either way; its steel is already there.
   deliver_finished_steel: false
 
-  # Two parts per leg: a charge per t that does not care how far the cargo
-  # goes (port dues, loading, discharge) and a charge per t and km that does.
-  # Published ore rates only make sense that way — Western Australia to
-  # Qingdao is a third of the distance of Tubarao to Qingdao but costs almost
-  # half as much, which no single per-km rate reproduces. Fitting the two
-  # gives about $4/t plus $0.0010/t·km, and that is what the sea numbers are
-  # anchored on.
-  #
-  # Iron carries a premium over ore for handling: DRI and HBI re-oxidise, so
-  # they travel in fitted holds under inert gas. Steel is dearer again — coil
-  # and plate go breakbulk, which stows worse and handles slower than bulk.
-  # Rail is an order of magnitude dearer per t·km than sea, which is the whole
-  # reason iron moves between continents by ship and barely moves overland;
-  # its per-t part is zero because the European rates we anchor on are already
-  # quoted all-in.
   sea:
-    iron:  { eur_per_t: 0,  eur_per_t_km: 0.000343 }
-    steel: { eur_per_t: 0,  eur_per_t_km: 0.000343 }
+    # register 163: shipping.cost_usd_per_t 0.763518 USD2025/t
+    # register 162: shipping.cost_usd_per_t_per_km 0.000387632 USD2025/(t·km)
+    iron:  { eur_per_t: 0.67568,  eur_per_t_km: 0.000343037 }
+    # register 163: shipping.cost_usd_per_t 0.763518 USD2025/t
+    # register 162: shipping.cost_usd_per_t_per_km 0.000387632 USD2025/(t·km)
+    steel: { eur_per_t: 0.67568,  eur_per_t_km: 0.000343037 }
   rail:
     iron:  { eur_per_t: 0,  eur_per_t_km: 0.035 }
     steel: { eur_per_t: 0,  eur_per_t_km: 0.045 }
@@ -340,9 +412,15 @@ transport:
     DEU: { rail: 1_800 }
     FRA: { rail: 1_000 }
     ESP: { rail: 400 }
-    BRA: { sea: 8_945 }                    # register: Brazil -> Spain
-    AUS: { sea: 17_960 }                   # register: Australia -> Spain
-    DEMO: { sea: 17_960 }                  # the demo's Victoria ships as Australia does
+    # register esp = 160: shipping.distance_km_bra_esp 8944.56, shipping.distance_km_bra_deu 11686.9, shipping.distance_km_bra_fra 10383.8 km
+    # alternatives in EUR: deu = 11686.9, fra = 10383.8
+    BRA: { sea: 8944.56 }
+    # register esp = 157: shipping.distance_km_aus_esp 17964.6, shipping.distance_km_aus_deu 21947.2, shipping.distance_km_aus_fra 16854 km
+    # alternatives in EUR: deu = 21947.2, fra = 16854
+    AUS: { sea: 17964.6 }
+    # register esp = 157: shipping.distance_km_aus_esp 17964.6, shipping.distance_km_aus_deu 21947.2, shipping.distance_km_aus_fra 16854 km
+    # alternatives in EUR: deu = 21947.2, fra = 16854
+    DEMO: { sea: 17964.6 }  # the demo's Victoria ships as Australia does
     AB:  { rail: 1_150, sea: 15_400 }      # Edmonton -> Vancouver -> Spain via Panama
     ONT: { rail: 550, sea: 5_900 }         # Hamilton -> Montreal -> Spain
 
@@ -405,27 +483,49 @@ emissions:
     # in DE, more in a hydro-heavy NEM region). Their round-trip loss is charged
     # where it belongs, as extra electricity drawn.
     electricity_t_co2e_per_mwh:
+      # register 164: emissions.electricity_t_co2e_per_mwh.biomass.combustion 0 t CO2e/MWh
       biomass:         0
+      # register 167: emissions.electricity_t_co2e_per_mwh.brown_coal.combustion 1.12 t CO2e/MWh
       brown_coal:      1.12
+      # register 170: emissions.electricity_t_co2e_per_mwh.coal_gas.combustion 1.57 t CO2e/MWh
       coal_gas:        1.57
+      # register 173: emissions.electricity_t_co2e_per_mwh.energy_storage.combustion 0 t CO2e/MWh
       energy_storage:  0
+      # register 176: emissions.electricity_t_co2e_per_mwh.gas.combustion 0.38 t CO2e/MWh
       gas:             0.38
+      # register 179: emissions.electricity_t_co2e_per_mwh.geothermal.combustion 0 t CO2e/MWh
       geothermal:      0
+      # register 182: emissions.electricity_t_co2e_per_mwh.hard_coal.combustion 0.82 t CO2e/MWh
       hard_coal:       0.82
+      # register 185: emissions.electricity_t_co2e_per_mwh.hydro.combustion 0 t CO2e/MWh
       hydro:           0        # NEM's undivided hydro
+      # register 188: emissions.electricity_t_co2e_per_mwh.hydro_reservoir.combustion 0 t CO2e/MWh
       hydro_reservoir: 0
+      # register 191: emissions.electricity_t_co2e_per_mwh.hydro_river.combustion 0 t CO2e/MWh
       hydro_river:     0
+      # register 194: emissions.electricity_t_co2e_per_mwh.marine.combustion 0 t CO2e/MWh
       marine:          0
+      # register 197: emissions.electricity_t_co2e_per_mwh.nuclear.combustion 0 t CO2e/MWh
       nuclear:         0
+      # register 200: emissions.electricity_t_co2e_per_mwh.oil.combustion 1.57 t CO2e/MWh
       oil:             1.57
+      # register 203: emissions.electricity_t_co2e_per_mwh.oil_shale.combustion 1.57 t CO2e/MWh
       oil_shale:       1.57
+      # register 206: emissions.electricity_t_co2e_per_mwh.other.combustion 1.57 t CO2e/MWh
       other:           1.57
+      # register 209: emissions.electricity_t_co2e_per_mwh.other_re.combustion 0 t CO2e/MWh
       other_re:        0
+      # register 212: emissions.electricity_t_co2e_per_mwh.peat.combustion 1.57 t CO2e/MWh
       peat:            1.57
+      # register 215: emissions.electricity_t_co2e_per_mwh.pumped_storage.combustion 0 t CO2e/MWh
       pumped_storage:  0
+      # register 218: emissions.electricity_t_co2e_per_mwh.solar.combustion 0 t CO2e/MWh
       solar:           0
+      # register 221: emissions.electricity_t_co2e_per_mwh.waste.combustion 1.57 t CO2e/MWh
       waste:           1.57
+      # register 224: emissions.electricity_t_co2e_per_mwh.wind_offshore.combustion 0 t CO2e/MWh
       wind_offshore:   0
+      # register 227: emissions.electricity_t_co2e_per_mwh.wind_onshore.combustion 0 t CO2e/MWh
       wind_onshore:    0
 
   # There is deliberately no per-area annual figure here, and none for the
