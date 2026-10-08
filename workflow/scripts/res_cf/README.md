@@ -81,8 +81,9 @@ in the root README.
 | `cache_warn_size_gb` | warn when `cutouts/cache/` grows past this (0 disables) |
 | `min_free_disk_gb` | warn before a download when free disk is below this (0 disables) |
 
-With `LCOX_STORE` set, `cutouts/cache/` and atlite's scratch `.atlite-cache/`
-live under that path, so worktrees share downloads (`common/_paths.py`).
+`cutouts/cache/` and atlite's scratch `.atlite-cache/` live in the main
+checkout, so every git worktree shares its downloads; `LCOX_STORE` points a
+checkout elsewhere at the same store (`common/_paths.py`).
 
 ## Capacity factors (d1–d5)
 

@@ -19,8 +19,8 @@ from scripts.grid import _entsoe
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# The raw cache is an expensive input, so it lives wherever the store does —
-# `LCOX_STORE` points every worktree at one copy (see workflow/common/_paths.py).
+# The raw cache is an expensive input, so it lives wherever the store does — the
+# main checkout, shared by every worktree (see workflow/common/_paths.py).
 RAW_CACHE = DATA / "entsoe_cache"
 AREA = "DE_LU"
 MONTHS = [f"2023-{month:02d}" for month in range(1, 13)]
