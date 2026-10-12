@@ -31,15 +31,11 @@ scenarios_df = pd.read_csv(config["inputs"]["scenarios"], comment="#", dtype=str
 runs_df = scenarios_df.drop_duplicates(["scenario", "run"])
 SCENARIOS = runs_df["scenario"].unique()
 
-# The areas make_area_geometry can build. It reads Natural Earth Admin 0, which
-# is countries only, so a zone's geometry is a committed source file instead
-# (issue #64) — constraining the rule keeps it from claiming one and rebuilding
-# it as the whole country the next time the Admin 0 zip looks newer. The demo's
-# areas ship their own geometry too.
+# The areas make_area_geometry builds: every registered area except the demo's,
+# whose geometry ships with the repository so the demo runs without the Natural
+# Earth zips.
 areas_df = pd.DataFrame.from_dict(config["areas"], orient="index")
-COUNTRY_AREAS = "|".join(
-    areas_df.query("demo != True").index.difference(areas_df["zones"].explode().dropna())
-)
+BUILT_AREAS = "|".join(areas_df.query("demo != True").index)
 
 
 include: "rules/_optional_shim.smk"

@@ -34,7 +34,7 @@ zips that the repository does not ship.
 - **Onshore** (`{AREA}_geo.parquet`): the committed ones are all sub-national —
   the NEM regions (and `DEMO`, a copy of Victoria's), Canadian provinces and
   Brazilian submarkets, dissolved from Natural Earth 1:10m Admin 1 states and
-  provinces (`scratch/cut_canada_provinces.py`, `scratch/cut_brazil_submarkets.py`).
+  provinces by `make_area_geometry` from each area's `admin1_names`.
   Natural Earth is [public domain](https://www.naturalearthdata.com/about/terms-of-use/),
   so no credit is required, but it is given here anyway.
 - **Offshore** (`{AREA}_offshore_geo.parquet`): the area's EEZ, minus the onshore

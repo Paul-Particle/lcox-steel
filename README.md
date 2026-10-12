@@ -203,6 +203,21 @@ Choose "World EEZ v12 (2023)" → Shapefile. Save as
 https://www.naturalearthdata.com/downloads/110m-cultural-vectors/. Save as
 `data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip`.
 
+**Natural Earth 1:10m Admin-1 states and provinces** *(for sub-national areas —
+the NEM regions, Brazil's submarkets, Alberta and Ontario — whose geometry is the
+dissolve of the states their `admin1_names` list; Admin 1 is not published at
+1:110m)* — https://www.naturalearthdata.com/downloads/10m-cultural-vectors/. Save as
+`data/shapes/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.zip`,
+or fetch directly:
+
+```bash
+curl -sSL --create-dirs -o data/shapes/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.zip \
+  https://naturalearth.s3.amazonaws.com/10m_cultural/ne_10m_admin_1_states_provinces.zip
+```
+
+Those areas' geometries are also committed under `resources/shapes/`, so without
+this zip the workflow uses them as they are.
+
 **Natural Earth 1:10m land** *(only for `res_cf.eligibility_source: availabilitymatrix`
 — the finer-coastline land-sea mask; the default `indicatormatrix` does not need it)* —
 https://www.naturalearthdata.com/downloads/10m-physical-vectors/. Save as
@@ -214,7 +229,8 @@ curl -sSL -o data/shapes/ne_10m_land/ne_10m_land.zip \
 ```
 
 ```bash
-mkdir -p data/shapes/offshore_zones data/shapes/ne_110m_admin_0_countries data/shapes/ne_10m_land
+mkdir -p data/shapes/offshore_zones data/shapes/ne_110m_admin_0_countries \
+  data/shapes/ne_10m_admin_1_states_provinces data/shapes/ne_10m_land
 # then drop the ZIPs in with the names above
 ```
 
@@ -321,7 +337,11 @@ rm -rf data/entsoe_cache/*/2024-12       # one month, all areas
 
 The `res_cf` chain is `make_area_geometry` → `make_offshore_geometry` →
 `retrieve_area_cutout` → `area_average`. The `{tech}` wildcard is
-`wind-onshore`, `wind-offshore`, or `solar`.
+`wind-onshore`, `wind-offshore`, or `solar`. `make_area_geometry` builds an
+area's land as its Natural Earth Admin 0 country (by `iso3`), or, for an area
+whose registry entry lists `admin1_names`, as the dissolve of those Admin 1
+states or provinces — that is how a NEM region or a Brazilian submarket gets its
+outline.
 
 > [!NOTE]
 > **Cutout bounds = land ∪ offshore.** `download_cutout` reads the pre-built

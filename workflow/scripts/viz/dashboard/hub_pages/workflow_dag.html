@@ -320,7 +320,7 @@
   const NODES = [
     // sources (row 0)
     { id:"ne_zip",   group:"src", x:150,  y:60, name:"Natural Earth", kick:"SOURCE · SHAPES",
-      title:"data/shapes/ne_110m_admin_0_countries", body:"Natural Earth admin-0 country polygons (zip).\nInput to make_area_geometry, which is constrained to\ntop-level areas — Admin 0 is countries only, so a market\nzone's geometry is a committed source file (issue #64)." },
+      title:"data/shapes/ne_110m_admin_0_countries, ne_10m_admin_1_states_provinces", body:"Natural Earth admin-0 country and admin-1 state polygons (zips).\nInput to make_area_geometry: a country by ISO3, or a\nsub-national area as the dissolve of its admin1_names." },
     { id:"eez_zip",  group:"src", x:330,  y:60, name:"EEZ v12", kick:"SOURCE · SHAPES",
       title:"data/shapes/offshore_zones/eez_v12.zip", body:"Marine Exclusive Economic Zones v12 (zip).\nInput to make_offshore_geometry." },
     { id:"era5",     group:"src", x:510,  y:60, name:"ERA5 / CDS", kick:"SOURCE · WEATHER",

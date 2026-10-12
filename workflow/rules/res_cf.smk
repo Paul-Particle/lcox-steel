@@ -5,9 +5,15 @@ wildcard_constraints:
 
 rule make_area_geometry:
     wildcard_constraints:
-        area=COUNTRY_AREAS,
+        area=BUILT_AREAS,
     input:
-        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
+        # A sub-national area names its states/provinces under `admin1_names`
+        # and is dissolved from Admin 1; any other area is its Admin 0 country.
+        branch(
+            lookup(dpath="areas/{area}/admin1_names", within=config, default=None),
+            then="data/shapes/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.zip",
+            otherwise="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
+        ),
     output:
         "resources/shapes/{area}_geo.parquet",
     log:
@@ -19,6 +25,9 @@ rule make_area_geometry:
             dpath="areas/{area}/mainland_bbox",
             within=config,
             default=None,
+        ),
+        admin1_names=lookup(
+            dpath="areas/{area}/admin1_names", within=config, default=None
         ),
     script:
         "../scripts/res_cf/a_make_area_geometry.py"

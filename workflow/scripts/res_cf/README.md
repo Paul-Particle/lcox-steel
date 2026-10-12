@@ -31,14 +31,19 @@ code sits in `_helpers_res_cf.py` and `workflow/common/`.
 ## Geometry (a, b)
 
 **a — onshore.** Dissolves the Natural Earth 1:110m Admin 0 country whose
-`ADM0_A3`, `SOV_A3` or `ISO_A3` is `areas.<area>.iso3`. With
+`ADM0_A3`, `SOV_A3` or `ISO_A3` is `areas.<area>.iso3`. An area that lists
+`areas.<area>.admin1_names` is instead the dissolve of the Natural Earth 1:10m
+Admin 1 units of that country with those `name`s (it raises if a name matches
+none); this is how the NEM regions, Brazil's submarkets, Alberta and Ontario are
+built. With
 `areas.<area>.mainland_bbox` (`[lon_min, lon_max, lat_min, lat_max]`), only
 polygon parts whose centroid lies inside the box are kept (this is how `FRA`
 drops its overseas territories). The file holds one row, `(region, geometry)`;
 `region` is `areas.<area>.region`, the tag every later stage selects on.
 
-The rule builds top-level areas (those in no one's `zones:`). Zone geometries are
-committed under `resources/shapes/`.
+The rule builds every area except the demo's (`demo: true`), whose geometry ships
+with the repository. The sub-national geometries are committed under
+`resources/shapes/` too, so a checkout without the Admin 1 zip still has them.
 
 **b — offshore.** Takes the World EEZ v12 polygons with `ISO_TER1 == iso3` and
 `POL_TYPE == "200NM"` (joint-regime areas are excluded), dissolves them, and keeps
