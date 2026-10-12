@@ -1,6 +1,8 @@
 """Build a single country/region geometry for RES capacity factor extraction.
 
-Source: Natural Earth Admin 0 countries (1:110m).
+Source: Natural Earth Admin 1 states and provinces (1:10m) when the area lists
+`admin1_names` — the dissolve of those units of `iso3` — and Natural Earth
+Admin 0 countries (1:110m) by ISO3 otherwise.
 
 Output: resources/shapes/{area}_geo.parquet — one row, columns (region, geometry).
 If mainland_bbox is given, only polygon parts whose centroid falls inside
@@ -48,6 +50,7 @@ _AREA = "DE_LU"
 _ISO3 = "DEU"
 _REGION = "DE"
 _MAINLAND_BBOX = None
+_ADMIN1_NAMES = None
 
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     NE_SHP = Path(snakemake.input[0])
@@ -56,6 +59,7 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _ISO3 = snakemake.params.iso3
     _REGION = snakemake.params.region
     _MAINLAND_BBOX = snakemake.params.mainland_bbox
+    _ADMIN1_NAMES = snakemake.params.admin1_names
 
 
 def _one_country(world: gpd.GeoDataFrame, iso_a3: str) -> BaseGeometry:
@@ -92,15 +96,26 @@ def main() -> None:
     if not NE_SHP.exists():
         raise FileNotFoundError(
             f"Cannot find Natural Earth shapefile at: {NE_SHP}\n"
-            "Download 'Admin 0 – Countries' (1:110m) and extract into:\n"
-            "  data/shapes/ne_110m_admin_0_countries/"
+            "Download it as README 'Setup → External data files' describes."
         )
 
     OUT_PARQUET.parent.mkdir(parents=True, exist_ok=True)
 
-    world = gpd.read_file(str(NE_SHP)).to_crs(4326)
+    shapes = gpd.read_file(str(NE_SHP)).to_crs(4326)
 
-    geom = _one_country(world, _ISO3)
+    if _ADMIN1_NAMES:
+        # Names repeat across countries (Victoria, Distrito Federal), so select
+        # within the country first.
+        selected_units = shapes.loc[
+            (shapes["adm0_a3"] == _ISO3) & shapes["name"].isin(_ADMIN1_NAMES)
+        ]
+        missing_names = sorted(set(_ADMIN1_NAMES) - set(selected_units["name"]))
+        if missing_names:
+            raise ValueError(f"{_AREA}: no Admin 1 unit of {_ISO3} is named {missing_names}.")
+        geom = selected_units.geometry.union_all()
+    else:
+        geom = _one_country(shapes, _ISO3)
+
     if _MAINLAND_BBOX is not None:
         geom = restrict_to_bbox(geom, _MAINLAND_BBOX)
 

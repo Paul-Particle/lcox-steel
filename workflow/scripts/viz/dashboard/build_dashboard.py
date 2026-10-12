@@ -89,8 +89,7 @@ CF_NAMES = {
 }
 # Zero-fossil routes only. MIX-DRI-EAF burns natural gas (optimiser picks the H2/gas
 # blend), so it is a transitional route, not clean; NG-DRI is the fossil benchmark.
-# Route ids as common/_runs.py spells them. h2-only is absent on purpose: it
-# makes hydrogen, so it has no cost of steel to compare.
+# Route ids as the scenario tables spell them.
 CLEAN_ROUTES = ["h2-dri-eaf", "h2-dri-eaf-export",
                 "moe-eaf", "moe-eaf-export",
                 "ew-eaf", "ew-eaf-export"]
@@ -487,8 +486,6 @@ def build_payload(report_paths):
         labels = run_labels(df)
         for idx, row in df.iterrows():
             label = labels[idx]
-            if label not in lcos_df.index:   # no LCOS (h2-only) — nothing to compare
-                continue
             axes = _axes(row)
             geo, year, grid = axes["geo"], axes["year"], axes["grid"]
             geos.add(geo)
@@ -543,8 +540,7 @@ def build_payload(report_paths):
     }
     if not cases:
         raise ValueError(
-            "no run with a cost of steel in any report — the page compares steel "
-            "routes, and h2-only produces hydrogen"
+            "no run in any report"
         )
     axis_options["default_view"] = _default_view(
         cases, baseline, axis_options["cf_options"]

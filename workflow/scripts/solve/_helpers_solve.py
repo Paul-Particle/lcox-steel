@@ -1,8 +1,54 @@
 """Financial, sizing and config utilities for the steel model."""
 
-import numpy as np
+from pathlib import Path
 
-from common._constants import HOURS_PER_YEAR
+import numpy as np
+import pandas as pd
+
+
+def find_transport_legs(distances: dict, origin: str, destination: str, areas: dict) -> dict:
+    """A run's freight legs, km by mode: its origin country's to its destination, else the default.
+
+    A market zone ships as the country whose `zones` list it is in.
+    """
+    country = next((parent for parent, entry in areas.items() if origin in entry.get("zones", [])), origin)
+    legs = distances.get(country, {}).get(destination, distances["default"])
+    return legs
+
+
+def read_run_inputs(scenario_table: Path, scenario: str, run: str, timeseries: list) -> dict:
+    """One run's rows of its scenario table, and the part each of its input series plays.
+
+    The first area in the rows is the run's origin and the second its destination;
+    a domestic run names one area, which is both. The origin's grid series prices
+    its own imports, and the destination's prices the furnace an export melts in.
+    """
+    rows = (
+        pd.read_csv(scenario_table, comment="#", dtype=str)
+        .query("scenario == @scenario and run == @run")
+    )
+    areas = list(dict.fromkeys(rows["area"]))
+    if len(areas) > 2:
+        raise ValueError(f"{scenario}/{run} names {len(areas)} areas {areas}: "
+                         f"a run has an origin and at most one destination")
+    path_by_name = {Path(raw).name: Path(raw) for raw in timeseries}
+    rows = rows.assign(path=(
+        rows["area"] + "_" + rows["tech"] + "_" + rows["variant"] + "_"
+        + rows["start_date"] + "_" + rows["end_date"] + ".parquet"
+    ).map(path_by_name))
+    origin, destination = areas[0], areas[-1]
+    grid_rows = rows[rows["tech"] == "grid"]
+    run_inputs = {
+        "rows": rows,
+        "origin": origin,
+        "destination": destination,
+        "route": rows["route"].iloc[0],
+        "cf_paths": list(rows.loc[rows["tech"] != "grid", "path"]),
+        "grid_path": next(iter(grid_rows.loc[grid_rows["area"] == origin, "path"]), None),
+        "destination_path": (next(iter(grid_rows.loc[grid_rows["area"] == destination, "path"]), None)
+                             if destination != origin else None),
+    }
+    return run_inputs
 
 
 def deep_merge(base: dict, overlay: dict) -> dict:
@@ -28,32 +74,6 @@ def annuity_factor(wacc: float, lifetime_years: float) -> float:
     return (wacc * (1.0 + wacc) ** lifetime_years) / (
         (1.0 + wacc) ** lifetime_years - 1.0
     )
-
-
-def dri_to_el_mw(
-    dri_mt_per_year: float,
-    h2_intensity_kg_per_t_dri: float,
-    efficiency_kwh_per_kg: float,
-    availability_target: float,
-) -> float:
-    """Size the electrolyser (MW electricity input) to supply a DRI plant continuously.
-
-    `efficiency_kwh_per_kg` already encodes MWh-electricity per kg-H2, so the H2
-    LHV doesn't appear here. `availability_target` is the fraction of the year the
-    plant runs (e.g. 1.0). Returns the nameplate MW of electricity input needed.
-    """
-    if dri_mt_per_year <= 0:
-        raise ValueError("dri_mt_per_year must be > 0")
-    if h2_intensity_kg_per_t_dri <= 0:
-        raise ValueError("h2_intensity_kg_per_t_dri must be > 0")
-    if efficiency_kwh_per_kg <= 0:
-        raise ValueError("efficiency_kwh_per_kg must be > 0")
-    if not (0 < availability_target <= 1.0):
-        raise ValueError("availability_target must be in (0, 1]")
-
-    h2_kg_per_year = dri_mt_per_year * 1_000_000.0 * h2_intensity_kg_per_t_dri
-    elec_mwh_per_year = h2_kg_per_year * efficiency_kwh_per_kg / 1000.0
-    return elec_mwh_per_year / (HOURS_PER_YEAR * availability_target)
 
 
 def haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:

@@ -4,7 +4,7 @@ The multi-site analogue of plot_capacity_bars: where that chart puts scenarios o
 the x-axis, this puts the candidate *sites* of a single multi-site scenario on the
 x-axis (only those the LP actually built), with grouped bars for generation MW
 (coloured by tech) and the site's HVDC link MW. Read straight from the solved
-network (results/{scenario}/{area}_{route}_{start}_{end}.nc).
+network (results/{scenario}/.runs/{scenario}_{run}/outputs/{scenario}_{run}.nc).
 
 Snakemake rule: plot_site_capacity_bars (in viz.smk).
 """
@@ -99,17 +99,16 @@ def plot(sites: pd.DataFrame, out: Path, scenario: str, run: str) -> None:
 
 def main() -> None:
     """Load the solved network and render its per-site capacity bars."""
-    route = snakemake.wildcards.route
-    area = snakemake.wildcards.area
+    run = snakemake.wildcards.run
     scenario = snakemake.wildcards.scenario
     n = pypsa.Network()
     n.import_from_netcdf(snakemake.input.network)
     if int((n.buses.carrier == "AC").sum()) <= 1:
         raise ValueError(
-            f"{scenario}/{area} {route} is a single-site network — plot_site_capacity_bars "
+            f"{scenario}/{run} is a single-site network — plot_site_capacity_bars "
             "is only meaningful for multi-site scenarios (those with a sites overlay)."
         )
-    plot(build_site_table(n), Path(snakemake.output.png), scenario, f"{area} {route}")
+    plot(build_site_table(n), Path(snakemake.output.png), scenario, run)
 
 
 if __name__ == "__main__":

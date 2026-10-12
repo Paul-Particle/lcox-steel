@@ -1,52 +1,59 @@
 # lcox-steel: Levelized Cost of Green Steel
 
 `lcox-steel` calculates levelized costs for green-steel plants powered by
-captive renewables, a grid connection, or both — the levelized cost of steel
-(LCOS) for full process routes, or the levelized cost of hydrogen (LCOH) for
-the pure hydrogen-supply model. It couples three data pipelines and an
+captive renewables, a grid connection, or both: the levelized cost of steel
+(LCOS) of a process route. It couples three data pipelines and an
 optimisation model into one Snakemake workflow:
 
 - **`res_cf`** — hourly renewable capacity factors from ERA5 reanalysis (via atlite).
 - **`grid`** — hourly electricity market data from ENTSO-E (Europe) and NEM (Australia).
 - **`solve`** — a PyPSA investment model that sizes generation, storage, and one
   steelmaking process route to meet a constant demand at least cost. One solve
-  is one route, named by the `route` column of `config/scenarios.csv`:
-  - `h2-only` — electrolyser meets a flat H2 demand (the original LCOH model)
+  is one run, building one route named by the `route` column of its scenario
+  table:
   - `h2-dri-eaf` — electrolyser → H2 → DRI shaft → sponge iron (storable) → EAF → steel
   - `ng-dri-eaf` — fossil benchmark: natural-gas DRI (flat gas price, optional CO2 price) → EAF → steel
   - `mix-dri-eaf` — H2 and NG DRI shafts side by side; the optimiser picks the split
   - `moe-eaf` — molten oxide electrolysis → liquid iron → EAF → steel
   - `ew-eaf` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
 
-  `all-routes` in that column means every route above. The registry lives in
-  `workflow/common/_runs.py`; `*-export` ids are reserved for the trade
-  scenarios and are not implemented.
-- **`viz`** — a per-scenario LCOH/LCOS report plus Plotly figures, one column per run.
+  Every route also has an `-export` twin that makes its iron at the run's
+  origin and melts it at its destination. A route without the suffix makes its
+  steel at the origin and, if its run has a destination elsewhere, ships the
+  steel there. The route ids live in `workflow/scripts/solve/build_network.py`.
+- **`viz`** — an LCOS report per run and per scenario, plus Plotly figures.
 
 ## Architecture at a glance
 
-Everything is a Snakemake workflow keyed off one table, `config/scenarios.csv`.
-A scenario name is an **umbrella label** and means nothing to the code — any
-string works. What identifies one network is the **run key**: scenario, area,
-date range, route. Every part of it but the name comes from the rows filed under
-that name, so **adding a run is a CSV edit, not a Snakefile edit**.
+Everything is a Snakemake workflow keyed off a scenario table, one row per input
+series of a run. The default table is generated from the input workbook,
+`data/assumptions/Assumptions_yaml_inputs.xlsx`, by `python -m
+common.generate_inputs`; the demo's is kept by hand (see [Inputs](#inputs)).
+
+A **scenario** is one row of the workbook — one origin, one destination, one
+route, one power supply, one renewable setup, one date range — together with its
+overlay. It is usually one **run**, one solved network. An area on the grid that
+trades through market zones (Australia through its NEM regions) is run once per
+zone, and the cheapest zone stands for the scenario. Nothing in the workflow reads
+meaning out of a scenario or run name, so **adding a run is a table edit, not a
+Snakefile edit**.
 
 ```
-config/scenarios.csv ──► res_cf ─┬─► resources/timeseries/*.parquet  (hourly CF) ─┐
-                     └─► grid   ─┘                        (and grid €/MWh)        │
-                                                                                  ▼
-                                                       solve (PyPSA optimise) ──► results/{scenario}/{area}_{route}_{dates}.nc
-                                                                                  │
-                                                          viz ◄───────────────────┘
-                                     results/report_{scenario}.csv + plots/*.png|html + html/*.html
+scenario table ──► res_cf ─┬─► resources/timeseries/*.parquet  (hourly CF) ─┐
+               └─► grid   ─┘                        (and grid €/MWh)        │
+                                                                            ▼
+                         solve (PyPSA optimise) ──► results/{scenario}/.runs/{scenario}_{run}/outputs/*.nc
+                                                                            │
+                                                    viz ◄───────────────────┘
+       results/{scenario}/report_{scenario}.csv  (the run that stands for the scenario)
+       results/{scenario}/.runs/                  (every run, complete)
 ```
 
-A scenario is a name plus its optional `config/overlays/{scenario}.yaml`
-overlay. Its rows group by `(area, start_date, end_date)`; each group draws one
-or more capacity-factor series (one per RES tech) and/or a single grid price
-series, and is solved once per route. `viz` compiles the report and charts, one
-column per run — so a scenario spanning several areas and years produces the
-cross-country comparison table directly.
+A run's rows name its input series: the origin's renewables, and its grid series
+if it is on the grid, then the destination market's grid series if it exports.
+The first area in a run's rows is its origin and the second its destination.
+A run is named after its origin, and an export's after its destination too
+(`AUS-DEU`, or `NSW1-DEU` for one of Australia's market zones).
 
 ## Project structure
 
@@ -55,11 +62,10 @@ lcox-steel/
 ├── workflow/                       # Snakemake workflow (standard layout)
 │   ├── Snakefile                   # configfile + includes + rule all
 │   ├── rules/
-│   │   ├── _optional_shim.smk      # local stand-in for Snakemake's optional() (not shipped yet)
 │   │   ├── grid.smk                # one retrieval rule, dispatching on the area's market
 │   │   ├── res_cf.smk              # atlite CF pipeline (shapes → cutout → CF series)
-│   │   ├── solve.smk               # PyPSA optimisation rule
-│   │   └── viz.smk                 # compile_report + plot rules
+│   │   ├── solve.smk               # PyPSA optimisation rule, one job per run
+│   │   └── viz.smk                 # compile_report, pick_best_run + plot rules
 │   ├── scripts/
 │   │   ├── grid/                   # ENTSO-E + NEM download/process
 │   │   │   ├── retrieve_grid_data.py # rule entrypoint: dispatches on the area's market
@@ -72,6 +78,7 @@ lcox-steel/
 │   │   ├── res_cf/                 # atlite capacity-factor pipeline (numbered by stage)
 │   │   │   ├── a_make_area_geometry.py        # onshore area geometry (GeoParquet)
 │   │   │   ├── b_make_offshore_geometry.py    # EEZ-clipped offshore geometry
+│   │   │   ├── b2_make_zone_offshore_geometry.py # a sub-national area's share of it, by nearest coast
 │   │   │   ├── c_retrieve_area_cutout.py      # ERA5 cutout (honours `_backup.nc`; see below)
 │   │   │   ├── d1_area_average.py             # area-average hourly CF per tech
 │   │   │   ├── d2_bestsite_p95.py             # best-site P95 + anchored RES-mix CF
@@ -85,18 +92,20 @@ lcox-steel/
 │   │   ├── solve/                  # PyPSA investment model
 │   │   │   ├── build_network.py    # network construction (pure, importable)
 │   │   │   ├── solve_network.py    # rule entrypoint: load → build → solve → write
-│   │   │   └── _helpers_solve.py   # annuity factor + electrolyser sizing
+│   │   │   └── _helpers_solve.py   # annuity factor, electrolyser sizing, a run's inputs
 │   │   └── viz/                    # reporting + Plotly figures
-│   │       ├── compile_report.py   # post-solve cost accounting → per-scenario CSV
+│   │       ├── compile_report.py   # post-solve cost accounting → one run's report
+│   │       ├── pick_best_run.py    # copies the run that stands for a scenario up into it
 │   │       ├── outputs/            # result plots: capacity bars, LCOS breakdown, per-site capacity
 │   │       ├── diagnostics/        # checks: CF heatmap, siting map, DE price vs residual demand
 │   │       ├── dashboard/          # HTML dashboard builders + cost taxonomy
 │   │       │   ├── templates/      # the pages' HTML templates
 │   │       │   └── hub_pages/      # static hub pages (network schematic, workflow DAG)
-│   │       ├── _run_display.py     # run labels + best-zone filter, shared by the plots
+│   │       ├── _run_display.py     # run labels, shared by the plots
 │   │       └── style.py            # FCA Plotly template + colormap
 │   └── common/                     # shared, cross-pipeline Python
-│       ├── _runs.py                # route/area registries; expands scenarios.csv into runs
+│       ├── generate_inputs.py      # writes the scenario table, base and overlays from the input workbook
+│       ├── _workbook_translation.py # the workbook's keys and vocabulary → the model's
 │       ├── _report_schema.py       # the report's fields + the only reader/writer of its layout
 │       ├── _provenance.py          # content digests of a solve's inputs (inputs_hash)
 │       ├── _constants.py           # physical constants (e.g. H2 LHV)
@@ -104,10 +113,12 @@ lcox-steel/
 │       ├── _paths.py               # repo-relative path roots
 │       └── _stubs.py               # snakemake object stub for linters/IDEs
 ├── config/
-│   ├── config.yaml                 # pipeline knobs (logging, entsoe, nem, res_cf)
-│   ├── assumptions.yaml            # base techno-economics (CAPEX, OPEX, WACC, lifetimes)
-│   ├── overlays/{scenario}.yaml    # optional per-scenario overlay (presence = on)
-│   └── scenarios.csv               # one row per (run, tech) input
+│   ├── config.yaml                 # pipeline knobs, the inputs to run, area registry
+│   ├── demo.yaml                   # runs the template instead: `--configfile config/demo.yaml`
+│   ├── .template.yaml              # complete assumptions: the demo's base, and the generator's
+│   ├── .template.csv               # the demo's scenario table
+│   ├── overlays/{scenario}.yaml    # optional per-scenario overlay (presence = on); generated ones gitignored
+│   └── generated/                  # base assumptions + scenario table from the workbook (gitignored)
 ├── profiles/
 │   ├── default/config.yaml         # local-run defaults (keep-going, quiet, per-rule logs)
 │   └── slurm/config.yaml.template  # HPC executor placeholder — copy & fill in
@@ -192,6 +203,21 @@ Choose "World EEZ v12 (2023)" → Shapefile. Save as
 https://www.naturalearthdata.com/downloads/110m-cultural-vectors/. Save as
 `data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip`.
 
+**Natural Earth 1:10m Admin-1 states and provinces** *(for sub-national areas —
+the NEM regions, Brazil's submarkets, Alberta and Ontario — whose geometry is the
+dissolve of the states their `admin1_names` list; Admin 1 is not published at
+1:110m)* — https://www.naturalearthdata.com/downloads/10m-cultural-vectors/. Save as
+`data/shapes/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.zip`,
+or fetch directly:
+
+```bash
+curl -sSL --create-dirs -o data/shapes/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.zip \
+  https://naturalearth.s3.amazonaws.com/10m_cultural/ne_10m_admin_1_states_provinces.zip
+```
+
+Those areas' geometries are also committed under `resources/shapes/`, so without
+this zip the workflow uses them as they are.
+
 **Natural Earth 1:10m land** *(only for `res_cf.eligibility_source: availabilitymatrix`
 — the finer-coastline land-sea mask; the default `indicatormatrix` does not need it)* —
 https://www.naturalearthdata.com/downloads/10m-physical-vectors/. Save as
@@ -203,7 +229,8 @@ curl -sSL -o data/shapes/ne_10m_land/ne_10m_land.zip \
 ```
 
 ```bash
-mkdir -p data/shapes/offshore_zones data/shapes/ne_110m_admin_0_countries data/shapes/ne_10m_land
+mkdir -p data/shapes/offshore_zones data/shapes/ne_110m_admin_0_countries \
+  data/shapes/ne_10m_admin_1_states_provinces data/shapes/ne_10m_land
 # then drop the ZIPs in with the names above
 ```
 
@@ -243,37 +270,39 @@ Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` per th
 
 ### Quick start — the demo (no credentials, no downloads)
 
-The default target is a small, self-contained **demo** that runs after a fresh
-clone with **no CDS download, no EEZ/Natural-Earth zips, and no API keys**. It
-ships a pre-sliced Victoria (Australia) cutout at 0.5° for its own `DEMO` area,
-plus that area's geometry parquets, and exercises the best-site (`d2`) and anchor-colocation (`d3`)
-capacity-factor science through a `solve` to a `viz` report. Its export twins melt
-their iron in `ES_SYN`, a made-up Spain-like market (its overlay sets
-`destination.area`), so their destination figures are illustrative only:
+`config/demo.yaml` runs the hand-kept template instead, a small self-contained
+**demo** that runs after a fresh clone with **no CDS download, no
+EEZ/Natural-Earth zips, and no API keys**. It ships a pre-sliced Victoria
+(Australia) cutout at 0.5° for its own `DEMO` area, plus that area's geometry
+parquets, and takes the best-site (`d2`) capacity-factor science through a
+`solve` to a `viz` report. Its scenarios build `h2-dri-eaf` and `moe-eaf`, each
+at home and as the export twin, which melts its iron in `ES_SYN`, a made-up
+Spain-like market, and `moe-eaf` once more shipping its steel there, so their
+destination figures are illustrative only:
 
 ```bash
-snakemake --profile profiles/default --cores 4        # builds the demo scenarios
+snakemake --configfile config/demo.yaml --profile profiles/default --cores 4
 ```
 
-The demo set is `config.yaml`'s `demo_scenarios`. Outputs land at
-`results/report_{scenario}.csv` and
-`results/plots/capacity_bars/{scenario}.png`, in a few minutes on a laptop.
+Outputs land at `results/{scenario}/report_{scenario}.csv`, in a few minutes on a
+laptop.
 
-### The real scenarios
+### The workbook scenarios
 
-`config/scenarios.csv` drives the full DAG. Building every real scenario needs the
-external data and credentials described under [Setup](#setup) — ERA5 cutouts via
-CDS, the EEZ/NE zips, and ENTSO-E or NEM access for grid-connected scenarios and
-for any scenario that builds an `-export` route, whose furnace stands in the
-destination market and prices its power there.
-Target them explicitly with `snakemake all`:
+The default target builds every scenario generated from the input workbook. Write
+them first; without `config/generated/`, Snakemake stops on the missing file:
 
 ```bash
-snakemake -n all                                              # preview the full DAG
-snakemake all --profile profiles/default --cores 4            # build every scenario
-snakemake all --profile profiles/default --cores 4 --verbose  # loud
+python -m common.generate_inputs                          # writes config/generated/
+snakemake -n                                              # preview the full DAG
+snakemake --profile profiles/default --cores 4            # build every scenario
+snakemake --profile profiles/default --cores 4 --verbose  # loud
 ```
 
+Building them needs the external data and credentials described under
+[Setup](#setup) — ERA5 cutouts via CDS, the EEZ/NE zips, and ENTSO-E, NEM or ONS
+access for grid-connected scenarios and for any scenario that builds an `-export`
+route, whose furnace stands in the destination market and prices its power there.
 Drop `--profile profiles/default` for the bare invocation.
 
 ### Targeting one output
@@ -288,8 +317,8 @@ snakemake resources/timeseries/VIC1_grid_emissions_20250101_20251231.parquet --c
 # res_cf — wind-onshore CF for Germany, 2023:
 snakemake resources/timeseries/DEU_wind-onshore_area-average_20250101_20251231.parquet --cores 4
 
-# solve — one network (one route):
-snakemake results/standard-islanded/DEU_h2-dri-eaf_20250101_20251231.nc --cores 4
+# solve — one run, results/{scenario}/.runs/{scenario}_{run}/outputs/{scenario}_{run}.nc:
+snakemake results/demo-moe-eaf/.runs/demo-moe-eaf_DEMO/outputs/demo-moe-eaf_DEMO.nc --configfile config/demo.yaml --cores 4
 ```
 
 The grid rule reads a per-month raw cache — `data/entsoe_cache/` for ENTSO-E,
@@ -309,31 +338,37 @@ rm -rf data/entsoe_cache/*/2024-12       # one month, all areas
 
 The `res_cf` chain is `make_area_geometry` → `make_offshore_geometry` →
 `retrieve_area_cutout` → `area_average`. The `{tech}` wildcard is
-`wind-onshore`, `wind-offshore`, or `solar`.
+`wind-onshore`, `wind-offshore`, or `solar`. `make_area_geometry` builds an
+area's land as its Natural Earth Admin 0 country (by `iso3`), or, for an area
+whose registry entry lists `admin1_names`, as the dissolve of those Admin 1
+states or provinces — that is how a NEM region or a Brazilian submarket gets its
+outline. Such an area's offshore geometry comes from `make_zone_offshore_geometry`
+instead: its country's offshore area split among the country's Admin 1 units by
+nearest coast, so neighbouring areas never share a cell of sea.
 
 > [!NOTE]
-> **Cutout bounds = land ∪ offshore.** `download_cutout` reads the pre-built
+> **Cutout bounds = land ∪ offshore.** `retrieve_area_cutout` reads the pre-built
 > `{area}_geo.parquet` and `{area}_offshore_geo.parquet`, unions them, and
 > takes the bounding box padded by `res_cf.cutout.bbox_pad_deg`. Unioning the
 > offshore zone in matters: it can reach `res_cf.offshore_max_distance_km`
 > (~200 km) from the coast — well beyond a land-only bbox + 1° pad — so without
 > it the offshore-wind cells get clipped out of the cutout. The mainland_bbox
-> filter and EEZ clip are already applied upstream by `build_regions` /
-> `build_offshore_regions`, so the geometry is computed once.
+> filter and EEZ clip are already applied upstream by `make_area_geometry` /
+> `make_offshore_geometry` / `make_zone_offshore_geometry`, so the geometry is
+> computed once. An area's `cutout_bbox` replaces the box altogether.
 
 ### Naming convention
 
 Five identifiers — **route, tech, variant, area, dates** — have one spelling
-each, set in `config/scenarios.csv`, and every layer below spells them the same:
+each, set in the scenario tables, and every layer below spells them the same:
 the assumptions blocks, the Snakemake wildcards and rule names, the script
 filenames, and the PyPSA component names.
 
 Name scenarios with **dashes** between words (`VIC-2025-solar-ew`,
 `DE-2023-grid-p95`), not underscores. The underscore is the field separator in
-the filenames these names compose into (`assumptions_<scenario>.yaml`,
-`logs/<scenario>_<route>.log`), so reserving it keeps the boundaries legible at a
-glance. Route, tech and variant follow the same rule (`moe-eaf`, `wind-onshore`,
-`area-average`, `tilt-mix-n7`).
+the names these compose into (a run's folder is `<scenario>_<run>`), so reserving
+it keeps the boundaries legible at a glance. Route, tech and variant follow the
+same rule (`moe-eaf`, `wind-onshore`, `area-average`, `tilt-mix-n7`).
 
 The **`area`** column is the exception — it keeps underscores, because official
 market-zone codes use them (`DE_LU`). The registry is the top-level `areas:`
@@ -341,70 +376,89 @@ block in `config/config.yaml`, and nothing infers anything from the shape of a
 code: what an area can be used for follows from its entry.
 
 An area is a country (`DEU`, `FRA`, `ESP`, `AUS`, `BRA`) or a sub-national market
-zone (`VIC1`). Write either — a market's own code is an alias for the area it
-prices, so `DE_LU`, `FR` and `ES` resolve to `DEU`, `FRA` and `ESP`. The CSV
-prefers the three-letter form.
+zone (`VIC1`), written as its registry key.
 
-`all-areas` starts from every area that is not someone's zone. A scenario with a
-`tech=grid` row then needs prices, so an area with no market of its own is
-replaced by the `zones:` through which it trades — naming Australia in a grid
-scenario yields its NEM regions separately, while an islanded scenario keeps the
-whole country. An area with neither market nor zones (Brazil, for now) drops out
-of grid scenarios and stays in islanded ones.
+On the grid, an area with no market of its own trades through the `zones:` its
+entry lists, so input generation runs a grid scenario there once per zone —
+Australia on the grid yields its NEM regions separately, while an islanded
+scenario keeps the whole country.
 
-## Scenarios
+## Inputs
 
-The scenarios in `config/scenarios.csv` exist to exercise the workflow, not to
-answer anything — like the numbers in `config/assumptions.yaml`, they are
-placeholders. There are three:
+`inputs` in `config/config.yaml` names the base assumptions and the scenario table
+`snakemake` runs; a scenario's overlay, if it has one, is
+`config/overlays/{scenario}.yaml`. There are two sets of them:
 
-| scenario | covers |
-|---|---|
-| `standard-islanded` | every area, all routes, 2025, dedicated renewables only |
-| `standard-grid` | every area that has prices (Australia via its NEM zones), all routes, 2025 |
-| `sensitivity-test` | the `DEMO` area (Victoria at 0.5°) only, routes named explicitly — a machinery test |
+| | base assumptions | scenario table | kept by |
+|---|---|---|---|
+| default | `config/generated/assumptions.yaml` | `config/generated/scenarios.csv` | `python -m common.generate_inputs`; gitignored |
+| `--configfile config/demo.yaml` | `config/.template.yaml` | `config/.template.csv` | hand |
 
-`sensitivity-test` is the default `snakemake` target: it sits on the shipped
-Victoria cutout, so it runs after a fresh clone with no CDS download. Its single
-overlay carries a cheap salt-cavern H2 store and a lower MOE turndown, and its
-two routes each read one of them — which is why it names both routes rather than
-using `all-routes`, since a route that reads neither would just re-solve the base
-case under a sensitivity's name.
+The overlays of both live side by side in `config/overlays/`. The generator's
+start with a `# GENERATED` line, and it only ever writes over or removes those;
+the hand-kept ones are committed with `git add -f`, as the directory is otherwise
+gitignored. `python -m common.generate_inputs --include-template` adds the
+template's scenarios to the generated table, so one run builds both, on the
+generated base.
 
-### Reporting across a country's zones
+Like the numbers in the assumptions, the scenarios are placeholders that exercise
+the machinery, not a study.
 
-A country that reaches its market through zones is solved once per zone, so
-several report rows describe the same place. Each route then picks the zone where
-that route came out cheapest — Australia's `moe-eaf` is reported from whichever
-NEM region made steel cheapest with `moe-eaf` — and each date range is ranked on
-its own.
+### From the input workbook
 
-`report.best_zone_by` in `config/config.yaml` names the ranking column, defaulting
-to `lco_output`: the levelised cost of whatever the run produces, steel or (for
-`h2-only`) hydrogen, with `lco_output_unit` alongside so a run is readable on its
-own. Set it to null to rank nothing.
+`python -m common.generate_inputs [WORKBOOK] [--include-template] [--verbose]`
+reads the workbook's `assumptions_inputs` and `scenarios_clean` tabs and writes:
 
-The choice is made **before** the report, so `results/report_{scenario}.csv`
-stands on its own: one column per reported place, and nothing about zones left
-for a reader to interpret. Everything downstream — the plots here, and any
-notebook or dashboard reading the CSV — takes the runs as given.
+- the base assumptions are `config/.template.yaml` with every value the workbook
+  holds replaced by the workbook's, converted from USD to EUR;
+- every row of `scenarios_clean` becomes a scenario named by its `scenario_id`,
+  run once per market zone where the row puts such an area on the grid;
+- a scenario's overlay carries what differs from the base: the origin's and the
+  destination's WACC from the workbook's EU and non-EU rows, and the sensitivity
+  overrides the row names (`"finance.default_wacc": "+30%"` scales both WACCs).
+  A scenario that differs in nothing gets no overlay.
 
-The beaten zones are not lost, because what they cost is itself a result and a
-dropped run costs a re-solve to recover. They go to
-`results/.report_{scenario}_diag.csv`, the same table with every zone and the
-`best_in_country` field that separates them. It is hidden because it answers a
-follow-up question rather than being the thing to read. Runs are numbered within
-each file, so `sensitivity-test_2` in one is not the run of that name in the
-other — the identity rows at the top say which is which.
+It stops before writing anything if a row cannot be translated, listing each
+problem with the workbook rows that have it. How the workbook names keys and
+scenario vocabulary, as against the model, is in
+`workflow/common/_workbook_translation.py`; `--verbose` lists the backstop values
+the template supplies and the workbook rows left unused.
+
+### The demo
+
+The template's five scenarios, `demo-h2-dri-eaf`, `demo-moe-eaf`, their
+`-export` twins and `demo-moe-eaf-ship`, which makes its steel at home and ships
+it to `ES_SYN`, sit on the shipped Victoria cutout, so they run after a fresh
+clone with no CDS download. Each overlay moves one value its route reads — a
+salt-cavern H2 store for the H2 routes, a lower MOE turndown for the MOE ones.
+
+### A scenario with several runs
+
+An area on the grid that trades through market zones is run once per zone.
+`report.best_run_by` in `config/config.yaml` names the field that decides which
+run stands for the scenario, defaulting to `lcos_eur_per_t`, the levelised cost
+of steel. The lowest wins, and a run without a value is never picked over one
+with it.
+
+`pick_best_run` copies the winner's report, diagnostic, network and assumptions
+up into `results/{scenario}/`, so a scenario's folder looks the same whether it
+had one run or several, and nothing about zones is left for a reader of
+`report_{scenario}.csv` to interpret. The other zones are not lost, because what
+they cost is itself a result: every run keeps its complete folder under
+`results/{scenario}/.runs/{scenario}_{run}/`, beside `runs.csv`, which lists the
+runs and says which one was picked. A scenario with one run has one entry, so
+`results/*/.runs/` is the complete record of every run solved.
 
 ## Configuration
 
 | File | Holds |
 |------|-------|
-| `config/config.yaml` | Pipeline knobs: `logging`, `entsoe` (data types), `nem` (`eur_per_aud` FX), `res_cf` (turbines, CF flags, cutout settings), `areas` (the area registry), `demo_scenarios`. |
-| `config/assumptions.yaml` | Base techno-economics: CAPEX/OPEX, lifetimes, WACC, electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and — for the export routes — where the iron is melted (`destination`) and what it costs to ship it there (`transport`). Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the CSV, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the tech wildcard. |
-| `config/overlays/{scenario}.yaml` | *Optional* per-scenario overlay — a scenario is its name plus this file. It covers every run under that name. **File presence is the toggle** (no CSV column); the `optional()` shim resolves it at job-evaluation time, and the script deep-merges it onto the base so the overlay carries only the keys it bumps. It never selects a route. Every route of the scenario shares it, so an override that only one route reads (a gas price, say) is harmless to the rest. An overlay may also move `destination.area`, the market an `-export` route melts in; because that decides which timeseries the DAG fetches, `build_destination_frame` reads it from the overlay at DAG time as well. |
-| `config/scenarios.csv` | Flat table, one row per `(run, tech)` input. Columns: `scenario, route, tech, variant, area, start_date, end_date`. Rows join into a network by `(scenario, area, start_date, end_date)`. `route` holds one route id, several separated by `|`, or `all-routes`; `area` holds one area or `all-areas`. `#` rows are planned scenarios and are not built. **The scenarios shipped are placeholders that exercise the machinery, not a study.** |
+| `config/config.yaml` | Pipeline knobs: `logging`, `inputs` (the base assumptions and scenario table to run), `entsoe` (data types), `nem` (`eur_per_aud` FX), `report` (`best_run_by`), `res_cf` (turbines, CF flags, cutout settings), `areas` (the area registry). |
+| `config/demo.yaml` | Runs the template instead: `snakemake --configfile config/demo.yaml`. |
+| `config/.template.yaml` | A complete assumptions file, every key the model reads: the demo runs on it as it stands, and `python -m common.generate_inputs [WORKBOOK]` writes `config/generated/assumptions.yaml` from it, replacing each value the input workbook, `data/assumptions/Assumptions_yaml_inputs.xlsx`, holds with the workbook's (converted from USD to EUR); the rest are backstop values, copied over as they stand. |
+| `config/generated/assumptions.yaml` | Generated from the input workbook and `config/.template.yaml`; edit those instead. Base techno-economics: CAPEX/OPEX, lifetimes, the WACC (`finance.origin_wacc` for everything up to the iron, `finance.destination_wacc` for an export route's EAF, steel store and the furnace's grid connection), electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and what freight costs (`transport`), with the legs from each origin country to each destination in `transport.distance_km` — a run looks up its own, a market zone shipping as its country, and a pair not listed gets `default`, 3141.593 km (π × 1000), a number nobody would quote, so such a run stands out. Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the scenario table, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the scenario table's `tech`. |
+| `config/overlays/{scenario}.yaml` | *Optional* per-scenario overlay, deep-merged onto the base so it carries only the keys it moves. **File presence is the toggle**: the `optional()` shim resolves it at job-evaluation time, and a scenario without one runs on the base as it stands. It never selects a route. The generator writes and removes its own (marked `# GENERATED`); the rest are kept by hand. |
+| `config/generated/scenarios.csv`, `config/.template.csv` | The scenario tables: one row per input series of a run. Columns: `scenario, run, route, tech, variant, area, start_date, end_date`. A run's rows name the origin's series first; its first area is its origin and its second its destination, and a third is an error. Route and dates are the same on every row of a run. `#` lines are comments. |
 
 ## Data formats
 
@@ -414,7 +468,7 @@ UTC hourly `DatetimeIndex`, leading `price` column (EUR/MWh). Three variants:
 | variant | columns | for |
 |---|---|---|
 | `dayahead` | `price` | a solve, and nothing else |
-| `emissions` | `price` + one per carrier, hourly | the default for grid rows — the solve buys at the price, the report weights the mix by the grid emission factors under `emissions` in `config/assumptions.yaml` |
+| `emissions` | `price` + one per carrier, hourly | the default for grid rows — the solve buys at the price, the report weights the mix by the grid emission factors under `emissions` in the assumptions |
 | `full` | all data types, native resolution | analysis; adds load, RES forecast and cross-border flows |
 
 The carrier column names are the shared vocabulary the downloaders emit
@@ -434,7 +488,7 @@ with it:
 |---|---|---|---|
 | `entsoe` | DEU, ESP, FRA | all three | yes, per carrier |
 | `nem` | the five NEM regions | all three | yes, per carrier |
-| `synthetic` | ES_SYN | `dayahead`, `emissions` | yes, made up — the demo's destination, never part of `all-areas` |
+| `synthetic` | ES_SYN | `dayahead`, `emissions` | yes, made up — the demo's destination |
 | `ons` | the four SIN submarkets | `dayahead`, `full` | **no** — the balance dataset aggregates everything thermal into one column, and no single emission factor describes gas, coal, oil, biomass and nuclear together |
 | `aeso` | AB | `dayahead` | **no** — per-carrier generation needs AESO's keyed API or its bulk metered-volume files |
 | `ieso` | ONT | `dayahead` | **no** — Ontario needs a separate XML report |
@@ -466,38 +520,40 @@ same index, **multiple columns** — one per orientation in the sweep (`solar_az
 `solar_az30`, …). `solve_network` concatenates columns from all CF inputs into one
 multi-tech frame.
 
-**Results**: `results/{scenario}/{area}_{route}_{start}_{end}.nc` is the full
-solved PyPSA network; `results/report_{scenario}.csv` (from `compile_report`)
-carries the levelised cost (LCOH for `h2-only` routes, LCOS €/t for steel routes)
-and optimal capacities, one column per run under that scenario.
+**Results**: each run's folder, `results/{scenario}/.runs/{scenario}_{run}/`,
+holds the full solved PyPSA network (`outputs/{scenario}_{run}.nc`), its report
+and diagnostic (from `compile_report`) and the assumptions it ran on. The report
+carries the levelised cost of steel (€/t) and optimal capacities. `results/{scenario}/` holds the same files of the run that
+stands for the scenario (`outputs/{scenario}.nc`, `report_{scenario}.csv`, …).
 
 ### The shape of a report
 
 **One column per run, one row per field.** There are far more fields than runs,
-so a report reads down the page and two runs sit side by side. Columns are named
-`{scenario}_{n}`, numbered within the file.
+so a report reads down the page, and reports put side by side line up. A report
+holds one run, named `{scenario}_{run}` like its folder.
 
 ```
-field,sensitivity-test_1,sensitivity-test_2
-scenario,sensitivity-test,sensitivity-test
-area,VIC1,VIC1
-route,h2-dri-eaf,moe-eaf
+field,demo-moe-eaf-export_DEMO-ES_SYN
+scenario,demo-moe-eaf-export
+area,DEMO
+route,moe-eaf-export
 ...
-lcos_eur_per_t,606.78,914.11
+lcos_eur_per_t,914.11
 ```
 
-The **identity fields lead**: the run key (`scenario, area, country, route,
-start_date, end_date`), one `{tech}_variant` row per input series
-(`solar_variant: bestsite-p95`, `wind_onshore_variant: bestsite-p95`), the unit its
-`lco_output` is in, and the `inputs_hash`. Everything below them is numbers, so a
+The **identity fields lead**: the run (`scenario, area` — the origin —
+`route, start_date, end_date`; the column's name says which run it is, and the
+hidden diagnostic beside the report also carries `run` and `destination`), one `{tech}_variant` row per input series
+(`solar_variant: bestsite-p95`, `wind_onshore_variant: bestsite-p95`), and the
+`inputs_hash`. Everything below them is numbers, so a
 reader can skip the block on top and take the rest as a numeric table. The
 variant matters because a best-site P95 profile and an area average answer
 different questions, and the solved network does not carry it (the solve reads
-the parquet, not its name), so `compile_report` takes `config/scenarios.csv` as
-an input and joins it back on.
+the parquet, not its name), so `compile_report` takes the scenario table as an
+input and reads it back off the run's rows.
 
 **Field names use `_` throughout**, including the part that names a tech or a
-link. The network and `config/scenarios.csv` hyphenate those ids, so the report
+link. The network and the scenario tables hyphenate those ids, so the report
 puts every one through `field_stem`: the tech `wind-onshore` reports as
 `wind_onshore_gw_opt` and `cf_wind_onshore`, the link `dri-h2` as
 `plant_dri_h2_eur_per_t` and `dri_h2_utilization`. Only the *values* keep the
@@ -506,10 +562,10 @@ they still name files and config keys.
 
 **Every run writes the same fields** whatever route it took. The set and its
 order are declared in `workflow/common/_report_schema.py`, and `compile_report`
-puts each scenario's frame on it before writing. Without that the shape was the
-union of whatever runs a scenario happened to contain: solving only `h2-only`
-left the steel chain out, adding one `moe-eaf` run grew every other run's row,
-and a consumer asking for a field nobody wrote got silence.
+puts each run's row on it before writing. Otherwise the shape would be the
+union of whatever runs a scenario happened to contain: solving only `ng-dri-eaf`
+would leave the electrolyser out, adding one `moe-eaf` run would grow every other
+run's row, and a consumer asking for a field nobody wrote would get silence.
 
 A cell a run has no value for says which of two things it means:
 
@@ -532,9 +588,9 @@ is written stays that module's business alone.
 
 ### Tying a result to its inputs
 
-A run key names the inputs but does not pin them: assumptions get edited and
-timeseries get rebuilt under the same name, so the same key can describe two
-different solves. Each row therefore ends with an **`inputs_hash`** — a digest
+A run's name identifies its inputs but does not pin them: assumptions get
+edited and timeseries get rebuilt under the same name, so the same run can
+describe two different solves. Each row therefore ends with an **`inputs_hash`** — a digest
 over the *contents* of every file the solve read (assumptions base + overlay,
 area geometry, each CF and grid parquet), stamped into the network by
 `solve_network` at solve time.
@@ -544,9 +600,9 @@ differ were not, whatever their keys say. Which file moved is answered by the
 per-file map that travels with the network, one content digest per input:
 
 ```python
-n = pypsa.Network(); n.import_from_netcdf("results/{scenario}/{area}_{route}_{start}_{end}.nc")
+n = pypsa.Network(); n.import_from_netcdf("results/{scenario}/outputs/{scenario}.nc")
 n.meta["inputs_hash"]   # '4f2a9c1b8e30' — the value in the report
-n.meta["inputs"]        # {'config/assumptions.yaml': 'a91c02...', ...}
+n.meta["inputs"]        # {'config/generated/assumptions.yaml': 'a91c02...', ...}
 ```
 
 The chain stops at the solve: the CF parquets are pinned by content, not traced
@@ -555,7 +611,7 @@ back to the cutout that produced them.
 ### Cutout caching
 
 ERA5 cutouts are expensive to (re-)download, so `cutouts/{name}.nc` is **not**
-marked `protected()`. Instead, `download_cutout` keeps a persistent cache under
+marked `protected()`. Instead, `retrieve_area_cutout` keeps a persistent cache under
 `cutouts/cache/`, keyed on the *actual* request parameters (module, bounding box,
 `dx`/`dy`, time range) — see `workflow/common/_cutout_cache.py`. On a cache hit it
 hardlinks the entry into the rule output and skips CDS; on a miss it downloads,
@@ -563,8 +619,10 @@ QC-validates, and stores the result. Keying on the real parameters means a
 `mainland_bbox` / `offshore_max_distance_km` edit correctly re-downloads instead
 of silently reusing a differently-bounded cutout. The legacy sibling
 `cutouts/{name}_backup.nc` still works as a fallback (`mv foo.nc foo_backup.nc`
-to pin one) and is promoted into the cache on use. Only an exact request match is
-reused; a larger cached cutout that covers a request is not sliced down to it.
+to pin one) and is promoted into the cache on use. A request no entry matches
+exactly is cut out of the smallest cached cutout, of any area and the same window
+and resolution, whose box covers it — or linked to it, when the boxes are the
+same, as for Brazil's submarkets, which take the national box.
 
 Every finished cutout — freshly downloaded, cached, or from a backup — passes
 structural QC (`workflow/common/_cutout_qc.py`) before the rule succeeds:
@@ -584,6 +642,7 @@ logs/
 ├── retrieve_grid_data/{area}_{variant}_{start}_{end}.log
 ├── make_area_geometry/{area}.log
 ├── make_offshore_geometry/{area}.log
+├── make_zone_offshore_geometry/{area}.log
 ├── retrieve_area_cutout/{area}_{start}_{end}.log
 ├── area_average/{area}_{tech}_{variant}_{start}_{end}.log
 ├── solve_network/{scenario}_{area}_{route}_{start}_{end}.log
@@ -611,8 +670,8 @@ tail -F logs/snakemake.log logs/*/*.log
 
 ### Watching CDS / ERA5 cutout downloads
 
-ERA5 downloads (`download_cutout`) can take **hours**: CDS allows one running job
-per user, each `download_cutout` submits ~5 feature requests (one per ERA5
+ERA5 downloads (`retrieve_area_cutout`) can take **hours**: CDS allows one running job
+per user, each `retrieve_area_cutout` job submits ~5 feature requests (one per ERA5
 variable group), and a single request commonly spends 20-25 min actually running
 plus queue time. So a full country-year cutout is ~2-2.5 h. This is normal.
 
@@ -688,7 +747,7 @@ SMK=path/to/snakemake PY=path/to/python \
 **For long multi-cutout runs, have an agent babysit.** A batch of country-years is
 many hours of mostly-waiting punctuated by rare failures — a good fit for a
 Claude Code agent that periodically tails `logs/overnight_downloads.log` +
-`logs/download_cutout/*.log`, distinguishes "still working" from a real failure
+`logs/retrieve_area_cutout/*.log`, distinguishes "still working" from a real failure
 using the signals above, and reports/retries. Run it as a background task and let
 it wake on a timer.
 

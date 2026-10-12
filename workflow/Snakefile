@@ -20,37 +20,27 @@ onstart:
             p.write_bytes(data.replace(b'\x00', b''))
             print(f"VM workaround: Removed NUL bytes from {p.relative_to(_smk_root)}")
 
-from common._runs import (
-    ROUTE_PATTERN,
-    build_destination_frame,
-    build_runs_frame,
-    load_scenarios,
-    top_level_areas,
-)
+import pandas as pd
 
-# One row per input timeseries, validated, with `all-areas` cells resolved
-# against the area registry — so every row downstream, the solve rule's lookup
-# included, names one real area.
-scenarios_df = load_scenarios("config/scenarios.csv", config["areas"])
+# One row per input series of a run, from the scenario table config.yaml names
+# under `inputs` (the generated one by default, the demo's with
+# `--configfile config/demo.yaml`).
+scenarios_df = pd.read_csv(config["inputs"]["scenarios"], comment="#", dtype=str)
 
-# One row per network to solve — `all-routes` and `a|b` cells expanded.
-runs_df = build_runs_frame(scenarios_df, config["areas"])
+# One row per run: a scenario is one run, or one per market zone.
+runs_df = scenarios_df.drop_duplicates(["scenario", "run"])
+SCENARIOS = runs_df["scenario"].unique()
 
-# One row per `-export` run, naming the market its furnace stands in, so the
-# solve and report rules can ask for that market's series. A scenario's overlay
-# may move it, as the demo's does.
-destinations_df = build_destination_frame(runs_df, Path("config"), config["areas"])
-
-# The areas make_area_geometry can build. It reads Natural Earth Admin 0, which
-# is countries only, so a zone's geometry is a committed source file instead
-# (issue #64) — constraining the rule keeps it from claiming one and rebuilding
-# it as the whole country the next time the Admin 0 zip looks newer.
-COUNTRY_AREAS = "|".join(top_level_areas(config["areas"]))
-
-SCENARIOS = scenarios_df["scenario"].unique()
-# A scenario name is a free-form label — nothing here reads meaning out of it,
-# so the demo set is listed in config.yaml rather than matched on a prefix.
-DEMO_SCENARIOS = config["demo_scenarios"]
+# The areas the geometry rules build: every registered area except the demo's,
+# whose land and offshore geometry ship with the repository so the demo runs
+# without the Natural Earth and EEZ zips. A sub-national area (one that lists
+# `admin1_names`) takes its offshore geometry from make_zone_offshore_geometry,
+# a country from make_offshore_geometry.
+areas_df = pd.DataFrame.from_dict(config["areas"], orient="index")
+built_df = areas_df.query("demo != True")
+BUILT_AREAS = "|".join(built_df.index)
+SUBNATIONAL_AREAS = "|".join(built_df.dropna(subset=["admin1_names"]).index)
+COUNTRY_AREAS = "|".join(built_df.index.difference(built_df.dropna(subset=["admin1_names"]).index))
 
 
 include: "rules/_optional_shim.smk"
@@ -60,22 +50,13 @@ include: "rules/solve.smk"
 include: "rules/viz.smk"
 
 
-# Default target: a small, self-contained demo that runs after a fresh clone
-# with no CDS download, no EEZ/NE zips, and no API keys. It ships a pre-sliced
-# Victoria (AUS) cutout for the DEMO area + its geo parquets, melts its export
-# twins' iron in ES_SYN, a made-up Spain-like market, and exercises the
-# best-site and anchor-colocation (multi-site PyPSA) RES-CF science through to
-# a solve and a viz report. Run the full set with `snakemake all`.
-rule demo:
+# Default target: every scenario of the scenario table. The default table is
+# the one generated from the input workbook; `--configfile config/demo.yaml`
+# selects the template's instead, a small self-contained demo that runs after a
+# fresh clone with no CDS download, no EEZ/NE zips and no API keys. It ships a
+# pre-sliced Victoria (AUS) cutout for the DEMO area and its geo parquets, and
+# melts its export twins' iron in ES_SYN, a made-up Spain-like market.
+rule all:
     default_target: True
     input:
-        collect("results/{scenario}/report_{scenario}.csv", scenario=DEMO_SCENARIOS),
-        collect("results/{scenario}/plots/capacity_bars.png", scenario=DEMO_SCENARIOS),
-
-
-rule all:
-    input:
-        # One report per scenario — its rows are that scenario's runs.
         collect("results/{scenario}/report_{scenario}.csv", scenario=SCENARIOS),
-        # One comparison bar chart per scenario.
-        collect("results/{scenario}/plots/capacity_bars.png", scenario=SCENARIOS),

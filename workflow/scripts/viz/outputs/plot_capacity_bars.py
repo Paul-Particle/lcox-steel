@@ -28,7 +28,6 @@ from common._report_schema import PROCESS_LINKS, field_stem, read_report
 from scripts.viz._run_display import run_labels
 from scripts.viz.style import (
     apply_header,
-    blue_black,
     blue_gray,
     dark_gray,
     fca_blue,
@@ -117,7 +116,6 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for idx, r in df.iterrows():
         row = {"label": labels[idx]}
-        row["dri_h2_mw_lhv"]    = r["dri_h2_mw_lhv"]
         row["electrolyser_mw"]  = r["electrolyser_gw"] * 1e3
         row["battery_mw"]       = r["battery_gw_opt"] * 1e3
         row["grid_mw"]          = r["grid_import_gw_opt"] * 1e3
@@ -252,9 +250,6 @@ def _build_panels(plot_df: pd.DataFrame) -> list[tuple[str, list]]:
     if _has_data(["grid_mw"]):
         power_slots.append(("single", "grid_mw", dark_gray,
                             "Grid connection (MW)", "MW"))
-    if _has_data(["dri_h2_mw_lhv"]):
-        power_slots.append(("single", "dri_h2_mw_lhv", blue_black,
-                            "DRI H₂ demand (MW H₂ LHV)", "MW H₂ LHV"))
 
     process_slots = [
         ("single", col, color, name, "t/h")

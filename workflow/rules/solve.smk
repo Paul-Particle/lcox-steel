@@ -1,54 +1,36 @@
 wildcard_constraints:
-    scenario=r"[^/_]+",
-    route=ROUTE_PATTERN,
+    scenario=r"[^/]+",
+    run=r"[^/]+",
 
 
 rule solve_network:
     input:
-        assumptions_base="config/assumptions.yaml",
-        assumptions_overlay=optional(
-            "config/overlays/{scenario}.yaml"
-        ),
-        # The plant sits at the area's own representative point, so multi-site
-        # scenarios need no hand-placed demand site.
-        regions="resources/shapes/{area}_geo.parquet",
-        # tech == 'grid' splits the run's rows into a price series and the
-        # capacity-factor series; the CSV column does the classifying, so the
-        # script never has to infer it from a path.
-        cf_inputs=collect(
-            "resources/timeseries/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}.parquet",
+        # The run's rows are read back from here by the script: they say which
+        # input series is the origin's, which the destination's, and the route.
+        scenario_table=lookup(dpath="inputs/scenarios", within=config),
+        assumptions_base=lookup(dpath="inputs/assumptions", within=config),
+        assumptions_overlay=optional("config/overlays/{scenario}.yaml"),
+        # The plant sits at the origin's own representative point, so multi-site
+        # runs need no hand-placed demand site. The origin is where the run's
+        # renewables are.
+        regions=collect(
+            "resources/shapes/{item.area}_geo.parquet",
             item=lookup(
-                query="scenario == '{scenario}' and area == '{area}' "
-                      "and start_date == '{start_date}' and end_date == '{end_date}' "
-                      "and tech != 'grid'",
+                query="scenario == '{scenario}' and run == '{run}' and tech != 'grid'",
                 within=scenarios_df,
             ),
         ),
-        grid_input=collect(
+        # Every input series of the run, in the order its rows list them.
+        timeseries=collect(
             "resources/timeseries/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}.parquet",
             item=lookup(
-                query="scenario == '{scenario}' and area == '{area}' "
-                      "and start_date == '{start_date}' and end_date == '{end_date}' "
-                      "and tech == 'grid'",
+                query="scenario == '{scenario}' and run == '{run}'",
                 within=scenarios_df,
-            ),
-        ),
-        # An `-export` route melts its iron in another market and buys the power
-        # for it there, so it needs that market's own hourly series — `emissions`
-        # because the same file has to carry both the price the furnace pays and
-        # the mix behind it. Empty for every domestic route, whatever the
-        # scenario asked for at home.
-        destination_input=collect(
-            "resources/timeseries/{item.destination}_grid_emissions_{item.start_date}_{item.end_date}.parquet",
-            item=lookup(
-                query="scenario == '{scenario}' and route == '{route}' "
-                      "and start_date == '{start_date}' and end_date == '{end_date}'",
-                within=destinations_df,
             ),
         ),
     output:
-        network="results/{scenario}/outputs/{area}_{route}_{start_date}_{end_date}.nc",
+        network="results/{scenario}/.runs/{scenario}_{run}/outputs/{scenario}_{run}.nc",
     log:
-        "logs/solve_network/{scenario}_{area}_{route}_{start_date}_{end_date}.log",
+        "logs/solve_network/{scenario}/{run}.log",
     script:
         "../scripts/solve/solve_network.py"

@@ -356,8 +356,8 @@
   const svg = document.getElementById("svg");
   const tip = document.getElementById("tip");
 
-  const ROUTES = ["h2-only", "h2-dri-eaf", "moe-eaf", "ew-eaf", "ng-dri-eaf", "mix-dri-eaf"];
-  const H2   = ["h2-only", "h2-dri-eaf", "mix-dri-eaf"];
+  const ROUTES = ["h2-dri-eaf", "moe-eaf", "ew-eaf", "ng-dri-eaf", "mix-dri-eaf"];
+  const H2   = ["h2-dri-eaf", "mix-dri-eaf"];
   const GAS  = ["ng-dri-eaf", "mix-dri-eaf"];
   const IRON = ["h2-dri-eaf", "ew-eaf", "ng-dri-eaf", "mix-dri-eaf"];
   const STEEL = ["h2-dri-eaf", "moe-eaf", "ew-eaf", "ng-dri-eaf", "mix-dri-eaf"];
@@ -385,13 +385,11 @@
       body:"Store + charger/discharger Links · extendable, cyclic\n€200 k/MW (one shared inverter rating) + €150 k/MWh\nduration sized by the optimiser · 90% round-trip" },
 
     { id:"electrolyser",kind:"link", color:"h2",  name:"electrolyser",x:404, y:110, routes:H2,
-      body:"Link  electricity -> H2\neff ~ 0.606 MWh H2/MWh e  (33.33 / 55 kWh/kg)\ncapex €0.7 M/MW · 20 yr · varopex €1/MWhe\nh2_only: floored to meet the flat load" },
+      body:"Link  electricity -> H2\neff ~ 0.606 MWh H2/MWh e  (33.33 / 55 kWh/kg)\ncapex €0.7 M/MW · 20 yr · varopex €1/MWhe" },
     { id:"hydrogen",    kind:"bus",  color:"h2",  name:"hydrogen",    unit:"MW H2 LHV", x:544, y:110, routes:H2,
       body:"Bus · carrier H2\n1 MWh LHV ~ 30 kg H2 (LHV ~ 33.33 kWh/kg)" },
     { id:"h2_buffer",   kind:"store",color:"h2",  name:"h2_buffer",   x:544, y:40,  routes:H2,
       body:"Store · extendable, cyclic\n€10 k/MWh (~€10/kWh compressed) · 25 yr" },
-    { id:"dri_load",    kind:"load", color:"h2",  name:"dri_load",    x:544, y:188, routes:["h2-only"],
-      body:"Load · h2_only route only\nFlat H2 demand (MW LHV)\n= el_mw · eff · 0.95 availability" },
     { id:"dri",         kind:"link", color:"iron",name:"dri",         x:694, y:110, routes:DRI,
       body:"Link  H2 -> iron  (+ elec draw, bus2)\neff = 1000 / (50 · 33.33) t/MWh H2\nel 0.35 MWh/t · ore €200/t · p_min 0.5\ncapex €230/(t·yr)" },
 
@@ -441,7 +439,6 @@
     { from:"electricity", to:"electrolyser", carrier:"ac", kind:"flow", routes:H2, sa:"r", ea:"l" },
     { from:"electrolyser",to:"hydrogen",     carrier:"h2", kind:"flow", routes:H2, sa:"r", ea:"l" },
     { from:"hydrogen",    to:"dri",          carrier:"h2", kind:"flow", routes:DRI, sa:"r", ea:"l" },
-    { from:"hydrogen",    to:"dri_load",     carrier:"h2", kind:"flow", routes:["h2-only"], sa:"b", ea:"t" },
     { from:"dri",         to:"iron",         carrier:"iron", kind:"flow", routes:DRI, sa:"r", ea:"l" },
 
     { from:"gas_supply",  to:"gas",          carrier:"gas", kind:"flow", routes:GAS, sa:"r", ea:"l" },
@@ -655,7 +652,6 @@
   const CAPTIONS = {
     all: "<b>All routes overlaid.</b> Every solved network contains exactly one route; the RES + battery front-end and (in grid scenarios) grid import are shared by all. Planned components are hidden here — select <b>expansions</b> to show them.",
     expansions: "<b>Everything + planned expansions.</b> All routes overlaid together with the dashed components not yet in the model — the MOE hot-linked-EAF path (hot iron onto the shared iron bus) and the imported-iron path (merchant iron bulk-shipped in, feeding the iron bus and EAF).",
-    "h2-only": "<b>h2-only</b> — electricity -> electrolyser -> H2 (+ buffer) -> flat H2 load. The LCOH model: no steel chain.",
     "h2-dri-eaf": "<b>h2-dri-eaf</b> — electrolyser -> H2 (+ buffer) -> DRI shaft -> sponge iron (+ store) -> EAF -> steel.",
     "moe-eaf": "<b>MOE + EAF</b> — molten oxide electrolysis takes electricity to liquid iron on the shared iron bus, and the shared EAF melts it to steel. Hot metal is not storable, so the domestic route builds no iron store and the cell runs with the furnace.",
     "ew-eaf": "<b>ew-eaf</b> — iron electrowinning: electricity -> iron plates (+ store) -> EAF -> steel.",

@@ -13,7 +13,6 @@ from common._paths import DATA, SHAPES_RES
 
 
 
-#CONFIG_PATH = Path("config_hannah.yaml")
 EEZ_SHP = DATA / "shapes/offshore_zones/eez_v12.zip"
 OUT_PARQUET = SHAPES_RES / "de_offshore_geo.parquet"
 LAND_REGIONS = SHAPES_RES / "de_geo.parquet"
@@ -30,7 +29,7 @@ from common._logging import configure_logging
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
 if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
-    _OFFSHORE_ZONE_ZIP = Path(snakemake.input.offshore_zone)
+    EEZ_SHP = Path(snakemake.input.offshore_zone)
     LAND_REGIONS = Path(snakemake.input.regions)
     OUT_PARQUET = Path(snakemake.output[0])
     _ISO3 = snakemake.params.iso3

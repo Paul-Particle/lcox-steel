@@ -5,7 +5,7 @@ that draws electricity as its input against one that draws it alongside another
 conversion, a furnace on the far side of an ocean against one at the plant, and
 a shaft that burns gas as well as drawing power. These pin that on hand-built
 networks with the dispatch written in — no cutouts, no solves, so they run
-anywhere and a change in `config/assumptions.yaml` cannot move them.
+anywhere and a change in the assumptions cannot move them.
 """
 
 import numpy as np

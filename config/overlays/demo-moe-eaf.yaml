@@ -1,0 +1,5 @@
+# Machinery test, not a study: the demo's overlays each move a value their route
+# reads, so a demo run shows an overlay reaching the solve. Here the MOE cell
+# may turn down to 70 %.
+moe:
+  p_min_pu: 0.7

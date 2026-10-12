@@ -8,9 +8,9 @@ rest of the file is a numeric block that can be read past them.
 Every run writes the same fields whatever route it took, so the report can be
 read as a table rather than probed field by field. The shape is this schema's
 alone and not the union of what the runs in a scenario happened to produce: a
-file of `h2-only` runs carries the steel chain's columns too, adding a `moe-eaf`
-run leaves every other row the same width, and a consumer asking for a declared
-field always gets a cell rather than silence.
+file of `ng-dri-eaf` runs carries the electrolyser's rows too, adding a
+`moe-eaf` run leaves every other row the same width, and a consumer asking for a
+declared field always gets a cell rather than silence.
 
 A blank cell therefore means one thing: the quantity is undefined for this run.
 That is a ratio with nothing in its denominator — the capacity factor of a
@@ -20,11 +20,10 @@ contributed. So blank is never "we did not look", and `0` is never "missing".
 
 The steel chain's per-tonne fields follow the totals rather than the ratios:
 they are shares of the levelised cost of steel and have to stack up to it, so a
-route without a MOE cell reads `0` there. A run that makes no steel at all
-(`h2-only`) reads `0` down the whole chain, matching its `steel_produced_mt`.
+route without a MOE cell reads `0` there.
 
 Field names separate words with `_` throughout, including the parts that name a
-tech or a link. The network and `config/scenarios.csv` hyphenate those ids —
+tech or a link. The network and the scenario tables hyphenate those ids —
 `wind-onshore`, `dri-h2` — so every field built from one goes through
 `field_stem`, so every field name separates words with `_` whatever spelling the
 id behind it uses.
@@ -56,8 +55,8 @@ def field_stem(element_id: str) -> str:
     return element_id.replace("-", "_")
 
 
-# Techs that contribute an input series to a run, named as `config/scenarios.csv`
-# names them. The variant each was solved with rides along in the report.
+# Techs that contribute an input series to a run, named as the scenario tables
+# name them. The variant each was solved with rides along in the report.
 INPUT_TECHS = ("solar", "wind-onshore", "wind-offshore", "grid")
 
 # The renewables a run can build, named as the network names them.
@@ -174,14 +173,15 @@ ELECTRICITY_JOBS = ("reduction", "melt", "hydrogen", "handling", "losses")
 REPORT_FIELDS = {
     # What this run is a result for.
     "scenario": UNDEFINED,
+    "run": UNDEFINED,
+    # The origin, where the iron is made.
     "area": UNDEFINED,
-    "country": UNDEFINED,
+    # Where the steel is made: the origin itself, unless the route exports.
+    "destination": UNDEFINED,
     "route": UNDEFINED,
     "start_date": UNDEFINED,
     "end_date": UNDEFINED,
     **{f"{field_stem(tech)}_variant": UNDEFINED for tech in INPUT_TECHS},
-    # Diagnostic only: the report drops it, having already selected on it.
-    "best_in_country": UNDEFINED,
 
     # Annual system cost and the groups it is made of.
     "total_annual_cost_meur": ZERO,
@@ -193,8 +193,6 @@ REPORT_FIELDS = {
     "ng_gwh_lhv": ZERO,
     "lcos_eur_per_t": UNDEFINED,
     "lcoh_eur_per_kg": UNDEFINED,
-    "lco_output": UNDEFINED,
-    "lco_output_unit": UNDEFINED,
 
     # Electricity: the system LCOE, the contributions that sum to it, then each
     # technology's own cost over its own generation.
@@ -226,7 +224,6 @@ REPORT_FIELDS = {
     "electrolyser_utilization": UNDEFINED,
     "h2_buffer_gwh": ZERO,
     "h2_buffer_hours_dri": UNDEFINED,
-    "dri_h2_mw_lhv": ZERO,
 
     # The steel chain: what each step cost per tonne, how big it is, how hard it
     # runs, and the stores that let it run at a different rate from the plant.
@@ -322,11 +319,6 @@ REPORT_FIELDS = {
     # clean route's tonne of steel lands near a thousandth of a tonne of CO2e.
     "emissions_basis": UNDEFINED,
     "emissions_kt_co2e_per_year": ZERO,
-    # Blank rather than zero on a run that makes no steel, the same way
-    # `lcos_eur_per_t` is: the per-step fields below are shares of a tonne and
-    # stack, but this is the ratio they are shares of, and a route with no
-    # denominator has no such tonne. `h2-only` is in every `all-routes`
-    # scenario, and a 0.00 here would read as the cleanest steel in the table.
     "emissions_kg_co2e_per_t_steel": UNDEFINED,
     "emissions_kg_co2e_per_kg_h2": UNDEFINED,
     # The two things inside the boundary that emit, as annual totals. Together
@@ -377,22 +369,21 @@ ZERO_FILLED = tuple(field for field, fill in REPORT_FIELDS.items() if fill == ZE
 
 # The fields that say what the run was rather than what it cost. They lead the
 # file, so everything below them is numbers and a reader can skip straight to it.
-IDENTITY_FIELDS = ("scenario", "area", "country", "route", "start_date", "end_date",
+IDENTITY_FIELDS = ("scenario", "run", "area", "destination", "route", "start_date", "end_date",
                    *(f"{field_stem(tech)}_variant" for tech in INPUT_TECHS),
-                   "best_in_country", "lco_output_unit",
                    # Prose, not a measurement: everything outside this tuple is
                    # coerced to a number when a report is read back.
                    "emissions_basis", "emissions_unavailable_reason", "inputs_hash",
                    "code_hash")
 
-# Fields only the diagnostic carries, for three separate reasons. The flag,
-# because the report has already acted on it, so a frame without it is not
-# missing anything. The freight, because it is outside the boundary the rest of
-# the emission fields are inside, and a figure that no total counts reads as one
-# that some total does. The battery C-rate, because the report already carries
-# it as `battery_duration_hours`; the diagnostic states it in the terms the
-# solve's plausibility warning uses.
-DIAGNOSTIC_FIELDS = ("best_in_country",
+# Fields only the diagnostic carries, for three separate reasons. The run and
+# its destination, because the report's column is named after the run, and an
+# export's run after its origin and destination. The freight, because it is
+# outside the boundary the rest of the emission fields are inside, and a figure
+# that no total counts reads as one that some total does. The battery C-rate,
+# because the report already carries it as `battery_duration_hours`; the
+# diagnostic states it in the terms the solve's plausibility warning uses.
+DIAGNOSTIC_FIELDS = ("run", "destination",
                      "emissions_freight_kt_co2e_per_year",
                      *(f"emissions_{field_stem(leg)}_kg_co2e_per_t_steel"
                        for leg in FREIGHT_LEGS),
@@ -442,16 +433,13 @@ def apply_schema(frame: pd.DataFrame, hold_back: tuple = ()) -> pd.DataFrame:
 def write_report_file(frame: pd.DataFrame, path: Path, hold_back: tuple = ()) -> None:
     """Write one report file: a column per run, a row per field.
 
-    Runs are named `{scenario}_{n}` in the order they were compiled. The number
-    counts within the file, so a run keeps the same name however many other zones
-    were solved alongside it — which of two files a column came from is answered
-    by the identity rows, not by matching numbers across them.
+    A column is named `{scenario}_{run}`, the name of the run's own folder.
     """
+    column_names = frame["scenario"].astype(str) + "_" + frame["run"].astype(str)
     on_schema = apply_schema(frame, hold_back)
     numeric = on_schema.select_dtypes("number").columns
     on_schema[numeric] = on_schema[numeric].round(2)
-    counter = on_schema.groupby("scenario").cumcount() + 1
-    on_schema.index = on_schema["scenario"].astype(str) + "_" + counter.astype(str)
+    on_schema.index = column_names
     path.parent.mkdir(parents=True, exist_ok=True)
     on_schema.T.to_csv(path, index_label="field")
 
@@ -465,10 +453,7 @@ def read_report(path) -> pd.DataFrame:
     """
     stored = pd.read_csv(path, index_col="field")
     runs = stored.T
-    runs.index.name = "run"
+    runs.index.name = "column"
     measured = [field for field in runs.columns if field not in IDENTITY_FIELDS]
     runs[measured] = runs[measured].apply(pd.to_numeric)
-    # The flag is a flag: read the diagnostic back and it is boolean again.
-    if "best_in_country" in runs.columns:
-        runs["best_in_country"] = runs["best_in_country"] == "True"
     return runs

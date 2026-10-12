@@ -18,7 +18,12 @@ venv/
 # Data files (broad patterns cover resources/ and other locations)
 *.parquet
 *.feather
-!config/scenarios.csv
+
+# What `python -m common.generate_inputs` writes from the input workbook. Its
+# overlays share config/overlays/ with the hand-kept ones, which are committed
+# with `git add -f` and stay tracked whatever this file says.
+config/generated/
+config/overlays/*
 
 # Cache directories: ignore everything except the committed reference file in each
 data/nem_cache/*

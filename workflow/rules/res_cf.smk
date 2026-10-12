@@ -5,9 +5,15 @@ wildcard_constraints:
 
 rule make_area_geometry:
     wildcard_constraints:
-        area=COUNTRY_AREAS,
+        area=BUILT_AREAS,
     input:
-        "data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
+        # A sub-national area names its states/provinces under `admin1_names`
+        # and is dissolved from Admin 1; any other area is its Admin 0 country.
+        branch(
+            lookup(dpath="areas/{area}/admin1_names", within=config, default=None),
+            then="data/shapes/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.zip",
+            otherwise="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
+        ),
     output:
         "resources/shapes/{area}_geo.parquet",
     log:
@@ -20,11 +26,16 @@ rule make_area_geometry:
             within=config,
             default=None,
         ),
+        admin1_names=lookup(
+            dpath="areas/{area}/admin1_names", within=config, default=None
+        ),
     script:
         "../scripts/res_cf/a_make_area_geometry.py"
 
 
 rule make_offshore_geometry:
+    wildcard_constraints:
+        area=COUNTRY_AREAS,
     input:
         regions="resources/shapes/{area}_geo.parquet",
         offshore_zone="data/shapes/offshore_zones/eez_v12.zip",
@@ -40,6 +51,28 @@ rule make_offshore_geometry:
         ),
     script:
         "../scripts/res_cf/b_make_offshore_geometry.py"
+
+
+rule make_zone_offshore_geometry:
+    """A sub-national area's share of its country's waters, by nearest coast."""
+    wildcard_constraints:
+        area=SUBNATIONAL_AREAS,
+    input:
+        admin1="data/shapes/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.zip",
+        offshore_zone="data/shapes/offshore_zones/eez_v12.zip",
+    output:
+        "resources/shapes/{area}_offshore_geo.parquet",
+    log:
+        "logs/make_zone_offshore_geometry/{area}.log",
+    params:
+        iso3=lookup(dpath="areas/{area}/iso3", within=config),
+        region=lookup(dpath="areas/{area}/region", within=config),
+        admin1_names=lookup(dpath="areas/{area}/admin1_names", within=config),
+        offshore_max_distance_km=lookup(
+            dpath="res_cf/offshore_max_distance_km", within=config
+        ),
+    script:
+        "../scripts/res_cf/b2_make_zone_offshore_geometry.py"
 
 
 rule retrieve_area_cutout:

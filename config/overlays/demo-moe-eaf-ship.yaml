@@ -1,0 +1,4 @@
+# Machinery test, not a study: the MOE cell may turn down to 70 %, as in
+# demo-moe-eaf.
+moe:
+  p_min_pu: 0.7

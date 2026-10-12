@@ -1,13 +1,11 @@
-"""Stacked LCOS cost-breakdown bars, one bar per steel-route scenario.
+"""Stacked LCOS cost-breakdown bars, one bar per run.
 
 Snakemake rule: plot_lcos_bars (in viz.smk).
 
 The core route-comparison figure: each scenario's levelised cost of steel
 (€/t) stacked by cost group (process capex, ore & consumables, renewables,
 grid, electrolyser, storage, transmission), with the LCOS total on top of
-each bar. Routes without a steel load (h2-only) are skipped — they have
-no LCOS; requesting this plot for a scenario with no steel routes at all
-is an error.
+each bar.
 """
 
 import logging
@@ -72,24 +70,14 @@ COST_GROUPS = [
 def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
     """Per-run cost-group columns in €/t steel, indexed by run label.
 
-    Keeps only runs with an LCOS (steel routes); converts each
-    cost_{group}_meur column from M€/yr to €/t via the run's steel output.
+    Converts each cost_{group}_meur column from M€/yr to €/t via the run's
+    steel output.
     """
-    steel = df[df["lcos_eur_per_t"].notna()]
-    skipped = len(df) - len(steel)
-    if skipped:
-        log.info(f"skipping {skipped} run(s) without a steel load (no LCOS)")
-    if steel.empty:
-        raise ValueError(
-            f"{_REPORT_PATH.name} has no steel-route runs — "
-            "plot_lcos_bars only applies to scenarios with a route other than h2-only"
-        )
-
-    steel_t_per_year = steel["steel_produced_mt"] * 1e6
-    plot_df = pd.DataFrame({"label": run_labels(df).loc[steel.index]})
+    steel_t_per_year = df["steel_produced_mt"] * 1e6
+    plot_df = pd.DataFrame({"label": run_labels(df)})
     for group, _, _ in COST_GROUPS:
-        plot_df[group] = steel[f"cost_{group}_meur"] * 1e6 / steel_t_per_year.values
-    plot_df["lcos_total"] = steel["lcos_eur_per_t"].values
+        plot_df[group] = df[f"cost_{group}_meur"] * 1e6 / steel_t_per_year.values
+    plot_df["lcos_total"] = df["lcos_eur_per_t"].values
     return plot_df.set_index("label")
 
 

@@ -1,63 +1,87 @@
 rule compile_report:
+    """One run's report: what it built, cost and emitted, beside what priced it."""
     input:
-        # The scenario table, for the variant each tech was solved with: the
-        # solve reads the parquet, not its name, so this is where that survives.
-        scenarios="config/scenarios.csv",
+        network="results/{scenario}/.runs/{scenario}_{run}/outputs/{scenario}_{run}.nc",
+        # The run's rows: its origin, destination and route, and the variant each
+        # tech was solved with. The solve reads the parquet, not its name, so the
+        # table is where the variant survives.
+        scenario_table=lookup(dpath="inputs/scenarios", within=config),
         # Emission factors, freight legs, the grid fee, and the capex and
-        # lifetime quotes the cost leaves are split on. The scenario's own
-        # overlay is merged over the base here exactly as the solve merged it,
-        # so a leaf is split on the numbers that priced it: the gas-price and
-        # EW-capex sweeps and the salt-cavern buffer all move a quote the split
-        # reads, and the base file alone would divide a solved cost by a
-        # quote the run never saw.
-        assumptions_base="config/assumptions.yaml",
-        assumptions_overlay=optional(
-            "config/overlays/{scenario}.yaml"
-        ),
-        networks=collect(
-            "results/{item.scenario}/outputs/{item.area}_{item.route}_{item.start_date}_{item.end_date}.nc",
-            item=lookup(query="scenario == '{scenario}'", within=runs_df),
-        ),
-        # The same grid series the solve priced its imports against, for the
-        # generation mix behind them. Empty for an islanded scenario, and
-        # carrying prices only unless the row asks for `variant: full`.
+        # lifetime quotes the cost leaves are split on, merged exactly as the
+        # solve merged them, so a leaf is split on the numbers that priced it.
+        assumptions_base=lookup(dpath="inputs/assumptions", within=config),
+        assumptions_overlay=optional("config/overlays/{scenario}.yaml"),
+        # The same grid series the solve priced against, the origin's and the
+        # destination's, for the generation mix behind them.
         grid_input=collect(
             "resources/timeseries/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}.parquet",
             item=lookup(
-                query="scenario == '{scenario}' and tech == 'grid'",
+                query="scenario == '{scenario}' and run == '{run}' and tech == 'grid'",
                 within=scenarios_df,
             ),
         ),
-        # And the destination market's series, for the same reason at the other
-        # end of an `-export` route: the furnace there carries its own market's
-        # mix, not the one that made the iron. Empty for a scenario that builds
-        # no export twin.
-        destination_input=collect(
-            "resources/timeseries/{item.destination}_grid_emissions_{item.start_date}_{item.end_date}.parquet",
-            item=lookup(
-                query="scenario == '{scenario}'",
-                within=destinations_df,
-            ),
+    output:
+        report="results/{scenario}/.runs/{scenario}_{run}/report_{scenario}_{run}.csv",
+        # Every field, including the ones the report holds back.
+        diagnostic="results/{scenario}/.runs/{scenario}_{run}/.report_{scenario}_{run}_diag.csv",
+        # What priced the run, beside the run.
+        overlay="results/{scenario}/.runs/{scenario}_{run}/assumptions_{scenario}_{run}.overlay.yaml",
+        base_assumptions="results/{scenario}/.runs/{scenario}_{run}/config/assumptions_base.yaml",
+        merged_assumptions="results/{scenario}/.runs/{scenario}_{run}/config/assumptions_{scenario}_{run}_merged.yaml",
+    log:
+        "logs/compile_report/{scenario}/{run}.log",
+    script:
+        "../scripts/viz/compile_report.py"
+
+
+rule pick_best_run:
+    """Give a scenario the files of the run that stands for it.
+
+    Usually its only run. An area on the grid that trades through market zones
+    is run once per zone, and the cheapest by `report.best_run_by` stands for
+    the scenario; every run keeps its own files under `.runs/`.
+    """
+    input:
+        # Each named like the output it may become, one path per run.
+        report=collect(
+            "results/{item.scenario}/.runs/{item.scenario}_{item.run}/report_{item.scenario}_{item.run}.csv",
+            item=lookup(query="scenario == '{scenario}'", within=runs_df),
+        ),
+        diagnostic=collect(
+            "results/{item.scenario}/.runs/{item.scenario}_{item.run}/.report_{item.scenario}_{item.run}_diag.csv",
+            item=lookup(query="scenario == '{scenario}'", within=runs_df),
+        ),
+        network=collect(
+            "results/{item.scenario}/.runs/{item.scenario}_{item.run}/outputs/{item.scenario}_{item.run}.nc",
+            item=lookup(query="scenario == '{scenario}'", within=runs_df),
+        ),
+        overlay=collect(
+            "results/{item.scenario}/.runs/{item.scenario}_{item.run}/assumptions_{item.scenario}_{item.run}.overlay.yaml",
+            item=lookup(query="scenario == '{scenario}'", within=runs_df),
+        ),
+        base_assumptions=collect(
+            "results/{item.scenario}/.runs/{item.scenario}_{item.run}/config/assumptions_base.yaml",
+            item=lookup(query="scenario == '{scenario}'", within=runs_df),
+        ),
+        merged_assumptions=collect(
+            "results/{item.scenario}/.runs/{item.scenario}_{item.run}/config/assumptions_{item.scenario}_{item.run}_merged.yaml",
+            item=lookup(query="scenario == '{scenario}'", within=runs_df),
         ),
     output:
-        # The report stands on its own: one row per reported place, the zone
-        # ranking already resolved. The diagnostic keeps every zone and the
-        # `best_in_country` flag, and is hidden because it answers a follow-up
-        # question rather than being the thing to read.
         report="results/{scenario}/report_{scenario}.csv",
         diagnostic="results/{scenario}/.report_{scenario}_diag.csv",
-        # What priced the run, beside the run. The overlay is written even when
-        # the scenario has none, because "this changed nothing" is a fact worth
-        # recording and an absent file cannot say it.
+        network="results/{scenario}/outputs/{scenario}.nc",
         overlay="results/{scenario}/assumptions_{scenario}.overlay.yaml",
         base_assumptions="results/{scenario}/config/assumptions_base.yaml",
         merged_assumptions="results/{scenario}/config/assumptions_{scenario}_merged.yaml",
+        # Every run of the scenario, its ranking value, and which one was picked.
+        runs="results/{scenario}/.runs/runs.csv",
     params:
-        best_zone_by=lookup(dpath="report/best_zone_by", within=config, default=""),
+        best_run_by=lookup(dpath="report/best_run_by", within=config),
     log:
-        "logs/compile_report/{scenario}.log",
+        "logs/pick_best_run/{scenario}.log",
     script:
-        "../scripts/viz/compile_report.py"
+        "../scripts/viz/pick_best_run.py"
 
 
 rule plot_cf_map:
@@ -96,10 +120,7 @@ rule plot_capacity_bars:
 
 
 rule plot_lcos_bars:
-    """Steel routes only: stacked LCOS cost-breakdown per run for one scenario.
-
-    Errors on scenarios whose only route is h2-only (no LCOS), so it is
-    requested on demand rather than fanned out in `rule all`."""
+    """Stacked LCOS cost-breakdown per run for one scenario, requested on demand."""
     input:
         report="results/{scenario}/report_{scenario}.csv",
     output:
@@ -114,12 +135,12 @@ rule plot_lcos_bars:
 rule plot_siting_map:
     """Multi-site only: geographic map of chosen sites + HVDC links for one run."""
     input:
-        network="results/{scenario}/outputs/{area}_{route}_{start_date}_{end_date}.nc",
+        network="results/{scenario}/.runs/{scenario}_{run}/outputs/{scenario}_{run}.nc",
     output:
-        png="results/{scenario}/plots/siting_map_{area}_{route}_{start_date}_{end_date}.png",
-        html="results/{scenario}/plots/siting_map_{area}_{route}_{start_date}_{end_date}.html",
+        png="results/{scenario}/.runs/{scenario}_{run}/plots/siting_map_{scenario}_{run}.png",
+        html="results/{scenario}/.runs/{scenario}_{run}/plots/siting_map_{scenario}_{run}.html",
     log:
-        "logs/plot_siting_map/{scenario}_{area}_{route}_{start_date}_{end_date}.log",
+        "logs/plot_siting_map/{scenario}/{run}.log",
     script:
         "../scripts/viz/diagnostics/plot_siting_map.py"
 
@@ -127,11 +148,11 @@ rule plot_siting_map:
 rule plot_site_capacity_bars:
     """Multi-site only: per-site built capacity + HVDC link MW for one run."""
     input:
-        network="results/{scenario}/outputs/{area}_{route}_{start_date}_{end_date}.nc",
+        network="results/{scenario}/.runs/{scenario}_{run}/outputs/{scenario}_{run}.nc",
     output:
-        png="results/{scenario}/plots/site_capacity_bars_{area}_{route}_{start_date}_{end_date}.png",
-        html="results/{scenario}/plots/site_capacity_bars_{area}_{route}_{start_date}_{end_date}.html",
+        png="results/{scenario}/.runs/{scenario}_{run}/plots/site_capacity_bars_{scenario}_{run}.png",
+        html="results/{scenario}/.runs/{scenario}_{run}/plots/site_capacity_bars_{scenario}_{run}.html",
     log:
-        "logs/plot_site_capacity_bars/{scenario}_{area}_{route}_{start_date}_{end_date}.log",
+        "logs/plot_site_capacity_bars/{scenario}/{run}.log",
     script:
         "../scripts/viz/outputs/plot_site_capacity_bars.py"

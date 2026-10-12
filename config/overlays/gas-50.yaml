@@ -1,4 +1,0 @@
-# One input moved, everything else as the base run. See the
-# `gas` sweep in scratch/add_sweep_scenarios.py for why this range.
-natural_gas:
-  price_eur_per_mwh: 50
