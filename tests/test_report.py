@@ -28,7 +28,7 @@ RUN_FILES = ("report", "diagnostic", "network", "overlay", "base_assumptions", "
 def _report(rows):
     """A report-shaped frame: one row per run, in the column order compile_report uses."""
     frame = pd.DataFrame(
-        rows, columns=["scenario", "run", "area", "route", "start_date", "end_date", "lco_output"]
+        rows, columns=["scenario", "run", "area", "route", "start_date", "end_date", "lcos_eur_per_t"]
     )
     # Every row carries the fingerprint of the inputs behind it, so a frame
     # without one is not a report frame.
@@ -60,7 +60,7 @@ def test_a_run_is_a_column_and_a_field_is_a_row(tmp_path):
 
 
 def _pick(tmp_path, monkeypatch, costs):
-    """Run pick_best_run over one scenario whose runs cost `costs` ({run: lco_output})."""
+    """Run pick_best_run over one scenario whose runs cost `costs` ({run: lcos_eur_per_t})."""
     inputs = {name: [] for name in RUN_FILES}
     for run, cost in costs.items():
         run_dir = tmp_path / ".runs" / f"s_{run}"
@@ -77,7 +77,7 @@ def _pick(tmp_path, monkeypatch, costs):
     monkeypatch.setattr(pick_best_run, "snakemake", SimpleNamespace(
         input=SimpleNamespace(**inputs),
         output=SimpleNamespace(**outputs, runs=tmp_path / ".runs" / "runs.csv"),
-        params=SimpleNamespace(best_run_by="lco_output"),
+        params=SimpleNamespace(best_run_by="lcos_eur_per_t"),
         wildcards=SimpleNamespace(scenario="s"),
     ))
     pick_best_run.main()
@@ -141,7 +141,7 @@ def test_a_window_that_crosses_new_year_names_both_years():
 def test_every_route_writes_the_same_fields(tmp_path):
     """The point of the schema: what a run reports must not depend on its route."""
     df = _report([
-        ("s", "VIC1", "VIC1", "h2-only", "20250101", "20251231", 4.1),
+        ("s", "VIC1", "VIC1", "h2-dri-eaf", "20250101", "20251231", 606.78),
         ("t", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0),
     ])
     # Only the MOE run has a MOE cell to report; only the H2 run has an LCOH.
@@ -215,7 +215,7 @@ def test_the_freight_a_run_reports_is_held_back_from_the_report(tmp_path):
 
 def test_a_freight_field_no_run_produced_still_reaches_the_diagnostic(tmp_path):
     """The diagnostic declares every field, so which file one lands in is fixed."""
-    df = _report([("s", "VIC1", "VIC1", "h2-only", "20250101", "20251231", 4.1)])
+    df = _report([("s", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
     _, diagnostic_path = _write(df, tmp_path)
 
     diagnostic = read_report(diagnostic_path)
@@ -233,4 +233,4 @@ def test_a_report_reads_back_as_it_was_written(tmp_path):
     assert list(report.index) == ["s_VIC1"]
     assert list(report["cf_solar"]) == [0.19], "numbers come back as numbers"
     assert list(report["start_date"]) == ["20250101"], "and dates as text"
-    assert report["lco_output"].dtype == float
+    assert report["lcos_eur_per_t"].dtype == float

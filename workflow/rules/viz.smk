@@ -120,10 +120,7 @@ rule plot_capacity_bars:
 
 
 rule plot_lcos_bars:
-    """Steel routes only: stacked LCOS cost-breakdown per run for one scenario.
-
-    Errors on scenarios whose only route is h2-only (no LCOS), so it is
-    requested on demand rather than fanned out in `rule all`."""
+    """Stacked LCOS cost-breakdown per run for one scenario, requested on demand."""
     input:
         report="results/{scenario}/report_{scenario}.csv",
     output:

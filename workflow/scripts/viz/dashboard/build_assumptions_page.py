@@ -42,12 +42,6 @@ SKIPPED = {
     "anchor.min_capacity_mw":
         "A floor on what the anchor cell must build, and it binds only on a "
         "multi-site run. Every run here is single-site best-site P95.",
-    "plant.dri_mt_per_year":
-        "Sizes the electrolyser for the hydrogen-only route, which makes no "
-        "steel and is not plotted.",
-    "plant.availability_target":
-        "The same: the hydrogen-only route's availability floor. A steel route "
-        "leaves electrolyser sizing to the optimiser.",
     "natural_gas.co2_price_eur_per_t":
         "Zero in every scenario here, so no route pays anything for its carbon "
         "and no cost on any chart comes from it.",

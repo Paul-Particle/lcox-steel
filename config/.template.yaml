@@ -23,14 +23,8 @@ finance:
 # workflow/scripts/solve/build_network.py.
 
 plant:
-  dri_mt_per_year: 0.526  # 100 MW H2 LHV input × 8760 h / 33.33 kWh/kg / 50 kg/t
   h2_intensity_kg_per_t_dri: 50.23
-  # Floor for electrolyser sizing — the optimiser may grow it further when the
-  # extra capacity earns its capex via buffer-mediated arbitrage of cheap RES.
-  # Used by the h2_only route only; steel routes size the electrolyser freely
-  # from the steel chain's demand.
-  availability_target: 0.95
-  # Demand anchor for the steel routes: a flat t/h load on the steel bus
+  # Demand anchor: a flat t/h load on the steel bus
   # (supply-side model; steel demand itself is not flexible).
   steel_mt_per_year: 1.0
 

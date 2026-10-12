@@ -1,9 +1,8 @@
 # lcox-steel: Levelized Cost of Green Steel
 
 `lcox-steel` calculates levelized costs for green-steel plants powered by
-captive renewables, a grid connection, or both — the levelized cost of steel
-(LCOS) for full process routes, or the levelized cost of hydrogen (LCOH) for
-the pure hydrogen-supply model. It couples three data pipelines and an
+captive renewables, a grid connection, or both: the levelized cost of steel
+(LCOS) of a process route. It couples three data pipelines and an
 optimisation model into one Snakemake workflow:
 
 - **`res_cf`** — hourly renewable capacity factors from ERA5 reanalysis (via atlite).
@@ -12,17 +11,16 @@ optimisation model into one Snakemake workflow:
   steelmaking process route to meet a constant demand at least cost. One solve
   is one run, building one route named by the `route` column of its scenario
   table:
-  - `h2-only` — electrolyser meets a flat H2 demand (the original LCOH model)
   - `h2-dri-eaf` — electrolyser → H2 → DRI shaft → sponge iron (storable) → EAF → steel
   - `ng-dri-eaf` — fossil benchmark: natural-gas DRI (flat gas price, optional CO2 price) → EAF → steel
   - `mix-dri-eaf` — H2 and NG DRI shafts side by side; the optimiser picks the split
   - `moe-eaf` — molten oxide electrolysis → liquid iron → EAF → steel
   - `ew-eaf` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
 
-  Every steel route also has an `-export` twin that makes its iron at the run's
+  Every route also has an `-export` twin that makes its iron at the run's
   origin and melts it at its destination. The route ids live in
   `workflow/scripts/solve/build_network.py`.
-- **`viz`** — an LCOH/LCOS report per run and per scenario, plus Plotly figures.
+- **`viz`** — an LCOS report per run and per scenario, plus Plotly figures.
 
 ## Architecture at a glance
 
@@ -432,10 +430,9 @@ and the exports' also set the sea distance.
 
 An area on the grid that trades through market zones is run once per zone.
 `report.best_run_by` in `config/config.yaml` names the field that decides which
-run stands for the scenario, defaulting to `lco_output`: the levelised cost of
-whatever the run produces, steel or (for `h2-only`) hydrogen, with
-`lco_output_unit` alongside so a run is readable on its own. The lowest wins, and
-a run without a value is never picked over one with it.
+run stands for the scenario, defaulting to `lcos_eur_per_t`, the levelised cost
+of steel. The lowest wins, and a run without a value is never picked over one
+with it.
 
 `pick_best_run` copies the winner's report, diagnostic, network and assumptions
 up into `results/{scenario}/`, so a scenario's folder looks the same whether it
@@ -520,8 +517,7 @@ multi-tech frame.
 **Results**: each run's folder, `results/{scenario}/.runs/{scenario}_{run}/`,
 holds the full solved PyPSA network (`outputs/{scenario}_{run}.nc`), its report
 and diagnostic (from `compile_report`) and the assumptions it ran on. The report
-carries the levelised cost (LCOH for `h2-only` routes, LCOS €/t for steel routes)
-and optimal capacities. `results/{scenario}/` holds the same files of the run that
+carries the levelised cost of steel (€/t) and optimal capacities. `results/{scenario}/` holds the same files of the run that
 stands for the scenario (`outputs/{scenario}.nc`, `report_{scenario}.csv`, …).
 
 ### The shape of a report
@@ -542,8 +538,8 @@ lcos_eur_per_t,914.11
 The **identity fields lead**: the run (`scenario, area` — the origin —
 `route, start_date, end_date`; the column's name says which run it is, and the
 hidden diagnostic beside the report also carries `run` and `destination`), one `{tech}_variant` row per input series
-(`solar_variant: bestsite-p95`, `wind_onshore_variant: bestsite-p95`), the unit its
-`lco_output` is in, and the `inputs_hash`. Everything below them is numbers, so a
+(`solar_variant: bestsite-p95`, `wind_onshore_variant: bestsite-p95`), and the
+`inputs_hash`. Everything below them is numbers, so a
 reader can skip the block on top and take the rest as a numeric table. The
 variant matters because a best-site P95 profile and an area average answer
 different questions, and the solved network does not carry it (the solve reads
@@ -560,10 +556,10 @@ they still name files and config keys.
 
 **Every run writes the same fields** whatever route it took. The set and its
 order are declared in `workflow/common/_report_schema.py`, and `compile_report`
-puts each run's row on it before writing. Without that the shape was the
-union of whatever runs a scenario happened to contain: solving only `h2-only`
-left the steel chain out, adding one `moe-eaf` run grew every other run's row,
-and a consumer asking for a field nobody wrote got silence.
+puts each run's row on it before writing. Otherwise the shape would be the
+union of whatever runs a scenario happened to contain: solving only `ng-dri-eaf`
+would leave the electrolyser out, adding one `moe-eaf` run would grow every other
+run's row, and a consumer asking for a field nobody wrote would get silence.
 
 A cell a run has no value for says which of two things it means:
 

@@ -422,10 +422,8 @@ def _emissions_breakdown(
 def _h2_produced_kg(n: pypsa.Network) -> float:
     """Annual H2 produced by the electrolyser, in kg, scaled to a year.
 
-    Read from the electrolyser link's H2-side output rather than the dri_load,
-    so the result reflects actual production. The two coincide when the model
-    is feasible and the H2 buffer is cyclic, but only the link side stays
-    correct if the load formulation changes later (e.g. flexible demand).
+    Read from the electrolyser link's H2-side output, so it is what was made
+    rather than what any one consumer drew.
     """
     t_hours = len(n.snapshots)
     # PyPSA Link sign convention: p1 < 0 when the link injects power into bus1,
@@ -849,11 +847,8 @@ def extract_summary(
     `run` identifies the row — area, route, date range and the input variants —
     and leads the columns, so what a number describes reads before the number.
 
-    The headline levelised cost depends on the network's route: LCOH for the
-    pure-H2 model (flat H2 load, no steel chain), LCOS for the steel routes
-    (flat steel load). H2 production is reported whenever an electrolyser
-    exists, but LCOH is only well-defined when H2 is the end product — on
-    steel routes the annual cost covers the whole chain.
+    The headline is the levelised cost of steel (LCOS) over the flat steel
+    load; hydrogen's output and cost are reported wherever an electrolyser runs.
 
     `transport_legs` and `grid_mix` are the run's own freight legs and the
     generation mix behind its imports; both only feed the emission fields, and
@@ -877,29 +872,13 @@ def extract_summary(
 
     total_annual_cost = sum(breakdown.values())
 
-    if "dri_load" in n.loads.index:
-        lcoh_eur_per_kg = total_annual_cost / _h2_produced_kg(n)
-        summary["lcoh_eur_per_kg"] = lcoh_eur_per_kg
-        summary["lcoh_eur_per_mwh_lhv"] = lcoh_eur_per_kg * 1000.0 / H2_LHV_KWH_PER_KG
-
-    if "steel_load" in n.loads.index:
-        steel_t_per_year = float(n.loads.at["steel_load", "p_set"]) * hours_per_year
-        summary["lcos_eur_per_t"] = total_annual_cost / steel_t_per_year
-        summary["steel_produced_mt"] = steel_t_per_year / 1e6
+    steel_t_per_h = float(n.loads.at["steel_load", "p_set"])
+    steel_t_per_year = steel_t_per_h * hours_per_year
+    summary["lcos_eur_per_t"] = total_annual_cost / steel_t_per_year
+    summary["steel_produced_mt"] = steel_t_per_year / 1e6
 
     if "electrolyser" in n.links.index:
         summary["h2_produced_kt"] = _h2_produced_kg(n) / 1e6
-
-    # The levelised cost of whatever this run produces — steel for the steel
-    # routes, hydrogen for h2-only. One column, so ranking a route's runs against
-    # each other needs no per-route special-casing; the unit rides along so a row
-    # is readable on its own.
-    if "lcos_eur_per_t" in summary:
-        summary["lco_output"] = summary["lcos_eur_per_t"]
-        summary["lco_output_unit"] = "EUR/t steel"
-    elif "lcoh_eur_per_kg" in summary:
-        summary["lco_output"] = summary["lcoh_eur_per_kg"]
-        summary["lco_output_unit"] = "EUR/kg H2"
 
     # Levelised cost of the underlying energy carriers, €/MWh, so LCOS can be read
     # against the electricity and hydrogen that drive it.
@@ -1024,7 +1003,7 @@ def extract_summary(
                 - float(assumptions["grid"]["fee_eur_per_mwh"])
             )
 
-    if "electrolyser" in n.links.index and "steel_load" in n.loads.index:
+    if "electrolyser" in n.links.index:
         el_mwh = float(n.links_t.p0["electrolyser"].sum()) * annual_scale
         h2_mwh = _h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
         if h2_mwh > 0:
@@ -1034,8 +1013,7 @@ def extract_summary(
             lcoh = (el_cost + buf_cost + elec_for_h2) / h2_mwh
             summary["lcoh_eur_per_mwh_lhv"] = lcoh
             # And per kg, which is the unit the cost-breakdown page charts
-            # hydrogen in. Filled on every route that makes hydrogen, not only
-            # h2-only, because the steel routes are the ones the page plots.
+            # hydrogen in.
             summary["lcoh_eur_per_kg"] = lcoh * H2_LHV_KWH_PER_KG / 1000.0
             # LCOH decomposition, €/MWh LHV over the same H2 denominator so the
             # parts sum back to LCOH: the electrolyser plant, its electricity
@@ -1050,28 +1028,25 @@ def extract_summary(
     # per-plant figures sum to the "process" group and ore+consumables to the
     # "ore_consumables" group. Ore is the feedstock priced on the reduction/
     # electrolysis links; consumables is the EAF's marginal cost.
-    if "steel_load" in n.loads.index:
-        steel_t = float(n.loads.at["steel_load", "p_set"]) * hours_per_year
-        if steel_t > 0:
-            def _link_capex(link_name: str) -> float:
-                return (float(n.links.at[link_name, "capital_cost"] * n.links.at[link_name, "p_nom_opt"])
-                        if link_name in n.links.index and bool(n.links.at[link_name, "p_nom_extendable"])
-                        else 0.0)
+    def _link_capex(link_name: str) -> float:
+        return (float(n.links.at[link_name, "capital_cost"] * n.links.at[link_name, "p_nom_opt"])
+                if link_name in n.links.index and bool(n.links.at[link_name, "p_nom_extendable"])
+                else 0.0)
 
-            def _link_marginal(link_name: str) -> float:
-                if link_name not in n.links.index or link_name not in n.links_t.p0.columns:
-                    return 0.0
-                return float((n.links_t.p0[link_name] * n.links.at[link_name, "marginal_cost"]).sum()) * annual_scale
+    def _link_marginal(link_name: str) -> float:
+        if link_name not in n.links.index or link_name not in n.links_t.p0.columns:
+            return 0.0
+        return float((n.links_t.p0[link_name] * n.links.at[link_name, "marginal_cost"]).sum()) * annual_scale
 
-            for link in PROCESS_LINKS:
-                summary[f"plant_{field_stem(link)}_eur_per_t"] = _link_capex(link) / steel_t
-            # Every link that buys ore — the blended shaft included, where the
-            # ore is over a third of the cost of the steel — so this column and
-            # `consumables` add up to the `ore_consumables` group and the leaf
-            # split under it reaches the same total.
-            ore = sum(_link_marginal(link) for link in ORE_LINKS)
-            summary["ore_eur_per_t_steel"] = ore / steel_t
-            summary["consumables_eur_per_t_steel"] = _link_marginal("eaf") / steel_t
+    for link in PROCESS_LINKS:
+        summary[f"plant_{field_stem(link)}_eur_per_t"] = _link_capex(link) / steel_t_per_year
+    # Every link that buys ore — the blended shaft included, where the
+    # ore is over a third of the cost of the steel — so this column and
+    # `consumables` add up to the `ore_consumables` group and the leaf
+    # split under it reaches the same total.
+    ore = sum(_link_marginal(link) for link in ORE_LINKS)
+    summary["ore_eur_per_t_steel"] = ore / steel_t_per_year
+    summary["consumables_eur_per_t_steel"] = _link_marginal("eaf") / steel_t_per_year
 
     # Steel-route process links: capacity in output units (t/h of iron or
     # steel — p_nom is input-side, so scale by the link efficiency) plus
@@ -1104,11 +1079,7 @@ def extract_summary(
     if "iron_store" in n.stores.index:
         store_t = n.stores.at["iron_store", "e_nom_opt"]
         summary["iron_store_kt"] = store_t / 1e3
-        if "steel_load" in n.loads.index:
-            steel_t_per_h = float(n.loads.at["steel_load", "p_set"])
-            summary["iron_store_hours_steel"] = (
-                store_t / steel_t_per_h if steel_t_per_h else float("nan")
-            )
+        summary["iron_store_hours_steel"] = store_t / steel_t_per_h
 
     annual = hours_per_year / len(n.snapshots)
     for link, field in (("iron_transport", "iron_shipped_kt"),
@@ -1122,11 +1093,7 @@ def extract_summary(
     if "steel_store" in n.stores.index:
         store_t = n.stores.at["steel_store", "e_nom_opt"]
         summary["steel_store_kt"] = store_t / 1e3
-        if "steel_load" in n.loads.index:
-            steel_t_per_h = float(n.loads.at["steel_load", "p_set"])
-            summary["steel_store_hours_steel"] = (
-                store_t / steel_t_per_h if steel_t_per_h else float("nan")
-            )
+        summary["steel_store_hours_steel"] = store_t / steel_t_per_h
 
     for gen in n.generators.index[n.generators.p_nom_extendable]:
         summary[f"{field_stem(gen)}_gw_opt"] = n.generators.at[gen, "p_nom_opt"] / 1e3
@@ -1140,11 +1107,8 @@ def extract_summary(
     if "h2_buffer" in n.stores.index:
         buffer_mwh = n.stores.at["h2_buffer", "e_nom_opt"]
         summary["h2_buffer_gwh"] = buffer_mwh / 1e3
-        # Additionally as hours of average H₂ demand: the flat dri_load on the
-        # pure-H2 route, or the DRI link's mean H₂ draw on the steel route.
-        if "dri_load" in n.loads.index:
-            h2_demand_mw = float(n.loads.at["dri_load", "p_set"])
-        elif "dri-h2" in n.links.index:
+        # Additionally as hours of the H₂ shaft's mean H₂ draw.
+        if "dri-h2" in n.links.index:
             h2_demand_mw = float(n.links_t.p0["dri-h2"].mean())
         else:
             h2_demand_mw = 0.0
@@ -1161,9 +1125,6 @@ def extract_summary(
             )
         else:
             summary["electrolyser_utilization"] = float("nan")
-
-    if "dri_load" in n.loads.index:
-        summary["dri_h2_mw_lhv"] = float(n.loads.at["dri_load", "p_set"])
 
     # Multi-site only (guarded so single-site reports are unchanged): one column
     # per HVDC link capacity, the total annualised transmission cost, and per-tech
@@ -1216,17 +1177,15 @@ def extract_summary(
     # total, so a step this route has none of reads 0 rather than blank. The
     # freight sits beside them rather than in them: it is what delivering the
     # tonne added, and no total above counts it.
-    if "steel_produced_mt" in summary and summary["steel_produced_mt"] > 0:
-        steel_t = summary["steel_produced_mt"] * 1e6
-        summary["emissions_kg_co2e_per_t_steel"] = emissions_t * 1e3 / steel_t
-        for step in EMISSION_STEPS:
-            summary[f"emissions_{field_stem(step)}_kg_co2e_per_t_steel"] = (
-                emissions.get(step, 0.0) * 1e3 / steel_t
-            )
-        for leg in FREIGHT_LEGS:
-            summary[f"emissions_{field_stem(leg)}_kg_co2e_per_t_steel"] = (
-                freight_by_leg.get(leg, 0.0) * 1e3 / steel_t
-            )
+    summary["emissions_kg_co2e_per_t_steel"] = emissions_t * 1e3 / steel_t_per_year
+    for step in EMISSION_STEPS:
+        summary[f"emissions_{field_stem(step)}_kg_co2e_per_t_steel"] = (
+            emissions.get(step, 0.0) * 1e3 / steel_t_per_year
+        )
+    for leg in FREIGHT_LEGS:
+        summary[f"emissions_{field_stem(leg)}_kg_co2e_per_t_steel"] = (
+            freight_by_leg.get(leg, 0.0) * 1e3 / steel_t_per_year
+        )
     if emissions_t > 0:
         for step in EMISSION_STEPS:
             summary[f"emissions_{field_stem(step)}_pct"] = (
@@ -1279,14 +1238,12 @@ def extract_summary(
     # The cost groups cut as finely as the model allows — the two taxonomies the
     # cost-breakdown page plots. Last, because it reads each user's electricity
     # draw off the emissions breakdown above rather than reading the ports a
-    # second time. Steel routes only: the splits are shares of a tonne of steel,
-    # and h2-only has none to be a share of.
-    if "steel_produced_mt" in summary and summary["steel_produced_mt"] > 0:
-        summary.update(_leaf_breakdown(
-            n, assumptions, breakdown, summary["steel_produced_mt"] * 1e6,
-            {"by_user": electricity_mwh, "losses_mwh": emitted["losses_mwh"],
-             "generation_mwh": elec_mwh},
-        ))
+    # second time.
+    summary.update(_leaf_breakdown(
+        n, assumptions, breakdown, steel_t_per_year,
+        {"by_user": electricity_mwh, "losses_mwh": emitted["losses_mwh"],
+         "generation_mwh": elec_mwh},
+    ))
 
     return summary
 

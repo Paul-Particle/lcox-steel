@@ -57,10 +57,9 @@ ons:
 # runs stands for it. A scenario is usually one run; an area on the grid that
 # trades through market zones is run once per zone, and the lowest value reaches
 # results/{scenario}/report_{scenario}.csv. The other zones are not lost: every
-# run keeps its own files under results/{scenario}/.runs/. `lco_output` is the
-# levelised cost of whatever the run produces (steel, or hydrogen for h2-only).
+# run keeps its own files under results/{scenario}/.runs/.
 report:
-  best_run_by: lco_output
+  best_run_by: lcos_eur_per_t
 
 # The area registry. `area` in a scenario table names one of these keys, and
 # each key names one cutout. An area is a country (three-letter ISO 3166-1
