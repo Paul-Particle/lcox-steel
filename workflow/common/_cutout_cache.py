@@ -14,8 +14,9 @@ Layout (under a gitignored ``cutouts/cache/``):
 Entries are shared with the rule output via hardlink (copy fallback), so the
 cache costs no extra disk and survives Snakemake deleting a rule output.
 
-Scope: exact-parameter match only. A larger cached cutout that covers a request is
-not sliced down to it, and a partial range is not filled month by month.
+Scope: entries are found here by exact parameters. retrieve_area_cutout also
+cuts a request out of a larger cached cutout that covers it; a partial time range
+is not filled month by month.
 """
 
 from __future__ import annotations

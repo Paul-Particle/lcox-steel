@@ -110,23 +110,28 @@ areas:
   # BRA runs the submarkets and an islanded one keeps the country whole. Each
   # submarket is the states it lists (the mapping is electrical, not geographic —
   # Acre and Rondônia are SE/CO, and Maranhão is N). Each takes the whole-Brazil
-  # cutout rather than a slice, hardlinked by scratch/cut_brazil_submarkets.py: a
-  # submarket's cells are a subset of the national grid, and the CF scripts select
-  # by geometry, not by the cutout's extent.
+  # cutout's box as its cutout_bbox, so retrieve_area_cutout links the cached
+  # national cutout rather than downloading one: a submarket's cells are a subset
+  # of the national grid, and the CF scripts select by geometry, not by the
+  # cutout's extent.
   #
   # Every market_area here is quoted. YAML 1.1 reads a bare N as boolean false,
   # the same trap that made Ontario's key ONT.
   BRA:   { iso3: BRA, region: BRA, coarse: false, zones: [BR_SE, BR_S, BR_NE, BR_N] }
   BR_SE: { iso3: BRA, region: BR_SE, coarse: false, market: ons, market_area: "SE",
            admin1_names: [São Paulo, Rio de Janeiro, Minas Gerais, Espírito Santo, Goiás,
-                          Distrito Federal, Mato Grosso, Mato Grosso do Sul, Acre, Rondônia] }
+                          Distrito Federal, Mato Grosso, Mato Grosso do Sul, Acre, Rondônia],
+           cutout_bbox: &brazil_cutout [-74.98724, -31.65731, -35.84369, 6.67772] }
   BR_S:  { iso3: BRA, region: BR_S,  coarse: false, market: ons, market_area: "S",
-           admin1_names: [Paraná, Santa Catarina, Rio Grande do Sul] }
+           admin1_names: [Paraná, Santa Catarina, Rio Grande do Sul],
+           cutout_bbox: *brazil_cutout }
   BR_NE: { iso3: BRA, region: BR_NE, coarse: false, market: ons, market_area: "NE",
            admin1_names: [Bahia, Sergipe, Alagoas, Pernambuco, Paraíba, Rio Grande do Norte,
-                          Ceará, Piauí] }
+                          Ceará, Piauí],
+           cutout_bbox: *brazil_cutout }
   BR_N:  { iso3: BRA, region: BR_N,  coarse: false, market: ons, market_area: "N",
-           admin1_names: [Amazonas, Pará, Amapá, Tocantins, Maranhão, Roraima] }
+           admin1_names: [Amazonas, Pará, Amapá, Tocantins, Maranhão, Roraima],
+           cutout_bbox: *brazil_cutout }
   # Alberta and Ontario are the only Canadian provinces with a wholesale market;
   # the rest are regulated cost-of-service utilities with no hourly price. They
   # are top-level areas rather than zones of a CAN entry because `all-areas`

@@ -16,6 +16,7 @@ below, no land-use, grid or permitting exclusions are applied.
 |---|---|---|
 | `a_make_area_geometry.py` | `make_area_geometry` | `resources/shapes/{area}_geo.parquet` |
 | `b_make_offshore_geometry.py` | `make_offshore_geometry` | `resources/shapes/{area}_offshore_geo.parquet` |
+| `b2_make_zone_offshore_geometry.py` | `make_zone_offshore_geometry` | `resources/shapes/{area}_offshore_geo.parquet` |
 | `c_retrieve_area_cutout.py` | `retrieve_area_cutout` | `cutouts/{area}_{start_date}_{end_date}.nc` |
 | `d1_area_average.py` | `area_average` | `resources/timeseries/{area}_{tech}_area-average_{start_date}_{end_date}.parquet` |
 | `d2_bestsite_p95.py` | `bestsite_p95` | `resources/timeseries/{area}_{tech}_bestsite-p95_{start_date}_{end_date}.parquet` |
@@ -51,7 +52,17 @@ with the repository. The sub-national geometries are committed under
     offshore = (EEZ − land) ∩ (land buffered by res_cf.offshore_max_distance_km)
 
 with the buffer built in the equal-area EPSG:6933. An area with no sea within that
-distance ends up with an empty geometry.
+distance ends up with an empty geometry. Like a, the rule skips the demo's area.
+
+**b2 — a sub-national area's offshore.** An area that lists `admin1_names` takes
+its country's offshore area, built as in b, and keeps the part whose nearest
+coast is one of its own Admin 1 units: every unit of the country claims the water
+closest to it (a Voronoi diagram of points every 2 km along the units' outlines),
+so neighbouring areas never share sea, and water nearest a unit that is no area's
+(Western Australia, Nunavut) belongs to none. Distances are taken in a projection
+centred on the area, where they are true along its coast; each area is split in
+its own, so two neighbours' shared border can disagree by a fraction of a
+percent of their areas.
 
 Where to download both source files is under
 [External data files](../../../README.md#2-external-data-files).

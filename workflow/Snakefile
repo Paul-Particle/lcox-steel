@@ -31,11 +31,16 @@ scenarios_df = pd.read_csv(config["inputs"]["scenarios"], comment="#", dtype=str
 runs_df = scenarios_df.drop_duplicates(["scenario", "run"])
 SCENARIOS = runs_df["scenario"].unique()
 
-# The areas make_area_geometry builds: every registered area except the demo's,
-# whose geometry ships with the repository so the demo runs without the Natural
-# Earth zips.
+# The areas the geometry rules build: every registered area except the demo's,
+# whose land and offshore geometry ship with the repository so the demo runs
+# without the Natural Earth and EEZ zips. A sub-national area (one that lists
+# `admin1_names`) takes its offshore geometry from make_zone_offshore_geometry,
+# a country from make_offshore_geometry.
 areas_df = pd.DataFrame.from_dict(config["areas"], orient="index")
-BUILT_AREAS = "|".join(areas_df.query("demo != True").index)
+built_df = areas_df.query("demo != True")
+BUILT_AREAS = "|".join(built_df.index)
+SUBNATIONAL_AREAS = "|".join(built_df.dropna(subset=["admin1_names"]).index)
+COUNTRY_AREAS = "|".join(built_df.index.difference(built_df.dropna(subset=["admin1_names"]).index))
 
 
 include: "rules/_optional_shim.smk"

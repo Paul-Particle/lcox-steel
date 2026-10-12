@@ -2,7 +2,7 @@
 Create an Atlite ERA5 cutout for one (area, start_date, end_date).
 
 The cutout extent is the bounding box of the union of the onshore land geometry
-(01_build_regions) and the offshore zone geometry (01b_build_offshore_regions),
+(make_area_geometry) and the offshore zone geometry (make_offshore_geometry),
 padded by `bbox_pad_deg`. Unioning in the offshore zone matters: it can reach up
 to `offshore_max_distance_km` (~200 km) from the coast — far beyond a land-only
 bbox — so without it the offshore-wind cells get clipped out of the cutout. An
@@ -11,7 +11,8 @@ it ships).
 
 Caching: the download is keyed on its actual request parameters (bbox, dx/dy,
 time range) and reused from a persistent cache (common._cutout_cache) rather than
-re-fetched from CDS. The legacy `<cutout>_backup.nc` sibling is still honoured as
+re-fetched from CDS. A request no entry matches exactly is cut out of the
+smallest cached cutout, of any area, whose box covers it. The legacy `<cutout>_backup.nc` sibling is still honoured as
 a fallback but is superseded by the keyed cache.
 
 QC: every cutout (freshly downloaded, cached, or from a backup) is validated
@@ -23,11 +24,16 @@ status is logged periodically instead of the run appearing to hang.
 """
 
 from pathlib import Path
+import json
 import logging
 import shutil
+
+import pandas as pd
+
 from common._paths import ATLITE_CACHE, CUTOUTS, SHAPES_RES
-from common._cutout_qc import validate_cutout
+from common._cutout_qc import ERA5_NATIVE_STEP_DEG, validate_cutout
 from common._cutout_cache import (
+    CACHE_DIR,
     cache_params,
     cache_paths,
     link_or_copy,
@@ -118,7 +124,47 @@ def main():
         log.info(f"cutout QC passed (from cache):\n{report.summary()}")
         return
 
-    # 2) Legacy backup sibling (superseded by the keyed cache; kept as a fallback
+    # 2) A larger cached cutout of the same window and resolution, of any area,
+    #    cut down to this box. One grid step of slack, because atlite snaps a
+    #    request to the ERA5 lattice inside its box, so a box a fraction of a step
+    #    wider asks for no cell the cached one lacks.
+    step = dx or ERA5_NATIVE_STEP_DEG
+    cache_entries = pd.DataFrame(
+        [{**json.loads(path.read_text()), "path": path.with_suffix(".nc")}
+         for path in CACHE_DIR.glob("*.json") if path.with_suffix(".nc").exists()],
+        columns=[*params, "path"],
+    )
+    covering = (
+        cache_entries[
+            (cache_entries["module"] == params["module"])
+            & (cache_entries["start_date"] == params["start_date"])
+            & (cache_entries["end_date"] == params["end_date"])
+            & (cache_entries["dx"].fillna(0) == (params["dx"] or 0))
+            & (cache_entries["x0"] <= params["x0"] + step)
+            & (cache_entries["x1"] >= params["x1"] - step)
+            & (cache_entries["y0"] <= params["y0"] + step)
+            & (cache_entries["y1"] >= params["y1"] - step)
+        ]
+        .assign(size=lambda df: (df["x1"] - df["x0"]) * (df["y1"] - df["y0"]))
+        .sort_values("size")
+    )
+    if not covering.empty:
+        source = covering["path"].iloc[0]
+        log.info(f"covered by cached {source.name} — cutting {_OUTPUT_PATH.name} out of it (skipping CDS)")
+        # The same box under another area's name (Brazil's submarkets take the
+        # national one) is linked rather than rewritten: these run to gigabytes.
+        same_box = all(covering[bound].iloc[0] == params[bound] for bound in ("x0", "x1", "y0", "y1"))
+        if same_box:
+            link_or_copy(source, _OUTPUT_PATH)
+        else:
+            # The cut keeps the cached cutout's compression.
+            atlite.Cutout(path=str(source)).sel(x=x, y=y).to_file(_OUTPUT_PATH)
+        report = validate_cutout(_OUTPUT_PATH, _START_DATE, _END_DATE)
+        log.info(f"cutout QC passed (cut from cache):\n{report.summary()}")
+        store_in_cache(_OUTPUT_PATH, _AREA, params, warn_size_gb=_CACHE_WARN_SIZE_GB)
+        return
+
+    # 3) Legacy backup sibling (superseded by the keyed cache; kept as a fallback
     #    so previously pinned `_backup.nc` files still short-circuit CDS).
     backup = _OUTPUT_PATH.with_name(_OUTPUT_PATH.stem + "_backup" + _OUTPUT_PATH.suffix)
     if backup.exists():
@@ -134,7 +180,7 @@ def main():
         log.info(f"backup {backup.name} now cached as {cached.name}; it is redundant and may be removed manually")
         return
 
-    # 3) Download from CDS.
+    # 4) Download from CDS.
     warn_if_low_disk(_MIN_FREE_DISK_GB)
     time_range = slice(_iso(_START_DATE), f"{_iso(_END_DATE)} 23:00")  # 23:00 keeps the full final day
     cutout = atlite.Cutout(

@@ -238,10 +238,13 @@ def main() -> None:
 
             co = atlite.Cutout(path=str(cutout))
             # Land-sea eligibility (#41): onshore drops sea-contaminated coastal
-            # border cells; offshore keeps all sea cells (min_lf = 0). Weights are
-            # also cos(lat) physical-area weighted (#37), folded into eligibility_weights.
-            min_lf = MIN_LAND_FRACTION if tech != "wind_offshore" else 0.0
-            weights = eligibility_weights(co, geom, min_lf, ELIGIBILITY_SOURCE)
+            # border cells; offshore keeps every cell it overlaps, weighted by the
+            # overlap, whichever land source is configured. Weights are also
+            # cos(lat) physical-area weighted (#37), folded into eligibility_weights.
+            offshore = tech == "wind_offshore"
+            min_lf = 0.0 if offshore else MIN_LAND_FRACTION
+            source = "indicatormatrix" if offshore else ELIGIBILITY_SOURCE
+            weights = eligibility_weights(co, geom, min_lf, source)
 
             cell_mean = cf_year.mean("time").values
             w_flat = weights.ravel()

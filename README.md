@@ -78,6 +78,7 @@ lcox-steel/
 │   │   ├── res_cf/                 # atlite capacity-factor pipeline (numbered by stage)
 │   │   │   ├── a_make_area_geometry.py        # onshore area geometry (GeoParquet)
 │   │   │   ├── b_make_offshore_geometry.py    # EEZ-clipped offshore geometry
+│   │   │   ├── b2_make_zone_offshore_geometry.py # a sub-national area's share of it, by nearest coast
 │   │   │   ├── c_retrieve_area_cutout.py      # ERA5 cutout (honours `_backup.nc`; see below)
 │   │   │   ├── d1_area_average.py             # area-average hourly CF per tech
 │   │   │   ├── d2_bestsite_p95.py             # best-site P95 + anchored RES-mix CF
@@ -341,17 +342,20 @@ The `res_cf` chain is `make_area_geometry` → `make_offshore_geometry` →
 area's land as its Natural Earth Admin 0 country (by `iso3`), or, for an area
 whose registry entry lists `admin1_names`, as the dissolve of those Admin 1
 states or provinces — that is how a NEM region or a Brazilian submarket gets its
-outline.
+outline. Such an area's offshore geometry comes from `make_zone_offshore_geometry`
+instead: its country's offshore area split among the country's Admin 1 units by
+nearest coast, so neighbouring areas never share a cell of sea.
 
 > [!NOTE]
-> **Cutout bounds = land ∪ offshore.** `download_cutout` reads the pre-built
+> **Cutout bounds = land ∪ offshore.** `retrieve_area_cutout` reads the pre-built
 > `{area}_geo.parquet` and `{area}_offshore_geo.parquet`, unions them, and
 > takes the bounding box padded by `res_cf.cutout.bbox_pad_deg`. Unioning the
 > offshore zone in matters: it can reach `res_cf.offshore_max_distance_km`
 > (~200 km) from the coast — well beyond a land-only bbox + 1° pad — so without
 > it the offshore-wind cells get clipped out of the cutout. The mainland_bbox
-> filter and EEZ clip are already applied upstream by `build_regions` /
-> `build_offshore_regions`, so the geometry is computed once.
+> filter and EEZ clip are already applied upstream by `make_area_geometry` /
+> `make_offshore_geometry` / `make_zone_offshore_geometry`, so the geometry is
+> computed once. An area's `cutout_bbox` replaces the box altogether.
 
 ### Naming convention
 
@@ -607,7 +611,7 @@ back to the cutout that produced them.
 ### Cutout caching
 
 ERA5 cutouts are expensive to (re-)download, so `cutouts/{name}.nc` is **not**
-marked `protected()`. Instead, `download_cutout` keeps a persistent cache under
+marked `protected()`. Instead, `retrieve_area_cutout` keeps a persistent cache under
 `cutouts/cache/`, keyed on the *actual* request parameters (module, bounding box,
 `dx`/`dy`, time range) — see `workflow/common/_cutout_cache.py`. On a cache hit it
 hardlinks the entry into the rule output and skips CDS; on a miss it downloads,
@@ -615,8 +619,10 @@ QC-validates, and stores the result. Keying on the real parameters means a
 `mainland_bbox` / `offshore_max_distance_km` edit correctly re-downloads instead
 of silently reusing a differently-bounded cutout. The legacy sibling
 `cutouts/{name}_backup.nc` still works as a fallback (`mv foo.nc foo_backup.nc`
-to pin one) and is promoted into the cache on use. Only an exact request match is
-reused; a larger cached cutout that covers a request is not sliced down to it.
+to pin one) and is promoted into the cache on use. A request no entry matches
+exactly is cut out of the smallest cached cutout, of any area and the same window
+and resolution, whose box covers it — or linked to it, when the boxes are the
+same, as for Brazil's submarkets, which take the national box.
 
 Every finished cutout — freshly downloaded, cached, or from a backup — passes
 structural QC (`workflow/common/_cutout_qc.py`) before the rule succeeds:
@@ -636,6 +642,7 @@ logs/
 ├── retrieve_grid_data/{area}_{variant}_{start}_{end}.log
 ├── make_area_geometry/{area}.log
 ├── make_offshore_geometry/{area}.log
+├── make_zone_offshore_geometry/{area}.log
 ├── retrieve_area_cutout/{area}_{start}_{end}.log
 ├── area_average/{area}_{tech}_{variant}_{start}_{end}.log
 ├── solve_network/{scenario}_{area}_{route}_{start}_{end}.log
@@ -663,8 +670,8 @@ tail -F logs/snakemake.log logs/*/*.log
 
 ### Watching CDS / ERA5 cutout downloads
 
-ERA5 downloads (`download_cutout`) can take **hours**: CDS allows one running job
-per user, each `download_cutout` submits ~5 feature requests (one per ERA5
+ERA5 downloads (`retrieve_area_cutout`) can take **hours**: CDS allows one running job
+per user, each `retrieve_area_cutout` job submits ~5 feature requests (one per ERA5
 variable group), and a single request commonly spends 20-25 min actually running
 plus queue time. So a full country-year cutout is ~2-2.5 h. This is normal.
 
@@ -740,7 +747,7 @@ SMK=path/to/snakemake PY=path/to/python \
 **For long multi-cutout runs, have an agent babysit.** A batch of country-years is
 many hours of mostly-waiting punctuated by rare failures — a good fit for a
 Claude Code agent that periodically tails `logs/overnight_downloads.log` +
-`logs/download_cutout/*.log`, distinguishes "still working" from a real failure
+`logs/retrieve_area_cutout/*.log`, distinguishes "still working" from a real failure
 using the signals above, and reports/retries. Run it as a background task and let
 it wake on a timer.
 

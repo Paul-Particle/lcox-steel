@@ -238,8 +238,13 @@ def build_anchor_scenario(cutout_path: Path, _AREA: str, anchor_tech: str,
     anchor_cf_year = build_cf_year(cutout_path, anchor_tech)
 
     co = atlite.Cutout(path=str(cutout_path))
-    anchor_min_lf = min_land_fraction if anchor_tech != "wind_offshore" else 0.0
-    anchor_weights = eligibility_weights(co, anchor_geom, anchor_min_lf, eligibility_source)
+    # Offshore keeps every cell it overlaps, whichever land source is configured.
+    anchor_offshore = anchor_tech == "wind_offshore"
+    anchor_weights = eligibility_weights(
+        co, anchor_geom,
+        0.0 if anchor_offshore else min_land_fraction,
+        "indicatormatrix" if anchor_offshore else eligibility_source,
+    )
 
     anchor_y_idx, anchor_x_idx = pick_p95_cell(anchor_cf_year.mean("time"), anchor_weights)
     anchor_series = extract_cell_timeseries(anchor_cf_year, anchor_y_idx, anchor_x_idx)
@@ -254,8 +259,12 @@ def build_anchor_scenario(cutout_path: Path, _AREA: str, anchor_tech: str,
         tech_cf_year = build_cf_year(cutout_path, tech)
         tech_geom = geometry_for_tech(_AREA, tech)
 
-        tech_min_lf = min_land_fraction if tech != "wind_offshore" else 0.0
-        eligible = eligibility_mask_2d(co, tech_geom, tech_min_lf, eligibility_source)
+        tech_offshore = tech == "wind_offshore"
+        eligible = eligibility_mask_2d(
+            co, tech_geom,
+            0.0 if tech_offshore else min_land_fraction,
+            "indicatormatrix" if tech_offshore else eligibility_source,
+        )
 
         found = find_top_candidates(
             anchor_x, anchor_y, tech_cf_year, tech_geom,

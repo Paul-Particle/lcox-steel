@@ -34,6 +34,8 @@ rule make_area_geometry:
 
 
 rule make_offshore_geometry:
+    wildcard_constraints:
+        area=COUNTRY_AREAS,
     input:
         regions="resources/shapes/{area}_geo.parquet",
         offshore_zone="data/shapes/offshore_zones/eez_v12.zip",
@@ -49,6 +51,28 @@ rule make_offshore_geometry:
         ),
     script:
         "../scripts/res_cf/b_make_offshore_geometry.py"
+
+
+rule make_zone_offshore_geometry:
+    """A sub-national area's share of its country's waters, by nearest coast."""
+    wildcard_constraints:
+        area=SUBNATIONAL_AREAS,
+    input:
+        admin1="data/shapes/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.zip",
+        offshore_zone="data/shapes/offshore_zones/eez_v12.zip",
+    output:
+        "resources/shapes/{area}_offshore_geo.parquet",
+    log:
+        "logs/make_zone_offshore_geometry/{area}.log",
+    params:
+        iso3=lookup(dpath="areas/{area}/iso3", within=config),
+        region=lookup(dpath="areas/{area}/region", within=config),
+        admin1_names=lookup(dpath="areas/{area}/admin1_names", within=config),
+        offshore_max_distance_km=lookup(
+            dpath="res_cf/offshore_max_distance_km", within=config
+        ),
+    script:
+        "../scripts/res_cf/b2_make_zone_offshore_geometry.py"
 
 
 rule retrieve_area_cutout:
