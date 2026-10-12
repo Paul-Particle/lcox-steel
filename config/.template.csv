@@ -13,3 +13,6 @@ demo-moe-eaf,DEMO,moe-eaf,solar,bestsite-p95,DEMO,20250101,20251231
 demo-moe-eaf-export,DEMO-ES_SYN,moe-eaf-export,wind-onshore,bestsite-p95,DEMO,20250101,20251231
 demo-moe-eaf-export,DEMO-ES_SYN,moe-eaf-export,solar,bestsite-p95,DEMO,20250101,20251231
 demo-moe-eaf-export,DEMO-ES_SYN,moe-eaf-export,grid,emissions,ES_SYN,20250101,20251231
+demo-moe-eaf-ship,DEMO-ES_SYN,moe-eaf,wind-onshore,bestsite-p95,DEMO,20250101,20251231
+demo-moe-eaf-ship,DEMO-ES_SYN,moe-eaf,solar,bestsite-p95,DEMO,20250101,20251231
+demo-moe-eaf-ship,DEMO-ES_SYN,moe-eaf,grid,emissions,ES_SYN,20250101,20251231

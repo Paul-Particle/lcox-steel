@@ -576,10 +576,13 @@ def _leaf_breakdown(
     `generation_mwh`.
     """
     annual_scale = _hours_per_year(n.snapshots) / len(n.snapshots)
-    # The furnace is financed where the steel is made, everything before it where
-    # the iron is, exactly as build_network financed them.
+    # The furnace is financed where it stands, everything before it where the
+    # iron is made, exactly as build_network financed them. It stands at the
+    # destination when it buys that market's power.
     origin_wacc = assumptions["finance"]["origin_wacc"]
-    wacc_of = lambda link: assumptions["finance"]["destination_wacc"] if link == "eaf" else origin_wacc
+    furnace_wacc = (assumptions["finance"]["destination_wacc"]
+                    if "destination_supply" in n.generators.index else origin_wacc)
+    wacc_of = lambda link: furnace_wacc if link == "eaf" else origin_wacc
     leaves = dict.fromkeys(LEAF_COSTS, 0.0)
 
     def link_capital(name: str) -> float:

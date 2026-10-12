@@ -174,9 +174,9 @@ def build_network(
     (`demand_site`), which hosts the process chain, storage and any grid import.
     `sites` is indexed by site_id with columns `x` (lon), `y` (lat).
 
-    `transport_legs` maps freight mode to km between the producing area and the
-    destination (`{"sea": 9500}`). An `-export` route needs it to ship its iron;
-    every steel route needs it when assumptions turn finished-steel delivery on.
+    `transport_legs` maps freight mode to km from the run's origin to its
+    destination (`{"sea": 9500}`), and is given only when the two differ. An
+    `-export` route ships its iron over them; any other route ships its steel.
 
     `destination_price` is the hourly €/MWh of the destination's market, on the
     same index. An `-export` route needs it — its furnace stands in that market
@@ -184,17 +184,19 @@ def build_network(
     """
     if route not in ROUTES:
         raise ValueError(f"unknown route '{route}' — expected one of {ROUTES}")
-    # Everything up to the iron is financed where the iron is made, the furnace
-    # and what serves it where the steel is made.
-    origin_wacc = assumptions["finance"]["origin_wacc"]
-    destination_wacc = assumptions["finance"]["destination_wacc"]
     plant = assumptions["plant"]
     transport_cfg = assumptions["transport"]
     stem = route_stem(route)
     is_export = route != stem
+    # Everything up to the iron is financed where the iron is made, the furnace
+    # and what serves it where the furnace stands: the destination on an export.
+    origin_wacc = assumptions["finance"]["origin_wacc"]
+    destination_wacc = assumptions["finance"]["destination_wacc"]
+    furnace_wacc = destination_wacc if is_export else origin_wacc
     # An export route's steel is made at the destination, so it is already
-    # where it is wanted and only the iron pays freight.
-    deliver_steel = transport_cfg["deliver_finished_steel"] and not is_export
+    # where it is wanted and only the iron pays freight; any other route with
+    # a destination elsewhere makes its steel at home and ships that.
+    deliver_steel = transport_legs is not None and not is_export
 
     multisite = sites is not None
 
@@ -229,7 +231,7 @@ def build_network(
     steel_t_per_h = plant["steel_mt_per_year"] * 1e6 / HOURS_PER_YEAR
     _add_steel_load(n, steel_t_per_h,
                     bus=DELIVERED_STEEL_BUS if deliver_steel else "steel")
-    _add_steel_store(n, assumptions["steel_store"], destination_wacc, steel_t_per_h)
+    _add_steel_store(n, assumptions["steel_store"], furnace_wacc, steel_t_per_h)
     if stem in _H2_DRI_ROUTES:
         _add_dri_link(n, plant, assumptions["dri-h2"], origin_wacc, elec_bus)
     if stem in _GAS_ROUTES:
@@ -288,7 +290,7 @@ def build_network(
     else:
         eaf_elec_bus, eaf_iron_bus = elec_bus, "iron"
     _add_eaf_link(
-        n, assumptions["eaf"], destination_wacc, eaf_elec_bus,
+        n, assumptions["eaf"], furnace_wacc, eaf_elec_bus,
         el_mwh_per_t=assumptions["eaf"]["charge"][charge_state]["el_mwh_per_t"],
         iron_t_per_t_steel=assumptions[iron_source]["iron_t_per_t_steel"],
         bus0=eaf_iron_bus,

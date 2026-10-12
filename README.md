@@ -18,8 +18,9 @@ optimisation model into one Snakemake workflow:
   - `ew-eaf` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
 
   Every route also has an `-export` twin that makes its iron at the run's
-  origin and melts it at its destination. The route ids live in
-  `workflow/scripts/solve/build_network.py`.
+  origin and melts it at its destination. A route without the suffix makes its
+  steel at the origin and, if its run has a destination elsewhere, ships the
+  steel there. The route ids live in `workflow/scripts/solve/build_network.py`.
 - **`viz`** — an LCOS report per run and per scenario, plus Plotly figures.
 
 ## Architecture at a glance
@@ -273,9 +274,10 @@ Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` per th
 EEZ/Natural-Earth zips, and no API keys**. It ships a pre-sliced Victoria
 (Australia) cutout at 0.5° for its own `DEMO` area, plus that area's geometry
 parquets, and takes the best-site (`d2`) capacity-factor science through a
-`solve` to a `viz` report. Its four scenarios build `h2-dri-eaf` and `moe-eaf`,
-each at home and as the export twin, which melts its iron in `ES_SYN`, a made-up
-Spain-like market, so their destination figures are illustrative only:
+`solve` to a `viz` report. Its scenarios build `h2-dri-eaf` and `moe-eaf`, each
+at home and as the export twin, which melts its iron in `ES_SYN`, a made-up
+Spain-like market, and `moe-eaf` once more shipping its steel there, so their
+destination figures are illustrative only:
 
 ```bash
 snakemake --configfile config/demo.yaml --profile profiles/default --cores 4
@@ -420,11 +422,11 @@ the template supplies and the workbook rows left unused.
 
 ### The demo
 
-The template's four scenarios, `demo-h2-dri-eaf`, `demo-moe-eaf` and their
-`-export` twins, sit on the shipped Victoria cutout, so they run after a fresh
+The template's five scenarios, `demo-h2-dri-eaf`, `demo-moe-eaf`, their
+`-export` twins and `demo-moe-eaf-ship`, which makes its steel at home and ships
+it to `ES_SYN`, sit on the shipped Victoria cutout, so they run after a fresh
 clone with no CDS download. Each overlay moves one value its route reads — a
-salt-cavern H2 store for the H2 routes, a lower MOE turndown for the MOE ones —
-and the exports' also set the sea distance.
+salt-cavern H2 store for the H2 routes, a lower MOE turndown for the MOE ones.
 
 ### A scenario with several runs
 
@@ -450,7 +452,7 @@ runs and says which one was picked. A scenario with one run has one entry, so
 | `config/config.yaml` | Pipeline knobs: `logging`, `inputs` (the base assumptions and scenario table to run), `entsoe` (data types), `nem` (`eur_per_aud` FX), `report` (`best_run_by`), `res_cf` (turbines, CF flags, cutout settings), `areas` (the area registry). |
 | `config/demo.yaml` | Runs the template instead: `snakemake --configfile config/demo.yaml`. |
 | `config/.template.yaml` | A complete assumptions file, every key the model reads: the demo runs on it as it stands, and `python -m common.generate_inputs [WORKBOOK]` writes `config/generated/assumptions.yaml` from it, replacing each value the input workbook, `data/assumptions/Assumptions_yaml_inputs.xlsx`, holds with the workbook's (converted from USD to EUR); the rest are backstop values, copied over as they stand. |
-| `config/generated/assumptions.yaml` | Generated from the input workbook and `config/.template.yaml`; edit those instead. Base techno-economics: CAPEX/OPEX, lifetimes, the WACC (`finance.origin_wacc` for everything up to the iron, `finance.destination_wacc` for the EAF, the steel store and the furnace's grid connection), electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and what freight costs (`transport`), with the legs from each origin country to each destination in `transport.distance_km` — a run looks up its own, a market zone shipping as its country, and a pair not listed gets `default`, 3141.593 km (π × 1000), a number nobody would quote, so such a run stands out. Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the scenario table, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the scenario table's `tech`. |
+| `config/generated/assumptions.yaml` | Generated from the input workbook and `config/.template.yaml`; edit those instead. Base techno-economics: CAPEX/OPEX, lifetimes, the WACC (`finance.origin_wacc` for everything up to the iron, `finance.destination_wacc` for an export route's EAF, steel store and the furnace's grid connection), electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and what freight costs (`transport`), with the legs from each origin country to each destination in `transport.distance_km` — a run looks up its own, a market zone shipping as its country, and a pair not listed gets `default`, 3141.593 km (π × 1000), a number nobody would quote, so such a run stands out. Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the scenario table, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the scenario table's `tech`. |
 | `config/overlays/{scenario}.yaml` | *Optional* per-scenario overlay, deep-merged onto the base so it carries only the keys it moves. **File presence is the toggle**: the `optional()` shim resolves it at job-evaluation time, and a scenario without one runs on the base as it stands. It never selects a route. The generator writes and removes its own (marked `# GENERATED`); the rest are kept by hand. |
 | `config/generated/scenarios.csv`, `config/.template.csv` | The scenario tables: one row per input series of a run. Columns: `scenario, run, route, tech, variant, area, start_date, end_date`. A run's rows name the origin's series first; its first area is its origin and its second its destination, and a third is an error. Route and dates are the same on every row of a run. `#` lines are comments. |
 

@@ -223,11 +223,15 @@ def main() -> None:
         f"destination={run_inputs['destination']} route={route} "
         f"techs={list(cf_timeseries.columns)} (overlay={overlay_name})"
     )
-    transport_legs = find_transport_legs(assumptions["transport"]["distance_km"], run_inputs["origin"],
-                                         run_inputs["destination"], snakemake.config["areas"])
+    # A run with a destination elsewhere ships its iron (an export) or its steel.
+    transport_legs = (
+        find_transport_legs(assumptions["transport"]["distance_km"], run_inputs["origin"],
+                            run_inputs["destination"], snakemake.config["areas"])
+        if run_inputs["destination"] != run_inputs["origin"] else None
+    )
 
     # Where an `-export` route melts its iron: the destination's own market series,
-    # which a domestic run does not have.
+    # which a run without a destination elsewhere does not have.
     destination_path = run_inputs["destination_path"]
     destination_price = None
     if destination_path is not None:

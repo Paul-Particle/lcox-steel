@@ -7,9 +7,10 @@
 
 finance:
   # The origin is where the iron is made: renewables, storage, electrolyser,
-  # the shaft or cell, briquetting and the iron stockpile. The destination is
-  # where the steel is made: the EAF, the steel store and the furnace's grid
-  # connection. On a domestic route the two are the same place.
+  # the shaft or cell, briquetting and the iron stockpile. destination_wacc
+  # finances what an export route builds where it melts its iron: the EAF, the
+  # steel store and the furnace's grid connection. Every other route's furnace
+  # stands at the origin and is financed at origin_wacc.
   origin_wacc: 0.071
   destination_wacc: 0.071
 
@@ -288,13 +289,10 @@ transport:
   # and not in the area registry — they depend on the destination port and on
   # the routing (Suez or the Cape), and we expect to vary both.
   #
-  # deliver_finished_steel decides where the model stops. Off (the default) it
-  # stops at the plant gate, and only an export route pays freight — it has to,
-  # because its furnace is somewhere else. On, every route also delivers its
-  # steel to the destination over the same legs, which is the comparison the
-  # export routes exist for: ship 1.1 t of iron, or ship 1 t of steel. An
-  # export route pays no steel freight either way; its steel is already there.
-  deliver_finished_steel: false
+  # A run whose destination is its origin stops at the plant gate. One with a
+  # destination elsewhere pays freight over the legs below: an export route on
+  # its iron, any other route on its steel. Side by side they are the
+  # comparison the export routes exist for: ship 1.1 t of iron, or 1 t of steel.
 
   sea:
     iron:  { eur_per_t: 0.6757,  eur_per_t_km: 0.000343 }

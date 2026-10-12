@@ -102,7 +102,6 @@ SECTIONS = [
 
     ("Export destination and freight rates",
      [("destination.area", "Destination", ""),
-      ("transport.deliver_finished_steel", "Deliver finished steel too", ""),
       ("transport.sea.iron.eur_per_t_km", "Sea freight, iron", "€/t·km"),
       ("transport.sea.steel.eur_per_t_km", "Sea freight, steel", "€/t·km"),
       ("transport.sea.iron.eur_per_t", "Sea freight, iron, per tonne", "€/t"),
