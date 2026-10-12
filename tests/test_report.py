@@ -1,42 +1,34 @@
-"""Unit tests for what a report row says and which rows survive into it.
+"""Unit tests for what a report says and which run stands for its scenario.
 
-A country that reaches its market through zones (Australia through its NEM
-regions) is solved once per zone, so several report rows describe the same
-place. `mark_best_in_country` flags the cheapest rather than dropping the rest,
-and `write_report` splits that into the report viz reads and the hidden
-diagnostic. `input_variants` puts back the one part of a run's identity the
-solved network does not carry. These pin that behaviour on synthetic frames —
-no cutouts, no solves, so they run anywhere.
+A report is one run: compile_report writes it, and the hidden diagnostic beside
+it, through `write_report_file`. A scenario usually has one run; an area on the
+grid that trades through zones (Australia through its NEM regions) is run once
+per zone, and `pick_best_run` copies the cheapest zone's files up to stand for
+the scenario. These pin that behaviour on synthetic frames — no cutouts, no
+solves, so they run anywhere.
 """
 
-import pandas as pd
-import pytest
+from types import SimpleNamespace
 
-from scripts.viz import compile_report
-from scripts.viz import _run_display
+import pandas as pd
+
+from scripts.viz import _run_display, pick_best_run
 from common._report_schema import (
     DIAGNOSTIC_FIELDS,
     FIELD_ORDER,
     IDENTITY_FIELDS,
     read_report,
+    write_report_file,
 )
-from common._runs import zone_parents
 
-AREAS = {
-    "DEU": {"market": "entsoe", "market_area": "DE_LU"},
-    "BRA": {},
-    "AUS": {"zones": ["VIC1", "NSW1", "QLD1"]},
-    "VIC1": {"market": "nem", "market_area": "VIC1"},
-    "NSW1": {"market": "nem", "market_area": "NSW1"},
-    "QLD1": {"market": "nem", "market_area": "QLD1"},
-}
-PARENTS = zone_parents(AREAS)
+# The files pick_best_run copies up, each an input and an output of the same name.
+RUN_FILES = ("report", "diagnostic", "network", "overlay", "base_assumptions", "merged_assumptions")
 
 
 def _report(rows):
     """A report-shaped frame: one row per run, in the column order compile_report uses."""
     frame = pd.DataFrame(
-        rows, columns=["scenario", "area", "route", "start_date", "end_date", "lco_output"]
+        rows, columns=["scenario", "run", "area", "route", "start_date", "end_date", "lco_output"]
     )
     # Every row carries the fingerprint of the inputs behind it, so a frame
     # without one is not a report frame.
@@ -44,112 +36,92 @@ def _report(rows):
     return frame
 
 
-def test_a_run_is_a_column_and_a_field_is_a_row(tmp_path):
-    """The file's shape: runs across the top, the identity fields leading."""
-    df = _report([
-        ("s", "VIC1", "h2-dri-eaf", "20250101", "20251231", 606.0),
-        ("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0),
-    ])
-    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-
+def _write(df, tmp_path):
+    """The report and the diagnostic, written as compile_report writes them."""
     report_path = tmp_path / "report_s.csv"
-    compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
+    diagnostic_path = tmp_path / ".report_s_diag.csv"
+    write_report_file(df, diagnostic_path)
+    write_report_file(df, report_path, hold_back=DIAGNOSTIC_FIELDS)
+    return report_path, diagnostic_path
+
+
+def test_a_run_is_a_column_and_a_field_is_a_row(tmp_path):
+    """The file's shape: the run across the top, named after its folder, the identity fields leading."""
+    df = _report([("s", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
+    report_path, diagnostic_path = _write(df, tmp_path)
     stored = pd.read_csv(report_path)
+    report_identity = [field for field in IDENTITY_FIELDS if field not in DIAGNOSTIC_FIELDS]
 
-    assert list(stored.columns) == ["field", "s_1", "s_2"]
-    leading = list(stored["field"])[:len(IDENTITY_FIELDS) - 1]
-    # Every identity field but the diagnostic's flag, in declared order, on top.
-    assert leading == [f for f in IDENTITY_FIELDS if f != "best_in_country"]
-    assert stored.set_index("field").at["route", "s_2"] == "moe-eaf"
-
-
-def test_zone_parents_maps_zones_to_their_country():
-    assert PARENTS["VIC1"] == "AUS"
-    assert PARENTS["NSW1"] == "AUS"
-    assert PARENTS["DEU"] == "DEU", "an area that is nobody's zone is its own country"
+    assert list(stored.columns) == ["field", "s_VIC1"]
+    assert list(stored["field"])[:len(report_identity)] == report_identity
+    assert stored.set_index("field").at["route", "s_VIC1"] == "moe-eaf"
+    assert "run" not in set(stored["field"]), "the column's name already says which run it is"
+    assert read_report(diagnostic_path).at["s_VIC1", "run"] == "VIC1"
 
 
-def test_cheapest_zone_of_each_country_is_flagged():
-    df = _report([
-        ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
-        ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
-        ("s", "QLD1", "moe-eaf", "20250101", "20251231", 875.0),
-        ("s", "DEU", "moe-eaf", "20250101", "20251231", 1010.0),
-    ])
-    out = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-
-    flagged = set(out.loc[out["best_in_country"], "area"])
-    assert flagged == {"NSW1", "DEU"}, "the cheapest Australian zone, and Germany on its own"
-    assert list(out["country"]) == ["AUS", "AUS", "AUS", "DEU"]
-    assert len(out) == len(df), "losers are flagged, never dropped"
-
-
-def test_ranking_is_per_route_and_per_date_range():
-    df = _report([
-        ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
-        ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
-        ("s", "VIC1", "ew-eaf", "20250101", "20251231", 700.0),
-        ("s", "NSW1", "ew-eaf", "20250101", "20251231", 760.0),
-        ("s", "VIC1", "moe-eaf", "20240101", "20241231", 880.0),
-        ("s", "NSW1", "moe-eaf", "20240101", "20241231", 910.0),
-    ])
-    out = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-    winners = {
-        (r.route, r.start_date): r.area for r in out.itertuples() if r.best_in_country
-    }
-    # Each route picks its own zone, and each year is ranked separately.
-    assert winners == {
-        ("moe-eaf", "20250101"): "NSW1",
-        ("ew-eaf", "20250101"): "VIC1",
-        ("moe-eaf", "20240101"): "VIC1",
-    }
+def _pick(tmp_path, monkeypatch, costs):
+    """Run pick_best_run over one scenario whose runs cost `costs` ({run: lco_output})."""
+    inputs = {name: [] for name in RUN_FILES}
+    for run, cost in costs.items():
+        run_dir = tmp_path / ".runs" / f"s_{run}"
+        run_dir.mkdir(parents=True)
+        report_path, diagnostic_path = _write(
+            _report([("s", run, run, "moe-eaf", "20250101", "20251231", cost)]), run_dir
+        )
+        inputs["report"].append(report_path)
+        inputs["diagnostic"].append(diagnostic_path)
+        for name in RUN_FILES[2:]:
+            (run_dir / name).write_text(f"{name} of {run}")
+            inputs[name].append(run_dir / name)
+    outputs = {name: tmp_path / name for name in RUN_FILES}
+    monkeypatch.setattr(pick_best_run, "snakemake", SimpleNamespace(
+        input=SimpleNamespace(**inputs),
+        output=SimpleNamespace(**outputs, runs=tmp_path / ".runs" / "runs.csv"),
+        params=SimpleNamespace(best_run_by="lco_output"),
+        wildcards=SimpleNamespace(scenario="s"),
+    ))
+    pick_best_run.main()
+    picked = pd.read_csv(tmp_path / ".runs" / "runs.csv")
+    return picked
 
 
-def test_runs_without_the_metric_are_kept():
-    """h2-only reports a cost of hydrogen, not steel; it must not be ranked away."""
-    df = _report([
-        ("s", "VIC1", "h2-only", "20250101", "20251231", float("nan")),
-        ("s", "NSW1", "h2-only", "20250101", "20251231", float("nan")),
-    ])
-    out = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-    assert out["best_in_country"].all()
+def test_the_cheapest_zone_stands_for_its_scenario(tmp_path, monkeypatch):
+    picked = _pick(tmp_path, monkeypatch, {"VIC1": 900.0, "NSW1": 820.0, "QLD1": 875.0})
+
+    assert list(picked.loc[picked["picked"], "run"]) == ["NSW1"]
+    assert len(picked) == 3, "every run is listed, the losers included"
+    assert (tmp_path / "network").read_text() == "network of NSW1"
+    assert read_report(tmp_path / "report").iloc[0]["area"] == "NSW1"
 
 
-def test_no_metric_configured_flags_everything():
-    df = _report([
-        ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
-        ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
-    ])
-    out = compile_report.mark_best_in_country(df, PARENTS, None)
-    assert out["best_in_country"].all()
-    assert "country" in out.columns, "the country is reported either way"
+def test_a_single_run_stands_for_its_scenario(tmp_path, monkeypatch):
+    picked = _pick(tmp_path, monkeypatch, {"DEU": 1010.0})
+
+    assert list(picked["picked"]) == [True]
+    assert (tmp_path / "merged_assumptions").read_text() == "merged_assumptions of DEU"
+
+
+def test_a_run_without_the_metric_is_not_picked_over_one_with_it(tmp_path, monkeypatch):
+    picked = _pick(tmp_path, monkeypatch, {"VIC1": float("nan"), "NSW1": 820.0})
+
+    assert list(picked.loc[picked["picked"], "run"]) == ["NSW1"]
 
 
 def test_one_window_is_labelled_by_area_and_route_alone():
     """A chart of a single window needs no date to tell its bars apart."""
     df = _report([
-        ("s", "NSW1", "moe-eaf", "20250101", "20251231", 900.0),
-        ("s", "DEU", "h2-dri-eaf", "20250101", "20251231", 1010.0),
+        ("s", "NSW1", "NSW1", "moe-eaf", "20250101", "20251231", 900.0),
+        ("t", "DEU", "DEU", "h2-dri-eaf", "20250101", "20251231", 1010.0),
     ])
     assert list(_run_display.run_labels(df)) == ["NSW1 moe-eaf", "DEU h2-dri-eaf"]
-
-
-def test_run_labels_are_unique_across_a_multi_area_scenario():
-    """A scenario spanning areas must not render every one as 'moe-eaf'."""
-    df = _report([
-        ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
-        ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
-        ("s", "DEU", "moe-eaf", "20250101", "20251231", 1010.0),
-    ])
-    assert _run_display.run_labels(df).is_unique
 
 
 def test_two_windows_of_one_area_are_told_apart_by_year():
     """The frame decides, not the run: two single-year windows are each one year,
     so a label read off the run alone would give both bars the same name."""
     df = _report([
-        ("s", "DEU", "h2-dri-eaf", "20240101", "20241231", 900.0),
-        ("s", "DEU", "h2-dri-eaf", "20250101", "20251231", 820.0),
+        ("s", "DEU", "DEU", "h2-dri-eaf", "20240101", "20241231", 900.0),
+        ("t", "DEU", "DEU", "h2-dri-eaf", "20250101", "20251231", 820.0),
     ])
     labels = _run_display.run_labels(df)
     assert list(labels) == ["DEU h2-dri-eaf 2024", "DEU h2-dri-eaf 2025"]
@@ -158,95 +130,24 @@ def test_two_windows_of_one_area_are_told_apart_by_year():
 
 def test_a_window_that_crosses_new_year_names_both_years():
     df = _report([
-        ("s", "DEU", "h2-dri-eaf", "20230101", "20241231", 900.0),
-        ("s", "DEU", "h2-dri-eaf", "20250101", "20251231", 820.0),
+        ("s", "DEU", "DEU", "h2-dri-eaf", "20230101", "20241231", 900.0),
+        ("t", "DEU", "DEU", "h2-dri-eaf", "20250101", "20251231", 820.0),
     ])
     assert list(_run_display.run_labels(df)) == [
         "DEU h2-dri-eaf 2023-2024", "DEU h2-dri-eaf 2025",
     ]
 
 
-def test_report_holds_the_selected_areas_and_the_diagnostic_holds_all(tmp_path):
-    """The seam: the report stands alone, the diagnostic answers "and the others?"."""
-    df = _report([
-        ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
-        ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
-        ("s", "DEU", "moe-eaf", "20250101", "20251231", 1010.0),
-    ])
-    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-    report_path = tmp_path / "report_s.csv"
-    diagnostic_path = tmp_path / ".report_s_diag.csv"
-    compile_report.write_report(flagged, report_path, diagnostic_path)
-
-    report = read_report(report_path)
-    assert set(report["area"]) == {"NSW1", "DEU"}
-    assert "best_in_country" not in report.columns, "the flag is not viz's problem"
-
-    diagnostic = read_report(diagnostic_path)
-    assert set(diagnostic["area"]) == {"VIC1", "NSW1", "DEU"}
-    assert set(diagnostic.loc[~diagnostic["best_in_country"], "area"]) == {"VIC1"}
-
-
-def _scenario_rows(rows):
-    """A scenario table as `load_scenarios` returns it: one row per input series."""
-    return pd.DataFrame(
-        rows, columns=["scenario", "tech", "variant", "area", "start_date", "end_date"]
-    )
-
-
-SCENARIOS = _scenario_rows([
-    ("s", "wind-onshore", "bestsite-p95", "VIC1", "20250101", "20251231"),
-    ("s", "solar",        "tilt-mix-n5",  "VIC1", "20250101", "20251231"),
-    ("s", "grid",         "dayahead",     "VIC1", "20250101", "20251231"),
-    ("s", "solar",        "area-average", "VIC1", "20240101", "20241231"),
-    ("s", "solar",        "area-average", "NSW1", "20250101", "20251231"),
-])
-
-
-def test_input_variants_name_the_series_behind_a_run():
-    run = {"area": "VIC1", "route": "moe-eaf",
-           "start_date": "20250101", "end_date": "20251231"}
-    assert compile_report.input_variants(SCENARIOS, "s", run) == {
-        "wind_onshore_variant": "bestsite-p95",
-        "solar_variant": "tilt-mix-n5",
-        "grid_variant": "dayahead",
-    }
-
-
-def test_input_variants_ignore_the_route():
-    """Every route of a group is solved from the same series, so they all report it."""
-    group = {"area": "VIC1", "start_date": "20250101", "end_date": "20251231"}
-    moe = compile_report.input_variants(SCENARIOS, "s", {**group, "route": "moe-eaf"})
-    h2 = compile_report.input_variants(SCENARIOS, "s", {**group, "route": "h2-dri-eaf"})
-    assert moe == h2
-
-
-@pytest.mark.parametrize(
-    "run, expected",
-    [
-        ({"area": "VIC1", "start_date": "20240101", "end_date": "20241231"},
-         {"solar_variant": "area-average"}),
-        ({"area": "NSW1", "start_date": "20250101", "end_date": "20251231"},
-         {"solar_variant": "area-average"}),
-    ],
-)
-def test_input_variants_do_not_leak_across_areas_or_years(run, expected):
-    assert compile_report.input_variants(SCENARIOS, "s", run) == expected
-
-
 def test_every_route_writes_the_same_fields(tmp_path):
     """The point of the schema: what a run reports must not depend on its route."""
     df = _report([
-        ("s", "VIC1", "h2-only", "20250101", "20251231", 4.1),
-        ("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0),
+        ("s", "VIC1", "VIC1", "h2-only", "20250101", "20251231", 4.1),
+        ("t", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0),
     ])
     # Only the MOE run has a MOE cell to report; only the H2 run has an LCOH.
     df["plant_moe_eur_per_t"] = [float("nan"), 120.0]
     df["lcoh_eur_per_kg"] = [4.1, float("nan")]
-    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-
-    report_path = tmp_path / "report_s.csv"
-    compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
+    report_path, _ = _write(df, tmp_path)
     report = read_report(report_path)
 
     declared = [f for f in FIELD_ORDER if f not in DIAGNOSTIC_FIELDS]
@@ -255,11 +156,8 @@ def test_every_route_writes_the_same_fields(tmp_path):
 
 def test_a_blank_means_undefined_and_a_zero_means_zero(tmp_path):
     """An amount the run has none of reads 0; a ratio with no denominator is blank."""
-    df = _report([("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
-    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-
-    report_path = tmp_path / "report_s.csv"
-    compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
+    df = _report([("s", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
+    report_path, _ = _write(df, tmp_path)
     row = read_report(report_path).iloc[0]
 
     # No H2 chain on this route: the electrolyser it did not build is 0 GW, but
@@ -274,27 +172,18 @@ def test_a_blank_means_undefined_and_a_zero_means_zero(tmp_path):
 
 def test_run_specific_fields_follow_the_declared_ones(tmp_path):
     """A multi-site run names a generator per candidate site; those are not declared."""
-    df = _report([("s", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
+    df = _report([("s", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
     df["solar_c00_gw_opt"] = 1.4
-    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-
-    report_path = tmp_path / "report_s.csv"
-    compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
+    report_path, _ = _write(df, tmp_path)
     report = read_report(report_path)
 
     assert list(report.columns)[-1] == "solar_c00_gw_opt"
-    assert report.at["s_1", "solar_c00_gw_opt"] == 1.4
+    assert report.at["s_VIC1", "solar_c00_gw_opt"] == 1.4
 
 
 def test_the_diagnostic_is_the_report_plus_the_held_back_fields(tmp_path):
-    df = _report([
-        ("s", "VIC1", "moe-eaf", "20250101", "20251231", 900.0),
-        ("s", "NSW1", "moe-eaf", "20250101", "20251231", 820.0),
-    ])
-    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-    report_path = tmp_path / "report_s.csv"
-    diagnostic_path = tmp_path / ".report_s_diag.csv"
-    compile_report.write_report(flagged, report_path, diagnostic_path)
+    df = _report([("s", "NSW1", "NSW1", "moe-eaf", "20250101", "20251231", 820.0)])
+    report_path, diagnostic_path = _write(df, tmp_path)
 
     report = set(read_report(report_path).columns)
     diagnostic = set(read_report(diagnostic_path).columns)
@@ -307,16 +196,12 @@ def test_the_freight_a_run_reports_is_held_back_from_the_report(tmp_path):
     No total on either side counts it, so the two files agree on every field
     they share and differ only in that the report has no freight at all.
     """
-    df = _report([("s", "VIC1", "moe-eaf-export", "20250101", "20251231", 900.0)])
+    df = _report([("s", "VIC1", "VIC1", "moe-eaf-export", "20250101", "20251231", 900.0)])
     df["emissions_kg_co2e_per_t_steel"] = 157.4
     df["emissions_freight_kt_co2e_per_year"] = 215.0
     df["emissions_steel_transport_kg_co2e_per_t_steel"] = 215.0
     df["emissions_moe_kg_co2e_per_t_steel"] = 149.3
-    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-
-    report_path = tmp_path / "report_s.csv"
-    diagnostic_path = tmp_path / ".report_s_diag.csv"
-    compile_report.write_report(flagged, report_path, diagnostic_path)
+    report_path, diagnostic_path = _write(df, tmp_path)
     report = read_report(report_path).iloc[0]
     diagnostic = read_report(diagnostic_path).iloc[0]
 
@@ -330,32 +215,22 @@ def test_the_freight_a_run_reports_is_held_back_from_the_report(tmp_path):
 
 def test_a_freight_field_no_run_produced_still_reaches_the_diagnostic(tmp_path):
     """The diagnostic declares every field, so which file one lands in is fixed."""
-    df = _report([("s", "VIC1", "h2-only", "20250101", "20251231", 4.1)])
-    flagged = compile_report.mark_best_in_country(df, PARENTS, "lco_output")
-
-    report_path = tmp_path / "report_s.csv"
-    diagnostic_path = tmp_path / ".report_s_diag.csv"
-    compile_report.write_report(flagged, report_path, diagnostic_path)
+    df = _report([("s", "VIC1", "VIC1", "h2-only", "20250101", "20251231", 4.1)])
+    _, diagnostic_path = _write(df, tmp_path)
 
     diagnostic = read_report(diagnostic_path)
-    assert diagnostic.at["s_1", "emissions_steel_transport_kg_co2e_per_t_steel"] == 0.0
-    assert diagnostic.at["s_1", "emissions_freight_kt_co2e_per_year"] == 0.0
+    assert diagnostic.at["s_VIC1", "emissions_steel_transport_kg_co2e_per_t_steel"] == 0.0
+    assert diagnostic.at["s_VIC1", "emissions_freight_kt_co2e_per_year"] == 0.0
 
 
 def test_a_report_reads_back_as_it_was_written(tmp_path):
     """read_report is the only thing that undoes the layout, so it has to be exact."""
-    df = _report([
-        ("s", "VIC1", "h2-dri-eaf", "20250101", "20251231", 606.78),
-        ("s", "NSW1", "moe-eaf", "20240101", "20241231", 914.11),
-    ])
-    df["cf_solar"] = [0.19, 0.24]
-    flagged = compile_report.mark_best_in_country(df, PARENTS, None)
-
-    report_path = tmp_path / "report_s.csv"
-    compile_report.write_report(flagged, report_path, tmp_path / ".report_s_diag.csv")
+    df = _report([("s", "VIC1", "VIC1", "h2-dri-eaf", "20250101", "20251231", 606.78)])
+    df["cf_solar"] = [0.19]
+    report_path, _ = _write(df, tmp_path)
     report = read_report(report_path)
 
-    assert list(report.index) == ["s_1", "s_2"]
-    assert list(report["cf_solar"]) == [0.19, 0.24], "numbers come back as numbers"
-    assert list(report["start_date"]) == ["20250101", "20240101"], "and dates as text"
+    assert list(report.index) == ["s_VIC1"]
+    assert list(report["cf_solar"]) == [0.19], "numbers come back as numbers"
+    assert list(report["start_date"]) == ["20250101"], "and dates as text"
     assert report["lco_output"].dtype == float

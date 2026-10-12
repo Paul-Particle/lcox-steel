@@ -8,23 +8,27 @@ logging:
   # "f-strings ok in log calls" convention (that's about call sites).
   format: "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 
-# Scenarios the default `snakemake` target (rule demo) builds. sensitivity-test
-# is the one that needs no CDS download — it sits on the shipped VIC1 cutout —
-# so it doubles as the after-a-fresh-clone smoke test. Listed by name
-# rather than matched on one, because a scenario name is a free-form label: the
-# workflow never reads meaning out of it, so any string works as an id.
-demo_scenarios:
-  - sensitivity-test
+# What `snakemake` runs: a base assumptions file and a scenario table with one
+# row per input series of a run. A scenario's overlay, if it has one, is
+# config/overlays/{scenario}.yaml. These two are written from the input workbook
+# by `python -m common.generate_inputs` and are not committed. The hand-kept demo
+# (config/.template.yaml and config/.template.csv) needs no CDS download, as it
+# sits on the shipped DEMO cutout, and doubles as the after-a-fresh-clone smoke
+# test:
+#   snakemake --configfile config/demo.yaml
+inputs:
+  assumptions: config/generated/assumptions.yaml
+  scenarios: config/generated/scenarios.csv
 
 entsoe:
-  # Per-(area, data_type) downloads are pulled on demand by config/scenarios.csv;
+  # Per-(area, data_type) downloads are pulled on demand by the scenario tables;
   # the bidding-zone catalog lives in data/entsoe_cache/entsoe_bidding_zones.csv.
   data_types: [prices, load_forecast, load_actual, res, generation, crossborder]
 
 nem:
   # FX rate for converting AUD-denominated NEM prices to EUR (used by
   # grid.smk → retrieve_grid_data). Infra-level constant; per-scenario cost
-  # assumptions live in config/assumptions*.yaml.
+  # assumptions live in the assumption files.
   eur_per_aud: 0.61
 
 canada:
@@ -49,17 +53,16 @@ ons:
     2025: { min:  58.60, max_hourly: 1542.23, max_structural: 751.73 }
     2026: { min:  57.31, max_hourly: 1611.04, max_structural: 785.27 }
 
-# Reporting. best_zone_by names the field that decides which of a country's
-# zones represents it — a country supplying its market through zones is run once
-# per zone, and only the cheapest reaches results/report_{scenario}.csv. The
-# beaten zones are not lost: they go to the hidden diagnostic beside it, with the
-# `best_in_country` flag that separates them. `lco_output` is the levelised cost
-# of whatever the run produces (steel, or hydrogen for h2-only). Null reports
-# every zone, i.e. no ranking.
+# Reporting. best_run_by names the field that decides which of a scenario's
+# runs stands for it. A scenario is usually one run; an area on the grid that
+# trades through market zones is run once per zone, and the lowest value reaches
+# results/{scenario}/report_{scenario}.csv. The other zones are not lost: every
+# run keeps its own files under results/{scenario}/.runs/. `lco_output` is the
+# levelised cost of whatever the run produces (steel, or hydrogen for h2-only).
 report:
-  best_zone_by: lco_output
+  best_run_by: lco_output
 
-# The area registry. `area` in config/scenarios.csv names one of these keys, and
+# The area registry. `area` in a scenario table names one of these keys, and
 # each key names one cutout. An area is a country (three-letter ISO 3166-1
 # alpha-3) or a sub-national market zone; nothing infers which from the shape of
 # the code, it follows from the entries below.
@@ -71,11 +74,10 @@ report:
 #                   `nem`, `ons`, `aeso`, `ieso`, or `synthetic` for the
 #                   demo's made-up one; absent where no price series exists.
 #   market_area:    the code that market knows this area by — the ENTSO-E
-#                   bidding zone or AEMO NEM region. Also an alias: writing it
-#                   in the CSV resolves to this area, so DE_LU and DEU both work.
+#                   bidding zone or AEMO NEM region.
 #   zones:          sub-national market zones. A country with no market of its
-#                   own supplies one only through these, so a grid scenario
-#                   naming the country runs its zones separately instead.
+#                   own supplies one only through these, so input generation
+#                   runs a grid scenario naming the country once per zone.
 #   coarse:         use a coarser cutout resolution to avoid CDS instability
 #                   / memory limits for large countries
 #   mainland_bbox:  optional [lon_min, lon_max, lat_min, lat_max] — keeps only

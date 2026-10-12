@@ -1,0 +1,15 @@
+# The template's scenarios: the demo, kept by hand. One row per input series
+# of a run; a run's origin series come first and its destination's after them.
+# DEMO is Victoria on a shipped cutout, and ES_SYN a made-up Spain-like market,
+# so none of this needs a download or an API key.
+scenario,run,route,tech,variant,area,start_date,end_date
+demo-h2-dri-eaf,DEMO,h2-dri-eaf,wind-onshore,bestsite-p95,DEMO,20250101,20251231
+demo-h2-dri-eaf,DEMO,h2-dri-eaf,solar,bestsite-p95,DEMO,20250101,20251231
+demo-h2-dri-eaf-export,DEMO-ES_SYN,h2-dri-eaf-export,wind-onshore,bestsite-p95,DEMO,20250101,20251231
+demo-h2-dri-eaf-export,DEMO-ES_SYN,h2-dri-eaf-export,solar,bestsite-p95,DEMO,20250101,20251231
+demo-h2-dri-eaf-export,DEMO-ES_SYN,h2-dri-eaf-export,grid,emissions,ES_SYN,20250101,20251231
+demo-moe-eaf,DEMO,moe-eaf,wind-onshore,bestsite-p95,DEMO,20250101,20251231
+demo-moe-eaf,DEMO,moe-eaf,solar,bestsite-p95,DEMO,20250101,20251231
+demo-moe-eaf-export,DEMO-ES_SYN,moe-eaf-export,wind-onshore,bestsite-p95,DEMO,20250101,20251231
+demo-moe-eaf-export,DEMO-ES_SYN,moe-eaf-export,solar,bestsite-p95,DEMO,20250101,20251231
+demo-moe-eaf-export,DEMO-ES_SYN,moe-eaf-export,grid,emissions,ES_SYN,20250101,20251231

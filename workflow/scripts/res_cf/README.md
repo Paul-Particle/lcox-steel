@@ -184,11 +184,11 @@ An area with N or fewer cells uses all of them. Columns are `{tech}@c00`,
 
 ## How the solve uses the series
 
-Each row of `config/scenarios.csv` names a `tech`, `variant`, `area` and window,
+Each row of a scenario table names a `tech`, `variant`, `area` and window,
 and `solve_network` reads
 `resources/timeseries/{area}_{tech}_{variant}_{start_date}_{end_date}.parquet`
 for every non-grid row of the run. Costs are looked up in
-`config/assumptions.yaml` by the column's tech key; `solar_az*` columns use the
+the assumptions' `res` block by the column's tech key; `solar_az*` columns use the
 `solar` entry.
 
 - **Single site** (`area-average`, `bestsite-p95`, `tilt-mix-n{N}`): the columns

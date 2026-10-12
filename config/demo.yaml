@@ -1,0 +1,7 @@
+# The demo: the hand-kept template (config/.template.yaml, config/.template.csv
+# and its overlays in config/overlays/), which runs after a fresh clone with no
+# CDS download, no EEZ/NE zips and no API keys.
+#   snakemake --configfile config/demo.yaml
+inputs:
+  assumptions: config/.template.yaml
+  scenarios: config/.template.csv

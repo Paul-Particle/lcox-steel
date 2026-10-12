@@ -40,7 +40,7 @@ ROUTES = ["h2-dri-eaf", "mix-dri-eaf", "ng-dri-eaf", "moe-eaf", "ew-eaf",
 @pytest.fixture(scope="module")
 def assumptions() -> dict:
     """The real assumptions, so the capital costs are composed as a solve's are."""
-    return yaml.safe_load((REPO_ROOT / "config" / "assumptions.yaml").read_text())
+    return yaml.safe_load((REPO_ROOT / "config" / ".template.yaml").read_text())
 
 
 def _solved(route: str, assumptions: dict):

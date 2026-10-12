@@ -17,7 +17,7 @@ from scripts.grid import download_entsoe
 from scripts.grid import download_nem
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EMISSIONS = yaml.safe_load((REPO_ROOT / "config" / "assumptions.yaml").read_text())[
+EMISSIONS = yaml.safe_load((REPO_ROOT / "config" / ".template.yaml").read_text())[
     "emissions"
 ]
 FACTORS = EMISSIONS[EMISSIONS["basis"]]["electricity_t_co2e_per_mwh"]

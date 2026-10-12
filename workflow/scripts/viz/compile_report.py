@@ -1,10 +1,10 @@
-"""Compile per-run summaries into the scenario-level report CSV.
+"""Compile one solved run into its report.
 
 Invoked by Snakemake's `script:` directive (compile_report rule in viz.smk).
 Writes two files: the report viz reads, and a hidden `_diag.csv` beside it that
-keeps the zones the report did not select. Each run carries the `inputs_hash` the
-solve stamped into the network, so a number stays tied to its inputs. What the
-files look like is common/_report_schema.py's business.
+also keeps the fields the report holds back. Each run carries the `inputs_hash`
+the solve stamped into the network, so a number stays tied to its inputs. What
+the files look like is common/_report_schema.py's business.
 """
 
 import calendar
@@ -34,8 +34,7 @@ from common._report_schema import (
     field_stem,
     write_report_file,
 )
-from common._runs import load_scenarios, zone_parents
-from scripts.solve._helpers_solve import annuity_factor, deep_merge
+from scripts.solve._helpers_solve import annuity_factor, deep_merge, find_transport_legs, read_run_inputs
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -116,7 +115,7 @@ def _grid_intensity(
             f"table has no entry for: {sorted(unknown)}. Either they are carriers "
             f"and belong in the `electricity_t_co2e_per_mwh` table under "
             f"`emissions` in "
-            f"config/assumptions.yaml, or the series is not a `variant: emissions` "
+            f"the assumptions, or the series is not a `variant: emissions` "
             f"one — a `full` series carries load and flow columns too."
         )
     missing = pd.Index(snapshots).difference(grid_mix.index)
@@ -221,8 +220,8 @@ def _emissions_breakdown(
     price on gas is set in build_network), so nothing here can move a solve.
     And it covers the run's energy alone — the process steps' own
     direct emissions are outside the model boundary, which is why the result is
-    not a CBAM or an ETS figure. See the `emissions` block in
-    config/assumptions.yaml.
+    not a CBAM or an ETS figure. See the `emissions` block of the
+    assumptions.
 
     Electricity is attributed hour by hour at the intensity of the system that
     supplied it, so a user that ran when the wind blew carries less than one
@@ -257,8 +256,8 @@ def _emissions_breakdown(
         raise ValueError(
             f"this run melts its iron in {destination_area}, but no market series for "
             f"{destination_area} over the run's own window reached the report, so what "
-            f"its furnace emitted is unknown. `destination_input` in rule "
-            f"compile_report is what carries it (workflow/rules/viz.smk)."
+            f"its furnace emitted is unknown. The run's grid row for its destination "
+            f"is what carries it (`grid_input` in rule compile_report)."
         )
     # Its furnace carries the destination market's own hours, read the same way
     # as any other grid's — so an export route's melt is as clean as the country
@@ -456,74 +455,6 @@ def _marginal_costs(static: pd.DataFrame, flow_t: pd.DataFrame, mc_t: pd.DataFra
     return total
 
 
-def mark_best_in_country(df: pd.DataFrame, parents: dict, metric: str | None) -> pd.DataFrame:
-    """Add `country`, and flag each country's best zone for every route.
-
-    A country that supplies its market through zones (Australia through its NEM
-    regions) is run once per zone, so several rows describe the same place. Every
-    route picks the zone where that route came out cheapest: Australia's moe-eaf
-    is reported from whichever NEM region made steel cheapest with moe-eaf, and
-    each date range is ranked on its own.
-
-    The losers are flagged, not dropped — this frame is the diagnostic one, where
-    what the other zones cost is itself a result and a dropped row would cost a
-    re-solve to recover. `write_report` is what narrows it down for viz.
-
-    `metric` names the ranking column, or None to flag everything. A row with no
-    value for it (h2-only produces hydrogen, so it has no cost of steel) stays
-    flagged rather than being ranked away.
-    """
-    out = df.copy()
-    out.insert(2, "country", out["area"].map(lambda a: parents.get(a, a)))
-    if metric is None:
-        out["best_in_country"] = True
-        return out
-    if metric not in out.columns:
-        raise ValueError(
-            f"report.best_zone_by names '{metric}', which no run reported. A zone "
-            f"ranking needs a column to rank on; the fields a run carries are "
-            f"declared in common/_report_schema.py"
-        )
-    ranked = out.groupby(["country", "route", "start_date", "end_date"])[metric]
-    out["best_in_country"] = (out[metric] == ranked.transform("min")) | out[metric].isna()
-    return out
-
-
-def input_variants(scenarios: pd.DataFrame, scenario_name: str, run: dict) -> dict:
-    """Which series each tech contributed to one run, as `{tech}_variant` fields.
-
-    A best-site P95 profile and an area average answer different questions, so a
-    cost is not interpretable without knowing which produced it. The solve reads
-    the parquet, not its name, so the variant survives only in the scenario
-    table and is joined back on here. Rows join on the run minus the route —
-    every route of a group is built from the same series. The scenario table
-    spells a tech `wind-onshore`; the field it lands in is `wind_onshore_variant`.
-    """
-    group = scenarios[
-        (scenarios["scenario"] == scenario_name)
-        & (scenarios["area"] == run["area"])
-        & (scenarios["start_date"] == run["start_date"])
-        & (scenarios["end_date"] == run["end_date"])
-    ]
-    variants = {f"{field_stem(row.tech)}_variant": row.variant for row in group.itertuples()}
-    return variants
-
-
-def write_report(df: pd.DataFrame, report_path: Path, diagnostic_path: Path) -> None:
-    """Write the scenario report and the hidden diagnostic beside it.
-
-    The report is the seam viz reads: which zone represents its country is
-    already decided here, so it holds one column per reported place and no
-    `best_in_country` row to interpret. The diagnostic keeps every zone, the
-    flag and the freight — every row and every field — for the questions the
-    report is not the place for.
-    """
-    write_report_file(df, diagnostic_path)
-    selected = df[df["best_in_country"]]
-    write_report_file(selected, report_path, hold_back=DIAGNOSTIC_FIELDS)
-    log.info(f"wrote {report_path} ({len(selected)} runs) and {diagnostic_path} ({len(df)} runs)")
-
-
 def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
     """Annualised cost per system component group, €/yr; sums to the total.
 
@@ -647,7 +578,10 @@ def _leaf_breakdown(
     `generation_mwh`.
     """
     annual_scale = _hours_per_year(n.snapshots) / len(n.snapshots)
-    wacc = assumptions["finance"]["default_wacc"]
+    # The furnace is financed where the steel is made, everything before it where
+    # the iron is, exactly as build_network financed them.
+    origin_wacc = assumptions["finance"]["origin_wacc"]
+    wacc_of = lambda link: assumptions["finance"]["destination_wacc"] if link == "eaf" else origin_wacc
     leaves = dict.fromkeys(LEAF_COSTS, 0.0)
 
     def link_capital(name: str) -> float:
@@ -684,7 +618,7 @@ def _leaf_breakdown(
         annual = link_capital(link)
         if not annual:
             continue
-        share = _fixed_om_share(wacc, assumptions[link],
+        share = _fixed_om_share(wacc_of(link), assumptions[link],
                                 "capex_per_t_per_year_eur", "opex_per_t_per_year_eur")
         leaves[f"{field_stem(link)}_fom"] = annual * share
         leaves[f"{field_stem(link)}_capex"] = annual * (1.0 - share)
@@ -706,7 +640,7 @@ def _leaf_breakdown(
     leaves["electrolyser_water"] = link_marginal("electrolyser")
     electrolyser_capital = link_capital("electrolyser")
     if electrolyser_capital:
-        share = _fixed_om_share(wacc, assumptions["electrolyser"],
+        share = _fixed_om_share(origin_wacc, assumptions["electrolyser"],
                                 "capex_per_mw_eur", "opex_per_mw_per_year_eur")
         leaves["electrolyser_fom"] = electrolyser_capital * share
         leaves["electrolyser_capex"] = electrolyser_capital * (1.0 - share)
@@ -731,7 +665,7 @@ def _leaf_breakdown(
         annual = res_annual(idx)
         if not annual:
             continue
-        share = _fixed_om_share(wacc, assumptions["res"][tech],
+        share = _fixed_om_share(origin_wacc, assumptions["res"][tech],
                                 "capex_per_mw_eur", "opex_per_mw_per_year_eur")
         leaves[f"res_{field_stem(tech)}_fom"] = annual * share
         leaves[f"res_{field_stem(tech)}_capex"] = annual * (1.0 - share)
@@ -751,7 +685,7 @@ def _leaf_breakdown(
     grid_cfg = assumptions["grid"]
     grid_connection = generator_capital("grid_import")
     if grid_connection:
-        annual_capex = (annuity_factor(wacc, grid_cfg["connection_lifetime_years"])
+        annual_capex = (annuity_factor(origin_wacc, grid_cfg["connection_lifetime_years"])
                         * grid_cfg["connection_capex_eur_per_mw"])
         yearly_fee = grid_cfg["fee_eur_per_mw_per_year"]
         fee_share = yearly_fee / (annual_capex + yearly_fee) if (annual_capex + yearly_fee) else 0.0
@@ -893,7 +827,7 @@ def _leaf_breakdown(
     # -- the inputs behind the split, so a cost can be checked against them
     for link in PROCESS_LINKS:
         fields[f"annuity_factor_{field_stem(link)}"] = annuity_factor(
-            wacc, assumptions[link]["lifetime_years"]
+            wacc_of(link), assumptions[link]["lifetime_years"]
         )
     for link in ORE_LINKS:
         fields[f"ore_quote_{field_stem(link)}_eur_per_t"] = assumptions[link]["ore_eur_per_t"]
@@ -1263,7 +1197,7 @@ def extract_summary(
     emitted = _emissions_breakdown(
         n, assumptions["emissions"],
         run["area"], transport_legs, grid_mix,
-        assumptions["destination"]["area"], destination_mix,
+        run["destination"], destination_mix,
     )
     emissions = emitted["by_step"]
     electricity_mwh = emitted["electricity_mwh"]
@@ -1358,99 +1292,72 @@ def extract_summary(
 
 
 def main() -> None:
-    """Load every run under the scenario and write the combined report CSV.
+    """Summarise one solved run into its report and the hidden diagnostic beside it.
 
-    A scenario is an umbrella over runs, so the netCDF name carries the rest of
-    the run key — area, route and date range; the scenario table adds the
-    variant each tech was solved with. One summary row per run via
-    `extract_summary`, then the report and its diagnostic sibling.
+    The run's rows in its scenario table name its origin, destination and route,
+    and the variant each tech was solved with; the netCDF name carries none of
+    them. One summary row via `extract_summary`, then the two files.
     """
     scenario_name = snakemake.wildcards.scenario
-    scenarios = load_scenarios(snakemake.input.scenarios, snakemake.config["areas"])
+    run_name = snakemake.wildcards.run
+    run_inputs = read_run_inputs(Path(snakemake.input.scenario_table), scenario_name,
+                                 run_name, list(snakemake.input.grid_input))
+    rows = run_inputs["rows"]
     # The same merge the solve did, so the cost leaves are split on the quotes
-    # that priced the runs rather than on the base file's.
-    assumptions = yaml.safe_load(Path(snakemake.input.assumptions_base).read_text())
+    # that priced the run rather than on the base file's.
+    base_text = Path(snakemake.input.assumptions_base).read_text()
     overlays = list(snakemake.input.assumptions_overlay)
-    if overlays:
-        assumptions = deep_merge(
-            assumptions, yaml.safe_load(Path(overlays[0]).read_text()) or {}
-        )
-    # The run's own copy of what priced it. compile_report is where this belongs
-    # because it already holds all three -- the base, the overlay and the merge of
-    # them -- and a separate rule would have to repeat the merge to say the same
-    # thing. Written every time, including the empty overlay, so the absence of a
-    # change is recorded rather than merely not recorded.
+    overlay_text = Path(overlays[0]).read_text() if overlays else None
+    assumptions = deep_merge(yaml.safe_load(base_text), yaml.safe_load(overlay_text or "") or {})
+    # The run's own copy of what priced it: the base, the overlay and the merge
+    # of them, so a reader does not have to merge the two in their head. The
+    # overlay is written even when the scenario has none, because "this changed
+    # nothing" is a fact worth recording and an absent file cannot say it.
     Path(snakemake.output.base_assumptions).parent.mkdir(parents=True, exist_ok=True)
-    Path(snakemake.output.base_assumptions).write_text(
-        Path(snakemake.input.assumptions_base).read_text()
+    Path(snakemake.output.base_assumptions).write_text(base_text)
+    Path(snakemake.output.overlay).write_text(
+        overlay_text or f"# {scenario_name} has no overlay: it ran on the base assumptions unchanged.\n"
     )
     Path(snakemake.output.merged_assumptions).write_text(
         "# The base with this scenario's overlay merged in: what actually priced the\n"
         "# run, rather than the two files a reader would have to merge in their head.\n"
         + yaml.safe_dump(assumptions, sort_keys=False)
     )
-    Path(snakemake.output.overlay).write_text(
-        Path(overlays[0]).read_text() if overlays
-        else f"# {scenario_name} has no overlay: it ran on the base assumptions unchanged.\n"
+
+    # Which series each tech contributed: a best-site P95 profile and an area
+    # average answer different questions, so a cost is not interpretable without
+    # knowing which produced it. The table spells a tech `wind-onshore`; the field
+    # it lands in is `wind_onshore_variant`.
+    cf_rows = rows[rows["tech"] != "grid"]
+    run = {
+        "run": run_name,
+        "area": run_inputs["origin"],
+        "destination": run_inputs["destination"],
+        "route": run_inputs["route"],
+        "start_date": rows["start_date"].iloc[0],
+        "end_date": rows["end_date"].iloc[0],
+        **{f"{field_stem(row.tech)}_variant": row.variant for row in cf_rows.itertuples()},
+    }
+    n = pypsa.Network()
+    n.import_from_netcdf(Path(snakemake.input.network))
+    read_mix = lambda path: pd.read_parquet(path) if path is not None else None
+    summary = extract_summary(
+        n, scenario_name, run, assumptions,
+        find_transport_legs(assumptions["transport"]["distance_km"], run_inputs["origin"],
+                            run_inputs["destination"], snakemake.config["areas"]),
+        read_mix(run_inputs["grid_path"]), read_mix(run_inputs["destination_path"]),
     )
+    # Trailing the row, because it identifies the inputs rather than describing
+    # them: the per-file map it stands for is in the network.
+    summary["inputs_hash"] = n.meta["inputs_hash"]
+    summary["code_hash"] = n.meta.get("code_hash", "")
 
-    parents = zone_parents(snakemake.config["areas"])
-
-    # The grid series each run was solved against. Only the emission fields read
-    # them, and only for the generation mix: a series solved on `dayahead` has
-    # none, and an islanded scenario has no series at all.
-    #
-    # Keyed by the part of the run key the series belongs to, not by area alone:
-    # a scenario can hold several date windows for one area, and one key per
-    # area would quietly hand a run another year's mix.
-    grid_series = {}
-    for grid_path in snakemake.input.grid_input:
-        area_tech_variant, grid_start, grid_end = Path(grid_path).stem.rsplit("_", 2)
-        grid_area = area_tech_variant.rsplit("_", 2)[0]
-        grid_series[(grid_area, grid_start, grid_end)] = pd.read_parquet(grid_path)
-
-    # And the series of the market an `-export` route melts in, kept apart from
-    # the map above rather than filed under its area: the destination is always
-    # a `variant: emissions` series, while a run's own grid row need not be, and
-    # one key per area would let one stand in for the other when a scenario
-    # produces in the same country it exports to. Every export run in the
-    # scenario names the same file, so the paths are deduplicated.
-    destination_series = {}
-    for grid_path in dict.fromkeys(snakemake.input.destination_input):
-        _, grid_start, grid_end = Path(grid_path).stem.rsplit("_", 2)
-        destination_series[(grid_start, grid_end)] = pd.read_parquet(grid_path)
-
-    rows = []
-    network_paths = list(dict.fromkeys(snakemake.input.networks))
-    log.info(f"compiling report for scenario={scenario_name} ({len(network_paths)} runs)")
-    for nc_path in network_paths:
-        nc_path = Path(nc_path)
-        # {area}_{route}_{start}_{end}. A route never contains an underscore;
-        # an area can — the ONS submarkets are BR_SE and friends — so split
-        # from the right, where the field count is known.
-        area, route, start_date, end_date = nc_path.stem.rsplit("_", 3)
-        n = pypsa.Network()
-        n.import_from_netcdf(nc_path)
-        run = {"area": area, "route": route, "start_date": start_date, "end_date": end_date}
-        run.update(input_variants(scenarios, scenario_name, run))
-        # Freight legs are the country's, not the zone's — a NEM region ships
-        # from Australia. Same resolution as solve_network's.
-        legs = assumptions["transport"]["distance_km"].get(parents.get(area, area))
-        grid_mix = grid_series.get((area, start_date, end_date))
-        destination_mix = destination_series.get((start_date, end_date))
-        summary = extract_summary(
-            n, scenario_name, run, assumptions, legs, grid_mix, destination_mix
-        )
-        # Trailing the row, because it identifies the inputs rather than
-        # describing them: the per-file map it stands for is in the network.
-        summary["inputs_hash"] = n.meta["inputs_hash"]
-        summary["code_hash"] = n.meta.get("code_hash", "")
-        rows.append(summary)
-
-    flagged = mark_best_in_country(
-        pd.DataFrame(rows), parents, snakemake.params.best_zone_by or None,
-    )
-    write_report(flagged, Path(snakemake.output.report), Path(snakemake.output.diagnostic))
+    # The report is the seam viz reads; the diagnostic keeps every field,
+    # including the ones the report is not the place for.
+    report = pd.DataFrame([summary])
+    write_report_file(report, Path(snakemake.output.diagnostic))
+    write_report_file(report, Path(snakemake.output.report), hold_back=DIAGNOSTIC_FIELDS)
+    log.info(f"wrote {snakemake.output.report} and {snakemake.output.diagnostic}")
 
 
 if __name__ == "__main__":

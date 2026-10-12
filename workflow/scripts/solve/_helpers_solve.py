@@ -1,8 +1,56 @@
 """Financial, sizing and config utilities for the steel model."""
 
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 
 from common._constants import HOURS_PER_YEAR
+
+
+def find_transport_legs(distances: dict, origin: str, destination: str, areas: dict) -> dict:
+    """A run's freight legs, km by mode: its origin country's to its destination, else the default.
+
+    A market zone ships as the country whose `zones` list it is in.
+    """
+    country = next((parent for parent, entry in areas.items() if origin in entry.get("zones", [])), origin)
+    legs = distances.get(country, {}).get(destination, distances["default"])
+    return legs
+
+
+def read_run_inputs(scenario_table: Path, scenario: str, run: str, timeseries: list) -> dict:
+    """One run's rows of its scenario table, and the part each of its input series plays.
+
+    The first area in the rows is the run's origin and the second its destination;
+    a domestic run names one area, which is both. The origin's grid series prices
+    its own imports, and the destination's prices the furnace an export melts in.
+    """
+    rows = (
+        pd.read_csv(scenario_table, comment="#", dtype=str)
+        .query("scenario == @scenario and run == @run")
+    )
+    areas = list(dict.fromkeys(rows["area"]))
+    if len(areas) > 2:
+        raise ValueError(f"{scenario}/{run} names {len(areas)} areas {areas}: "
+                         f"a run has an origin and at most one destination")
+    path_by_name = {Path(raw).name: Path(raw) for raw in timeseries}
+    rows = rows.assign(path=(
+        rows["area"] + "_" + rows["tech"] + "_" + rows["variant"] + "_"
+        + rows["start_date"] + "_" + rows["end_date"] + ".parquet"
+    ).map(path_by_name))
+    origin, destination = areas[0], areas[-1]
+    grid_rows = rows[rows["tech"] == "grid"]
+    run_inputs = {
+        "rows": rows,
+        "origin": origin,
+        "destination": destination,
+        "route": rows["route"].iloc[0],
+        "cf_paths": list(rows.loc[rows["tech"] != "grid", "path"]),
+        "grid_path": next(iter(grid_rows.loc[grid_rows["area"] == origin, "path"]), None),
+        "destination_path": (next(iter(grid_rows.loc[grid_rows["area"] == destination, "path"]), None)
+                             if destination != origin else None),
+    }
+    return run_inputs
 
 
 def deep_merge(base: dict, overlay: dict) -> dict:

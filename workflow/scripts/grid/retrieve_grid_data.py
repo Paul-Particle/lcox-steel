@@ -1,14 +1,14 @@
 """Grid market data for one (area, variant, date-range) slice.
 
-Single entry point for every `tech=grid` row in config/scenarios.csv. The area
+Single entry point for every `tech=grid` row of a scenario table. The area
 registry (config/config.yaml `areas`) says which wholesale market an area trades
 in, and that decides which source implementation runs. The sources themselves
 are unaware of this dispatcher.
 
 Nothing infers anything from the shape of an area code. An area with no `market`
 entry has no price series of its own, so a tech=grid row reaches here only for an
-area that does — a country whose prices come from sub-national zones is replaced
-by those zones before the DAG is built (see common/_runs.py).
+area that does — input generation runs a country whose prices come from
+sub-national zones once per zone (see common/generate_inputs.py).
 
 The market knows the area by its own code (`market_area`: the ENTSO-E bidding
 zone, the AEMO NEM region), which is not always the area code the rest of the

@@ -1,0 +1,4 @@
+# Machinery test, not a study: the H2 buffer is priced as a salt cavern, as in
+# demo-h2-dri-eaf.
+h2_buffer:
+  capex_per_mwh_eur: 350

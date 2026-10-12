@@ -81,7 +81,7 @@ log = logging.getLogger(__name__)
 YEAR = 2023
 OUTDIR = TIMESERIES
 RES_CF_CFG = load_res_cf_cfg()
-AREAS = ["DE_LU"]          # area codes, as in config/scenarios.csv
+AREAS = ["DE_LU"]          # area codes, as in a scenario table
 REGION = "DE"              # region tag stored in the geo parquet
 
 CUTOUT_DIR = None # test: Path("cutouts/vic_20250101_20251231.nc")

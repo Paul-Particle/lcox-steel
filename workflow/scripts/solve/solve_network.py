@@ -20,12 +20,12 @@ import geopandas as gpd
 import pyarrow.parquet as pq
 import pypsa
 
+from scripts.solve._helpers_solve import find_transport_legs, read_run_inputs
 from scripts.solve.build_network import build_network, load_assumptions
 
 from common._logging import configure_logging
 from common._paths import REPO_ROOT
 from common._provenance import code_manifest, input_manifest
-from common._runs import zone_parents
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -148,24 +148,20 @@ def _tie_battery_inverter(n: pypsa.Network, snapshots) -> None:
 def main() -> None:
     """Assemble rule inputs, build and solve the network, export it to netCDF.
 
-    Capacity-factor and grid-price inputs arrive already separated by the rule
-    (the CSV's `tech` column does the classifying), so this concatenates the CF
-    columns into one multi-tech frame, aligns the optional price series, merges
-    base+overlay assumptions, then builds, optimises (HiGHS), and writes the
-    network for the one route named by the wildcard.
+    The run's rows in its scenario table say what each input series is for (see
+    `read_run_inputs`), so this concatenates the CF columns into one multi-tech
+    frame, aligns the price series, merges base+overlay assumptions, then builds,
+    optimises (HiGHS), and writes the network for the run's one route.
     """
     scenario = snakemake.wildcards.scenario
-    area     = snakemake.wildcards.area
-    route    = snakemake.wildcards.route
-    run      = f"{scenario}/{area}/{route}"
+    run      = f"{scenario}/{snakemake.wildcards.run}"
     out_path = Path(snakemake.output.network)
 
-    cf_paths   = [Path(raw) for raw in snakemake.input.cf_inputs]
-    grid_paths = [Path(raw) for raw in snakemake.input.grid_input]
-
-    if len(grid_paths) > 1:
-        raise ValueError(f"{run}: multiple grid inputs: {grid_paths}")
-    grid_path = grid_paths[0] if grid_paths else None
+    run_inputs = read_run_inputs(Path(snakemake.input.scenario_table), scenario,
+                                 snakemake.wildcards.run, list(snakemake.input.timeseries))
+    route = run_inputs["route"]
+    cf_paths = run_inputs["cf_paths"]
+    grid_path = run_inputs["grid_path"]
     # By name, not by position: every variant carries a `price` column, but only
     # `dayahead` carries nothing else, and `emissions` puts the generation mix
     # alongside it.
@@ -184,7 +180,7 @@ def main() -> None:
     demand_site = None
     if cf_paths and multisite:
         cf_timeseries, sites, demand_site = _assemble_multisite_cf(
-            cf_paths, _area_representative_point(Path(snakemake.input.regions))
+            cf_paths, _area_representative_point(Path(snakemake.input.regions[0]))
         )
     elif cf_paths:
         cf_parts: dict[str, pd.Series] = {}
@@ -223,29 +219,24 @@ def main() -> None:
     overlay_name = overlay_path.name if overlay_path else "none"
     mode = f"multi-site ({len(sites)} sites)" if sites is not None else "single-site"
     log.info(
-        f"building {mode} network for scenario={scenario} area={area} route={route} "
+        f"building {mode} network for {run}: origin={run_inputs['origin']} "
+        f"destination={run_inputs['destination']} route={route} "
         f"techs={list(cf_timeseries.columns)} (overlay={overlay_name})"
     )
-    # Freight legs are the producing country's, not the zone's: every NEM
-    # region is the same ocean away from Europe.
-    country = zone_parents(snakemake.config["areas"]).get(area, area)
-    transport_legs = assumptions["transport"]["distance_km"].get(country)
+    transport_legs = find_transport_legs(assumptions["transport"]["distance_km"], run_inputs["origin"],
+                                         run_inputs["destination"], snakemake.config["areas"])
 
-    # Where an `-export` route melts its iron. The rule hands over that market's
-    # own series and nothing at all for a domestic route, so the file's presence
-    # is what decides.
-    destination_area = assumptions["destination"]["area"]
-    destination_paths = [Path(raw) for raw in snakemake.input.destination_input]
-    if len(destination_paths) > 1:
-        raise ValueError(f"{run}: multiple destination inputs: {destination_paths}")
+    # Where an `-export` route melts its iron: the destination's own market series,
+    # which a domestic run does not have.
+    destination_path = run_inputs["destination_path"]
     destination_price = None
-    if destination_paths:
+    if destination_path is not None:
         destination_price = (
-            pd.read_parquet(destination_paths[0])["price"].reindex(cf_timeseries.index)
+            pd.read_parquet(destination_path)["price"].reindex(cf_timeseries.index)
         )
         if destination_price.isna().any():
             raise ValueError(
-                f"{run}: {destination_area}'s price series has "
+                f"{run}: {run_inputs['destination']}'s price series has "
                 f"{destination_price.isna().sum()} missing values after aligning to "
                 f"the run's snapshots, so it covers a different period."
             )

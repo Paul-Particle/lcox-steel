@@ -1,117 +1,75 @@
-"""Unit tests for writing config/assumptions.yaml from the template and the input workbook.
+"""Unit tests for turning the input workbook's values into model keys.
 
-The workbook is a stand-in laid out like data/assumptions/Assumptions_yaml_inputs.xlsx:
-an `assumptions_inputs` tab with one row per value and its register row ID.
+The workbook rows are a stand-in for the `assumptions_inputs` tab of
+data/assumptions/Assumptions_yaml_inputs.xlsx, indexed by its YAML key column.
 """
 
 import pandas as pd
 import pytest
-import yaml
 
-from common.generate_inputs import (
-    USD_PER_EUR,
-    format_number,
-    read_template_references,
-    read_workbook_inputs,
-    render_assumptions,
-    resolve_reference,
-)
+from common._workbook_translation import translate_override
+from common.generate_inputs import read_overrides, resolve_sources
 
-WORKBOOK_ROWS = [
-    # YAML key, value, unit, confirmed row ID
-    ("plant.capex_usd_base", 1.13 * 1000, "USD/t", 1),
-    ("plant.capex_usd_high", 1.13 * 2000, "USD/t", 2),
-    ("plant.heat_mwh", 0.5, "MWh/t", 3),
-    ("plant.drive_mwh", 0.25, "MWh/t", 4),
-    ("plant.lifetime", 20, "years", 5),
-    ("plant.p_min_pu", 0, "0", None),
-]
-
-TEMPLATE = """\
-# Explains the template, and is not copied over.
-
-plant:
-  capex_eur_per_t: !register {base: 1, high: 2}   # kept comment
-  opex_eur_per_t: !register {mean: [1, 2]}
-  total_mwh_per_t: !register {sum: [3, 4]}
-  lifetime_years: !register 5
-  freight: { eur_per_t: 0, eur_per_t_km: !register 1 }
-  untouched: 7
-"""
+WORKBOOK_ROWS = pd.DataFrame(
+    [("plant.capex_usd_base", 1.13 * 1000, "USD/t"),
+     ("plant.capex_usd_high", 1.13 * 2000, "USD/t"),
+     ("plant.heat_mwh", 0.5, "MWh/t"),
+     ("plant.drive_mwh", 0.25, "MWh/t"),
+     ("plant.lifetime", 20, "years")],
+    columns=["key", "value", "unit"],
+).set_index("key")
 
 
-@pytest.fixture
-def workbook_inputs(tmp_path):
-    workbook_path = tmp_path / "inputs.xlsx"
-    (
-        pd.DataFrame(WORKBOOK_ROWS, columns=["YAML key", "Value", "Unit", "Confirmed row ID"])
-        .assign(**{"Old YAML key": None})
-        .to_excel(workbook_path, sheet_name="assumptions_inputs", index=False)
-    )
-    return read_workbook_inputs(workbook_path)
+def resolve_with(sources):
+    return resolve_sources(WORKBOOK_ROWS, sources)
 
 
-def resolve_template(template, workbook_inputs):
-    references, _ = read_template_references(template)
-    for reference in references:
-        resolve_reference(reference, workbook_inputs)
-    return references
+def test_values_are_converted_combined_and_kept_with_their_alternatives():
+    resolved = resolve_with({
+        "plant.capex_eur_per_t": {"base": "plant.capex_usd_base", "high": "plant.capex_usd_high"},
+        "plant.opex_eur_per_t": {"mean": ["plant.capex_usd_base", "plant.capex_usd_high"]},
+        "plant.total_mwh_per_t": {"sum": ["plant.heat_mwh", "plant.drive_mwh"]},
+        "plant.lifetime_years": "plant.lifetime",
+    })
+
+    assert resolved["plant.capex_eur_per_t"] == pytest.approx({"base": 1000, "high": 2000})
+    assert resolved["plant.opex_eur_per_t"] == pytest.approx({"default": 1500})
+    assert resolved["plant.total_mwh_per_t"] == pytest.approx({"default": 0.75})
+    assert resolved["plant.lifetime_years"] == {"default": 20}
 
 
-def test_values_are_converted_combined_and_written(workbook_inputs):
-    rendered_text = render_assumptions(TEMPLATE, resolve_template(TEMPLATE, workbook_inputs))
-    plant = yaml.safe_load(rendered_text)["plant"]
-
-    assert USD_PER_EUR == 1.13
-    assert plant["capex_eur_per_t"] == pytest.approx(1000)
-    assert plant["opex_eur_per_t"] == pytest.approx(1500)
-    assert plant["total_mwh_per_t"] == pytest.approx(0.75)
-    assert plant["lifetime_years"] == 20
-    assert plant["freight"] == {"eur_per_t": 0, "eur_per_t_km": pytest.approx(1000)}
-    assert plant["untouched"] == 7
-
-
-def test_alternatives_are_kept_beside_the_default(workbook_inputs):
-    references = {r.path: r for r in resolve_template(TEMPLATE, workbook_inputs)}
-
-    assert references["plant.capex_eur_per_t"].values == pytest.approx({"base": 1000, "high": 2000})
-
-
-def test_comments_carry_the_rows_and_the_alternatives(workbook_inputs):
-    rendered_text = render_assumptions(TEMPLATE, resolve_template(TEMPLATE, workbook_inputs))
-
-    assert "Explains the template" not in rendered_text
-    assert "# register base = 1: plant.capex_usd_base 1130, plant.capex_usd_high 2260 USD/t" in rendered_text
-    assert "# alternatives in EUR: high = 2000" in rendered_text
-    assert "# register sum of 3, 4: plant.heat_mwh 0.5, plant.drive_mwh 0.25 MWh/t" in rendered_text
-    assert "# kept comment" in rendered_text
-
-
-def test_untagged_values_are_listed_as_backstop_values():
-    _, backstop_paths = read_template_references(TEMPLATE)
-
-    assert backstop_paths == ["plant.freight.eur_per_t", "plant.untouched"]
-
-
-def test_an_unknown_row_stops_the_build(workbook_inputs):
+def test_a_missing_row_stops_the_build():
     with pytest.raises(KeyError, match="plant.capex_eur_per_t"):
-        resolve_template("plant:\n  capex_eur_per_t: !register 99\n", workbook_inputs)
+        resolve_with({"plant.capex_eur_per_t": "plant.capex_usd_low"})
 
 
-def test_rows_in_different_units_stop_the_build(workbook_inputs):
-    with pytest.raises(ValueError, match="different units"):
-        resolve_template("plant:\n  capex_eur_per_t: !register {sum: [1, 3]}\n", workbook_inputs)
+def test_rows_in_different_units_stop_the_build():
+    with pytest.raises(ValueError, match="one unit"):
+        resolve_with({"plant.capex_eur_per_t": {"sum": ["plant.capex_usd_base", "plant.heat_mwh"]}})
 
 
-def test_a_currency_the_key_does_not_name_stops_the_build(workbook_inputs):
-    """A USD row under a key without `eur` (or the reverse) is a wrong ID, not a value."""
+def test_a_currency_the_key_does_not_name_stops_the_build():
+    """A USD row under a key without `eur` (or the reverse) is a wrong row, not a value."""
     with pytest.raises(ValueError, match="currency"):
-        resolve_template("plant:\n  lifetime_years: !register 1\n", workbook_inputs)
+        resolve_with({"plant.lifetime_years": "plant.capex_usd_base"})
     with pytest.raises(ValueError, match="currency"):
-        resolve_template("plant:\n  capex_eur_per_t: !register 5\n", workbook_inputs)
+        resolve_with({"plant.capex_eur_per_t": "plant.lifetime"})
 
 
-def test_numbers_are_never_written_in_exponent_notation():
-    assert format_number(2593805.3) == "2593810"
-    assert format_number(0.0000343037) == "0.0000343037"
-    assert format_number(20.0) == "20"
+def test_overrides_survive_excel_curly_quotes():
+    assert read_overrides('{“finance.default_wacc”:“+30%”}') == {"finance.default_wacc": "+30%"}
+    assert read_overrides(float("nan")) == {}
+
+
+def test_workbook_override_keys_translate_to_model_keys_and_alternatives():
+    assert translate_override("res.solar.capex_usd_per_mw", "res.solar.capex_usd_per_mw_low") == [
+        ("res.solar.capex_per_mw_eur", "low")]
+    assert translate_override("electrolyser.capex_usd_per_mw", "electrolyser.capex_usd_per_mw_low") == [
+        ("electrolyser.capex_per_mw_eur", "electrolyser.capex_usd_per_mw_low")]
+
+
+def test_one_workbook_key_reaches_every_model_key_it_feeds():
+    assert translate_override("finance.default_wacc", "+30%") == [
+        ("finance.origin_wacc", "+30%"), ("finance.destination_wacc", "+30%")]
+    assert [path for path, _ in translate_override("dri.capex_usd_per_t", 400)] == [
+        "dri-h2.capex_per_t_per_year_eur", "dri-mix.capex_per_t_per_year_eur", "dri-ng.capex_per_t_per_year_eur"]

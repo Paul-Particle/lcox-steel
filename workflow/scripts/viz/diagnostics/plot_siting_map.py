@@ -1,7 +1,7 @@
 """Geographic siting map for one multi-site h2_dri scenario.
 
 The multi-site analogue of plot_cf_map: instead of a CF heatmap it reads a solved
-network (results/{scenario}/{area}_{route}_{start}_{end}.nc) and shows, on a real map, where the LP
+network (results/{scenario}/.runs/{scenario}_{run}/outputs/{scenario}_{run}.nc) and shows, on a real map, where the LP
 chose to build. Candidate sites are markers sized by built capacity and coloured
 by tech; the demand/electrolyser site is starred; HVDC links are drawn from each
 built site to the demand site with width proportional to optimal link capacity
@@ -180,18 +180,17 @@ def plot(n: pypsa.Network, sites: pd.DataFrame, out: Path, scenario: str, run: s
 
 def main() -> None:
     """Load the solved network and render its siting map."""
-    route = snakemake.wildcards.route
-    area = snakemake.wildcards.area
+    run = snakemake.wildcards.run
     scenario = snakemake.wildcards.scenario
     n = pypsa.Network()
     n.import_from_netcdf(snakemake.input.network)
     if int((n.buses.carrier == "AC").sum()) <= 1:
         raise ValueError(
-            f"{scenario}/{area} {route} is a single-site network — plot_siting_map is "
+            f"{scenario}/{run} is a single-site network — plot_siting_map is "
             "only meaningful for multi-site scenarios (those with a sites overlay)."
         )
     sites = build_site_table(n)
-    plot(n, sites, Path(snakemake.output.png), scenario, f"{area} {route}")
+    plot(n, sites, Path(snakemake.output.png), scenario, run)
 
 
 if __name__ == "__main__":
