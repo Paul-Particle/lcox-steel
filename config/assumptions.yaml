@@ -13,51 +13,51 @@ finance:
 res:
   financing_period: 20
   wind-onshore:
-    capex_usd_per_mw_base: 976000
-    capex_usd_per_mw_low: 632000
-    capex_usd_per_mw_high: 2208000
-    opex_usd_per_mw_per_year_base: 24400
-    opex_usd_per_mw_per_year_low: 15800
-    opex_usd_per_mw_per_year_high: 55200
+    capex_eur_per_mw_base: 863716.814159292
+    capex_eur_per_mw_low: 559292.0353982301
+    capex_eur_per_mw_high: 1953982.3008849558
+    opex_eur_per_mw_per_year_base: 21592.920353982303
+    opex_eur_per_mw_per_year_low: 13982.300884955754
+    opex_eur_per_mw_per_year_high: 48849.5575221239
   solar:
-    capex_usd_per_mw_base: 667000
-    capex_usd_per_mw_low: 383000
-    capex_usd_per_mw_high: 1211000
-    opex_usd_per_mw_per_year_base: 13340
-    opex_usd_per_mw_per_year_low: 7660
-    opex_usd_per_mw_per_year_high: 24220
+    capex_eur_per_mw_base: 590265.4867256638
+    capex_eur_per_mw_low: 338938.05309734517
+    capex_eur_per_mw_high: 1071681.4159292036
+    opex_eur_per_mw_per_year_base: 11805.309734513276
+    opex_eur_per_mw_per_year_low: 6778.761061946903
+    opex_eur_per_mw_per_year_high: 21433.628318584073
   wind-offshore:
-    capex_usd_per_mw_base: 2931000
-    capex_usd_per_mw_low: 1321000
-    capex_usd_per_mw_high: 5800000
-    opex_usd_per_mw_per_year_base: 73275
-    opex_usd_per_mw_per_year_low: 33025
-    opex_usd_per_mw_per_year_high: 145000
+    capex_eur_per_mw_base: 2593805.3097345135
+    capex_eur_per_mw_low: 1169026.5486725664
+    capex_eur_per_mw_high: 5132743.362831859
+    opex_eur_per_mw_per_year_base: 64845.13274336283
+    opex_eur_per_mw_per_year_low: 29225.66371681416
+    opex_eur_per_mw_per_year_high: 128318.58407079647
 electrolyser:
-  capex_usd_per_mw_base: 1049000
-  opex_usd_per_mw_per_year_base: 20980
+  capex_eur_per_mw_base: 1086191.480102735
+  opex_eur_per_mw_per_year_base: 21723.8296020547
   financing_period: 30
   efficiency_kwh_per_kg: 48.3
-  varopex_usd_per_mwh_h2_base: 0.61
-  varopex_usd_per_mwh_h2_low: 0.44
-  varopex_usd_per_mwh_h2_high: 0.82
+  varopex_eur_per_mwh_h2_base: 0.71
+  varopex_eur_per_mwh_h2_low: 0.51
+  varopex_eur_per_mwh_h2_high: 0.95
 battery:
-  capex_usd_per_mw_eu: 242373.69
-  capex_usd_per_mw_global: 156429.34
-  capex_usd_per_mwh_eu: 157021.66
-  capex_usd_per_mwh_global: 101342.66
+  capex_eur_per_mw_eu: 214489.99
+  capex_eur_per_mw_global: 138433.05
+  capex_eur_per_mwh_eu: 138957.22
+  capex_eur_per_mwh_global: 89683.77
   financing_period: 20
   efficiency_roundtrip: 0.85
   max_hours: 6
 h2_buffer:
-  capex_usd_per_mwh: 67856.5
-  fom_usd_per_mwh: 755.45
+  capex_eur_per_mwh: 60050
+  fom_eur_per_mwh: 668.54
   financing_period: 30
 IS:
   financing_period: 20
 dri:
-  capex_usd_per_t: 640
-  ore_usd_per_t: 269.22
+  capex_eur_per_t: 581.2810651798624
+  ore_eur_per_t: 238.25
   p_min_pu: null
 dri_h2:
   kg_h2_per_t_dri: 50.23
@@ -67,26 +67,26 @@ dri_ng:
   gas_mwh_per_t: 3.47
   el_mwh_per_t: 0.18
 moe:
-  capex_usd_per_t: 1600
+  capex_eur_per_t: 1453.2026629496559
   el_mwh_per_t: 3.18
-  ore_usd_per_t_liquid_iron: 180.07
+  ore_eur_per_t_liquid_iron: 159.35
   p_min_pu: null
 ewin:
-  capex_usd_per_t: 800
+  capex_eur_per_t: 726.6013314748279
   el_mwh_per_t: 3.74
-  ore_usd_per_t_electrolytic_iron: 180.43
+  ore_eur_per_t_electrolytic_iron: 159.67
   p_min_pu: null
 iron:
-  fom_usd_per_t_capacity_per_year_eu: 79.6500000000001
-  fom_usd_per_t_capacity_per_year_bra: 73.8
-  fom_usd_per_t_capacity_per_year_aus: 84.9416666666667
+  fom_eur_per_t_capacity_per_year_eu: 72.34224506496264
+  fom_eur_per_t_capacity_per_year_bra: 67.02897282855288
+  fom_eur_per_t_capacity_per_year_aus: 77.14841012211379
 briquetting:
   el_mwh_per_t_hbi: 0.01
 eaf:
-  capex_usd_per_t: 410
-  fom_usd_per_t_capacity_per_year_eu: 101.33
-  fom_usd_per_t_capacity_per_year_bra: 100
-  fom_usd_per_t_capacity_per_year_aus: 106.07
+  capex_eur_per_t: 372.3831823808493
+  fom_eur_per_t_capacity_per_year_eu: 92.04
+  fom_eur_per_t_capacity_per_year_bra: 90.83
+  fom_eur_per_t_capacity_per_year_aus: 96.34
   p_min_pu: null
 eaf_dri:
   el_mwh_per_t: 0.45
@@ -101,13 +101,13 @@ eaf_moe:
   el_mwh_per_t: 0.18
   iron_t_per_t_steel: 1.08
 iron_steel_store:
-  capex_usd_per_t: 23.65
+  capex_eur_per_t: 23.81
   financing_period: 100
 steel_store:
   max_weeks: null
 natural_gas:
-  price_usd_per_mwh_high: 27.3
-  price_usd_per_mwh_low: 22.18
+  price_eur_per_mwh_high: 25.43
+  price_eur_per_mwh_low: 20.66
 grid:
   connection_capex_eur_per_mw: null
   connection_lifetime_years: null
@@ -119,8 +119,8 @@ transmission:
   losses_pct_per_1000km: null
   indirect_route_factor: null
 shipping:
-  cost_usd_per_t_per_km: 0.00038763215700000003
-  cost_usd_per_t: 0.7635178850000001
+  cost_eur_per_t_per_km: 0.00034169989364528364
+  cost_eur_per_t: 0.6730452450588921
   distance_km_aus_deu: 21947.2
   distance_km_aus_esp: 17964.6
   distance_km_aus_fra: 16854

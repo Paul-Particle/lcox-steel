@@ -82,19 +82,19 @@ ROUND_2_PREFIXES = (
 )
 ROUND_2_KEYS = {
     "electrolyser.efficiency_kwh_per_kg",
-    "electrolyser.varopex_usd_per_mwh_h2_base",
-    "electrolyser.varopex_usd_per_mwh_h2_low",
-    "electrolyser.varopex_usd_per_mwh_h2_high",
-    "h2_buffer.fom_usd_per_mwh",
-    "h2_buffer.capex_usd_per_mwh",
-    "dri.ore_usd_per_t",
+    "electrolyser.varopex_eur_per_mwh_h2_base",
+    "electrolyser.varopex_eur_per_mwh_h2_low",
+    "electrolyser.varopex_eur_per_mwh_h2_high",
+    "h2_buffer.fom_eur_per_mwh",
+    "h2_buffer.capex_eur_per_mwh",
+    "dri.ore_eur_per_t",
     "moe.el_mwh_per_t",
-    "moe.ore_usd_per_t_liquid_iron",
+    "moe.ore_eur_per_t_liquid_iron",
     "ewin.el_mwh_per_t",
-    "ewin.ore_usd_per_t_electrolytic_iron",
-    "natural_gas.price_usd_per_mwh_high",
-    "natural_gas.price_usd_per_mwh_low",
-    "iron_steel_store.capex_usd_per_t",
+    "ewin.ore_eur_per_t_electrolytic_iron",
+    "natural_gas.price_eur_per_mwh_high",
+    "natural_gas.price_eur_per_mwh_low",
+    "iron_steel_store.capex_eur_per_t",
 }
 
 
