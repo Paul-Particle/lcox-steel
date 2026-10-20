@@ -760,7 +760,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         if(key==="res_capex"||key==="res_fom"||key==="renewables"){
           const out = lcoeTechLines(rec, false);
           if(lo(rec,"renewables")!=null)
-            out.unshift(["· own LCOE, over its own generation", amount(lo(rec,"renewables"),"€/MWh",1)]);
+            out.unshift(["· LCOE per MWh of renewables generated", amount(lo(rec,"renewables"),"€/MWh",1)]);
           return out;
         }
         if(key==="grid_energy") return gridLines(rec).filter(l=>l[0]==="· market price"||l[0]==="· volumetric fee");

@@ -20,7 +20,7 @@ def run_labels(runs: pd.DataFrame) -> pd.Series:
     Callers that plot a subset pass the whole frame and select afterwards, so a
     run keeps one label across every chart built from the same report.
     """
-    label = runs["area"].astype(str) + " " + runs["route"].astype(str)
+    label = runs["origin"].astype(str) + " " + runs["route"].astype(str)
     windows = runs[["start_date", "end_date"]].drop_duplicates()
     if len(windows) == 1:
         return label

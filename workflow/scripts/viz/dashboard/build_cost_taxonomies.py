@@ -74,7 +74,7 @@ LCOE_SPLIT_BANDS = [
     ["grid_energy",       "Grid energy",              C_GRID_NRG],
     ["transmission",      "Transmission (HVDC)",      C_TRANSM],
     # Only an export route has one; on every other it is zero and draws nothing.
-    ["destination_power", "Destination power",        "#0293D2"],
+    ["destination_electricity", "Destination electricity", "#0293D2"],
 ]
 LCOE_GROUP_BANDS = [
     ["renewables",        "Renewables (capex+opex)",  C_ELEC],
@@ -82,7 +82,7 @@ LCOE_GROUP_BANDS = [
     ["grid_connection",   "Grid connection",          C_GRID_CONN],
     ["grid_energy",       "Grid energy",              C_GRID_NRG],
     ["transmission",      "Transmission (HVDC)",      C_TRANSM],
-    ["destination_power", "Destination power",        "#0293D2"],
+    ["destination_electricity", "Destination electricity", "#0293D2"],
 ]
 LCOH_SPLIT_BANDS = [
     ["electrolyser_capex", "Electrolyser — capital",   C_CAPEX],
@@ -173,7 +173,7 @@ def attach(payload: dict, cases: dict) -> None:
         # The split lives in the report, so a report without the cost-leaf
         # columns has nothing for this page to plot. Say that, rather than
         # failing on a missing column three frames further in.
-        probe = f"cost_{cost_taxonomy.LEAF_COSTS[0]}_eur_per_t"
+        probe = f"cost_{cost_taxonomy.LEAF_COSTS[0]}_eur_per_t_steel"
         if probe not in runs.columns:
             raise SystemExit(
                 f"{report.name} carries no cost leaves ({probe} is not in it), so "

@@ -60,7 +60,7 @@ COST_GROUPS = [
     ("transmission",    "Transmission (HVDC)",          turquois),
     ("grid",            "Grid (connection + energy)",   dark_gray),
     ("transport",       "Freight",                      light_blue_gray),
-    ("destination_power", "Destination power",          highlight_blue),
+    ("destination_electricity", "Destination electricity", highlight_blue),
 ]
 
 

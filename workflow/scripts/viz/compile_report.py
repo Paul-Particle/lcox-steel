@@ -27,11 +27,13 @@ from common._report_schema import (
     LEAF_COSTS,
     LEAF_GROUP,
     LEAF_PARENTS,
+    LEAF_SUBTOTALS,
     ORE_LINKS,
     REDUCTION_LINKS,
     PROCESS_LINKS,
     RES_TECHS,
     field_stem,
+    variant_field,
     write_report_file,
 )
 from scripts.solve._helpers_solve import annuity_factor, deep_merge, find_transport_legs, read_run_inputs
@@ -52,6 +54,11 @@ STORAGE_CARRIERS = ("energy_storage", "pumped_storage")
 # a plant's own draw and not a source, whatever the carrier: Germany reports one
 # for solar and onshore wind as well as for its storage.
 CONSUMPTION_SUFFIX = "_cons"
+
+# A link's second electricity draw (on bus3), and the user it is reported under.
+# The H2 shaft preheats its own feed; the blend shaft's preheat is a link of its
+# own, `reductant-h2`, and both land in the same row.
+SECOND_DRAWS = {"dri-h2": "reductant-h2"}
 
 
 def _carrier_key(carrier: str) -> str:
@@ -247,6 +254,11 @@ def _emissions_breakdown(
                if "p2" in n.links_t else link_p0 * 0.0)
     link_bus2 = (n.links["bus2"] if "bus2" in n.links.columns
                  else pd.Series("", index=n.links.index))
+    # And bus3, which only the H2 shaft uses: the preheat on its H2 feed.
+    link_p3 = (n.links_t["p3"].reindex(columns=n.links.index, fill_value=0.0)
+               if "p3" in n.links_t else link_p0 * 0.0)
+    link_bus3 = (n.links["bus3"] if "bus3" in n.links.columns
+                 else pd.Series("", index=n.links.index))
 
     # The destination is found by who feeds it rather than by name, so the bus
     # can be renamed in build_network without breaking the report.
@@ -351,6 +363,21 @@ def _emissions_breakdown(
         intensity = destination_intensity if bus == destination_bus else home_intensity
         electricity_mwh[link] = float(draw.sum()) * annual
         electricity_by_user[link] = float((draw * intensity).sum()) * annual
+        # A second draw on bus3 is reported under the user it is for, not the
+        # link it is on: the H2 shaft's preheat sits with the blend shaft's, so
+        # the preheat has one row whichever shaft drew it.
+        bus3 = link_bus3[link]
+        if bus3 and n.buses.at[bus3, "carrier"] == "AC":
+            if link not in SECOND_DRAWS:
+                raise ValueError(
+                    f"{link} draws electricity on bus3 but the report does not know "
+                    f"what for. Name the user it belongs to in SECOND_DRAWS."
+                )
+            user = SECOND_DRAWS[link]
+            intensity = destination_intensity if bus3 == destination_bus else home_intensity
+            electricity_mwh[user] = electricity_mwh.get(user, 0.0) + float(link_p3[link].sum()) * annual
+            electricity_by_user[user] = (electricity_by_user.get(user, 0.0)
+                                         + float((link_p3[link] * intensity).sum()) * annual)
     emissions = dict(electricity_by_user)
     electricity_t = sum(electricity_by_user.values())
 
@@ -529,7 +556,7 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         "transport": link_marginal(["iron_transport", "steel_transport"]),
         # The destination furnace's own power, kept out of the grid group so an
         # export run shows what it pays at each end.
-        "destination_power": (gen_capital("destination_supply")
+        "destination_electricity": (gen_capital("destination_supply")
                               + gen_marginal("destination_supply")),
     }
 
@@ -552,9 +579,9 @@ def _leaf_breakdown(
 ) -> dict[str, float]:
     """The cost groups cut as finely as the model allows, as report fields.
 
-    `cost_*_eur_per_t` comes out, one column per priced thing plus what each
+    `cost_*_eur_per_t_steel` comes out, one column per priced thing plus what each
     parent group of them comes to, stacking to `lcos_eur_per_t`. So does
-    `el_*_eur_per_t`, which divides one of those groups — the electricity — by
+    `el_*_eur_per_t_steel`, which divides one of those groups — the electricity — by
     the job each euro of it paid for. Both are checked against the total they
     stack to rather than assumed to close.
 
@@ -670,36 +697,50 @@ def _leaf_breakdown(
                                 "capex_per_mw_eur", "opex_per_mw_per_year_eur")
         leaves[f"res_{field_stem(tech)}_fom"] = annual * share
         leaves[f"res_{field_stem(tech)}_capex"] = annual * (1.0 - share)
-    # A generator none of the three techs names keeps its cost whole here rather
-    # than being divided into a technology it is not.
-    leaves["res_other"] = res_annual(gen for gen in res_idx if gen not in named)
+    # A generator none of the three techs names has no capex and O&M split to
+    # put it in, and no row of its own: an error, rather than a cost parked
+    # somewhere undivided or dropped from the stack.
+    unnamed = sorted(str(gen) for gen in res_idx if gen not in named)
+    if unnamed:
+        raise ValueError(
+            f"the run built renewable generators the report has no technology for: "
+            f"{unnamed}. Add the technology to RES_TECHS in "
+            f"common/_report_schema.py, which gives it its own capex and fixed O&M rows."
+        )
 
     # The inverter rating and the energy are two components the solve sized
     # separately, so what each cost needs no assumption about duration.
-    leaves["battery_power"] = link_capital("battery_charger")
-    leaves["battery_energy"] = store_capital("battery")
+    leaves["battery_power_capex"] = link_capital("battery_charger")
+    leaves["battery_energy_capex"] = store_capital("battery")
 
     # The connection pays annuitised capex plus a yearly charge on the same built
     # MW; the imported energy pays the market price plus a flat charge on every
     # MWh. So each divides at the rate it was charged at, and the market price —
     # the one part that is neither a quote nor a capacity — is the remainder.
+    # The same for both connections: the origin's, and on an export route the
+    # destination furnace's, each financed where it stands.
     grid_cfg = assumptions["grid"]
-    grid_connection = generator_capital("grid_import")
-    if grid_connection:
-        annual_capex = (annuity_factor(origin_wacc, grid_cfg["connection_lifetime_years"])
-                        * grid_cfg["connection_capex_eur_per_mw"])
-        yearly_fee = grid_cfg["fee_eur_per_mw_per_year"]
-        fee_share = yearly_fee / (annual_capex + yearly_fee) if (annual_capex + yearly_fee) else 0.0
-        leaves["grid_capacity_fee"] = grid_connection * fee_share
-        leaves["grid_connection_capex"] = grid_connection * (1.0 - fee_share)
-    grid_mwh = (float(n.generators_t.p["grid_import"].sum()) * annual_scale
-                if "grid_import" in n.generators.index else 0.0)
-    leaves["grid_fee"] = grid_mwh * float(grid_cfg["fee_eur_per_mwh"])
-    leaves["grid_market"] = breakdown["grid"] - grid_connection - leaves["grid_fee"]
+
+    def split_connection(generator: str, wacc: float, group_total: float, prefix: str) -> None:
+        connection = generator_capital(generator)
+        if connection:
+            annual_capex = (annuity_factor(wacc, grid_cfg["connection_lifetime_years"])
+                            * grid_cfg["connection_capex_eur_per_mw"])
+            yearly_fee = grid_cfg["fee_eur_per_mw_per_year"]
+            fee_share = yearly_fee / (annual_capex + yearly_fee) if (annual_capex + yearly_fee) else 0.0
+            leaves[f"{prefix}_capacity_fee"] = connection * fee_share
+            leaves[f"{prefix}_connection_capex"] = connection * (1.0 - fee_share)
+        mwh = (float(n.generators_t.p[generator].sum()) * annual_scale
+               if generator in n.generators.index else 0.0)
+        leaves[f"{prefix}_fee"] = mwh * float(grid_cfg["fee_eur_per_mwh"])
+        leaves[f"{prefix}_market"] = group_total - connection - leaves[f"{prefix}_fee"]
+
+    split_connection("grid_import", origin_wacc, breakdown["grid"], "grid")
+    split_connection("destination_supply", assumptions["finance"]["destination_wacc"],
+                     breakdown["destination_electricity"], "destination_grid")
 
     # -- what is already as fine as the model cuts it
-    for group in ("transmission", "destination_power",
-                  "iron_store", "steel_store", "transport"):
+    for group in ("transmission", "iron_store", "steel_store", "transport"):
         leaves[group] = breakdown[group]
 
     # Every group is either split into leaves or carried into one, so the leaves
@@ -716,11 +757,14 @@ def _leaf_breakdown(
             f"common/_report_schema.py is the list of them."
         )
 
-    fields = {f"cost_{leaf}_eur_per_t": value / steel_t for leaf, value in leaves.items()}
+    fields = {f"cost_{leaf}_eur_per_t_steel": value / steel_t for leaf, value in leaves.items()}
     for parent in LEAF_PARENTS:
-        fields[f"cost_{parent}_eur_per_t"] = sum(
+        fields[f"cost_{parent}_eur_per_t_steel"] = sum(
             value for leaf, value in leaves.items() if LEAF_GROUP[leaf] == parent
         ) / steel_t
+    # A few components' leaves added up, beside them rather than among them.
+    for name, parts in LEAF_SUBTOTALS.items():
+        fields[f"cost_{name}_eur_per_t_steel"] = sum(leaves[leaf] for leaf in parts) / steel_t
 
     # -- the electricity bill, divided by the job the electricity did. Two systems
     # can pay it: the plant's own, and — on an export route — the market its
@@ -771,7 +815,7 @@ def _leaf_breakdown(
         )
     jobs = {
         "reduction": reduction_mwh * home_rate,
-        "melt": breakdown["destination_power"] if melts_abroad else melt_mwh * home_rate,
+        "melt": breakdown["destination_electricity"] if melts_abroad else melt_mwh * home_rate,
         "hydrogen": electrolyser_mwh * home_rate,
         "handling": handling_mwh * home_rate,
         "losses": losses_mwh * home_rate,
@@ -780,7 +824,7 @@ def _leaf_breakdown(
     # rather than by what was bought, so the two cuts have to land on the same
     # number. A job that swallowed another's megawatt-hours would still close on
     # the bill, which is what the megawatt-hour check above is separately for.
-    electricity_bill = home_cost + breakdown["destination_power"]
+    electricity_bill = home_cost + breakdown["destination_electricity"]
     job_total = sum(jobs.values())
     if abs(job_total - electricity_bill) > max(1.0, 1e-9 * abs(electricity_bill)):
         raise ValueError(
@@ -791,7 +835,7 @@ def _leaf_breakdown(
             f"electrolyser, or is left to `handling` "
             f"(common/_report_schema.py names all three lists)."
         )
-    fields.update({f"el_{job}_eur_per_t": value / steel_t
+    fields.update({f"el_{job}_eur_per_t_steel": value / steel_t
                    for job, value in jobs.items()})
 
     # The same capital/upkeep split on the carriers, over each carrier's own
@@ -811,9 +855,9 @@ def _leaf_breakdown(
             )
 
     # -- what a tonne of steel took, measured off the run
-    fields["eaf_el_mwh_per_t_steel"] = draws.get("eaf", 0.0) / steel_t
-    fields["reduction_el_mwh_per_t_steel"] = reduction_mwh / steel_t
-    fields["electrolyser_el_mwh_per_t_steel"] = draws.get("electrolyser", 0.0) / steel_t
+    fields["el_eaf_mwh_per_t_steel"] = draws.get("eaf", 0.0) / steel_t
+    fields["el_reduction_mwh_per_t_steel"] = reduction_mwh / steel_t
+    fields["el_electrolyser_mwh_per_t_steel"] = draws.get("electrolyser", 0.0) / steel_t
     fields["gas_mwh_per_t_steel"] = gas_mwh / steel_t
     if "electrolyser" in n.links.index:
         fields["h2_kg_per_t_steel"] = _h2_produced_kg(n) / steel_t
@@ -831,13 +875,50 @@ def _leaf_breakdown(
             wacc_of(link), assumptions[link]["lifetime_years"]
         )
     for link in ORE_LINKS:
-        fields[f"ore_quote_{field_stem(link)}_eur_per_t"] = assumptions[link]["ore_eur_per_t"]
+        fields[f"ore_quote_{field_stem(link)}_eur_per_t_iron"] = assumptions[link]["ore_eur_per_t"]
     if "eaf" in n.links.index:
         # The furnace's efficiency is tonnes of steel per tonne of iron, so its
         # reciprocal is the charge this route feeds it — off the network, rather
         # than back through the route's own charge table.
         fields["eaf_iron_t_per_t_steel"] = 1.0 / float(n.links.at["eaf", "efficiency"])
     return fields
+
+
+def _res_energy(n: pypsa.Network, hours_per_year: float) -> dict[str, float]:
+    """What each renewable delivered in a year, and what it was switched off for, GWh.
+
+    Summed over every generator of the tech — a candidate site or a panel
+    orientation is a generator of its own, named after the tech — so the pair
+    describes the tech whatever the siting. Generated is the denominator of
+    `lcoe_{tech}_eur_per_mwh_{tech}`; curtailed is what the built capacity
+    could have produced on top of it.
+    """
+    available = n.get_switchable_as_dense("Generator", "p_max_pu") * n.generators.p_nom_opt
+    annual_scale = hours_per_year / len(n.snapshots)
+    built = n.generators.index[
+        n.generators.p_nom_extendable
+        & ~n.generators.index.isin(("grid_import", "gas_supply", "destination_supply"))
+    ]
+    fields = {}
+    for tech in RES_TECHS:
+        idx = [g for g in built if str(g).startswith(tech)]
+        generated = float(n.generators_t.p[idx].sum().sum()) * annual_scale if idx else 0.0
+        potential = float(available[idx].sum().sum()) * annual_scale if idx else 0.0
+        fields[f"{field_stem(tech)}_generated_gwh"] = generated / 1e3
+        # Clipped at zero: the solver's tolerance can put dispatch a hair above
+        # what was available, which is not negative curtailment.
+        fields[f"{field_stem(tech)}_curtailed_gwh"] = max(potential - generated, 0.0) / 1e3
+    return fields
+
+
+def _battery_discharged_mwh(n: pypsa.Network, hours_per_year: float) -> float:
+    """What the battery gave back to the plant in a year, MWh, after the discharge loss.
+
+    The discharger's output side, so a MWh lost on the way out is not counted as
+    delivered. The denominator of `lcoe_storage_eur_per_mwh_discharged`.
+    """
+    drawn = float(n.links_t.p0["battery_discharger"].sum())
+    return drawn * float(n.links.at["battery_discharger", "efficiency"]) * hours_per_year / len(n.snapshots)
 
 
 def extract_summary(
@@ -847,7 +928,7 @@ def extract_summary(
 ) -> dict:
     """Key sizing, cost and emission metrics as a flat dict (one row of the CSV).
 
-    `run` identifies the row — area, route, date range and the input variants —
+    `run` identifies the row — origin, destination, route, date range and the input variants —
     and leads the columns, so what a number describes reads before the number.
 
     The headline is the levelised cost of steel (LCOS) over the flat steel
@@ -891,7 +972,7 @@ def extract_summary(
     #          destination supply). Route-wide: every megawatt-hour the route draws
     #          is in the denominator, so every one of them has to be paid for in the
     #          numerator: `elec_gens` picks up the destination supply, so `elec_cost`
-    #          carries `destination_power` alongside it. Numerator and denominator
+    #          carries `destination_electricity` alongside it. Numerator and denominator
     #          cover the same generators, or an export route reads cheaper than its
     #          domestic twin by the MWh nobody was charged for.
     #   LCOH = (electrolyser capex/opex + H2 buffer + the electrolyser's electricity
@@ -900,7 +981,7 @@ def extract_summary(
     elec_gens = [g for g in n.generators.index if g != "gas_supply"]
     elec_mwh = (float(n.generators_t.p[elec_gens].sum().sum()) * annual_scale) if elec_gens else 0.0
     elec_cost = sum(breakdown[k]
-                    for k in ("res", "battery", "grid", "transmission", "destination_power"))
+                    for k in ("res", "battery", "grid", "transmission", "destination_electricity"))
     lcoe = elec_cost / elec_mwh if elec_mwh > 0 and elec_cost > 0 else float("nan")
     if lcoe == lcoe:  # not NaN
         summary["lcoe_eur_per_mwh"] = lcoe
@@ -937,7 +1018,7 @@ def extract_summary(
             "lcoe_transmission": breakdown["transmission"],
             # Zero on a domestic route, which builds no destination supply. It is a
             # part like the others so the decomposition still closes on LCOE.
-            "lcoe_destination_power": breakdown["destination_power"],
+            "lcoe_destination_electricity": breakdown["destination_electricity"],
         }
         res_total = sum(components[f"lcoe_{field_stem(tech)}"] for tech in RES_TECHS)
         summary["lcoe_renewables_eur_per_mwh"] = res_total / elec_mwh
@@ -950,7 +1031,7 @@ def extract_summary(
         for tech in RES_TECHS:
             cost, mwh = _res_cost(tech), _res_mwh(tech)
             if cost > 0 and mwh > 0:
-                summary[f"lcoe_{field_stem(tech)}_own_eur_per_mwh"] = cost / mwh
+                summary[f"lcoe_{field_stem(tech)}_eur_per_mwh_{field_stem(tech)}"] = cost / mwh
 
         # Blended renewable own LCOE (over renewable generation only) — the
         # generation-weighted mean of the per-tech own LCOEs, so it sits between
@@ -958,7 +1039,7 @@ def extract_summary(
         # which grid imports drag below the per-tech figures).
         res_mwh = sum(_res_mwh(tech) for tech in RES_TECHS)
         if res_total > 0 and res_mwh > 0:
-            summary["lcoe_renewables_own_eur_per_mwh"] = res_total / res_mwh
+            summary["lcoe_renewables_eur_per_mwh_renewables"] = res_total / res_mwh
 
         # Capacity factors (annual generation / nameplate × hours per year) for the renewables
         # and the grid connection, surfaced next to the built capacities.
@@ -1042,7 +1123,7 @@ def extract_summary(
         return float((n.links_t.p0[link_name] * n.links.at[link_name, "marginal_cost"]).sum()) * annual_scale
 
     for link in PROCESS_LINKS:
-        summary[f"plant_{field_stem(link)}_eur_per_t"] = _link_capex(link) / steel_t_per_year
+        summary[f"plant_{field_stem(link)}_eur_per_t_steel"] = _link_capex(link) / steel_t_per_year
     # Every link that buys ore — the blended shaft included, where the
     # ore is over a third of the cost of the steel — so this column and
     # `consumables` add up to the `ore_consumables` group and the leaf
@@ -1101,11 +1182,22 @@ def extract_summary(
     for gen in n.generators.index[n.generators.p_nom_extendable]:
         summary[f"{field_stem(gen)}_gw_opt"] = n.generators.at[gen, "p_nom_opt"] / 1e3
 
+    summary.update(_res_energy(n, hours_per_year))
+    if "grid_import" in n.generators.index:
+        summary["grid_imported_gwh"] = (float(n.generators_t.p["grid_import"].sum())
+                                        * hours_per_year / len(n.snapshots) / 1e3)
+
     if "battery" in n.stores.index:
         # Power is the shared inverter rating, energy is the store — now two
         # separate answers from the solve rather than one and a fixed ratio.
         summary["battery_gw_opt"] = n.links.at["battery_charger", "p_nom_opt"] / 1e3
         summary["battery_mwh_opt"] = n.stores.at["battery", "e_nom_opt"]
+        discharged_mwh = _battery_discharged_mwh(n, hours_per_year)
+        summary["battery_discharged_gwh"] = discharged_mwh / 1e3
+        if summary["battery_mwh_opt"] > 0:
+            summary["battery_cycles_per_year"] = discharged_mwh / summary["battery_mwh_opt"]
+        if discharged_mwh > 0 and breakdown["battery"] > 0:
+            summary["lcoe_storage_eur_per_mwh_discharged"] = breakdown["battery"] / discharged_mwh
 
     if "h2_buffer" in n.stores.index:
         buffer_mwh = n.stores.at["h2_buffer", "e_nom_opt"]
@@ -1160,7 +1252,7 @@ def extract_summary(
     # report's two decimals still say something about a clean route.
     emitted = _emissions_breakdown(
         n, assumptions["emissions"],
-        run["area"], transport_legs, grid_mix,
+        run["origin"], transport_legs, grid_mix,
         run["destination"], destination_mix,
     )
     emissions = emitted["by_step"]
@@ -1228,6 +1320,7 @@ def extract_summary(
         summary["emissions_kg_co2e_per_mwh_el"] = (
             sources["electricity"] * 1e3 / total_el_mwh
         )
+    summary["el_users_gwh"] = sum(electricity_mwh.values()) / 1e3
     for user, mwh in electricity_mwh.items():
         summary[f"el_{field_stem(user)}_gwh"] = mwh / 1e3
         if mwh > 0:
@@ -1249,6 +1342,23 @@ def extract_summary(
     ))
 
     return summary
+
+
+def input_variants(rows: pd.DataFrame, origin: str) -> dict:
+    """Which series each tech contributed to one run, as its `variant_field`s.
+
+    A best-site P95 profile and an area average answer different questions, so a
+    cost is not interpretable without knowing which produced it. The table spells
+    a tech `wind-onshore`; the field it lands in is `wind_onshore_variant`.
+
+    The grid's is the origin's own connection, so a blank `grid_variant_origin`
+    means the plant was islanded. An export run's destination has a grid row too, for
+    the furnace that buys its power there; it is always `emissions`, and the
+    `destination` field already names the market, so it gets no field of its own
+    and must not overwrite the origin's.
+    """
+    own = rows[(rows["tech"] != "grid") | (rows["area"] == origin)]
+    return {variant_field(row.tech): row.variant for row in own.itertuples()}
 
 
 def main() -> None:
@@ -1284,19 +1394,14 @@ def main() -> None:
         + yaml.safe_dump(assumptions, sort_keys=False)
     )
 
-    # Which series each tech contributed: a best-site P95 profile and an area
-    # average answer different questions, so a cost is not interpretable without
-    # knowing which produced it. The table spells a tech `wind-onshore`; the field
-    # it lands in is `wind_onshore_variant`.
-    cf_rows = rows[rows["tech"] != "grid"]
     run = {
         "run": run_name,
-        "area": run_inputs["origin"],
+        "origin": run_inputs["origin"],
         "destination": run_inputs["destination"],
         "route": run_inputs["route"],
         "start_date": rows["start_date"].iloc[0],
         "end_date": rows["end_date"].iloc[0],
-        **{f"{field_stem(row.tech)}_variant": row.variant for row in cf_rows.itertuples()},
+        **input_variants(rows, run_inputs["origin"]),
     }
     n = pypsa.Network()
     n.import_from_netcdf(Path(snakemake.input.network))

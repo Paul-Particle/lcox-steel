@@ -51,13 +51,32 @@ def field_stem(element_id: str) -> str:
     Every field name a run's own parts go into is built through here, so the
     report separates words one way and a reader never has to know which spelling
     a given field inherited.
+
+    A few ids say what the network does rather than what a reader wants to
+    know, and are reported under a name of their own (`REPORT_NAMES`).
     """
-    return element_id.replace("-", "_")
+    return REPORT_NAMES.get(element_id, element_id.replace("-", "_"))
+
+
+# Ids reported under a name other than their own. `reductant-h2` is the link
+# that feeds hydrogen into the blended shaft, and the only thing it does to a
+# report is draw the power that preheats that hydrogen.
+REPORT_NAMES = {"reductant-h2": "h2_preheat"}
 
 
 # Techs that contribute an input series to a run, named as the scenario tables
 # name them. The variant each was solved with rides along in the report.
 INPUT_TECHS = ("solar", "wind-onshore", "wind-offshore", "grid")
+
+
+def variant_field(tech: str) -> str:
+    """The report field a tech's variant lands in: `wind-onshore` → `wind_onshore_variant`.
+
+    The grid's says whose connection it is, because an export run has two and
+    the report carries only the origin's (the destination's is always
+    `emissions`, and the `destination` field already names its market).
+    """
+    return "grid_variant_origin" if tech == "grid" else f"{field_stem(tech)}_variant"
 
 # The renewables a run can build, named as the network names them.
 RES_TECHS = ("solar", "wind-onshore", "wind-offshore")
@@ -69,7 +88,7 @@ PROCESS_LINKS = ("dri-h2", "dri-ng", "dri-mix", "eaf", "moe", "ew", "briquetting
 # them. Together they are the total annual cost.
 COST_GROUPS = ("res", "battery", "grid", "gas", "electrolyser", "h2_buffer",
                "process", "ore_consumables", "iron_store", "steel_store",
-               "transmission", "transport", "destination_power")
+               "transmission", "transport", "destination_electricity")
 
 # The links that draw electricity, by the id `build_network` gives them. Each
 # takes it either on bus0 (electricity in, product out) or on bus2 (a by-draw
@@ -132,17 +151,20 @@ LEAF_COSTS_BY_GROUP = (
     ("h2_buffer", "hydrogen"),
     *((f"res_{field_stem(tech)}_{half}", "electricity")
       for tech in RES_TECHS for half in ("capex", "fom")),
-    # A geography may build a generator none of the three techs names; its cost
-    # lands here undivided rather than going missing from the stack.
-    ("res_other", "electricity"),
-    ("battery_power", "electricity"),
-    ("battery_energy", "electricity"),
+    # Capital only: the battery carries no fixed O&M yet.
+    ("battery_power_capex", "electricity"),
+    ("battery_energy_capex", "electricity"),
     ("grid_connection_capex", "electricity"),
     ("grid_capacity_fee", "electricity"),
     ("grid_market", "electricity"),
     ("grid_fee", "electricity"),
     ("transmission", "electricity"),
-    ("destination_power", "electricity"),
+    # The destination furnace's grid connection on an export route, split as the
+    # origin's is. Their total is the `destination_electricity` subtotal.
+    ("destination_grid_connection_capex", "electricity"),
+    ("destination_grid_capacity_fee", "electricity"),
+    ("destination_grid_market", "electricity"),
+    ("destination_grid_fee", "electricity"),
     ("iron_store", "storage"),
     ("steel_store", "storage"),
     ("transport", "storage"),
@@ -151,6 +173,24 @@ LEAF_COSTS = tuple(leaf for leaf, _ in LEAF_COSTS_BY_GROUP)
 LEAF_GROUP = dict(LEAF_COSTS_BY_GROUP)
 # The parent groups, in the order their leaves first appear.
 LEAF_PARENTS = tuple(dict.fromkeys(group for _, group in LEAF_COSTS_BY_GROUP))
+
+# Totals of a few leaves inside one parent, for a reader who wants a component's
+# cost without adding its halves up. Each is reported as `cost_{name}_eur_per_t_steel`
+# beside the leaves, never among them: a stack that drew a subtotal and its own
+# leaves would count them twice, so nothing that stacks leaves reads these.
+LEAF_SUBTOTALS = {
+    **{f"res_{field_stem(tech)}": (f"res_{field_stem(tech)}_capex", f"res_{field_stem(tech)}_fom")
+       for tech in RES_TECHS},
+    "res": tuple(f"res_{field_stem(tech)}_{half}" for tech in RES_TECHS for half in ("capex", "fom")),
+    "battery": ("battery_power_capex", "battery_energy_capex"),
+    # The origin's grid connection and the energy bought through it.
+    "grid": ("grid_connection_capex", "grid_capacity_fee", "grid_market", "grid_fee"),
+    # The same four for the destination furnace's connection on an export route.
+    "destination_electricity": ("destination_grid_connection_capex", "destination_grid_capacity_fee",
+                                "destination_grid_market", "destination_grid_fee"),
+}
+assert all(leaf in LEAF_COSTS for leaves in LEAF_SUBTOTALS.values() for leaf in leaves)
+assert not set(LEAF_SUBTOTALS) & (set(LEAF_COSTS) | set(LEAF_PARENTS))
 
 # The jobs the electricity did, which is the one cut of the levelised cost the
 # leaves above cannot make. They price what was bought; these divide what one of
@@ -165,7 +205,7 @@ LEAF_PARENTS = tuple(dict.fromkeys(group for _, group in LEAF_COSTS_BY_GROUP))
 #
 # Every megawatt-hour is priced at what the system that supplied it cost, and the
 # system's whole cost is the megawatt-hours it delivered, so the five close on
-# `cost_electricity_eur_per_t` exactly. They are the same money as the
+# `cost_electricity_eur_per_t_steel` exactly. They are the same money as the
 # `electricity` leaves, cut a second way, which is why they are not `cost_*` and
 # must never be added to one: doing so counts the electricity bill twice.
 ELECTRICITY_JOBS = ("reduction", "melt", "hydrogen", "handling", "losses")
@@ -174,14 +214,14 @@ REPORT_FIELDS = {
     # What this run is a result for.
     "scenario": UNDEFINED,
     "run": UNDEFINED,
-    # The origin, where the iron is made.
-    "area": UNDEFINED,
-    # Where the steel is made: the origin itself, unless the route exports.
+    # Where the iron is made.
+    "origin": UNDEFINED,
+    # Where the steel is made: the origin again, unless the route exports.
     "destination": UNDEFINED,
     "route": UNDEFINED,
     "start_date": UNDEFINED,
     "end_date": UNDEFINED,
-    **{f"{field_stem(tech)}_variant": UNDEFINED for tech in INPUT_TECHS},
+    **{variant_field(tech): UNDEFINED for tech in INPUT_TECHS},
 
     # Annual system cost and the groups it is made of.
     "total_annual_cost_meur": ZERO,
@@ -195,7 +235,8 @@ REPORT_FIELDS = {
     "lcoh_eur_per_kg": UNDEFINED,
 
     # Electricity: the system LCOE, the contributions that sum to it, then each
-    # technology's own cost over its own generation.
+    # technology's cost over its own generation (the unit after `per_mwh` names
+    # whose MWh).
     "lcoe_eur_per_mwh": UNDEFINED,
     "lcoe_renewables_eur_per_mwh": ZERO,
     **{f"lcoe_{field_stem(tech)}_eur_per_mwh": ZERO for tech in RES_TECHS},
@@ -203,9 +244,12 @@ REPORT_FIELDS = {
     "lcoe_grid_connection_eur_per_mwh": ZERO,
     "lcoe_grid_energy_eur_per_mwh": ZERO,
     "lcoe_transmission_eur_per_mwh": ZERO,
-    "lcoe_destination_power_eur_per_mwh": ZERO,
-    "lcoe_renewables_own_eur_per_mwh": UNDEFINED,
-    **{f"lcoe_{field_stem(tech)}_own_eur_per_mwh": UNDEFINED for tech in RES_TECHS},
+    "lcoe_destination_electricity_eur_per_mwh": ZERO,
+    "lcoe_renewables_eur_per_mwh_renewables": UNDEFINED,
+    **{f"lcoe_{field_stem(tech)}_eur_per_mwh_{field_stem(tech)}": UNDEFINED for tech in RES_TECHS},
+    # The battery's yearly cost over what it gave back. Not what a stored MWh
+    # cost in full: the power that charged it is paid for in the rows above.
+    "lcoe_storage_eur_per_mwh_discharged": UNDEFINED,
     **{f"cf_{field_stem(tech)}": UNDEFINED for tech in RES_TECHS},
     "cf_grid_connection": UNDEFINED,
     "grid_price_eur_per_mwh": UNDEFINED,
@@ -227,7 +271,7 @@ REPORT_FIELDS = {
 
     # The steel chain: what each step cost per tonne, how big it is, how hard it
     # runs, and the stores that let it run at a different rate from the plant.
-    **{f"plant_{field_stem(link)}_eur_per_t": ZERO for link in PROCESS_LINKS},
+    **{f"plant_{field_stem(link)}_eur_per_t_steel": ZERO for link in PROCESS_LINKS},
     "ore_eur_per_t_steel": ZERO,
     "consumables_eur_per_t_steel": ZERO,
     **{f"{field_stem(link)}_t_per_h_opt": ZERO for link in PROCESS_LINKS},
@@ -248,16 +292,24 @@ REPORT_FIELDS = {
     # up into. A leaf a route has none of reads 0 — it contributed nothing, the
     # same way its cost group does.
     #
-    # The two `cost_*_eur_per_t` blocks share a prefix but sit at different
+    # The two `cost_*_eur_per_t_steel` blocks share a prefix but sit at different
     # levels of the same tree, so they are not to be added together: LEAF_COSTS
     # and LEAF_PARENTS are the lists that say which is which, and
-    # `cost_{parent}_eur_per_t` is the sum of its own leaves.
-    **{f"cost_{leaf}_eur_per_t": ZERO for leaf in LEAF_COSTS},
-    **{f"cost_{parent}_eur_per_t": ZERO for parent in LEAF_PARENTS},
+    # `cost_{parent}_eur_per_t_steel` is the sum of its own leaves.
+    **{f"cost_{leaf}_eur_per_t_steel": ZERO for leaf in LEAF_COSTS},
+    **{f"cost_{parent}_eur_per_t_steel": ZERO for parent in LEAF_PARENTS},
+    # The subtotals (LEAF_SUBTOTALS): a component's leaves added up, beside them.
+    **{f"cost_{name}_eur_per_t_steel": ZERO for name in LEAF_SUBTOTALS},
+    # The battery's fixed O&M, held open until the model carries it: the
+    # assumption exists in the input workbook but does not reach the solve, so
+    # the battery is priced on capital alone. Blank, not 0, because 0 would say
+    # the battery costs nothing to run. Once it is wired it becomes a leaf
+    # (`battery_fom`, parent `electricity`) and joins the `battery` subtotal.
+    "cost_battery_fom_eur_per_t_steel": UNDEFINED,
     # The electricity leaf group cut a second way, by the job each euro of it
-    # paid for (ELECTRICITY_JOBS). These stack to `cost_electricity_eur_per_t`
+    # paid for (ELECTRICITY_JOBS). These stack to `cost_electricity_eur_per_t_steel`
     # and to nothing else, so they belong in no `cost_*` sum.
-    **{f"el_{job}_eur_per_t": ZERO for job in ELECTRICITY_JOBS},
+    **{f"el_{job}_eur_per_t_steel": ZERO for job in ELECTRICITY_JOBS},
     # The same capital/upkeep split on the two carriers, in their own units, so
     # each pair stacks to the reported part above it that it divides.
     "lcoe_res_capex_eur_per_mwh": ZERO,
@@ -269,9 +321,9 @@ REPORT_FIELDS = {
     # What a tonne of steel took, for reading a cost against the thing behind
     # it. Each is measured off the run rather than taken from the coefficient
     # that priced it, so a furnace that ran hot in cheap hours says so.
-    "eaf_el_mwh_per_t_steel": ZERO,
-    "reduction_el_mwh_per_t_steel": ZERO,
-    "electrolyser_el_mwh_per_t_steel": ZERO,
+    "el_eaf_mwh_per_t_steel": ZERO,
+    "el_reduction_mwh_per_t_steel": ZERO,
+    "el_electrolyser_mwh_per_t_steel": ZERO,
     "h2_kg_per_t_steel": ZERO,
     "gas_mwh_per_t_steel": ZERO,
     # Blank rather than zero on a run that built no battery: it is the store's
@@ -286,14 +338,21 @@ REPORT_FIELDS = {
     # chosen by the solve, but carried per run so the leaf split above can be
     # checked against its inputs without opening the assumptions file.
     **{f"annuity_factor_{field_stem(link)}": UNDEFINED for link in PROCESS_LINKS},
-    **{f"ore_quote_{field_stem(link)}_eur_per_t": UNDEFINED for link in ORE_LINKS},
+    **{f"ore_quote_{field_stem(link)}_eur_per_t_iron": UNDEFINED for link in ORE_LINKS},
     # How much iron the furnace charged per tonne of steel, which is the ore
     # quote's other half: it depends on what the route feeds it.
     "eaf_iron_t_per_t_steel": UNDEFINED,
 
     # Built capacity.
     **{f"{field_stem(tech)}_gw_opt": ZERO for tech in RES_TECHS},
+    # What it delivered in a year, and what it could have but was switched off
+    # for. Generated is the denominator of `lcoe_{tech}_eur_per_mwh_{tech}`.
+    **{f"{field_stem(tech)}_generated_gwh": ZERO for tech in RES_TECHS},
+    **{f"{field_stem(tech)}_curtailed_gwh": ZERO for tech in RES_TECHS},
     "grid_import_gw_opt": ZERO,
+    # What the origin's connection carried in a year; `cf_grid_connection` is
+    # this over the connection running flat out.
+    "grid_imported_gwh": ZERO,
     "gas_supply_gw_opt": ZERO,
     # The destination furnace's own connection, which only an export route
     # builds. Declared like the other two so it sits with them rather than after
@@ -301,6 +360,13 @@ REPORT_FIELDS = {
     "destination_supply_gw_opt": ZERO,
     "battery_gw_opt": ZERO,
     "battery_mwh_opt": ZERO,
+    # What it gave back in a year, after the discharge loss.
+    "battery_discharged_gwh": ZERO,
+    # Equivalent full cycles: what it gave back over its energy capacity, so two
+    # half cycles count as one. Blank without a battery, as there is nothing to
+    # divide by. The model sets a lifetime in years but no cycle limit, so this
+    # is what says whether that lifetime is plausible.
+    "battery_cycles_per_year": UNDEFINED,
     "transmission_total_annual_cost_meur": ZERO,
 
     # Emissions from the energy a run used. Accounting only — none of it reaches
@@ -343,10 +409,12 @@ REPORT_FIELDS = {
     # average is what a MWh cost the run on average; a user above it bought the
     # dirty hours, one below it chased the clean ones.
     "emissions_kg_co2e_per_mwh_el": UNDEFINED,
+    # All of them together: the electricity the users drew, losses excluded.
+    "el_users_gwh": ZERO,
     **{f"el_{field_stem(user)}_gwh": ZERO for user in ELECTRICITY_USERS},
     # The electricity nobody drew — the battery's round trip and the lines'
     # losses. With it the draws above account for the whole of what was
-    # generated, which is what lets the `el_*_eur_per_t` jobs close on
+    # generated, which is what lets the `el_*_eur_per_t_steel` jobs close on
     # the electricity bill.
     "el_losses_gwh": ZERO,
     **{f"emissions_{field_stem(user)}_kg_co2e_per_mwh_el": UNDEFINED
@@ -369,21 +437,20 @@ ZERO_FILLED = tuple(field for field, fill in REPORT_FIELDS.items() if fill == ZE
 
 # The fields that say what the run was rather than what it cost. They lead the
 # file, so everything below them is numbers and a reader can skip straight to it.
-IDENTITY_FIELDS = ("scenario", "run", "area", "destination", "route", "start_date", "end_date",
-                   *(f"{field_stem(tech)}_variant" for tech in INPUT_TECHS),
+IDENTITY_FIELDS = ("scenario", "run", "origin", "destination", "route", "start_date", "end_date",
+                   *(variant_field(tech) for tech in INPUT_TECHS),
                    # Prose, not a measurement: everything outside this tuple is
                    # coerced to a number when a report is read back.
                    "emissions_basis", "emissions_unavailable_reason", "inputs_hash",
                    "code_hash")
 
-# Fields only the diagnostic carries, for three separate reasons. The run and
-# its destination, because the report's column is named after the run, and an
-# export's run after its origin and destination. The freight, because it is
+# Fields only the diagnostic carries, for three separate reasons. The run,
+# because the report's column is named after it. The freight, because it is
 # outside the boundary the rest of the emission fields are inside, and a figure
 # that no total counts reads as one that some total does. The battery C-rate,
 # because the report already carries it as `battery_duration_hours`; the
 # diagnostic states it in the terms the solve's plausibility warning uses.
-DIAGNOSTIC_FIELDS = ("run", "destination",
+DIAGNOSTIC_FIELDS = ("run",
                      "emissions_freight_kt_co2e_per_year",
                      *(f"emissions_{field_stem(leg)}_kg_co2e_per_t_steel"
                        for leg in FREIGHT_LEGS),

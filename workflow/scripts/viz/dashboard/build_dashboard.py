@@ -131,7 +131,7 @@ COST_GROUPS = [
     ["gas",             "Natural gas (fuel + CO₂)",   "#525F6A"],
     ["iron_store",      "Iron stockpile",             "#B7C1C8"],
     ["transport",       "Freight",                    "#BDCCD9"],
-    ["destination_power", "Destination power",        "#0293D2"],
+    ["destination_electricity", "Destination electricity", "#0293D2"],
     ["steel_store",     "Steel inventory",            "#8CA5B7"],
     ["electrolyser",    "Electrolyser",               "#91C096"],
     ["h2_buffer",       "H₂ buffer",                  "#70D2F0"],
@@ -207,11 +207,11 @@ def _axes(row):
         for col in row.index
         if col.endswith("_variant") and pd.notna(row[col])
     }
-    cf_methods = sorted({v for tech, v in variants.items() if tech != "grid"})
+    cf_methods = sorted(variants.values())
     return {
-        "geo": row["area"],
+        "geo": row["origin"],
         "year": str(row["start_date"])[:4],
-        "grid": "grid" if "grid" in variants else "nogrid",
+        "grid": "grid" if pd.notna(row.get("grid_variant_origin")) else "nogrid",
         "route": row["route"],
         "variant": DASHBOARD_SCENARIOS[row["scenario"]],
         # A run whose techs were solved with different methods is named by all of
@@ -296,7 +296,7 @@ def _record(row, lcos_row, cap_row):
         ("lcoe_grid_connection_eur_per_mwh", "grid_connection"),
         ("lcoe_grid_energy_eur_per_mwh", "grid_energy"),
         ("lcoe_transmission_eur_per_mwh", "transmission"),
-        ("lcoe_destination_power_eur_per_mwh", "destination_power"),
+        ("lcoe_destination_electricity_eur_per_mwh", "destination_electricity"),
     ):
         v = _opt(row[col])
         if v is not None:
@@ -305,10 +305,10 @@ def _record(row, lcos_row, cap_row):
     # renewable itself), distinct from the lcoe_parts contribution above.
     lcoe_own = {}
     for col, key in (
-        ("lcoe_renewables_own_eur_per_mwh", "renewables"),
-        ("lcoe_solar_own_eur_per_mwh", "solar"),
-        ("lcoe_wind_onshore_own_eur_per_mwh", "wind_onshore"),
-        ("lcoe_wind_offshore_own_eur_per_mwh", "wind_offshore"),
+        ("lcoe_renewables_eur_per_mwh_renewables", "renewables"),
+        ("lcoe_solar_eur_per_mwh_solar", "solar"),
+        ("lcoe_wind_onshore_eur_per_mwh_wind_onshore", "wind_onshore"),
+        ("lcoe_wind_offshore_eur_per_mwh_wind_offshore", "wind_offshore"),
     ):
         v = _opt(row[col])
         if v is not None:
@@ -327,16 +327,16 @@ def _record(row, lcos_row, cap_row):
     # ore/consumables split (sums to "ore_consumables"). For the segment hovers.
     cost_detail = {}
     for col, key in (
-        ("plant_dri_h2_eur_per_t", "dri"),
-        ("plant_dri_ng_eur_per_t", "dri_ng"),
+        ("plant_dri_h2_eur_per_t_steel", "dri"),
+        ("plant_dri_ng_eur_per_t_steel", "dri_ng"),
         # The blended shaft and the briquetting press were absent, so on a
         # blended or an export route the per-plant lines came to well under the
         # process group they are meant to add up to.
-        ("plant_dri_mix_eur_per_t", "dri_mix"),
-        ("plant_briquetting_eur_per_t", "briquetting"),
-        ("plant_eaf_eur_per_t", "eaf"),
-        ("plant_moe_eur_per_t", "moe"),
-        ("plant_ew_eur_per_t", "electrowinning"),
+        ("plant_dri_mix_eur_per_t_steel", "dri_mix"),
+        ("plant_briquetting_eur_per_t_steel", "briquetting"),
+        ("plant_eaf_eur_per_t_steel", "eaf"),
+        ("plant_moe_eur_per_t_steel", "moe"),
+        ("plant_ew_eur_per_t_steel", "electrowinning"),
         ("ore_eur_per_t_steel", "ore"),
         ("consumables_eur_per_t_steel", "consumables"),
     ):

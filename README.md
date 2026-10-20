@@ -535,15 +535,17 @@ holds one run, named `{scenario}_{run}` like its folder.
 ```
 field,demo-moe-eaf-export_DEMO-ES_SYN
 scenario,demo-moe-eaf-export
-area,DEMO
+origin,DEMO
+destination,ES_SYN
 route,moe-eaf-export
 ...
 lcos_eur_per_t,914.11
 ```
 
-The **identity fields lead**: the run (`scenario, area` — the origin —
-`route, start_date, end_date`; the column's name says which run it is, and the
-hidden diagnostic beside the report also carries `run` and `destination`), one `{tech}_variant` row per input series
+The **identity fields lead**: the run (`scenario`, `origin` — where the iron is
+made — `destination` — where the steel is made, the origin again unless the
+route exports — `route, start_date, end_date`; the column's name says which run
+it is, and the hidden diagnostic beside the report also carries `run`), one `{tech}_variant` row per input series
 (`solar_variant: bestsite-p95`, `wind_onshore_variant: bestsite-p95`), and the
 `inputs_hash`. Everything below them is numbers, so a
 reader can skip the block on top and take the rest as a numeric table. The
@@ -552,11 +554,46 @@ different questions, and the solved network does not carry it (the solve reads
 the parquet, not its name), so `compile_report` takes the scenario table as an
 input and reads it back off the run's rows.
 
+`grid_variant_origin` says whether the plant at the origin was connected to the
+grid, and which version of that market's data priced its power. Blank means the
+plant was islanded and ran on its own renewables and storage. `emissions`, the
+default, means it bought power at the hourly market price and the report works
+out that power's CO₂ from the market's hourly generation mix. `dayahead` means
+it bought power at the hourly price only, so the run's emission fields are blank
+and `emissions_unavailable_reason` says why; a market that publishes no mix
+(Brazil, Alberta, Ontario) ends up the same way even when asked for
+`emissions`. Only the origin's connection is reported: an export route's
+furnace also buys power at its destination, but that series is always
+`emissions` and the `destination` field already names the market.
+
+`lcoe_eur_per_mwh` divides the run's whole electricity-system cost per year by
+all the electricity that entered the system that year, not by the electricity
+the processes used. The denominator contains a) what the solar and wind farms
+actually delivered, b) what was bought from the grid, and c) on an export
+route, the power the steel furnace buys at its destination. It does not contain
+curtailed power, which the farms could have generated but were switched off for,
+so it never entered the system; its cost is still in the numerator, because the
+farms were paid for. It does count the power lost in the battery's charge and
+discharge and on the internal lines, so it is larger than what the processes
+used; that difference is reported as `el_losses_gwh`. The `lcoe_*_eur_per_mwh`
+parts below it share the same denominator, so they add up to
+`lcoe_eur_per_mwh`.
+
+`lcoe_storage_eur_per_mwh_discharged` is the battery's own cost per MWh it
+delivered, the companion to its system share `lcoe_storage_eur_per_mwh`. It
+divides a) the battery's yearly cost, energy capacity and inverter together, by
+b) the electricity it gave back to the plant in a year after the discharge
+loss, which the report also gives as `battery_discharged_gwh`. It does not
+contain c) the cost of the power that charged it, because that power is already
+paid for in the renewables and grid rows, so the figure is what the battery
+adds per MWh it delivers, not the full cost of a MWh that came out of it. It is
+blank when no battery was built or it never discharged.
+
 **Field names use `_` throughout**, including the part that names a tech or a
 link. The network and the scenario tables hyphenate those ids, so the report
 puts every one through `field_stem`: the tech `wind-onshore` reports as
 `wind_onshore_gw_opt` and `cf_wind_onshore`, the link `dri-h2` as
-`plant_dri_h2_eur_per_t` and `dri_h2_utilization`. Only the *values* keep the
+`plant_dri_h2_eur_per_t_steel` and `dri_h2_utilization`. Only the *values* keep the
 hyphens (`route: moe-eaf`, `solar_variant: bestsite-p95`) — those are ids, and
 they still name files and config keys.
 
@@ -570,7 +607,7 @@ run's row, and a consumer asking for a field nobody wrote would get silence.
 A cell a run has no value for says which of two things it means:
 
 - **`0`** — an amount, and this run's is nothing. A route without a MOE cell
-  reports `plant_moe_eur_per_t: 0`; it built none, and zero is what that step
+  reports `plant_moe_eur_per_t_steel: 0`; it built none, and zero is what that step
   contributed to the cost of its steel. The cost groups stack to
   `total_annual_cost_meur` for every run.
 - **blank** — undefined here: a ratio with nothing in its denominator. The

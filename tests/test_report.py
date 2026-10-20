@@ -8,11 +8,24 @@ the scenario. These pin that behaviour on synthetic frames — no cutouts, no
 solves, so they run anywhere.
 """
 
+import copy
 from types import SimpleNamespace
 
+import numpy as np
 import pandas as pd
+import pypsa
+import pytest
+import yaml
 
+from conftest import REPO_ROOT
+from scripts.solve.build_network import build_network
 from scripts.viz import _run_display, pick_best_run
+from scripts.viz.compile_report import (
+    _battery_discharged_mwh,
+    _res_energy,
+    extract_summary,
+    input_variants,
+)
 from common._report_schema import (
     DIAGNOSTIC_FIELDS,
     FIELD_ORDER,
@@ -28,8 +41,10 @@ RUN_FILES = ("report", "diagnostic", "network", "overlay", "base_assumptions", "
 def _report(rows):
     """A report-shaped frame: one row per run, in the column order compile_report uses."""
     frame = pd.DataFrame(
-        rows, columns=["scenario", "run", "area", "route", "start_date", "end_date", "lcos_eur_per_t"]
+        rows, columns=["scenario", "run", "origin", "route", "start_date", "end_date", "lcos_eur_per_t"]
     )
+    # Iron and steel made in one place, as compile_report writes a domestic run.
+    frame.insert(3, "destination", frame["origin"])
     # Every row carries the fingerprint of the inputs behind it, so a frame
     # without one is not a report frame.
     frame["inputs_hash"] = "772c9cac81fe"
@@ -55,6 +70,7 @@ def test_a_run_is_a_column_and_a_field_is_a_row(tmp_path):
     assert list(stored.columns) == ["field", "s_VIC1"]
     assert list(stored["field"])[:len(report_identity)] == report_identity
     assert stored.set_index("field").at["route", "s_VIC1"] == "moe-eaf"
+    assert stored.set_index("field").at["destination", "s_VIC1"] == "VIC1"
     assert "run" not in set(stored["field"]), "the column's name already says which run it is"
     assert read_report(diagnostic_path).at["s_VIC1", "run"] == "VIC1"
 
@@ -91,7 +107,7 @@ def test_the_cheapest_zone_stands_for_its_scenario(tmp_path, monkeypatch):
     assert list(picked.loc[picked["picked"], "run"]) == ["NSW1"]
     assert len(picked) == 3, "every run is listed, the losers included"
     assert (tmp_path / "network").read_text() == "network of NSW1"
-    assert read_report(tmp_path / "report").iloc[0]["area"] == "NSW1"
+    assert read_report(tmp_path / "report").iloc[0]["origin"] == "NSW1"
 
 
 def test_a_single_run_stands_for_its_scenario(tmp_path, monkeypatch):
@@ -145,7 +161,7 @@ def test_every_route_writes_the_same_fields(tmp_path):
         ("t", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0),
     ])
     # Only the MOE run has a MOE cell to report; only the H2 run has an LCOH.
-    df["plant_moe_eur_per_t"] = [float("nan"), 120.0]
+    df["plant_moe_eur_per_t_steel"] = [float("nan"), 120.0]
     df["lcoh_eur_per_kg"] = [4.1, float("nan")]
     report_path, _ = _write(df, tmp_path)
     report = read_report(report_path)
@@ -164,7 +180,7 @@ def test_a_blank_means_undefined_and_a_zero_means_zero(tmp_path):
     # the cost of the hydrogen it never made is not a number.
     assert row["electrolyser_gw"] == 0.0
     assert row["cost_electrolyser_meur"] == 0.0
-    assert row["plant_dri_h2_eur_per_t"] == 0.0
+    assert row["plant_dri_h2_eur_per_t_steel"] == 0.0
     assert pd.isna(row["lcoh_eur_per_mwh_lhv"])
     assert pd.isna(row["electrolyser_utilization"])
     assert pd.isna(row["cf_wind_offshore"])
@@ -234,3 +250,116 @@ def test_a_report_reads_back_as_it_was_written(tmp_path):
     assert list(report["cf_solar"]) == [0.19], "numbers come back as numbers"
     assert list(report["start_date"]) == ["20250101"], "and dates as text"
     assert report["lcos_eur_per_t"].dtype == float
+
+
+def _rows(*series):
+    """A run's rows in its scenario table, as (tech, variant, area) triples."""
+    return pd.DataFrame(series, columns=["tech", "variant", "area"])
+
+
+def test_an_export_reports_its_own_grid_not_its_furnaces():
+    """The destination's grid row prices the furnace abroad; the origin's is the plant's."""
+    rows = _rows(("solar", "bestsite-p95", "AUS"), ("grid", "dayahead", "AUS"),
+                 ("grid", "emissions", "DEU"))
+    assert input_variants(rows, "AUS") == {"solar_variant": "bestsite-p95",
+                                           "grid_variant_origin": "dayahead"}
+
+
+def test_an_islanded_export_reports_no_grid():
+    """A blank grid_variant_origin is what tells the dashboard the plant was islanded."""
+    rows = _rows(("solar", "bestsite-p95", "AUS"), ("grid", "emissions", "DEU"))
+    assert "grid_variant_origin" not in input_variants(rows, "AUS")
+
+
+def test_a_domestic_run_reports_its_grid():
+    rows = _rows(("wind-onshore", "area-average", "DEU"), ("grid", "emissions", "DEU"))
+    assert input_variants(rows, "DEU") == {"wind_onshore_variant": "area-average",
+                                           "grid_variant_origin": "emissions"}
+
+
+def _res_network():
+    """Two solar orientations, one wind farm and a grid connection, solved by hand.
+
+    A day of hours at a flat half-capacity availability, so what each tech could
+    have made is easy to state: 24 h x 0.5 x its capacity.
+    """
+    n = pypsa.Network()
+    n.set_snapshots(pd.date_range("2025-01-01", periods=24, freq="h"))
+    n.add("Bus", "electricity")
+    for name in ("solar_az0", "solar_az30", "wind-onshore", "grid_import"):
+        n.add("Generator", name, bus="electricity", p_nom_extendable=True,
+              p_max_pu=0.5 if name != "grid_import" else 1.0)
+    n.generators["p_nom_opt"] = [100.0, 60.0, 200.0, 80.0]
+    # Solar runs flat out; wind is held back to 40 of its 100 MW available.
+    n.generators_t.p = pd.DataFrame(
+        {"solar_az0": 50.0, "solar_az30": 30.0, "wind-onshore": 40.0, "grid_import": 80.0},
+        index=n.snapshots,
+    )
+    return n
+
+
+def test_a_tech_s_generation_sums_its_orientations_and_leaves_the_grid_out():
+    """Each orientation is a generator of its own; the tech's row is all of them."""
+    fields = _res_energy(_res_network(), hours_per_year=24)
+    assert fields["solar_generated_gwh"] == pytest.approx((50 + 30) * 24 / 1e3)
+    assert fields["wind_onshore_generated_gwh"] == pytest.approx(40 * 24 / 1e3)
+    assert fields["wind_offshore_generated_gwh"] == 0.0
+
+
+def test_curtailment_is_what_was_available_but_not_delivered():
+    fields = _res_energy(_res_network(), hours_per_year=24)
+    assert fields["solar_curtailed_gwh"] == pytest.approx(0.0)
+    assert fields["wind_onshore_curtailed_gwh"] == pytest.approx((100 - 40) * 24 / 1e3)
+
+
+def test_a_short_run_reports_a_year():
+    """A day's run is scaled up to a year, like every other energy in the report."""
+    fields = _res_energy(_res_network(), hours_per_year=8760)
+    assert fields["wind_onshore_generated_gwh"] == pytest.approx(40 * 8760 / 1e3)
+
+
+def test_a_battery_is_credited_with_what_it_gave_back_not_what_it_drew():
+    """The discharge loss stays out: 10 MW drawn off the store at 90 % is 9 MW delivered."""
+    n = pypsa.Network()
+    n.set_snapshots(pd.date_range("2025-01-01", periods=24, freq="h"))
+    n.add("Bus", "electricity")
+    n.add("Bus", "electricity_battery")
+    n.add("Link", "battery_discharger", bus0="electricity_battery", bus1="electricity",
+          efficiency=0.9)
+    n.links_t.p0 = pd.DataFrame({"battery_discharger": 10.0}, index=n.snapshots)
+
+    assert _battery_discharged_mwh(n, hours_per_year=24) == pytest.approx(9.0 * 24)
+    assert _battery_discharged_mwh(n, hours_per_year=8760) == pytest.approx(9.0 * 8760)
+
+
+def test_the_h2_shaft_reports_its_preheat_where_the_blend_shaft_does():
+    """The H2 feed's preheat lands in the one preheat row on either shaft, the shaft
+    row keeps only the shaft's own power, and splitting the draw moves no number
+    the solve decides."""
+    assumptions = yaml.safe_load((REPO_ROOT / "config" / ".template.yaml").read_text())
+    hours = np.arange(48)
+    cf = pd.DataFrame({"solar": np.clip(np.sin((hours % 24 - 6) / 12 * np.pi), 0, None),
+                       "wind-onshore": 0.35 + 0.3 * np.sin(hours / 7.0)},
+                      index=pd.date_range("2025-01-01", periods=48, freq="h"))
+    run = {"origin": "X", "destination": "X", "route": "h2-dri-eaf",
+           "start_date": "20250101", "end_date": "20250102"}
+
+    def solved(a):
+        n = build_network("h2-dri-eaf", a, cf)
+        n.optimize(solver_name="highs", solver_options={"output_flag": False})
+        return extract_summary(n, "s", run, assumptions)
+
+    # The shaft as it was before the split: one draw carrying both.
+    lumped = copy.deepcopy(assumptions)
+    shaft = lumped["dri-h2"]
+    shaft["el_mwh_per_t"] += shaft["h2_preheat_el_mwh_per_t"]
+    shaft["h2_preheat_el_mwh_per_t"] = 0.0
+    before, after = solved(lumped), solved(assumptions)
+
+    assert after["lcos_eur_per_t"] == pytest.approx(before["lcos_eur_per_t"])
+    assert after["el_users_gwh"] == pytest.approx(before["el_users_gwh"])
+    assert after["el_dri_h2_gwh"] + after["el_h2_preheat_gwh"] == pytest.approx(before["el_dri_h2_gwh"])
+    preheat_share = (assumptions["dri-h2"]["h2_preheat_el_mwh_per_t"]
+                     / (assumptions["dri-h2"]["el_mwh_per_t"]
+                        + assumptions["dri-h2"]["h2_preheat_el_mwh_per_t"]))
+    assert after["el_h2_preheat_gwh"] == pytest.approx(preheat_share * before["el_dri_h2_gwh"])
