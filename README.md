@@ -589,6 +589,42 @@ paid for in the renewables and grid rows, so the figure is what the battery
 adds per MWh it delivers, not the full cost of a MWh that came out of it. It is
 blank when no battery was built or it never discharged.
 
+`el_reduction_mwh_per_t_steel` is the electricity that turned ore into iron
+over the year, per tonne of steel produced, and `cost_electricity_reduction_eur_per_t_steel`
+is the same electricity priced at the system's average cost per MWh. Both
+contain a) running the reduction shaft, whether it reduces with hydrogen, gas
+or a blend, b) preheating the hydrogen fed into a shaft, and c) the
+electrolysis cells on the MOE and EW routes. They do not contain the
+electricity that made the hydrogen (`el_electrolyser_mwh_per_t_steel`,
+`cost_electricity_electrolyser_eur_per_t_steel`), melting in the furnace, briquetting, or the
+battery's and lines' losses. Being per tonne of steel rather than per tonne of
+iron, a DRI route's figure carries the furnace's iron yield: about 1.17 t of
+iron goes into each tonne of steel (`eaf_iron_t_per_t_steel`).
+
+`cost_electricity_eur_per_t_iron` is the electricity cost of making the iron,
+per tonne of iron. Its numerator is ironmaking's share of the origin's whole
+electricity system cost (renewables, battery, grid and transmission). That
+share is the electricity drawn by a) the direct reduction shaft furnace or the
+MOE or EW cells, b) the hydrogen preheat and the electrolyser, and c) the
+briquetting press, divided by all the electricity drawn at the origin. The
+losses in the battery and the lines are included: ironmaking carries the same
+share of them as of the electricity drawn. Only the electric arc furnace is
+left out. The shared system is split by the average-cost rule: every MWh,
+whichever step drew it and whenever, is priced at the system's average cost
+per MWh, because the model does not track which source supplied which step. On
+an export route the furnace melts abroad and draws nothing at the origin, so
+the share is the whole origin system. The denominator is the tonnes of iron
+the ironmaking step produced over the year: what leaves the shaft or the cells,
+or the briquettes on a route that briquettes its iron. The rows below it cut
+the same total as the steel's electricity is cut, renewables by technology
+into capex and fixed O&M, the battery into power and energy capex, the grid
+into connection capex, capacity fee, market purchases and volumetric fee, and
+transmission, with subtotals beside their parts; they all end in
+`_eur_per_t_iron`. `cost_electricity_battery_fom_eur_per_t_iron` is blank until
+the battery's fixed O&M reaches the model. Converted to per tonne of steel by
+the iron per tonne of steel, and added to the furnace's own electricity and its
+share of the losses, it gives back `cost_electricity_eur_per_t_steel` exactly.
+
 **Field names use `_` throughout**, including the part that names a tech or a
 link. The network and the scenario tables hyphenate those ids, so the report
 puts every one through `field_stem`: the tech `wind-onshore` reports as

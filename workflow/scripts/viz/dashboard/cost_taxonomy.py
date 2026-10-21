@@ -3,7 +3,7 @@
 
 The report cuts each of its thirteen cost groups (`cost_*_meur`) as finely as
 the model allows and writes the result out as `cost_*_eur_per_t_steel`, one column per
-priced thing, stacking to `lcos_eur_per_t`. Beside them `el_*_eur_per_t_steel` divides
+priced thing, stacking to `lcos_eur_per_t`. Beside them `cost_electricity_*_eur_per_t_steel` divides
 one of those groups — the electricity — by the job each euro of it paid for.
 This module reads them, keys them the way the chart bands are keyed, and puts
 the hover lines together.
@@ -235,13 +235,13 @@ def purpose_bands(row: pd.Series) -> dict:
         "capex": [f"cost_{plant}_capex_eur_per_t_steel" for plant in plants],
         "fixed_om": [f"cost_{plant}_fom_eur_per_t_steel" for plant in plants],
         "hydrogen": ([f"cost_{leaf}_eur_per_t_steel" for leaf in electrolyser]
-                     + ["cost_h2_buffer_eur_per_t_steel", "el_hydrogen_eur_per_t_steel"]),
+                     + ["cost_h2_buffer_eur_per_t_steel", "cost_electricity_electrolyser_eur_per_t_steel"]),
         "gas": ["cost_gas_eur_per_t_steel"],
         "transport": ["cost_transport_eur_per_t_steel"],
         "store": ["cost_iron_store_eur_per_t_steel", "cost_steel_store_eur_per_t_steel"],
         "_hydrogen_electrolyser": [f"cost_{leaf}_eur_per_t_steel" for leaf in electrolyser],
         "_hydrogen_buffer": ["cost_h2_buffer_eur_per_t_steel"],
-        "_hydrogen_electricity": ["el_hydrogen_eur_per_t_steel"],
+        "_hydrogen_electricity": ["cost_electricity_electrolyser_eur_per_t_steel"],
         "_electricity_total": ["cost_electricity_eur_per_t_steel"],
     }
     bands = {}
@@ -249,12 +249,12 @@ def purpose_bands(row: pd.Series) -> dict:
         total = sum(_value(row, field) or 0.0 for field in fields if field in row)
         if total:
             bands[key] = total
-    bands.update(_present(row, {job: f"el_{job}_eur_per_t_steel"
-                                for job in ELECTRICITY_JOBS if job != "hydrogen"}))
+    bands.update(_present(row, {job: f"cost_electricity_{job}_eur_per_t_steel"
+                                for job in ELECTRICITY_JOBS if job != "electrolyser"}))
     # What the two electricity bands that have a natural per-tonne figure took,
     # measured over the year each ran rather than from the coefficient that
     # priced it.
-    for key, field in (("_melt_mwh_per_t", "el_eaf_mwh_per_t_steel"),
+    for key, field in (("_eaf_mwh_per_t", "el_eaf_mwh_per_t_steel"),
                        ("_reduction_mwh_per_t", "el_reduction_mwh_per_t_steel")):
         drawn = _value(row, field)
         if drawn:

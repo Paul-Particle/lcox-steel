@@ -1,6 +1,6 @@
 """Unit tests for the report's two fine cuts of the cost of steel.
 
-`cost_*_eur_per_t_steel` (by what was bought) and `el_*_eur_per_t_steel` (by what it was
+`cost_*_eur_per_t_steel` (by what was bought) and `cost_electricity_*_eur_per_t_steel` (by what it was
 for) each have to stack back to LCOS. The cost-breakdown page prints the
 *reported* total on top of the stack it draws, so anything the split does not
 reach goes missing from the bars while every share still reads 100 %.
@@ -24,6 +24,8 @@ from common._report_schema import (
     LEAF_GROUP,
     LEAF_PARENTS,
     LEAF_SUBTOTALS,
+    IRON_ELECTRICITY_JOBS,
+    ORIGIN_ELECTRICITY_LEAVES,
     PROCESS_LINKS,
     ELECTRICITY_JOBS,
     field_stem,
@@ -119,7 +121,7 @@ def test_the_electricity_jobs_stack_to_the_electricity_bill(route, assumptions):
     n = _solved(route, assumptions)
     fields, _, _ = _fields(n, assumptions)
 
-    jobs = sum(fields[f"el_{job}_eur_per_t_steel"] for job in ELECTRICITY_JOBS)
+    jobs = sum(fields[f"cost_electricity_{job}_eur_per_t_steel"] for job in ELECTRICITY_JOBS)
     assert jobs == pytest.approx(fields["cost_electricity_eur_per_t_steel"], rel=1e-9)
 
 
@@ -173,10 +175,10 @@ def test_the_power_that_made_the_iron_is_its_own_band(route, assumptions):
     n = _solved(route, assumptions)
     fields, _, _ = _fields(n, assumptions)
 
-    assert fields["el_reduction_eur_per_t_steel"] > 0
+    assert fields["cost_electricity_reduction_eur_per_t_steel"] > 0
     assert fields["el_reduction_mwh_per_t_steel"] > 0
-    assert (fields["el_reduction_eur_per_t_steel"]
-            > fields["el_handling_eur_per_t_steel"] + fields["el_losses_eur_per_t_steel"])
+    assert (fields["cost_electricity_reduction_eur_per_t_steel"]
+            > fields["cost_electricity_briquetting_eur_per_t_steel"] + fields["cost_electricity_losses_eur_per_t_steel"])
 
 
 @pytest.mark.parametrize("route", ["mix-dri-eaf", "mix-dri-eaf-export"])
@@ -273,3 +275,63 @@ def test_a_subtotal_is_its_leaves_and_its_cost_group(route, assumptions):
     for name in ("res", "battery", "grid", "destination_electricity"):
         assert fields[f"cost_{name}_eur_per_t_steel"] == pytest.approx(
             breakdown[name] / steel_t, rel=1e-9, abs=1e-9)
+
+
+def test_a_drawing_link_with_no_job_of_its_own_is_refused(assumptions):
+    """Briquetting is the press and only the press, so a new user cannot hide in it.
+
+    Its megawatt-hours go to no job, the jobs then fall short of what the plant
+    generated, and the report stops rather than pricing the bill on the rest.
+    """
+    n = _solved("h2-dri-eaf", assumptions)
+    with pytest.raises(ValueError, match="ELECTRICITY_JOBS"):
+        compile_report._leaf_breakdown(
+            n, assumptions, compile_report._cost_breakdown(n),
+            float(n.loads.at["steel_load", "p_set"]) * 8760.0,
+            {"by_user": {"eaf": 1e5, "compressor": 5e4}, "losses_mwh": 0.0,
+             "generation_mwh": 1.5e5},
+        )
+
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_the_iron_s_electricity_is_its_share_of_the_steel_s(route, assumptions):
+    """The iron's electricity rows stack to their total, each subtotal is its parts,
+    and the iron's share plus the furnace's comes back to the steel's whole bill.
+
+    Every MWh is at the system's average cost, so the iron carries its own draw
+    and the losses in proportion to it, and the furnace the rest — or, melting
+    abroad, its own destination bill and nothing at the origin.
+    """
+    n = _solved(route, assumptions)
+    fields, _, steel_t = _fields(n, assumptions)
+    iron_t = compile_report._iron_produced_t(n) * 8760.0 / len(n.snapshots)
+    total = fields["cost_electricity_eur_per_t_iron"]
+
+    assert total > 0
+    assert sum(fields[f"cost_electricity_{leaf}_eur_per_t_iron"]
+               for leaf in ORIGIN_ELECTRICITY_LEAVES) == pytest.approx(total, rel=1e-9)
+    for name, parts in LEAF_SUBTOTALS.items():
+        if name != "destination_electricity":
+            assert fields[f"cost_electricity_{name}_eur_per_t_iron"] == pytest.approx(
+                sum(fields[f"cost_electricity_{leaf}_eur_per_t_iron"] for leaf in parts), rel=1e-9)
+    assert pd.isna(fields.get("cost_electricity_battery_fom_eur_per_t_iron", float("nan")))
+
+    job = lambda name: fields[f"cost_electricity_{name}_eur_per_t_steel"]
+    iron_jobs = job("reduction") + job("electrolyser") + job("briquetting")
+    furnace_home = 0.0 if route.endswith("-export") else job("eaf")
+    iron_share = iron_jobs / (iron_jobs + furnace_home)
+    furnace = job("eaf") + (1 - iron_share) * job("losses")
+    assert total * iron_t / steel_t + furnace == pytest.approx(
+        fields["cost_electricity_eur_per_t_steel"], rel=1e-9)
+
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_the_iron_s_electricity_by_job_closes_on_the_same_total(route, assumptions):
+    """Ironmaking's four jobs, losses at its share, stack to its electricity total."""
+    n = _solved(route, assumptions)
+    fields, _, _ = _fields(n, assumptions)
+    jobs = sum(fields[f"cost_electricity_{job}_eur_per_t_iron"] for job in IRON_ELECTRICITY_JOBS)
+    assert jobs == pytest.approx(fields["cost_electricity_eur_per_t_iron"], rel=1e-9)
+    assert "eaf" not in IRON_ELECTRICITY_JOBS

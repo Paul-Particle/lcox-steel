@@ -22,6 +22,7 @@ from common._logging import configure_logging
 from common._report_schema import (
     DIAGNOSTIC_FIELDS,
     ELECTRICITY_USERS,
+    IRON_ELECTRICITY_JOBS,
     EMISSION_STEPS,
     FREIGHT_LEGS,
     LEAF_COSTS,
@@ -29,6 +30,7 @@ from common._report_schema import (
     LEAF_PARENTS,
     LEAF_SUBTOTALS,
     ORE_LINKS,
+    ORIGIN_ELECTRICITY_LEAVES,
     REDUCTION_LINKS,
     PROCESS_LINKS,
     RES_TECHS,
@@ -581,7 +583,7 @@ def _leaf_breakdown(
 
     `cost_*_eur_per_t_steel` comes out, one column per priced thing plus what each
     parent group of them comes to, stacking to `lcos_eur_per_t`. So does
-    `el_*_eur_per_t_steel`, which divides one of those groups — the electricity — by
+    `cost_electricity_*_eur_per_t_steel`, which divides one of those groups — the electricity — by
     the job each euro of it paid for. Both are checked against the total they
     stack to rather than assumed to close.
 
@@ -790,13 +792,11 @@ def _leaf_breakdown(
                         if link in REDUCTION_LINKS)
     electrolyser_mwh = home_draws.get("electrolyser", 0.0)
     melt_mwh = 0.0 if melts_abroad else home_draws.get("eaf", 0.0)
-    # Whatever else drew: the briquetting press is the only one so far.
-    handling_mwh = sum(mwh for link, mwh in home_draws.items()
-                       if link not in REDUCTION_LINKS
-                       and link not in ("electrolyser", "eaf"))
+    # The press, by name rather than as whatever is left: a link that fits none
+    # of the jobs then fails the check below instead of hiding in this one.
+    briquetting_mwh = home_draws.get("briquetting", 0.0)
     # And the electricity nobody drew at all: the battery's round trip and the
-    # lines'. Its own job rather than part of `handling`, which is power a step
-    # did draw.
+    # lines'. Its own job rather than part of another, as no step drew it.
     losses_mwh = electricity["losses_mwh"]
     # Every megawatt-hour the home system generated is in exactly one of those
     # five, or the bands below divide the bill by shares that do not add up to
@@ -804,20 +804,21 @@ def _leaf_breakdown(
     # total whatever it has absorbed, so a step missing from the five would read
     # as part of the leftovers instead of as an error.
     attributed = (reduction_mwh + electrolyser_mwh + melt_mwh
-                  + handling_mwh + losses_mwh)
+                  + briquetting_mwh + losses_mwh)
     if home_mwh > 0 and abs(attributed - home_mwh) > max(1.0, 1e-6 * home_mwh):
         raise ValueError(
             f"the electricity jobs account for {attributed:,.0f} MWh of the "
             f"{home_mwh:,.0f} MWh this plant generated. Every drawing link has to be "
-            f"in REDUCTION_LINKS, be the furnace or the electrolyser, or fall to "
-            f"`handling` — and `draws` is keyed the way the network spells a "
+            f"in REDUCTION_LINKS or be the furnace, the electrolyser or the "
+            f"briquetting press; a new one needs a job of its own in "
+            f"ELECTRICITY_JOBS — and `draws` is keyed the way the network spells a "
             f"link id (common/_report_schema.py names the lists)."
         )
     jobs = {
         "reduction": reduction_mwh * home_rate,
-        "melt": breakdown["destination_electricity"] if melts_abroad else melt_mwh * home_rate,
-        "hydrogen": electrolyser_mwh * home_rate,
-        "handling": handling_mwh * home_rate,
+        "eaf": breakdown["destination_electricity"] if melts_abroad else melt_mwh * home_rate,
+        "electrolyser": electrolyser_mwh * home_rate,
+        "briquetting": briquetting_mwh * home_rate,
         "losses": losses_mwh * home_rate,
     }
     # The same bill the `electricity` leaves price, divided by what it was for
@@ -831,12 +832,40 @@ def _leaf_breakdown(
             f"the electricity jobs come to {job_total:,.0f} EUR/yr against an "
             f"electricity bill of {electricity_bill:,.0f} EUR/yr. The jobs divide the "
             f"bill by the megawatt-hours each drew, so they only close while every "
-            f"drawing link is in REDUCTION_LINKS, is the furnace, is the "
-            f"electrolyser, or is left to `handling` "
-            f"(common/_report_schema.py names all three lists)."
+            f"drawing link is in REDUCTION_LINKS or is the furnace, the "
+            f"electrolyser or the briquetting press "
+            f"(common/_report_schema.py names the lists)."
         )
-    fields.update({f"el_{job}_eur_per_t_steel": value / steel_t
+    fields.update({f"cost_electricity_{job}_eur_per_t_steel": value / steel_t
                    for job, value in jobs.items()})
+
+    # -- ironmaking's share of the origin's electricity, per tonne of iron. Every
+    # MWh at the system's average cost, as the jobs above are priced, so the share
+    # is the ironmaking steps' draw over everything drawn at the origin — the
+    # losses go with it in proportion. On an export route the furnace melts
+    # abroad, draws nothing here, and the share is the whole origin system.
+    iron_mwh = reduction_mwh + electrolyser_mwh + briquetting_mwh
+    iron_share = iron_mwh / (iron_mwh + melt_mwh) if iron_mwh + melt_mwh > 0 else 0.0
+    iron_t = _iron_produced_t(n) * annual_scale
+    if iron_t > 0:
+        per_t_iron = {leaf: leaves[leaf] * iron_share / iron_t for leaf in ORIGIN_ELECTRICITY_LEAVES}
+        fields["cost_electricity_eur_per_t_iron"] = sum(per_t_iron.values())
+        fields.update({f"cost_electricity_{leaf}_eur_per_t_iron": value
+                       for leaf, value in per_t_iron.items()})
+        fields.update({f"cost_electricity_{name}_eur_per_t_iron": sum(per_t_iron[leaf] for leaf in parts)
+                       for name, parts in LEAF_SUBTOTALS.items()
+                       if all(leaf in per_t_iron for leaf in parts)})
+        # And by job: each ironmaking job's MWh at the average rate, the losses
+        # at ironmaking's share of them, so the four close on the same total.
+        iron_jobs = {
+            "reduction": reduction_mwh * home_rate,
+            "electrolyser": electrolyser_mwh * home_rate,
+            "briquetting": briquetting_mwh * home_rate,
+            "losses": losses_mwh * iron_share * home_rate,
+        }
+        assert set(iron_jobs) == set(IRON_ELECTRICITY_JOBS)
+        fields.update({f"cost_electricity_{job}_eur_per_t_iron": value / iron_t
+                       for job, value in iron_jobs.items()})
 
     # The same capital/upkeep split on the carriers, over each carrier's own
     # denominator so the parts stack to the reported part they divide.
@@ -909,6 +938,18 @@ def _res_energy(n: pypsa.Network, hours_per_year: float) -> dict[str, float]:
         # what was available, which is not negative curtailment.
         fields[f"{field_stem(tech)}_curtailed_gwh"] = max(potential - generated, 0.0) / 1e3
     return fields
+
+
+def _iron_produced_t(n: pypsa.Network) -> float:
+    """Tonnes of iron the ironmaking steps put out over the snapshots.
+
+    The route's own iron product: what leaves the shaft or the cells, or on a
+    route that briquettes it, the briquettes — the press is part of making the
+    iron, and HBI is what it hands on. Not annualised.
+    """
+    if "briquetting" in n.links.index:
+        return float(-n.links_t.p1["briquetting"].sum())
+    return float(sum(-n.links_t.p1[link].sum() for link in ORE_LINKS if link in n.links.index))
 
 
 def _battery_discharged_mwh(n: pypsa.Network, hours_per_year: float) -> float:
@@ -1221,17 +1262,11 @@ def extract_summary(
         else:
             summary["electrolyser_utilization"] = float("nan")
 
-    # Multi-site only (guarded so single-site reports are unchanged): one column
-    # per HVDC link capacity, the total annualised transmission cost, and per-tech
-    # built-capacity totals summed across candidate sites.
-    hvdc = n.links.index[n.links.carrier == "HVDC"]
-    if len(hvdc):
-        trans_cost = 0.0
-        for link in hvdc:
-            cap = n.links.at[link, "p_nom_opt"]
-            summary[f"{field_stem(link)}_gw_opt"] = cap / 1e3
-            trans_cost += n.links.at[link, "capital_cost"] * cap
-        summary["transmission_total_annual_cost_meur"] = trans_cost / 1e6
+    # Multi-site only: one column per HVDC link capacity, and per-tech built
+    # capacity summed across candidate sites. What the links cost is
+    # `cost_transmission_meur`, with the other cost groups.
+    for link in n.links.index[n.links.carrier == "HVDC"]:
+        summary[f"{field_stem(link)}_gw_opt"] = n.links.at[link, "p_nom_opt"] / 1e3
 
     # A run offered several candidate sites names a generator per site, so no
     # single `{tech}_gw_opt` says what that tech built and the total is reported

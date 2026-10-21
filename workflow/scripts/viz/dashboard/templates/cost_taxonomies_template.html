@@ -663,14 +663,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
            ["· drawn making the iron", amount(a._reduction_mwh_per_t,"MWh/t steel",2)],
            ["· of the electricity bill", pct(a.reduction, a._electricity_total)]] : [];
-      if(key==="melt") return a.melt>0
+      if(key==="eaf") return a.eaf>0
         ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
-           ["· furnace demand", amount(a._melt_mwh_per_t,"MWh/t steel",2)],
-           ["· of the electricity bill", pct(a.melt, a._electricity_total)]] : [];
-      if(key==="handling") return a.handling>0
+           ["· furnace demand", amount(a._eaf_mwh_per_t,"MWh/t steel",2)],
+           ["· of the electricity bill", pct(a.eaf, a._electricity_total)]] : [];
+      if(key==="briquetting") return a.briquetting>0
         ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
            ["· drawn by the briquetting press", ""],
-           ["· of the electricity bill", pct(a.handling, a._electricity_total)]] : [];
+           ["· of the electricity bill", pct(a.briquetting, a._electricity_total)]] : [];
       if(key==="losses") return a.losses>0
         ? [["electricity LCOE:", amount(rec.lcoe,"€/MWh",1)],
            ["· the battery's round trip and the lines, drawn by nothing", ""],

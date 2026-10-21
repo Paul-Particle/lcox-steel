@@ -192,13 +192,39 @@ LEAF_SUBTOTALS = {
 assert all(leaf in LEAF_COSTS for leaves in LEAF_SUBTOTALS.values() for leaf in leaves)
 assert not set(LEAF_SUBTOTALS) & (set(LEAF_COSTS) | set(LEAF_PARENTS))
 
+# The electricity leaves of the origin's own system: everything in the
+# `electricity` group but the destination furnace's connection. Ironmaking
+# always happens at the origin, so these are what the iron's electricity is cut
+# from (`cost_electricity_*_eur_per_t_iron`).
+ORIGIN_ELECTRICITY_LEAVES = tuple(
+    leaf for leaf in LEAF_COSTS
+    if LEAF_GROUP[leaf] == "electricity" and not leaf.startswith("destination_")
+)
+# The rows of that cut, in the order the report lists them: each subtotal ahead
+# of its own leaves, as a reader goes from the whole to its parts.
+# `battery_fom` is a placeholder, blank until the battery's fixed O&M reaches the
+# solve (see `cost_battery_fom_eur_per_t_steel`).
+IRON_ELECTRICITY_PARTS = (
+    "res",
+    *(part for tech in RES_TECHS
+      for part in (f"res_{field_stem(tech)}", f"res_{field_stem(tech)}_capex",
+                   f"res_{field_stem(tech)}_fom")),
+    "battery", "battery_power_capex", "battery_energy_capex", "battery_fom",
+    "grid", "grid_connection_capex", "grid_capacity_fee", "grid_market", "grid_fee",
+    "transmission",
+)
+assert set(ORIGIN_ELECTRICITY_LEAVES) <= set(IRON_ELECTRICITY_PARTS)
+assert all(part in ORIGIN_ELECTRICITY_LEAVES or part in LEAF_SUBTOTALS or part == "battery_fom"
+           for part in IRON_ELECTRICITY_PARTS)
+
 # The jobs the electricity did, which is the one cut of the levelised cost the
 # leaves above cannot make. They price what was bought; these divide what one of
 # those purchases was *for*: making the hydrogen, making the iron, melting it,
 # moving it about, and the losses around all of that.
 #
-# `handling` is drawn power that no production step drew — the briquetting press
-# is the only one so far. `losses` is power nobody drew at all: the battery's
+# `briquetting` is the press that cold-forms hot DRI before it ships, and only
+# that: a new drawing link is not swept into it but needs a job of its own,
+# and the report stops until it has one. `losses` is power nobody drew at all: the battery's
 # round trip and the lines'. They are separate jobs because only one of them is
 # electricity anyone used, and `el_losses_gwh` above measures the second in its
 # own units.
@@ -206,9 +232,17 @@ assert not set(LEAF_SUBTOTALS) & (set(LEAF_COSTS) | set(LEAF_PARENTS))
 # Every megawatt-hour is priced at what the system that supplied it cost, and the
 # system's whole cost is the megawatt-hours it delivered, so the five close on
 # `cost_electricity_eur_per_t_steel` exactly. They are the same money as the
-# `electricity` leaves, cut a second way, which is why they are not `cost_*` and
-# must never be added to one: doing so counts the electricity bill twice.
-ELECTRICITY_JOBS = ("reduction", "melt", "hydrogen", "handling", "losses")
+# `electricity` leaves, cut a second way, and are reported as
+# `cost_electricity_{job}_eur_per_t_steel` to say so: a breakdown of that one
+# total, which must never be added to the leaves it re-cuts, or the electricity
+# bill is counted twice.
+# Named after the equipment that drew the power, as the `el_*` energy rows are,
+# so a job's cost and its MWh read as a pair: the furnace's melt is `eaf`, the
+# hydrogen's making `electrolyser`.
+ELECTRICITY_JOBS = ("reduction", "eaf", "electrolyser", "briquetting", "losses")
+# The jobs that make the iron, for the same cut per tonne of iron: every job but
+# the furnace, the losses being ironmaking's share of them.
+IRON_ELECTRICITY_JOBS = tuple(job for job in ELECTRICITY_JOBS if job != "eaf")
 
 REPORT_FIELDS = {
     # What this run is a result for.
@@ -308,8 +342,18 @@ REPORT_FIELDS = {
     "cost_battery_fom_eur_per_t_steel": UNDEFINED,
     # The electricity leaf group cut a second way, by the job each euro of it
     # paid for (ELECTRICITY_JOBS). These stack to `cost_electricity_eur_per_t_steel`
-    # and to nothing else, so they belong in no `cost_*` sum.
-    **{f"el_{job}_eur_per_t_steel": ZERO for job in ELECTRICITY_JOBS},
+    # and to nothing else, so no stack of leaves or subtotals may add them in.
+    **{f"cost_electricity_{job}_eur_per_t_steel": ZERO for job in ELECTRICITY_JOBS},
+    # Ironmaking's share of the origin's electricity cost, per tonne of iron:
+    # the total, then cut as the steel's electricity is. The share is the
+    # ironmaking steps' MWh over everything drawn at the origin, losses shared
+    # in proportion; every MWh is priced at the system's average cost.
+    "cost_electricity_eur_per_t_iron": ZERO,
+    **{f"cost_electricity_{part}_eur_per_t_iron": UNDEFINED if part == "battery_fom" else ZERO
+       for part in IRON_ELECTRICITY_PARTS},
+    # The same total cut a second way, by the job each MWh did, as the steel's
+    # electricity is by ELECTRICITY_JOBS. Never to be added to the cut above.
+    **{f"cost_electricity_{job}_eur_per_t_iron": ZERO for job in IRON_ELECTRICITY_JOBS},
     # The same capital/upkeep split on the two carriers, in their own units, so
     # each pair stacks to the reported part above it that it divides.
     "lcoe_res_capex_eur_per_mwh": ZERO,
@@ -367,7 +411,6 @@ REPORT_FIELDS = {
     # divide by. The model sets a lifetime in years but no cycle limit, so this
     # is what says whether that lifetime is plausible.
     "battery_cycles_per_year": UNDEFINED,
-    "transmission_total_annual_cost_meur": ZERO,
 
     # Emissions from the energy a run used. Accounting only — none of it reaches
     # the objective, so these never move a cost. And only the energy: the process
@@ -414,7 +457,7 @@ REPORT_FIELDS = {
     **{f"el_{field_stem(user)}_gwh": ZERO for user in ELECTRICITY_USERS},
     # The electricity nobody drew — the battery's round trip and the lines'
     # losses. With it the draws above account for the whole of what was
-    # generated, which is what lets the `el_*_eur_per_t_steel` jobs close on
+    # generated, which is what lets the `cost_electricity_*_eur_per_t_steel` jobs close on
     # the electricity bill.
     "el_losses_gwh": ZERO,
     **{f"emissions_{field_stem(user)}_kg_co2e_per_mwh_el": UNDEFINED
