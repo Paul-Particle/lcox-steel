@@ -602,28 +602,34 @@ iron, a DRI route's figure carries the furnace's iron yield: about 1.17 t of
 iron goes into each tonne of steel (`eaf_iron_t_per_t_steel`).
 
 `cost_electricity_eur_per_t_iron` is the electricity cost of making the iron,
-per tonne of iron. Its numerator is ironmaking's share of the origin's whole
+per tonne of iron. Ironmaking ends at the DRI, liquid iron or plates the shaft
+or cells put out. Its numerator is ironmaking's share of the origin's whole
 electricity system cost (renewables, battery, grid and transmission). That
 share is the electricity drawn by a) the direct reduction shaft furnace or the
-MOE or EW cells, b) the hydrogen preheat and the electrolyser, and c) the
-briquetting press, divided by all the electricity drawn at the origin. The
-losses in the battery and the lines are included: ironmaking carries the same
-share of them as of the electricity drawn. Only the electric arc furnace is
-left out. The shared system is split by the average-cost rule: every MWh,
-whichever step drew it and whenever, is priced at the system's average cost
-per MWh, because the model does not track which source supplied which step. On
-an export route the furnace melts abroad and draws nothing at the origin, so
-the share is the whole origin system. The denominator is the tonnes of iron
-the ironmaking step produced over the year: what leaves the shaft or the cells,
-or the briquettes on a route that briquettes its iron. The rows below it cut
+MOE or EW cells, b) the hydrogen preheat, and c) the electrolyser, divided by
+all the electricity drawn at the origin. The losses in the battery and the
+lines are included: ironmaking carries the same share of them as of the
+electricity drawn. The briquetting press and the electric arc furnace are left
+out: they are steps after ironmaking, and carry the rest of the electricity
+and of the losses. The shared system is split by the average-cost rule: every
+MWh, whichever step drew it and whenever, is priced at the system's average
+cost per MWh, because the model does not track which source supplied which
+step. On an export route the furnace melts abroad and draws nothing at the
+origin. The denominator is the tonnes of iron the ironmaking step produced
+over the year (`iron_produced_mt`): what leaves the shaft or the cells, on
+every route, including those that go on to briquette it. The rows below it cut
 the same total as the steel's electricity is cut, renewables by technology
 into capex and fixed O&M, the battery into power and energy capex, the grid
 into connection capex, capacity fee, market purchases and volumetric fee, and
 transmission, with subtotals beside their parts; they all end in
 `_eur_per_t_iron`. `cost_electricity_battery_fom_eur_per_t_iron` is blank until
-the battery's fixed O&M reaches the model. Converted to per tonne of steel by
-the iron per tonne of steel, and added to the furnace's own electricity and its
-share of the losses, it gives back `cost_electricity_eur_per_t_steel` exactly.
+the battery's fixed O&M reaches the model. Beside them,
+`cost_electricity_briquetting_eur_per_t_iron` is the press's own electricity per
+tonne of DRI it pressed; it is not part of the iron's total and is never added
+to it. Converted to per tonne of steel by the iron per tonne of steel, and
+added to the press's and the furnace's own electricity and their share of the
+losses, `cost_electricity_eur_per_t_iron` gives back
+`cost_electricity_eur_per_t_steel` exactly.
 
 `h2_produced_kg_per_t_steel` is the hydrogen the electrolyser produced over the
 year, per tonne of steel produced (`h2_produced_kt` over `steel_produced_mt`).
@@ -632,6 +638,41 @@ the shaft's hydrogen per tonne of iron (`h2_intensity_kg_per_t_dri`) times the
 iron per tonne of steel, because the hydrogen buffer is lossless and ends the
 year where it began. On `mix-dri-eaf` it is the model's own choice of how much
 of the reductant is hydrogen, and on the gas, MOE and EW routes it is 0.
+
+`lcoi_eur_per_t_iron` is the levelised cost of the iron at the plant gate, per
+tonne of iron produced (`iron_produced_mt`: the DRI, liquid iron or plates the
+shaft or cells put out). Its numerator is every yearly cost inside a line drawn
+round the ironmaking asset, with capital annualised at its own WACC and
+lifetime: a) the ore, the ironmaking plant's (shaft's or cells') annualised
+capex and fixed O&M, the natural gas, and separately the carbon price on the
+gas's CO2 (`emissions.co2_price_eur_per_t`, 0 in the template), b) the
+hydrogen's electrolyser (annualised capex, fixed O&M and water) and buffer, and
+c) ironmaking's electricity, `cost_electricity_eur_per_t_iron`, which already
+holds the electrolyser's power, so the hydrogen is counted without it. Storage
+goes with what it holds: where the iron can be stored, as EW plates or cooled
+MOE iron are, its store is in; hot DRI cannot be stored, and a home-made DRI
+route goes straight to the furnace with none. The briquetting press, freight,
+the electric arc furnace and the steel side are outside the line. Its parts,
+all per tonne of iron, are `cost_ore_eur_per_t_iron`,
+`cost_ironmaking_plant_capex_eur_per_t_iron`,
+`cost_ironmaking_plant_fom_eur_per_t_iron`, `cost_gas_fuel_eur_per_t_iron`,
+`cost_gas_carbon_eur_per_t_iron`, `cost_electrolyser_eur_per_t_iron`,
+`cost_h2_buffer_eur_per_t_iron`, `cost_electricity_eur_per_t_iron` and
+`cost_iron_store_eur_per_t_iron`, and they add up to it exactly.
+`cost_h2_production_eur_per_t_iron` is never one of the parts: it holds the
+electrolyser's power a second time. The plant's two halves are also given
+together as `cost_ironmaking_plant_eur_per_t_iron`, a subtotal beside them that
+is never added to them.
+
+`lcohbi_eur_per_t_hbi` is the levelised cost of the briquettes at the plant
+gate, on a route that presses its DRI for export, per tonne of briquettes
+produced (`hbi_produced_mt`). Its numerator is a) the iron's whole cost
+(`lcoi_eur_per_t_iron` times `iron_produced_mt`), b) the press's annualised
+capex and fixed O&M, and its electricity with its share of the battery's and
+lines' losses, and c) the stockpile the briquettes wait in before shipping.
+Dividing by the briquettes rather than the DRI spreads the cost of the fines
+the press screens out over the tonnes that are left. It is blank on every route
+that does not briquette.
 
 `cost_h2_production_meur` is the yearly cost of producing the hydrogen, in M€:
 a) the electrolyser itself (`cost_electrolyser_meur`), b) the hydrogen buffer
@@ -661,7 +702,7 @@ inside `cost_electricity_eur_per_t_iron`, so it is never added to that.
 link. The network and the scenario tables hyphenate those ids, so the report
 puts every one through `field_stem`: the tech `wind-onshore` reports as
 `wind_onshore_gw_opt` and `cf_wind_onshore`, the link `dri-h2` as
-`plant_dri_h2_eur_per_t_steel` and `dri_h2_utilization`. Only the *values* keep the
+`annuity_factor_dri_h2` and `el_dri_h2_gwh`. Only the *values* keep the
 hyphens (`route: moe-eaf`, `solar_variant: bestsite-p95`) — those are ids, and
 they still name files and config keys.
 
@@ -674,8 +715,8 @@ run's row, and a consumer asking for a field nobody wrote would get silence.
 
 A cell a run has no value for says which of two things it means:
 
-- **`0`** — an amount, and this run's is nothing. A route without a MOE cell
-  reports `plant_moe_eur_per_t_steel: 0`; it built none, and zero is what that step
+- **`0`** — an amount, and this run's is nothing. A route without a briquetting
+  press reports `cost_briquetting_capex_eur_per_t_steel: 0`; it built none, and zero is what that step
   contributed to the cost of its steel. The cost groups stack to
   `total_annual_cost_meur` for every run.
 - **blank** — undefined here: a ratio with nothing in its denominator. The

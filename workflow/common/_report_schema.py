@@ -87,7 +87,7 @@ PROCESS_LINKS = ("dri-h2", "dri-ng", "dri-mix", "eaf", "moe", "ew", "briquetting
 # Annualised cost groups, in the order `compile_report._cost_breakdown` builds
 # them. Together they are the total annual cost.
 COST_GROUPS = ("res", "battery", "grid", "gas", "electrolyser", "h2_buffer",
-               "process", "ore_consumables", "iron_store", "steel_store",
+               "process", "ore_consumables", "iron_or_hbi_store", "steel_store",
                "transmission", "transport", "destination_electricity")
 
 # The links that draw electricity, by the id `build_network` gives them. Each
@@ -141,8 +141,13 @@ REDUCTION_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew", "reductant-h2")
 LEAF_COSTS_BY_GROUP = (
     ("ore", "feedstock"),
     ("consumables", "feedstock"),
+    # The ironmaking plant is one pair whatever the route — the shaft or cells it
+    # built, the others being none — so the row reads the same on every route.
+    # The furnace and the press after it keep a pair each.
+    ("ironmaking_plant_capex", "process"),
+    ("ironmaking_plant_fom", "process"),
     *((f"{field_stem(link)}_{half}", "process")
-      for link in PROCESS_LINKS for half in ("capex", "fom")),
+      for link in PROCESS_LINKS if link not in ORE_LINKS for half in ("capex", "fom")),
     ("gas_fuel", "gas"),
     ("gas_carbon", "gas"),
     ("electrolyser_capex", "hydrogen"),
@@ -165,7 +170,10 @@ LEAF_COSTS_BY_GROUP = (
     ("destination_grid_capacity_fee", "electricity"),
     ("destination_grid_market", "electricity"),
     ("destination_grid_fee", "electricity"),
-    ("iron_store", "storage"),
+    # The stockpile between ironmaking and what follows it, whatever it holds:
+    # the iron on a route that stores it, the briquettes on one that presses its
+    # DRI for export. The whole of the `iron_or_hbi_store` cost group.
+    ("iron_or_hbi_store", "storage"),
     ("steel_store", "storage"),
     ("transport", "storage"),
 )
@@ -183,6 +191,9 @@ LEAF_SUBTOTALS = {
        for tech in RES_TECHS},
     "res": tuple(f"res_{field_stem(tech)}_{half}" for tech in RES_TECHS for half in ("capex", "fom")),
     "battery": ("battery_power_capex", "battery_energy_capex"),
+    # The route's ironmaking plant, capital and upkeep: whichever shaft or cell it
+    # built, the others being 0, so one row reads the same on every route.
+    "ironmaking_plant": ("ironmaking_plant_capex", "ironmaking_plant_fom"),
     # The electrolyser alone; with the buffer it is the `hydrogen` parent.
     "electrolyser": ("electrolyser_capex", "electrolyser_fom", "electrolyser_water"),
     # The origin's grid connection and the energy bought through it.
@@ -244,7 +255,9 @@ assert all(part in ORIGIN_ELECTRICITY_LEAVES or part in LEAF_SUBTOTALS or part =
 ELECTRICITY_JOBS = ("reduction", "eaf", "electrolyser", "briquetting", "losses")
 # The jobs that make the iron, for the same cut per tonne of iron: every job but
 # the furnace, the losses being ironmaking's share of them.
-IRON_ELECTRICITY_JOBS = tuple(job for job in ELECTRICITY_JOBS if job != "eaf")
+# Ironmaking stops at the DRI: the press after it is a step of its own, like the
+# furnace, so neither is one of these.
+IRON_ELECTRICITY_JOBS = tuple(job for job in ELECTRICITY_JOBS if job not in ("eaf", "briquetting"))
 
 REPORT_FIELDS = {
     # What this run is a result for.
@@ -265,9 +278,24 @@ REPORT_FIELDS = {
 
     # What the run produced, and what a unit of it cost.
     "steel_produced_mt": ZERO,
+    # What the shaft or cells made in the year: the denominator of every
+    # `*_eur_per_t_iron` row, and `ironmaking_capacity_mt_opt` times
+    # `ironmaking_utilization`.
+    "iron_produced_mt": ZERO,
+    # What the briquetting press made of it, on a route that briquettes; 0 elsewhere.
+    "hbi_produced_mt": ZERO,
     "h2_produced_kt": ZERO,
     "ng_gwh_lhv": ZERO,
     "lcos_eur_per_t": UNDEFINED,
+    # The levelised cost of the iron at the plant gate, per tonne of
+    # `iron_produced_mt`: everything inside a line drawn round the ironmaking
+    # asset — ore, the shaft or cells, the hydrogen, its electricity, the gas, and
+    # the iron's own store where the iron can be stored. Not the press, freight,
+    # furnace or steel side.
+    "lcoi_eur_per_t_iron": UNDEFINED,
+    # And of the briquettes, on a route that presses its DRI: the iron above plus
+    # the press and the HBI stockpile, per tonne of `hbi_produced_mt`.
+    "lcohbi_eur_per_t_hbi": UNDEFINED,
     "lcoh_eur_per_kg": UNDEFINED,
 
     # Electricity: the system LCOE, the contributions that sum to it, then each
@@ -338,13 +366,19 @@ REPORT_FIELDS = {
     "h2_buffer_cycles_per_year": UNDEFINED,
     "h2_buffer_share_of_h2_pct": UNDEFINED,
 
-    # The steel chain: what each step cost per tonne, how big it is, how hard it
-    # runs, and the stores that let it run at a different rate from the plant.
-    **{f"plant_{field_stem(link)}_eur_per_t_steel": ZERO for link in PROCESS_LINKS},
-    "ore_eur_per_t_steel": ZERO,
-    "consumables_eur_per_t_steel": ZERO,
-    **{f"{field_stem(link)}_t_per_h_opt": ZERO for link in PROCESS_LINKS},
-    **{f"{field_stem(link)}_utilization": UNDEFINED for link in PROCESS_LINKS},
+    # The steel chain: how big each step is, how hard it runs, and the stores
+    # that let it run at a different rate from the plant. What each step cost per
+    # tonne is in its `cost_{step}_capex` / `_fom` leaves above.
+    # The ironmaking step's nameplate: the iron it could put out in a year at full
+    # utilisation, in Mt — the size of the asset built, not what it produced. One
+    # row for every route, whichever shaft or cell makes its iron.
+    "ironmaking_capacity_mt_opt": ZERO,
+    # How hard that step ran: its mean output over its nameplate, so what it made
+    # is the capacity above times this.
+    "ironmaking_utilization": UNDEFINED,
+    # The other two steps' sizes, in t/h of their own output.
+    **{f"{field_stem(link)}_t_per_h_opt": ZERO for link in PROCESS_LINKS if link not in ORE_LINKS},
+    **{f"{field_stem(link)}_utilization": UNDEFINED for link in PROCESS_LINKS if link not in ORE_LINKS},
     # Hydrogen's share of the reducing agent, two ways. By reduction: the share of
     # the iron reduced with hydrogen, each fuel counted as the hydrogen it stands
     # in for. By energy: hydrogen's share of the reducing agent's energy content
@@ -352,8 +386,11 @@ REPORT_FIELDS = {
     # tonne. 1 on the H2 shaft, 0 on the gas shaft, the model's choice on the blend.
     "reductant_h2_share": UNDEFINED,
     "reductant_h2_share_energy": UNDEFINED,
-    "iron_store_kt": ZERO,
-    "iron_store_hours_steel": UNDEFINED,
+    # The stockpile between ironmaking and what follows it, iron or briquettes:
+    # what it holds, and how many hours of steel production that much would feed
+    # the furnace for, at the furnace's own iron or briquettes per tonne of steel.
+    "iron_or_hbi_store_kt": ZERO,
+    "iron_or_hbi_store_hours_steel": UNDEFINED,
     # Zero on a route that melts its iron where it made it and stops at the
     # plant gate. Only one of the two commodities is ever shipped.
     "transport_km": ZERO,
@@ -386,15 +423,20 @@ REPORT_FIELDS = {
     # and to nothing else, so no stack of leaves or subtotals may add them in.
     **{f"cost_electricity_{job}_eur_per_t_steel": ZERO for job in ELECTRICITY_JOBS},
     # Ironmaking's share of the origin's electricity cost, per tonne of iron:
-    # the total, then cut as the steel's electricity is. The share is the
-    # ironmaking steps' MWh over everything drawn at the origin, losses shared
-    # in proportion; every MWh is priced at the system's average cost.
+    # the total, then cut as the steel's electricity is. Ironmaking is the shaft
+    # or cells, the H2 preheat and the electrolyser, up to the DRI; the share is
+    # their MWh over everything drawn at the origin, losses shared in proportion;
+    # every MWh is priced at the system's average cost.
     "cost_electricity_eur_per_t_iron": ZERO,
     **{f"cost_electricity_{part}_eur_per_t_iron": UNDEFINED if part == "battery_fom" else ZERO
        for part in IRON_ELECTRICITY_PARTS},
     # The same total cut a second way, by the job each MWh did, as the steel's
     # electricity is by ELECTRICITY_JOBS. Never to be added to the cut above.
     **{f"cost_electricity_{job}_eur_per_t_iron": ZERO for job in IRON_ELECTRICITY_JOBS},
+    # The briquetting press's electricity per tonne of DRI it pressed. Beside the
+    # iron's electricity, not in it: the press is a step after ironmaking, as
+    # the furnace is, so this is never added to `cost_electricity_eur_per_t_iron`.
+    "cost_electricity_briquetting_eur_per_t_iron": ZERO,
     # The hydrogen per tonne of iron, the whole of it, since every kg goes into
     # the shaft: the total, the electrolyser and its three parts, the buffer.
     # The electricity part is `cost_electricity_electrolyser_eur_per_t_iron`
@@ -406,6 +448,30 @@ REPORT_FIELDS = {
     "cost_electrolyser_fom_eur_per_t_iron": ZERO,
     "cost_electrolyser_water_eur_per_t_iron": ZERO,
     "cost_h2_buffer_eur_per_t_iron": ZERO,
+    # `lcoi_eur_per_t_iron` cut into what it bought. With the electrolyser and
+    # buffer rows above and `cost_electricity_eur_per_t_iron` they stack to it
+    # exactly; `cost_h2_production_eur_per_t_iron` is never one of the parts, as
+    # it holds the electrolyser's power a second time. The plant is the route's
+    # one shaft or cell, as in `ironmaking_capacity_mt_opt`; the carbon is the
+    # price on the gas's CO2, kept apart from the gas itself.
+    "cost_ore_eur_per_t_iron": ZERO,
+    # The plant's two halves together: a subtotal beside them, never a third part.
+    "cost_ironmaking_plant_eur_per_t_iron": ZERO,
+    "cost_ironmaking_plant_capex_eur_per_t_iron": ZERO,
+    "cost_ironmaking_plant_fom_eur_per_t_iron": ZERO,
+    "cost_gas_fuel_eur_per_t_iron": ZERO,
+    "cost_gas_carbon_eur_per_t_iron": ZERO,
+    "cost_iron_store_eur_per_t_iron": ZERO,
+    # The cost of the iron per tonne of steel: the same yearly euros as
+    # `lcoi_eur_per_t_iron` over the steel, with the two parts the steel's own
+    # breakdown has no row for. Its other parts per tonne of steel are the ore,
+    # the ironmaking plant, gas, electrolyser and buffer rows above. The
+    # electricity is ironmaking's share — its jobs and its share of the losses —
+    # and is never added to the `cost_electricity_{job}` rows, which hold it
+    # already; the store is the iron's own, never the briquettes'.
+    "cost_ironmaking_eur_per_t_steel": ZERO,
+    "cost_electricity_ironmaking_eur_per_t_steel": ZERO,
+    "cost_ironmaking_store_eur_per_t_steel": ZERO,
     # The same capital/upkeep split on the two carriers, in their own units, so
     # each pair stacks to the reported part above it that it divides.
     "lcoe_res_capex_eur_per_mwh": ZERO,
@@ -429,14 +495,14 @@ REPORT_FIELDS = {
     # or discharge, as a share of its energy per hour.
     "max_battery_c_rate": UNDEFINED,
 
-    # The capital recovery factor each plant's capex was annuitised at, and the
-    # ore quote that applied to it — both fixed by the scenario rather than
-    # chosen by the solve, but carried per run so the leaf split above can be
-    # checked against its inputs without opening the assumptions file.
+    # The capital recovery factor each plant's capex was annuitised at — fixed by
+    # the scenario rather than chosen by the solve, but carried per run so the
+    # leaf split above can be checked against it. The feedstock quote is not: it
+    # is per tonne of iron out, so `cost_ore_eur_per_t_iron` always equals it,
+    # and the run's own assumptions file beside the report holds it as given.
     **{f"annuity_factor_{field_stem(link)}": UNDEFINED for link in PROCESS_LINKS},
-    **{f"ore_quote_{field_stem(link)}_eur_per_t_iron": UNDEFINED for link in ORE_LINKS},
-    # How much iron the furnace charged per tonne of steel, which is the ore
-    # quote's other half: it depends on what the route feeds it.
+    # How much iron the furnace charged per tonne of steel, which turns the ore
+    # per tonne of iron into the ore per tonne of steel.
     "eaf_iron_t_per_t_steel": UNDEFINED,
 
     # Built capacity.

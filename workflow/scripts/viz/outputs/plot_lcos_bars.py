@@ -51,7 +51,7 @@ COST_GROUPS = [
     ("process",         "Process plant (capex+opex)",   blue_black),
     ("ore_consumables", "Ore & consumables",            sand_yellow),
     ("gas",             "Natural gas (fuel + CO₂)",     very_dark_gray),
-    ("iron_store",      "Iron stockpile",               gray),
+    ("iron_or_hbi_store", "Iron / HBI stockpile",       gray),
     ("steel_store",     "Steel inventory",              blue_gray),
     ("electrolyser",    "Electrolyser",                 green),
     ("h2_buffer",       "H₂ buffer",                    light_blue),

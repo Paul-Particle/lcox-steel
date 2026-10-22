@@ -162,8 +162,8 @@ def test_every_route_writes_the_same_fields(tmp_path):
         ("s", "VIC1", "VIC1", "h2-dri-eaf", "20250101", "20251231", 606.78),
         ("t", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0),
     ])
-    # Only the MOE run has a MOE cell to report; only the H2 run has an LCOH.
-    df["plant_moe_eur_per_t_steel"] = [float("nan"), 120.0]
+    # Only one run has a press to report, only the other an LCOH.
+    df["cost_briquetting_capex_eur_per_t_steel"] = [float("nan"), 120.0]
     df["lcoh_eur_per_kg"] = [4.1, float("nan")]
     report_path, _ = _write(df, tmp_path)
     report = read_report(report_path)
@@ -182,7 +182,7 @@ def test_a_blank_means_undefined_and_a_zero_means_zero(tmp_path):
     # the cost of the hydrogen it never made is not a number.
     assert row["electrolyser_gw"] == 0.0
     assert row["cost_electrolyser_meur"] == 0.0
-    assert row["plant_dri_h2_eur_per_t_steel"] == 0.0
+    assert row["cost_briquetting_capex_eur_per_t_steel"] == 0.0
     assert pd.isna(row["lcoh_eur_per_mwh_lhv"])
     assert pd.isna(row["electrolyser_utilization"])
     assert pd.isna(row["cf_wind_offshore"])
@@ -434,3 +434,57 @@ def test_the_hydrogen_s_yearly_cost_is_its_lcoh_times_what_was_made():
         + s["cost_electricity_electrolyser_eur_per_t_iron"])
     assert s["cost_electrolyser_eur_per_t_iron"] == pytest.approx(
         sum(s[f"cost_electrolyser_{part}_eur_per_t_iron"] for part in ("capex", "fom", "water")))
+
+
+def test_the_ironmaking_capacity_is_the_shaft_at_full_load_for_a_year():
+    """The asset's size, not its output: the built t/h over a whole year, which
+    is at least what the shaft made and equals it only at full utilisation."""
+    assumptions = yaml.safe_load((REPO_ROOT / "config" / ".template.yaml").read_text())
+    hours = np.arange(48)
+    cf = pd.DataFrame({"solar": np.clip(np.sin((hours % 24 - 6) / 12 * np.pi), 0, None),
+                       "wind-onshore": 0.35 + 0.3 * np.sin(hours / 7.0)},
+                      index=pd.date_range("2025-01-01", periods=48, freq="h"))
+    n = build_network("h2-dri-eaf", assumptions, cf)
+    n.optimize(solver_name="highs", solver_options={"output_flag": False})
+    s = extract_summary(n, "s", {"origin": "X", "destination": "X", "route": "h2-dri-eaf",
+                                 "start_date": "20250101", "end_date": "20250102"}, assumptions)
+
+    shaft_t_per_h = n.links.at["dri-h2", "p_nom_opt"] * n.links.at["dri-h2", "efficiency"]
+    assert s["ironmaking_capacity_mt_opt"] == pytest.approx(shaft_t_per_h * 8760 / 1e6)
+    assert "dri_h2_t_per_h_opt" not in s, "one ironmaking row, not one per shaft"
+    made_mt = _iron_produced_t(n) * 8760 / len(n.snapshots) / 1e6
+    assert s["ironmaking_capacity_mt_opt"] * s["ironmaking_utilization"] == pytest.approx(made_mt)
+    # The feedstock is quoted per tonne of iron out, so what was spent on it over
+    # the iron made is the quote itself: the reason the report no longer repeats it.
+    assert s["cost_ore_eur_per_t_iron"] == pytest.approx(assumptions["dri-h2"]["ore_eur_per_t"])
+
+
+def test_iron_is_counted_at_the_shaft_and_the_briquettes_beside_it():
+    """On a route that briquettes, iron is what the shaft made and HBI what the
+    press made of it; every per-tonne-of-iron row is over the shaft's tonnes."""
+    assumptions = yaml.safe_load((REPO_ROOT / "config" / ".template.yaml").read_text())
+    hours = np.arange(48)
+    index = pd.date_range("2025-01-01", periods=48, freq="h")
+    cf = pd.DataFrame({"solar": np.clip(np.sin((hours % 24 - 6) / 12 * np.pi), 0, None),
+                       "wind-onshore": 0.35 + 0.3 * np.sin(hours / 7.0)}, index=index)
+    price = pd.Series(60 + 40 * np.sin(hours / 24 * 2 * np.pi), index=index)
+    legs = {"sea": 8945}
+    n = build_network("h2-dri-eaf-export", assumptions, cf, transport_legs=legs,
+                      destination_price=price)
+    n.optimize(solver_name="highs", solver_options={"output_flag": False})
+    mix = pd.DataFrame({"price": price, "gas": 100.0, "wind_onshore": 100.0}, index=index)
+    s = extract_summary(n, "s", {"origin": "X", "destination": "Y", "route": "h2-dri-eaf-export",
+                                 "start_date": "20250101", "end_date": "20250102"},
+                        assumptions, legs, None, mix)
+
+    assert s["iron_produced_mt"] == pytest.approx(
+        s["ironmaking_capacity_mt_opt"] * s["ironmaking_utilization"])
+    assert s["hbi_produced_mt"] == pytest.approx(
+        s["iron_produced_mt"] * assumptions["briquetting"]["yield_t_per_t"])
+    assert s["cost_h2_production_eur_per_t_iron"] * s["iron_produced_mt"] == pytest.approx(
+        s["cost_h2_production_meur"])
+    # The briquette stockpile in hours of steel: what it holds over what the
+    # furnace charges an hour, more than a tonne of briquettes per tonne of steel.
+    steel_t_per_h = s["steel_produced_mt"] * 1e6 / 8760
+    assert s["iron_or_hbi_store_hours_steel"] == pytest.approx(
+        s["iron_or_hbi_store_kt"] * 1e3 / (steel_t_per_h * s["eaf_iron_t_per_t_steel"]))

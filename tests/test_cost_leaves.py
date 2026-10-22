@@ -24,6 +24,7 @@ from common._report_schema import (
     LEAF_GROUP,
     LEAF_PARENTS,
     LEAF_SUBTOTALS,
+    ORE_LINKS,
     IRON_ELECTRICITY_JOBS,
     ORIGIN_ELECTRICITY_LEAVES,
     PROCESS_LINKS,
@@ -151,7 +152,8 @@ def test_a_plants_two_halves_are_its_whole_annual_cost(route, assumptions):
     for link in PROCESS_LINKS:
         if link not in n.links.index:
             continue
-        stem = field_stem(link)
+        # The route's one ironmaking step reports as the ironmaking plant.
+        stem = "ironmaking_plant" if link in ORE_LINKS else field_stem(link)
         whole = float(n.links.at[link, "capital_cost"]
                       * n.links.at[link, "p_nom_opt"]) / steel_t
         halves = (fields[f"cost_{stem}_capex_eur_per_t_steel"]
@@ -317,21 +319,100 @@ def test_the_iron_s_electricity_is_its_share_of_the_steel_s(route, assumptions):
                 sum(fields[f"cost_electricity_{leaf}_eur_per_t_iron"] for leaf in parts), rel=1e-9)
     assert pd.isna(fields.get("cost_electricity_battery_fom_eur_per_t_iron", float("nan")))
 
+    # Ironmaking stops at the DRI: the press and the furnace after it carry the
+    # rest of the origin's draw, and with it the rest of the losses.
     job = lambda name: fields[f"cost_electricity_{name}_eur_per_t_steel"]
-    iron_jobs = job("reduction") + job("electrolyser") + job("briquetting")
+    iron_jobs = job("reduction") + job("electrolyser")
     furnace_home = 0.0 if route.endswith("-export") else job("eaf")
-    iron_share = iron_jobs / (iron_jobs + furnace_home)
-    furnace = job("eaf") + (1 - iron_share) * job("losses")
-    assert total * iron_t / steel_t + furnace == pytest.approx(
+    iron_share = iron_jobs / (iron_jobs + job("briquetting") + furnace_home)
+    after_iron = job("eaf") + job("briquetting") + (1 - iron_share) * job("losses")
+    assert total * iron_t / steel_t + after_iron == pytest.approx(
         fields["cost_electricity_eur_per_t_steel"], rel=1e-9)
+    # The press per tonne of the DRI it pressed is its steel job over the iron.
+    assert fields["cost_electricity_briquetting_eur_per_t_iron"] == pytest.approx(
+        job("briquetting") * steel_t / iron_t, rel=1e-9)
 
 
 
 @pytest.mark.parametrize("route", ROUTES)
 def test_the_iron_s_electricity_by_job_closes_on_the_same_total(route, assumptions):
-    """Ironmaking's four jobs, losses at its share, stack to its electricity total."""
+    """Ironmaking's three jobs, losses at its share, stack to its electricity total;
+    the press is beside them, not one of them."""
     n = _solved(route, assumptions)
     fields, _, _ = _fields(n, assumptions)
     jobs = sum(fields[f"cost_electricity_{job}_eur_per_t_iron"] for job in IRON_ELECTRICITY_JOBS)
     assert jobs == pytest.approx(fields["cost_electricity_eur_per_t_iron"], rel=1e-9)
     assert "eaf" not in IRON_ELECTRICITY_JOBS
+    assert "briquetting" not in IRON_ELECTRICITY_JOBS
+
+
+def _iron_and_after(route, assumptions):
+    """(fields, yearly € of each leaf, iron t, steel t, what the iron store holds)."""
+    n = _solved(route, assumptions)
+    fields, _, steel_t = _fields(n, assumptions)
+    iron_t = compile_report._iron_produced_t(n) * 8760.0 / len(n.snapshots)
+    yearly = {leaf: fields[f"cost_{leaf}_eur_per_t_steel"] * steel_t for leaf in LEAF_COSTS}
+    holds = n.stores.at["iron_store", "bus"] if "iron_store" in n.stores.index else None
+    return n, fields, yearly, iron_t, steel_t, holds
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_the_iron_and_everything_after_it_are_the_whole_steel(route, assumptions):
+    """The plant gate splits the cost of steel in two with nothing lost or doubled:
+    the iron, and the press, furnace, stores, freight and the rest of the power."""
+    _, fields, yearly, iron_t, _, holds = _iron_and_after(route, assumptions)
+    origin_power = sum(yearly[leaf] for leaf in ORIGIN_ELECTRICITY_LEAVES)
+    iron_power = fields["cost_electricity_eur_per_t_iron"] * iron_t
+    after = (yearly["consumables"]
+             + sum(yearly[f"{stem}_{half}"] for stem in ("eaf", "briquetting") for half in ("capex", "fom"))
+             + yearly["steel_store"] + yearly["transport"]
+             + (yearly["iron_or_hbi_store"] if holds != "iron" else 0.0)
+             + sum(v for leaf, v in yearly.items() if leaf.startswith("destination_grid_"))
+             + origin_power - iron_power)
+    assert fields["lcoi_eur_per_t_iron"] * iron_t + after == pytest.approx(
+        sum(yearly.values()), rel=1e-9)
+
+
+@pytest.mark.parametrize("route", [r for r in ROUTES if r.endswith("-export") and "dri" in r])
+def test_the_briquettes_are_the_iron_plus_the_press_and_their_stockpile(route, assumptions):
+    n, fields, yearly, iron_t, steel_t, holds = _iron_and_after(route, assumptions)
+    hbi_t = float(-n.links_t.p1["briquetting"].sum()) * 8760.0 / len(n.snapshots)
+    job = lambda name: fields[f"cost_electricity_{name}_eur_per_t_steel"] * steel_t
+    press_share = job("briquetting") / (job("reduction") + job("electrolyser") + job("briquetting"))
+    press = (yearly["briquetting_capex"] + yearly["briquetting_fom"]
+             + job("briquetting") + job("losses") * press_share)
+
+    assert holds == "hbi"
+    assert fields["lcohbi_eur_per_t_hbi"] * hbi_t == pytest.approx(
+        fields["lcoi_eur_per_t_iron"] * iron_t + press + yearly["iron_or_hbi_store"], rel=1e-9)
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_the_cost_of_iron_is_the_sum_of_its_parts(route, assumptions):
+    """The breakdown stacks to the levelised cost of iron, the hydrogen without its
+    power (that is in the electricity) and the carbon apart from the gas."""
+    _, fields, _, iron_t, steel_t, _ = _iron_and_after(route, assumptions)
+    # The plant per tonne of steel is the same yearly euros as per tonne of iron.
+    assert fields["cost_ironmaking_plant_eur_per_t_steel"] * steel_t == pytest.approx(
+        fields["cost_ironmaking_plant_eur_per_t_iron"] * iron_t, rel=1e-9)
+    parts = ("ore", "ironmaking_plant_capex", "ironmaking_plant_fom", "gas_fuel", "gas_carbon",
+             "electrolyser", "h2_buffer", "electricity", "iron_store")
+    assert sum(fields[f"cost_{part}_eur_per_t_iron"] for part in parts) == pytest.approx(
+        fields["lcoi_eur_per_t_iron"], rel=1e-9)
+    assert fields["cost_ironmaking_plant_eur_per_t_iron"] == pytest.approx(
+        fields["cost_ironmaking_plant_capex_eur_per_t_iron"]
+        + fields["cost_ironmaking_plant_fom_eur_per_t_iron"], rel=1e-9)
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_the_cost_of_iron_per_tonne_of_steel_is_its_parts_on_that_basis(route, assumptions):
+    """The iron per tonne of steel is the same euros as per tonne of iron, and the
+    steel-basis rows that are its parts add up to it."""
+    _, fields, _, iron_t, steel_t, _ = _iron_and_after(route, assumptions)
+    total = fields["cost_ironmaking_eur_per_t_steel"]
+
+    assert total * steel_t == pytest.approx(fields["lcoi_eur_per_t_iron"] * iron_t, rel=1e-9)
+    parts = ("ore", "ironmaking_plant", "gas_fuel", "gas_carbon", "electrolyser", "h2_buffer",
+             "electricity_ironmaking", "ironmaking_store")
+    assert sum(fields[f"cost_{part}_eur_per_t_steel"] for part in parts) == pytest.approx(
+        total, rel=1e-9)

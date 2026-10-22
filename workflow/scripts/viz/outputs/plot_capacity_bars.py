@@ -23,8 +23,9 @@ from plotly.subplots import make_subplots
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
+from common._constants import HOURS_PER_YEAR
 from common._logging import configure_logging
-from common._report_schema import PROCESS_LINKS, field_stem, read_report
+from common._report_schema import ORE_LINKS, PROCESS_LINKS, field_stem, read_report
 from scripts.viz._run_display import run_labels
 from scripts.viz.style import (
     apply_header,
@@ -64,18 +65,14 @@ WIND_SOLO_COLOR  = fca_blue
 _BAR_WIDTH = 0.12
 
 PROCESS_BARS = [
-    ("dri_h2_t_per_h", "H2-DRI shaft (t/h iron)",   blue_gray),
-    ("dri_ng_t_per_h", "NG-DRI shaft (t/h iron)",   light_blue_gray),
-    ("dri_mix_t_per_h", "Blended shaft (t/h iron)", green),
+    ("ironmaking_t_per_h", "Ironmaking (t/h iron)",  blue_gray),
     ("eaf_t_per_h",    "EAF (t/h steel)",           very_dark_gray),
-    ("moe_t_per_h",    "MOE (t/h steel)",           highlight_blue),
-    ("ew_t_per_h",     "Electrowinning (t/h iron)", turquois),
     ("briquetting_t_per_h", "Briquetting (t/h HBI)", gray),
 ]
 
 STORAGE_BARS = [
     ("h2_buffer_duration_hours", "H₂ buffer (h of avg DRI H₂ draw)", light_blue),
-    ("iron_store_hours_steel", "Iron store (h of steel output)",  gray),
+    ("iron_or_hbi_store_hours_steel", "Iron / HBI store (h of steel output)",  gray),
     ("steel_store_hours_steel", "Steel inventory (h of steel output)", blue_gray),
 ]
 
@@ -132,14 +129,16 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
             row["solar_mw"] = r["solar_gw_opt"] * 1e3
         for col in wind_cols:
             row[f"{col.replace('_gw_opt','')}_mw"] = r[col] * 1e3
-        # Every report row carries `{link}_t_per_h_opt` for each of
-        # PROCESS_LINKS (common/_report_schema.py), reading 0 on a route
-        # without that step.
+        # The ironmaking step is one row whatever the route, in Mt a year at
+        # full utilisation; the bars are t/h, so it goes back to an hour.
+        # The furnace and the press keep `{link}_t_per_h_opt`, 0 where unbuilt.
+        row["ironmaking_t_per_h"] = r["ironmaking_capacity_mt_opt"] * 1e6 / HOURS_PER_YEAR
         for link in PROCESS_LINKS:
-            stem = field_stem(link)
-            row[f"{stem}_t_per_h"] = r[f"{stem}_t_per_h_opt"]
+            if link not in ORE_LINKS:
+                stem = field_stem(link)
+                row[f"{stem}_t_per_h"] = r[f"{stem}_t_per_h_opt"]
         row["h2_buffer_duration_hours"] = r["h2_buffer_duration_hours"]
-        row["iron_store_hours_steel"] = r["iron_store_hours_steel"]
+        row["iron_or_hbi_store_hours_steel"] = r["iron_or_hbi_store_hours_steel"]
         row["steel_store_hours_steel"] = r["steel_store_hours_steel"]
         rows.append(row)
     return pd.DataFrame(rows).set_index("label")

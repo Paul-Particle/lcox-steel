@@ -549,7 +549,9 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         "h2_buffer": store_capital("h2_buffer"),
         "process": link_capital(PROCESS_LINKS),
         "ore_consumables": link_marginal(PROCESS_LINKS),
-        "iron_store": store_capital("iron_store"),
+        # Named for what it may hold, iron or briquettes; the network's store
+        # keeps its own name.
+        "iron_or_hbi_store": store_capital("iron_store"),
         "steel_store": store_capital("steel_store"),
         "transmission": link_capital(hvdc),
         # Freight has no capex — the whole bill is the per-t-km charge. Only
@@ -650,8 +652,10 @@ def _leaf_breakdown(
             continue
         share = _fixed_om_share(wacc_of(link), assumptions[link],
                                 "capex_per_t_per_year_eur", "opex_per_t_per_year_eur")
-        leaves[f"{field_stem(link)}_fom"] = annual * share
-        leaves[f"{field_stem(link)}_capex"] = annual * (1.0 - share)
+        # Each split on its own quotes; the ironmaking steps land in one pair.
+        stem = "ironmaking_plant" if link in ORE_LINKS else field_stem(link)
+        leaves[f"{stem}_fom"] += annual * share
+        leaves[f"{stem}_capex"] += annual * (1.0 - share)
 
     # -- natural gas: the fuel bill, and separately any carbon price on it. Both
     # ride on the gas generator's marginal cost, so the carbon comes out at the
@@ -742,7 +746,7 @@ def _leaf_breakdown(
                      breakdown["destination_electricity"], "destination_grid")
 
     # -- what is already as fine as the model cuts it
-    for group in ("transmission", "iron_store", "steel_store", "transport"):
+    for group in ("transmission", "iron_or_hbi_store", "steel_store", "transport"):
         leaves[group] = breakdown[group]
 
     # Every group is either split into leaves or carried into one, so the leaves
@@ -842,10 +846,12 @@ def _leaf_breakdown(
     # -- ironmaking's share of the origin's electricity, per tonne of iron. Every
     # MWh at the system's average cost, as the jobs above are priced, so the share
     # is the ironmaking steps' draw over everything drawn at the origin — the
-    # losses go with it in proportion. On an export route the furnace melts
-    # abroad, draws nothing here, and the share is the whole origin system.
-    iron_mwh = reduction_mwh + electrolyser_mwh + briquetting_mwh
-    iron_share = iron_mwh / (iron_mwh + melt_mwh) if iron_mwh + melt_mwh > 0 else 0.0
+    # losses go with it in proportion. Ironmaking stops at the DRI: the press and
+    # the furnace after it are steps of their own, with their own shares. On an
+    # export route the furnace melts abroad and draws nothing here.
+    iron_mwh = reduction_mwh + electrolyser_mwh
+    drawn_at_origin = iron_mwh + briquetting_mwh + melt_mwh
+    iron_share = iron_mwh / drawn_at_origin if drawn_at_origin > 0 else 0.0
     iron_t = _iron_produced_t(n) * annual_scale
     if iron_t > 0:
         per_t_iron = {leaf: leaves[leaf] * iron_share / iron_t for leaf in ORIGIN_ELECTRICITY_LEAVES}
@@ -856,16 +862,18 @@ def _leaf_breakdown(
                        for name, parts in LEAF_SUBTOTALS.items()
                        if all(leaf in per_t_iron for leaf in parts)})
         # And by job: each ironmaking job's MWh at the average rate, the losses
-        # at ironmaking's share of them, so the four close on the same total.
+        # at ironmaking's share of them, so the three close on the same total.
         iron_jobs = {
             "reduction": reduction_mwh * home_rate,
             "electrolyser": electrolyser_mwh * home_rate,
-            "briquetting": briquetting_mwh * home_rate,
             "losses": losses_mwh * iron_share * home_rate,
         }
         assert set(iron_jobs) == set(IRON_ELECTRICITY_JOBS)
         fields.update({f"cost_electricity_{job}_eur_per_t_iron": value / iron_t
                        for job, value in iron_jobs.items()})
+        # The press beside them, per tonne of the DRI it pressed — its own draw at
+        # the average rate, as its per-tonne-of-steel job is, outside the total.
+        fields["cost_electricity_briquetting_eur_per_t_iron"] = briquetting_mwh * home_rate / iron_t
         # The hydrogen's own costs per tonne of iron: all of them, since all the
         # hydrogen goes into ironmaking. The total, which also needs the
         # electricity at the LCOH's rate, is written beside the LCOH.
@@ -874,6 +882,55 @@ def _leaf_breakdown(
         fields.update({f"cost_electrolyser_{part}_eur_per_t_iron": value / iron_t
                        for part, value in electrolyser.items()})
         fields["cost_h2_buffer_eur_per_t_iron"] = leaves["h2_buffer"] / iron_t
+
+        # -- the levelised cost of the iron at the plant gate: every yearly euro
+        # inside a line round the ironmaking asset, capital already annualised at
+        # its own WACC and lifetime, over the iron the shaft or cells made. The
+        # electricity is the iron's share above, so the electrolyser's power is
+        # counted there and not again with the hydrogen. A store goes with what
+        # it holds: the iron's into the iron, the briquettes' into the briquettes.
+        store_holds = n.stores.at["iron_store", "bus"] if "iron_store" in n.stores.index else None
+        iron_parts = {
+            "ore": leaves["ore"],
+            "ironmaking_plant_capex": leaves["ironmaking_plant_capex"],
+            "ironmaking_plant_fom": leaves["ironmaking_plant_fom"],
+            "gas_fuel": leaves["gas_fuel"],
+            "gas_carbon": leaves["gas_carbon"],
+            "electrolyser": sum(electrolyser.values()),
+            "h2_buffer": leaves["h2_buffer"],
+            "electricity": sum(leaves[leaf] for leaf in ORIGIN_ELECTRICITY_LEAVES) * iron_share,
+            "iron_store": leaves["iron_or_hbi_store"] if store_holds == "iron" else 0.0,
+        }
+        iron_cost = sum(iron_parts.values())
+        fields["lcoi_eur_per_t_iron"] = iron_cost / iron_t
+        # The parts the breakdown adds; the electrolyser, buffer and electricity
+        # rows are already written above.
+        for part in ("ore", "ironmaking_plant_capex", "ironmaking_plant_fom",
+                     "gas_fuel", "gas_carbon", "iron_store"):
+            fields[f"cost_{part}_eur_per_t_iron"] = iron_parts[part] / iron_t
+        fields["cost_ironmaking_plant_eur_per_t_iron"] = (
+            iron_parts["ironmaking_plant_capex"] + iron_parts["ironmaking_plant_fom"]) / iron_t
+        # The same iron per tonne of steel, and the two parts of it the steel's
+        # breakdown does not already carry.
+        fields["cost_ironmaking_eur_per_t_steel"] = iron_cost / steel_t
+        fields["cost_electricity_ironmaking_eur_per_t_steel"] = iron_parts["electricity"] / steel_t
+        fields["cost_ironmaking_store_eur_per_t_steel"] = iron_parts["iron_store"] / steel_t
+
+        # -- and of the briquettes: the iron, the press with its own electricity
+        # and its share of the losses, and the stockpile the briquettes wait in,
+        # over the briquettes — so the fines the press screens out are paid for
+        # by the tonnes that are left.
+        if "briquetting" in n.links.index:
+            hbi_t = float(-n.links_t.p1["briquetting"].sum()) * annual_scale
+            press_share = briquetting_mwh / drawn_at_origin if drawn_at_origin > 0 else 0.0
+            hbi_cost = (
+                iron_cost
+                + leaves["briquetting_capex"] + leaves["briquetting_fom"]
+                + (briquetting_mwh + losses_mwh * press_share) * home_rate
+                + (leaves["iron_or_hbi_store"] if store_holds != "iron" and store_holds is not None else 0.0)
+            )
+            if hbi_t > 0:
+                fields["lcohbi_eur_per_t_hbi"] = hbi_cost / hbi_t
 
     # The same capital/upkeep split on the carriers, over each carrier's own
     # denominator so the parts stack to the reported part they divide.
@@ -910,8 +967,6 @@ def _leaf_breakdown(
         fields[f"annuity_factor_{field_stem(link)}"] = annuity_factor(
             wacc_of(link), assumptions[link]["lifetime_years"]
         )
-    for link in ORE_LINKS:
-        fields[f"ore_quote_{field_stem(link)}_eur_per_t_iron"] = assumptions[link]["ore_eur_per_t"]
     if "eaf" in n.links.index:
         # The furnace's efficiency is tonnes of steel per tonne of iron, so its
         # reciprocal is the charge this route feeds it — off the network, rather
@@ -948,14 +1003,12 @@ def _res_energy(n: pypsa.Network, hours_per_year: float) -> dict[str, float]:
 
 
 def _iron_produced_t(n: pypsa.Network) -> float:
-    """Tonnes of iron the ironmaking steps put out over the snapshots.
+    """Tonnes of iron the ironmaking step put out over the snapshots.
 
-    The route's own iron product: what leaves the shaft or the cells, or on a
-    route that briquettes it, the briquettes — the press is part of making the
-    iron, and HBI is what it hands on. Not annualised.
+    What leaves the shaft or the cells, on every route: DRI, liquid iron or
+    plates. A route that briquettes its DRI presses it afterwards and loses a
+    little to screening; that is `hbi_produced_mt`, not this. Not annualised.
     """
-    if "briquetting" in n.links.index:
-        return float(-n.links_t.p1["briquetting"].sum())
     return float(sum(-n.links_t.p1[link].sum() for link in ORE_LINKS if link in n.links.index))
 
 
@@ -1018,6 +1071,12 @@ def extract_summary(
     steel_t_per_year = steel_t_per_h * hours_per_year
     summary["lcos_eur_per_t"] = total_annual_cost / steel_t_per_year
     summary["steel_produced_mt"] = steel_t_per_year / 1e6
+    # The iron the ironmaking step made, and on a route that briquettes it what
+    # the press made of that, a little less for the fines it screens out.
+    summary["iron_produced_mt"] = _iron_produced_t(n) * hours_per_year / len(n.snapshots) / 1e6
+    if "briquetting" in n.links.index:
+        summary["hbi_produced_mt"] = (float(-n.links_t.p1["briquetting"].sum())
+                                      * hours_per_year / len(n.snapshots) / 1e6)
 
     if "electrolyser" in n.links.index:
         summary["h2_produced_kt"] = _h2_produced_kg(n) / 1e6
@@ -1177,42 +1236,27 @@ def extract_summary(
                 summary["cost_h2_production_eur_per_t_iron"] = (
                     (el_cost + buf_cost + elec_for_h2) / iron_t)
 
-    # Cost detail for the hover: per-plant levelised capex and the ore-vs-consumables
-    # split, all €/t steel on the same denominator as the LCOS cost groups — so the
-    # per-plant figures sum to the "process" group and ore+consumables to the
-    # "ore_consumables" group. Ore is the feedstock priced on the reduction/
-    # electrolysis links; consumables is the EAF's marginal cost.
-    def _link_capex(link_name: str) -> float:
-        return (float(n.links.at[link_name, "capital_cost"] * n.links.at[link_name, "p_nom_opt"])
-                if link_name in n.links.index and bool(n.links.at[link_name, "p_nom_extendable"])
-                else 0.0)
-
-    def _link_marginal(link_name: str) -> float:
-        if link_name not in n.links.index or link_name not in n.links_t.p0.columns:
-            return 0.0
-        return float((n.links_t.p0[link_name] * n.links.at[link_name, "marginal_cost"]).sum()) * annual_scale
-
-    for link in PROCESS_LINKS:
-        summary[f"plant_{field_stem(link)}_eur_per_t_steel"] = _link_capex(link) / steel_t_per_year
-    # Every link that buys ore — the blended shaft included, where the
-    # ore is over a third of the cost of the steel — so this column and
-    # `consumables` add up to the `ore_consumables` group and the leaf
-    # split under it reaches the same total.
-    ore = sum(_link_marginal(link) for link in ORE_LINKS)
-    summary["ore_eur_per_t_steel"] = ore / steel_t_per_year
-    summary["consumables_eur_per_t_steel"] = _link_marginal("eaf") / steel_t_per_year
-
     # Steel-route process links: capacity in output units (t/h of iron or
     # steel — p_nom is input-side, so scale by the link efficiency) plus
     # utilisation, which shows how far each step actually load-follows.
+    # The route's one ironmaking step — whichever of the shafts or cells it built —
+    # at full utilisation for a year. Not what it made: that is this times its
+    # utilisation.
+    summary["ironmaking_capacity_mt_opt"] = sum(
+        n.links.at[link, "p_nom_opt"] * n.links.at[link, "efficiency"]
+        for link in ORE_LINKS if link in n.links.index
+    ) * hours_per_year / 1e6
     for link in PROCESS_LINKS:
         if link not in n.links.index:
             continue
         p_nom = n.links.at[link, "p_nom_opt"]
-        summary[f"{field_stem(link)}_t_per_h_opt"] = p_nom * n.links.at[link, "efficiency"]
-        summary[f"{field_stem(link)}_utilization"] = (
-            float(n.links_t.p0[link].mean() / p_nom) if p_nom > 0 else float("nan")
-        )
+        utilization = float(n.links_t.p0[link].mean() / p_nom) if p_nom > 0 else float("nan")
+        if link in ORE_LINKS:
+            # One row for the route's ironmaking step, like its capacity.
+            summary["ironmaking_utilization"] = utilization
+        else:
+            summary[f"{field_stem(link)}_t_per_h_opt"] = p_nom * n.links.at[link, "efficiency"]
+            summary[f"{field_stem(link)}_utilization"] = utilization
 
     if "gas_supply" in n.generators.index:
         gas_mwh = float(n.generators_t.p["gas_supply"].sum()) * (hours_per_year / len(n.snapshots))
@@ -1238,8 +1282,13 @@ def extract_summary(
 
     if "iron_store" in n.stores.index:
         store_t = n.stores.at["iron_store", "e_nom_opt"]
-        summary["iron_store_kt"] = store_t / 1e3
-        summary["iron_store_hours_steel"] = store_t / steel_t_per_h
+        summary["iron_or_hbi_store_kt"] = store_t / 1e3
+        # Hours of steel the stockpile could keep the furnace making: what it holds
+        # over what the furnace draws an hour, which is more than a tonne of iron
+        # or briquettes per tonne of steel. The furnace's efficiency is steel per
+        # tonne charged, so its reciprocal is the charge per tonne of steel.
+        charge_t_per_t_steel = 1.0 / float(n.links.at["eaf", "efficiency"])
+        summary["iron_or_hbi_store_hours_steel"] = store_t / (steel_t_per_h * charge_t_per_t_steel)
 
     annual = hours_per_year / len(n.snapshots)
     for link, field in (("iron_transport", "iron_shipped_kt"),

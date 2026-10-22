@@ -30,6 +30,7 @@ import yaml
 from plotly.utils import PlotlyJSONEncoder
 
 from common._constants import H2_LHV_KWH_PER_KG
+from scripts.viz.dashboard import cost_taxonomy
 
 REPO = Path(__file__).resolve().parents[4]  # workflow/scripts/viz/dashboard/ -> repo root
 RESULTS = REPO / "results"
@@ -131,7 +132,7 @@ COST_GROUPS = [
     ["process",         "Process plant (capex+opex)", "#33434D"],
     ["ore_consumables", "Ore & consumables",          "#E2B681"],
     ["gas",             "Natural gas (fuel + CO₂)",   "#525F6A"],
-    ["iron_store",      "Iron stockpile",             "#B7C1C8"],
+    ["iron_or_hbi_store", "Iron / HBI stockpile",     "#B7C1C8"],
     ["transport",       "Freight",                    "#BDCCD9"],
     ["destination_electricity", "Destination electricity", "#0293D2"],
     ["steel_store",     "Steel inventory",            "#8CA5B7"],
@@ -156,15 +157,12 @@ CAP_PANELS = [
         ["grid_mw",          "Grid connection",      "#71828F"],
     ]],
     ["Process capacity (t/h output)", "t/h", [
-        ["dri_h2_t_per_h", "H2-DRI shaft",   "#8CA5B7"],
-        ["dri_ng_t_per_h", "NG-DRI shaft",   "#BDCCD9"],
+        ["ironmaking_t_per_h", "Ironmaking", "#8CA5B7"],
         ["eaf_t_per_h",    "EAF",            "#525F6A"],
-        ["moe_t_per_h",    "MOE",            "#0293D2"],
-        ["ew_t_per_h",     "Electrowinning", "#83D1DD"],
     ]],
     ["Storage (hours of demand)", "h", [
         ["h2_buffer_duration_hours", "H₂ buffer",      "#70D2F0"],
-        ["iron_store_hours_steel",  "Iron store",      "#B7C1C8"],
+        ["iron_or_hbi_store_hours_steel", "Iron / HBI store", "#B7C1C8"],
         ["steel_store_hours_steel", "Steel inventory", "#8CA5B7"],
     ]],
 ]
@@ -326,23 +324,26 @@ def _record(row, lcos_row, cap_row):
         v = _opt(row[col])
         if v is not None:
             lcoh_parts[key] = v * 1000.0 / H2_LHV_KWH_PER_KG
-    # €/t-steel cost detail: per-plant capex (sums to the "process" group) plus the
-    # ore/consumables split (sums to "ore_consumables"). For the segment hovers.
+    # €/t-steel cost detail: per-plant cost, capital and upkeep together (sums to
+    # the "process" group), plus the ore/consumables split (sums to
+    # "ore_consumables"). For the segment hovers, read off the cost leaves. The
+    # blended shaft and the press are here too, or on a blended or an export
+    # route the per-plant lines would come to less than the group they add up to.
     cost_detail = {}
-    for col, key in (
-        ("plant_dri_h2_eur_per_t_steel", "dri"),
-        ("plant_dri_ng_eur_per_t_steel", "dri_ng"),
-        # The blended shaft and the briquetting press were absent, so on a
-        # blended or an export route the per-plant lines came to well under the
-        # process group they are meant to add up to.
-        ("plant_dri_mix_eur_per_t_steel", "dri_mix"),
-        ("plant_briquetting_eur_per_t_steel", "briquetting"),
-        ("plant_eaf_eur_per_t_steel", "eaf"),
-        ("plant_moe_eur_per_t_steel", "moe"),
-        ("plant_ew_eur_per_t_steel", "electrowinning"),
-        ("ore_eur_per_t_steel", "ore"),
-        ("consumables_eur_per_t_steel", "consumables"),
-    ):
+    # The ironmaking plant is one pair of leaves whatever the route; the hover
+    # names it after the step the run built, under the key that step always had.
+    built = cost_taxonomy.built_ironmaking(row)
+    plant = _opt(row["cost_ironmaking_plant_eur_per_t_steel"])
+    if built is not None and plant is not None:
+        key = {"dri-h2": "dri", "dri-ng": "dri_ng", "dri-mix": "dri_mix",
+               "moe": "moe", "ew": "electrowinning"}[built[0]]
+        cost_detail[key] = plant
+    for stem in ("briquetting", "eaf"):
+        halves = [_opt(row[f"cost_{stem}_{half}_eur_per_t_steel"]) for half in ("capex", "fom")]
+        if any(v is not None for v in halves):
+            cost_detail[stem] = sum(v or 0.0 for v in halves)
+    for col, key in (("cost_ore_eur_per_t_steel", "ore"),
+                     ("cost_consumables_eur_per_t_steel", "consumables")):
         v = _opt(row[col])
         if v is not None:
             cost_detail[key] = v
@@ -355,11 +356,8 @@ def _record(row, lcos_row, cap_row):
         ("wind_offshore_mw", "cf_wind_offshore"),
         ("grid_mw", "cf_grid_connection"),
         ("electrolyser_mw", "electrolyser_utilization"),
-        ("dri_h2_t_per_h", "dri_h2_utilization"),
-        ("dri_ng_t_per_h", "dri_ng_utilization"),
+        ("ironmaking_t_per_h", "ironmaking_utilization"),
         ("eaf_t_per_h", "eaf_utilization"),
-        ("moe_t_per_h", "moe_utilization"),
-        ("ew_t_per_h", "ew_utilization"),
     ):
         raw = row[col]
         if pd.notna(raw):

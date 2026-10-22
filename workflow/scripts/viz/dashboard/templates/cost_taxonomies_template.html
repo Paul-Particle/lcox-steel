@@ -701,7 +701,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       if(g==="transmission") return lp(rec,"transmission")!=null
         ? [["transmission:", amountOf(lp(rec,"transmission"), rec.lcoe, "LCOE", "€/MWh", 1)]] : [];
       if(g==="grid") return gridLines(rec);
-      if(g==="iron_store" || g==="steel_store") return storeLines(rec, g);
+      if(g==="iron_or_hbi_store" || g==="steel_store") return storeLines(rec, g);
       return [];
     };
     if(!PURPOSE_ONLY) stacked(document.getElementById("plot-lcos-dash"), routes,
@@ -713,12 +713,14 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // The solid stores cost too little to round to a €/t band, so name their size too.
   function storeLines(rec, only){
     const out=[];
-    [["iron_store","· iron stockpile","iron_store_hours"],
-     ["steel_store","· steel inventory","steel_store_hours"]].forEach(([g,lab])=>{
+    // The iron store is named for what it may hold, iron or briquettes, as both
+    // its cost group and its leaf; its size rows keep the store's own name.
+    [["iron_or_hbi_store","· iron / HBI stockpile","iron_or_hbi_store"],
+     ["steel_store","· steel inventory","steel_store"]].forEach(([g,lab,leaf])=>{
       if(only && g!==only) return;
-      const v = (rec.leaves||{})[g];
+      const v = (rec.leaves||{})[leaf];
       if(v==null) return;
-      const hours = (rec.caps||{})[g==="iron_store"?"iron_store_hours_steel":"steel_store_hours_steel"];
+      const hours = (rec.caps||{})[g==="iron_or_hbi_store"?"iron_or_hbi_store_hours_steel":"steel_store_hours_steel"];
       out.push([lab, amount(v,"€/t",2) + (hours!=null?` for ${nf(hours,0)} h of demand`:"")]);
     });
     return out;
