@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from common._constants import H2_LHV_KWH_PER_KG
 from common._report_schema import (
     ELECTRICITY_JOBS,
     LEAF_COSTS,
@@ -171,7 +172,7 @@ def leaf_inputs(row: pd.Series) -> dict:
     # -- hydrogen
     electrolyser_built = quantity("electrolyser_gw", "built", "{:,.3f} GW input")
     electrolyser_use = quantity("electrolyser_utilization", "utilisation", "{:.0%}")
-    h2_made = quantity("h2_kg_per_t_steel", "H₂ produced", "{:,.0f} kg H₂ / t steel")
+    h2_made = quantity("h2_produced_kg_per_t_steel", "H₂ produced", "{:,.0f} kg H₂ / t steel")
     add("electrolyser_capex", electrolyser_built, electrolyser_use, h2_made)
     add("electrolyser_fom", electrolyser_built, electrolyser_use)
     add("electrolyser_water", h2_made,
@@ -179,7 +180,7 @@ def leaf_inputs(row: pd.Series) -> dict:
                  "{:,.2f} MWh / t steel"))
     add("h2_buffer",
         quantity("h2_buffer_gwh", "size", "{:,.2f} GWh LHV"),
-        quantity("h2_buffer_hours_dri", "cover", "{:,.0f} h of DRI demand"))
+        quantity("h2_buffer_duration_hours", "cover", "{:,.0f} h of DRI demand"))
 
     # -- the electricity system
     for tech, _ in RES_TECH_LABELS:
@@ -278,13 +279,15 @@ def carrier_splits(row: pd.Series) -> dict:
         "transmission": "lcoe_transmission_eur_per_mwh",
         "destination_electricity": "lcoe_destination_electricity_eur_per_mwh",
     })
-    lcoh = _present(row, {
-        "electrolyser_capex": "lcoh_electrolyser_capex_eur_per_mwh_lhv",
-        "electrolyser_fom": "lcoh_electrolyser_fom_eur_per_mwh_lhv",
-        "electrolyser_water": "lcoh_electrolyser_water_eur_per_mwh_lhv",
-        "storage": "lcoh_h2_storage_eur_per_mwh_lhv",
-        "electricity": "lcoh_electricity_eur_per_mwh_lhv",
-    })
+    # The report gives the hydrogen's parts per kg; the page works in €/MWh LHV
+    # and converts to kg itself, so they go back to that unit here.
+    lcoh = {key: value * 1000.0 / H2_LHV_KWH_PER_KG for key, value in _present(row, {
+        "electrolyser_capex": "lcoh_electrolyser_capex_eur_per_kg",
+        "electrolyser_fom": "lcoh_electrolyser_fom_eur_per_kg",
+        "electrolyser_water": "lcoh_electrolyser_water_eur_per_kg",
+        "storage": "lcoh_h2_storage_eur_per_kg",
+        "electricity": "lcoh_electricity_eur_per_kg",
+    }).items()}
     return {"lcoe": lcoe, "lcoh": lcoh}
 
 # ---- the published leaf specification ------------------------------------

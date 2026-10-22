@@ -312,7 +312,7 @@ def test_the_iron_s_electricity_is_its_share_of_the_steel_s(route, assumptions):
     assert sum(fields[f"cost_electricity_{leaf}_eur_per_t_iron"]
                for leaf in ORIGIN_ELECTRICITY_LEAVES) == pytest.approx(total, rel=1e-9)
     for name, parts in LEAF_SUBTOTALS.items():
-        if name != "destination_electricity":
+        if set(parts) <= set(ORIGIN_ELECTRICITY_LEAVES):
             assert fields[f"cost_electricity_{name}_eur_per_t_iron"] == pytest.approx(
                 sum(fields[f"cost_electricity_{leaf}_eur_per_t_iron"] for leaf in parts), rel=1e-9)
     assert pd.isna(fields.get("cost_electricity_battery_fom_eur_per_t_iron", float("nan")))

@@ -866,6 +866,14 @@ def _leaf_breakdown(
         assert set(iron_jobs) == set(IRON_ELECTRICITY_JOBS)
         fields.update({f"cost_electricity_{job}_eur_per_t_iron": value / iron_t
                        for job, value in iron_jobs.items()})
+        # The hydrogen's own costs per tonne of iron: all of them, since all the
+        # hydrogen goes into ironmaking. The total, which also needs the
+        # electricity at the LCOH's rate, is written beside the LCOH.
+        electrolyser = {part: leaves[f"electrolyser_{part}"] for part in ("capex", "fom", "water")}
+        fields["cost_electrolyser_eur_per_t_iron"] = sum(electrolyser.values()) / iron_t
+        fields.update({f"cost_electrolyser_{part}_eur_per_t_iron": value / iron_t
+                       for part, value in electrolyser.items()})
+        fields["cost_h2_buffer_eur_per_t_iron"] = leaves["h2_buffer"] / iron_t
 
     # The same capital/upkeep split on the carriers, over each carrier's own
     # denominator so the parts stack to the reported part they divide.
@@ -875,13 +883,12 @@ def _leaf_breakdown(
             fields[f"lcoe_res_{part}_eur_per_mwh"] = sum(
                 leaves[f"res_{field_stem(tech)}_{part}"] for tech in RES_TECHS
             ) / generation_mwh
-    h2_mwh = (_h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
-              if "electrolyser" in n.links.index else 0.0)
-    if h2_mwh > 0:
+    for part in ("capex", "fom", "water"):
+        fields[f"cost_electrolyser_{part}_meur"] = leaves[f"electrolyser_{part}"] / 1e6
+    h2_kg = _h2_produced_kg(n) if "electrolyser" in n.links.index else 0.0
+    if h2_kg > 0:
         for part in ("capex", "fom", "water"):
-            fields[f"lcoh_electrolyser_{part}_eur_per_mwh_lhv"] = (
-                leaves[f"electrolyser_{part}"] / h2_mwh
-            )
+            fields[f"lcoh_electrolyser_{part}_eur_per_kg"] = leaves[f"electrolyser_{part}"] / h2_kg
 
     # -- what a tonne of steel took, measured off the run
     fields["el_eaf_mwh_per_t_steel"] = draws.get("eaf", 0.0) / steel_t
@@ -889,7 +896,7 @@ def _leaf_breakdown(
     fields["el_electrolyser_mwh_per_t_steel"] = draws.get("electrolyser", 0.0) / steel_t
     fields["gas_mwh_per_t_steel"] = gas_mwh / steel_t
     if "electrolyser" in n.links.index:
-        fields["h2_kg_per_t_steel"] = _h2_produced_kg(n) / steel_t
+        fields["h2_produced_kg_per_t_steel"] = _h2_produced_kg(n) / steel_t
     if "battery" in n.stores.index and "battery_charger" in n.links.index:
         power_mw = float(n.links.at["battery_charger", "p_nom_opt"])
         energy_mwh = float(n.stores.at["battery", "e_nom_opt"])
@@ -950,6 +957,16 @@ def _iron_produced_t(n: pypsa.Network) -> float:
     if "briquetting" in n.links.index:
         return float(-n.links_t.p1["briquetting"].sum())
     return float(sum(-n.links_t.p1[link].sum() for link in ORE_LINKS if link in n.links.index))
+
+
+def _h2_buffer_discharged_mwh(n: pypsa.Network, hours_per_year: float) -> float:
+    """Hydrogen the buffer gave back to the hydrogen bus in a year, MWh LHV.
+
+    A Store's p is positive when it feeds its bus, so the positive hours are its
+    discharge. Lossless and cyclic, so the same again went in.
+    """
+    discharge = n.stores_t.p["h2_buffer"].clip(lower=0.0)
+    return float(discharge.sum()) * hours_per_year / len(n.snapshots)
 
 
 def _battery_discharged_mwh(n: pypsa.Network, hours_per_year: float) -> float:
@@ -1140,13 +1157,25 @@ def extract_summary(
             # And per kg, which is the unit the cost-breakdown page charts
             # hydrogen in.
             summary["lcoh_eur_per_kg"] = lcoh * H2_LHV_KWH_PER_KG / 1000.0
-            # LCOH decomposition, €/MWh LHV over the same H2 denominator so the
-            # parts sum back to LCOH: the electrolyser plant, its electricity
-            # (valued at LCOE) and — where built — the H2 buffer store.
-            summary["lcoh_electrolyser_eur_per_mwh_lhv"] = el_cost / h2_mwh
-            summary["lcoh_electricity_eur_per_mwh_lhv"] = elec_for_h2 / h2_mwh
+            # LCOH decomposition, €/kg over the same H2 denominator so the parts
+            # sum back to `lcoh_eur_per_kg`: the electrolyser plant, its
+            # electricity (valued at LCOE) and — where built — the H2 buffer store.
+            h2_kg = h2_mwh * 1000.0 / H2_LHV_KWH_PER_KG
+            summary["lcoh_electrolyser_eur_per_kg"] = el_cost / h2_kg
+            summary["lcoh_electricity_eur_per_kg"] = elec_for_h2 / h2_kg
             if buf_cost > 0:
-                summary["lcoh_h2_storage_eur_per_mwh_lhv"] = buf_cost / h2_mwh
+                summary["lcoh_h2_storage_eur_per_kg"] = buf_cost / h2_kg
+            # The same three as yearly M€. Not cost groups: the electricity is
+            # part of the electricity groups already, so these add to each
+            # other and to `cost_electrolyser_meur` / `cost_h2_buffer_meur` only.
+            summary["cost_electricity_electrolyser_meur"] = elec_for_h2 / 1e6
+            summary["cost_h2_production_meur"] = (el_cost + buf_cost + elec_for_h2) / 1e6
+            summary["cost_h2_production_eur_per_t_steel"] = (
+                (el_cost + buf_cost + elec_for_h2) / steel_t_per_year)
+            iron_t = _iron_produced_t(n) * annual_scale
+            if iron_t > 0:
+                summary["cost_h2_production_eur_per_t_iron"] = (
+                    (el_cost + buf_cost + elec_for_h2) / iron_t)
 
     # Cost detail for the hover: per-plant levelised capex and the ore-vs-consumables
     # split, all €/t steel on the same denominator as the LCOS cost groups — so the
@@ -1199,7 +1228,13 @@ def extract_summary(
         from_h2 = -float(n.links_t.p1[h2_link].sum()) if h2_link in n.links.index else 0.0
         from_ng = -float(n.links_t.p1[ng_link].sum()) if ng_link in n.links.index else 0.0
         total = from_h2 + from_ng
-        summary["iron_from_h2_share"] = from_h2 / total if total else float("nan")
+        summary["reductant_h2_share"] = from_h2 / total if total else float("nan")
+        # The same split on what went in rather than what it reduced: each link's
+        # input side is the fuel itself, MWh LHV of hydrogen or of gas.
+        h2_fed = float(n.links_t.p0[h2_link].sum()) if h2_link in n.links.index else 0.0
+        ng_fed = float(n.links_t.p0[ng_link].sum()) if ng_link in n.links.index else 0.0
+        fed = h2_fed + ng_fed
+        summary["reductant_h2_share_energy"] = h2_fed / fed if fed > 0 else float("nan")
 
     if "iron_store" in n.stores.index:
         store_t = n.stores.at["iron_store", "e_nom_opt"]
@@ -1243,14 +1278,21 @@ def extract_summary(
     if "h2_buffer" in n.stores.index:
         buffer_mwh = n.stores.at["h2_buffer", "e_nom_opt"]
         summary["h2_buffer_gwh"] = buffer_mwh / 1e3
-        # Additionally as hours of the H₂ shaft's mean H₂ draw.
-        if "dri-h2" in n.links.index:
-            h2_demand_mw = float(n.links_t.p0["dri-h2"].mean())
-        else:
-            h2_demand_mw = 0.0
-        summary["h2_buffer_hours_dri"] = (
-            buffer_mwh / h2_demand_mw if h2_demand_mw else float("nan")
+        summary["h2_buffer_kt"] = buffer_mwh * 1000.0 / H2_LHV_KWH_PER_KG / 1e6
+        # Additionally as hours of the shaft's mean H₂ draw: what the H2 shaft
+        # takes, or on the blend shaft what its hydrogen feed takes.
+        h2_demand_mw = sum(float(n.links_t.p0[link].mean())
+                           for link in ("dri-h2", "reductant-h2") if link in n.links.index)
+        summary["h2_buffer_duration_hours"] = (
+            buffer_mwh / h2_demand_mw if buffer_mwh > 0 and h2_demand_mw > 0 else float("nan")
         )
+        discharged_mwh = _h2_buffer_discharged_mwh(n, hours_per_year)
+        discharged_kg = discharged_mwh * 1000.0 / H2_LHV_KWH_PER_KG
+        summary["h2_buffer_discharged_kt"] = discharged_kg / 1e6
+        if buffer_mwh > 0:
+            summary["h2_buffer_cycles_per_year"] = discharged_mwh / buffer_mwh
+        if "electrolyser" in n.links.index and _h2_produced_kg(n) > 0:
+            summary["h2_buffer_share_of_h2_pct"] = discharged_kg * 100.0 / _h2_produced_kg(n)
 
     if "electrolyser" in n.links.index:
         el_cap = n.links.at["electrolyser", "p_nom_opt"]

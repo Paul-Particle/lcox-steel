@@ -22,6 +22,8 @@ from scripts.solve.build_network import build_network
 from scripts.viz import _run_display, pick_best_run
 from scripts.viz.compile_report import (
     _battery_discharged_mwh,
+    _h2_buffer_discharged_mwh,
+    _iron_produced_t,
     _res_energy,
     extract_summary,
     input_variants,
@@ -363,3 +365,72 @@ def test_the_h2_shaft_reports_its_preheat_where_the_blend_shaft_does():
                      / (assumptions["dri-h2"]["el_mwh_per_t"]
                         + assumptions["dri-h2"]["h2_preheat_el_mwh_per_t"]))
     assert after["el_h2_preheat_gwh"] == pytest.approx(preheat_share * before["el_dri_h2_gwh"])
+
+
+
+def test_the_h2_buffer_counts_what_it_gave_back_not_what_it_took_in():
+    """Only the hours the store fed its bus are discharge: filling is not."""
+    n = pypsa.Network()
+    n.set_snapshots(pd.date_range("2025-01-01", periods=24, freq="h"))
+    n.add("Bus", "hydrogen")
+    n.add("Store", "h2_buffer", bus="hydrogen", e_cyclic=True)
+    # Twelve hours filling at 30 MW, twelve emptying at 30 MW.
+    n.stores_t.p = pd.DataFrame({"h2_buffer": [-30.0] * 12 + [30.0] * 12}, index=n.snapshots)
+
+    assert _h2_buffer_discharged_mwh(n, hours_per_year=24) == pytest.approx(30.0 * 12)
+    assert _h2_buffer_discharged_mwh(n, hours_per_year=8760) == pytest.approx(30.0 * 12 * 365)
+
+
+def test_a_zero_is_written_without_a_sign(tmp_path):
+    """Solver dust and a flipped zero both round to nothing, and read as 0, not -0."""
+    df = _report([("s", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
+    df["h2_produced_kg_per_t_steel"] = -0.0
+    df["h2_buffer_gwh"] = -1e-12
+    report_path, _ = _write(df, tmp_path)
+    stored = pd.read_csv(report_path).set_index("field")["s_VIC1"]
+
+    assert stored["h2_produced_kg_per_t_steel"] == "0.0"
+    assert stored["h2_buffer_gwh"] == "0.0"
+
+
+def test_the_hydrogen_s_yearly_cost_is_its_lcoh_times_what_was_made():
+    """The M€ set closes on itself: parts to total, and each part to its per-kg row."""
+    assumptions = yaml.safe_load((REPO_ROOT / "config" / ".template.yaml").read_text())
+    hours = np.arange(48)
+    cf = pd.DataFrame({"solar": np.clip(np.sin((hours % 24 - 6) / 12 * np.pi), 0, None),
+                       "wind-onshore": 0.35 + 0.3 * np.sin(hours / 7.0)},
+                      index=pd.date_range("2025-01-01", periods=48, freq="h"))
+    n = build_network("h2-dri-eaf", assumptions, cf)
+    n.optimize(solver_name="highs", solver_options={"output_flag": False})
+    s = extract_summary(n, "s", {"origin": "X", "destination": "X", "route": "h2-dri-eaf",
+                                 "start_date": "20250101", "end_date": "20250102"}, assumptions)
+    made = s["h2_produced_kt"]
+
+    assert s["cost_h2_production_meur"] == pytest.approx(
+        s["cost_electrolyser_meur"] + s["cost_h2_buffer_meur"]
+        + s["cost_electricity_electrolyser_meur"])
+    assert s["cost_h2_production_meur"] == pytest.approx(s["lcoh_eur_per_kg"] * made)
+    assert s["cost_electricity_electrolyser_meur"] == pytest.approx(
+        s["lcoh_electricity_eur_per_kg"] * made)
+    assert s["cost_electrolyser_meur"] == pytest.approx(s["lcoh_electrolyser_eur_per_kg"] * made)
+    assert s["cost_electrolyser_meur"] == pytest.approx(
+        sum(s[f"cost_electrolyser_{part}_meur"] for part in ("capex", "fom", "water")))
+    for part in ("capex", "fom", "water"):
+        assert s[f"cost_electrolyser_{part}_meur"] == pytest.approx(
+            s[f"lcoh_electrolyser_{part}_eur_per_kg"] * made)
+    # Per tonne of steel: the same total, over the steel, and on a route that
+    # melts at home its three parts are the rows the steel's breakdown carries.
+    assert s["cost_h2_production_eur_per_t_steel"] == pytest.approx(
+        s["cost_h2_production_meur"] / s["steel_produced_mt"])
+    assert s["cost_h2_production_eur_per_t_steel"] == pytest.approx(
+        s["cost_electrolyser_eur_per_t_steel"] + s["cost_h2_buffer_eur_per_t_steel"]
+        + s["cost_electricity_electrolyser_eur_per_t_steel"])
+    # And per tonne of iron: all of the hydrogen over the iron it reduced.
+    iron_t = _iron_produced_t(n) * 8760.0 / len(n.snapshots)
+    assert s["cost_h2_production_eur_per_t_iron"] == pytest.approx(
+        s["cost_h2_production_meur"] * 1e6 / iron_t)
+    assert s["cost_h2_production_eur_per_t_iron"] == pytest.approx(
+        s["cost_electrolyser_eur_per_t_iron"] + s["cost_h2_buffer_eur_per_t_iron"]
+        + s["cost_electricity_electrolyser_eur_per_t_iron"])
+    assert s["cost_electrolyser_eur_per_t_iron"] == pytest.approx(
+        sum(s[f"cost_electrolyser_{part}_eur_per_t_iron"] for part in ("capex", "fom", "water")))

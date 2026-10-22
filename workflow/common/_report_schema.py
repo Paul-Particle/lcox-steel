@@ -183,6 +183,8 @@ LEAF_SUBTOTALS = {
        for tech in RES_TECHS},
     "res": tuple(f"res_{field_stem(tech)}_{half}" for tech in RES_TECHS for half in ("capex", "fom")),
     "battery": ("battery_power_capex", "battery_energy_capex"),
+    # The electrolyser alone; with the buffer it is the `hydrogen` parent.
+    "electrolyser": ("electrolyser_capex", "electrolyser_fom", "electrolyser_water"),
     # The origin's grid connection and the energy bought through it.
     "grid": ("grid_connection_capex", "grid_capacity_fee", "grid_market", "grid_fee"),
     # The same four for the destination furnace's connection on an export route.
@@ -293,15 +295,48 @@ REPORT_FIELDS = {
     # furnace in another market, so there is no price it paid there.
     "destination_price_eur_per_mwh": UNDEFINED,
 
-    # Hydrogen: the levelised cost, its parts, and the plant behind them.
+    # Hydrogen: the levelised cost, its parts, and the plant behind them. The
+    # parts are per kg, the unit hydrogen is quoted in; they stack to
+    # `lcoh_eur_per_kg`, and the total is also given per MWh LHV.
     "lcoh_eur_per_mwh_lhv": UNDEFINED,
-    "lcoh_electrolyser_eur_per_mwh_lhv": UNDEFINED,
-    "lcoh_electricity_eur_per_mwh_lhv": UNDEFINED,
-    "lcoh_h2_storage_eur_per_mwh_lhv": UNDEFINED,
+    "lcoh_electrolyser_eur_per_kg": UNDEFINED,
+    "lcoh_electricity_eur_per_kg": UNDEFINED,
+    "lcoh_h2_storage_eur_per_kg": UNDEFINED,
+    # The hydrogen's yearly cost in M€, to sit beside `cost_electrolyser_meur` and
+    # `cost_h2_buffer_meur` as one set: the electrolyser's electricity, and the
+    # three together (the LCOH times the hydrogen made). Neither is a cost group.
+    # The electricity is a slice of `cost_res_meur`, `cost_battery_meur`,
+    # `cost_grid_meur` and `cost_transmission_meur`, already paid there, so
+    # neither row may be added to the cost groups or to `total_annual_cost_meur`:
+    # that counts the electrolyser's power twice. Add them only to each other.
+    "cost_electricity_electrolyser_meur": ZERO,
+    "cost_h2_production_meur": ZERO,
+    # The same total per tonne of steel. Its electricity part per tonne of steel
+    # is `cost_electricity_electrolyser_eur_per_t_steel`, and the same warning
+    # holds: it is already inside `cost_electricity_eur_per_t_steel`, so this
+    # total is never added to the six group totals or to `lcos_eur_per_t`.
+    "cost_h2_production_eur_per_t_steel": ZERO,
+    # `cost_electrolyser_meur` in its three parts: the annualised capital, the
+    # fixed O&M, and the water and consumables. They add up to it, so they are
+    # never added to it or to the cost groups beside it.
+    "cost_electrolyser_capex_meur": ZERO,
+    "cost_electrolyser_fom_meur": ZERO,
+    "cost_electrolyser_water_meur": ZERO,
     "electrolyser_gw": ZERO,
     "electrolyser_utilization": UNDEFINED,
     "h2_buffer_gwh": ZERO,
-    "h2_buffer_hours_dri": UNDEFINED,
+    # The same size as hydrogen mass, the unit the buffer's flows are in.
+    "h2_buffer_kt": ZERO,
+    # How long a full buffer would feed the shaft on its own: its size over the
+    # shaft's mean hydrogen draw, on either the H2 or the blend shaft.
+    "h2_buffer_duration_hours": UNDEFINED,
+    # The hydrogen taken out of the buffer in a year. The buffer is lossless, so
+    # it is also what went in. Cycles are equivalent full cycles over its size;
+    # the share is of the hydrogen the electrolyser made, so how much of the
+    # supply went through the buffer rather than straight to its users.
+    "h2_buffer_discharged_kt": ZERO,
+    "h2_buffer_cycles_per_year": UNDEFINED,
+    "h2_buffer_share_of_h2_pct": UNDEFINED,
 
     # The steel chain: what each step cost per tonne, how big it is, how hard it
     # runs, and the stores that let it run at a different rate from the plant.
@@ -310,7 +345,13 @@ REPORT_FIELDS = {
     "consumables_eur_per_t_steel": ZERO,
     **{f"{field_stem(link)}_t_per_h_opt": ZERO for link in PROCESS_LINKS},
     **{f"{field_stem(link)}_utilization": UNDEFINED for link in PROCESS_LINKS},
-    "iron_from_h2_share": UNDEFINED,
+    # Hydrogen's share of the reducing agent, two ways. By reduction: the share of
+    # the iron reduced with hydrogen, each fuel counted as the hydrogen it stands
+    # in for. By energy: hydrogen's share of the reducing agent's energy content
+    # (LHV) fed into the shaft, where the gas weighs more, needing more energy per
+    # tonne. 1 on the H2 shaft, 0 on the gas shaft, the model's choice on the blend.
+    "reductant_h2_share": UNDEFINED,
+    "reductant_h2_share_energy": UNDEFINED,
     "iron_store_kt": ZERO,
     "iron_store_hours_steel": UNDEFINED,
     # Zero on a route that melts its iron where it made it and stops at the
@@ -354,13 +395,24 @@ REPORT_FIELDS = {
     # The same total cut a second way, by the job each MWh did, as the steel's
     # electricity is by ELECTRICITY_JOBS. Never to be added to the cut above.
     **{f"cost_electricity_{job}_eur_per_t_iron": ZERO for job in IRON_ELECTRICITY_JOBS},
+    # The hydrogen per tonne of iron, the whole of it, since every kg goes into
+    # the shaft: the total, the electrolyser and its three parts, the buffer.
+    # The electricity part is `cost_electricity_electrolyser_eur_per_t_iron`
+    # above, already inside `cost_electricity_eur_per_t_iron`, so the total is
+    # never added to that or to any other iron or steel total.
+    "cost_h2_production_eur_per_t_iron": ZERO,
+    "cost_electrolyser_eur_per_t_iron": ZERO,
+    "cost_electrolyser_capex_eur_per_t_iron": ZERO,
+    "cost_electrolyser_fom_eur_per_t_iron": ZERO,
+    "cost_electrolyser_water_eur_per_t_iron": ZERO,
+    "cost_h2_buffer_eur_per_t_iron": ZERO,
     # The same capital/upkeep split on the two carriers, in their own units, so
     # each pair stacks to the reported part above it that it divides.
     "lcoe_res_capex_eur_per_mwh": ZERO,
     "lcoe_res_fom_eur_per_mwh": ZERO,
-    "lcoh_electrolyser_capex_eur_per_mwh_lhv": UNDEFINED,
-    "lcoh_electrolyser_fom_eur_per_mwh_lhv": UNDEFINED,
-    "lcoh_electrolyser_water_eur_per_mwh_lhv": UNDEFINED,
+    "lcoh_electrolyser_capex_eur_per_kg": UNDEFINED,
+    "lcoh_electrolyser_fom_eur_per_kg": UNDEFINED,
+    "lcoh_electrolyser_water_eur_per_kg": UNDEFINED,
 
     # What a tonne of steel took, for reading a cost against the thing behind
     # it. Each is measured off the run rather than taken from the coefficient
@@ -368,7 +420,7 @@ REPORT_FIELDS = {
     "el_eaf_mwh_per_t_steel": ZERO,
     "el_reduction_mwh_per_t_steel": ZERO,
     "el_electrolyser_mwh_per_t_steel": ZERO,
-    "h2_kg_per_t_steel": ZERO,
+    "h2_produced_kg_per_t_steel": ZERO,
     "gas_mwh_per_t_steel": ZERO,
     # Blank rather than zero on a run that built no battery: it is the store's
     # hours over its inverter rating, and neither exists to divide.
@@ -548,7 +600,10 @@ def write_report_file(frame: pd.DataFrame, path: Path, hold_back: tuple = ()) ->
     column_names = frame["scenario"].astype(str) + "_" + frame["run"].astype(str)
     on_schema = apply_schema(frame, hold_back)
     numeric = on_schema.select_dtypes("number").columns
-    on_schema[numeric] = on_schema[numeric].round(2)
+    # Adding 0.0 turns a negative zero into a plain one: a flow the solver left at
+    # -1e-12, or an output whose sign was flipped when it was nothing, would
+    # otherwise round to a "-0.0" that reads like a value.
+    on_schema[numeric] = on_schema[numeric].round(2) + 0.0
     on_schema.index = column_names
     path.parent.mkdir(parents=True, exist_ok=True)
     on_schema.T.to_csv(path, index_label="field")

@@ -29,6 +29,8 @@ import pandas as pd
 import yaml
 from plotly.utils import PlotlyJSONEncoder
 
+from common._constants import H2_LHV_KWH_PER_KG
+
 REPO = Path(__file__).resolve().parents[4]  # workflow/scripts/viz/dashboard/ -> repo root
 RESULTS = REPO / "results"
 # The built pages live together, away from the reports and the plot outputs.
@@ -161,7 +163,7 @@ CAP_PANELS = [
         ["ew_t_per_h",     "Electrowinning", "#83D1DD"],
     ]],
     ["Storage (hours of demand)", "h", [
-        ["h2_buffer_hours_dri",     "H₂ buffer",       "#70D2F0"],
+        ["h2_buffer_duration_hours", "H₂ buffer",      "#70D2F0"],
         ["iron_store_hours_steel",  "Iron store",      "#B7C1C8"],
         ["steel_store_hours_steel", "Steel inventory", "#8CA5B7"],
     ]],
@@ -313,16 +315,17 @@ def _record(row, lcos_row, cap_row):
         v = _opt(row[col])
         if v is not None:
             lcoe_own[key] = v
-    # LCOH breakdown in €/MWh LHV (parts sum to LCOH); absent parts stay absent.
+    # LCOH breakdown (parts sum to LCOH); absent parts stay absent. The report
+    # gives it per kg; the page works in €/MWh LHV and converts to kg itself.
     lcoh_parts = {}
     for col, key in (
-        ("lcoh_electrolyser_eur_per_mwh_lhv", "electrolyser"),
-        ("lcoh_electricity_eur_per_mwh_lhv", "electricity"),
-        ("lcoh_h2_storage_eur_per_mwh_lhv", "storage"),
+        ("lcoh_electrolyser_eur_per_kg", "electrolyser"),
+        ("lcoh_electricity_eur_per_kg", "electricity"),
+        ("lcoh_h2_storage_eur_per_kg", "storage"),
     ):
         v = _opt(row[col])
         if v is not None:
-            lcoh_parts[key] = v
+            lcoh_parts[key] = v * 1000.0 / H2_LHV_KWH_PER_KG
     # €/t-steel cost detail: per-plant capex (sums to the "process" group) plus the
     # ore/consumables split (sums to "ore_consumables"). For the segment hovers.
     cost_detail = {}
@@ -376,7 +379,7 @@ def _record(row, lcos_row, cap_row):
         # Optional, not zero-filled: a blended run that took no H2 has a share of
         # 0, and a route with no blend at all has none, which the card reads as
         # two different things.
-        "h2_share": _opt(row["iron_from_h2_share"], 3),
+        "h2_share": _opt(row["reductant_h2_share"], 3),
         "costs": costs,
         "caps": caps,
         "lcoe_parts": lcoe_parts,

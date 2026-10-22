@@ -625,6 +625,38 @@ the battery's fixed O&M reaches the model. Converted to per tonne of steel by
 the iron per tonne of steel, and added to the furnace's own electricity and its
 share of the losses, it gives back `cost_electricity_eur_per_t_steel` exactly.
 
+`h2_produced_kg_per_t_steel` is the hydrogen the electrolyser produced over the
+year, per tonne of steel produced (`h2_produced_kt` over `steel_produced_mt`).
+It is a model result, but on `h2-dri-eaf` it always comes back to the inputs,
+the shaft's hydrogen per tonne of iron (`h2_intensity_kg_per_t_dri`) times the
+iron per tonne of steel, because the hydrogen buffer is lossless and ends the
+year where it began. On `mix-dri-eaf` it is the model's own choice of how much
+of the reductant is hydrogen, and on the gas, MOE and EW routes it is 0.
+
+`cost_h2_production_meur` is the yearly cost of producing the hydrogen, in M€:
+a) the electrolyser itself (`cost_electrolyser_meur`), b) the hydrogen buffer
+(`cost_h2_buffer_meur`), and c) the electricity the electrolyser used
+(`cost_electricity_electrolyser_meur`), priced at the plant's average
+electricity cost. It equals `lcoh_eur_per_kg` times `h2_produced_kt`, and each
+of the three equals its `lcoh_*_eur_per_kg` row times `h2_produced_kt`. The
+electricity is not extra money: it is the electrolyser's slice of the
+renewables, battery, grid and transmission costs, which the plant already pays
+in `cost_res_meur`, `cost_battery_meur`, `cost_grid_meur` and
+`cost_transmission_meur`. So `cost_electricity_electrolyser_meur` and
+`cost_h2_production_meur` add only to each other and to the electrolyser and
+buffer rows. Adding either to the electricity cost groups or to
+`total_annual_cost_meur` counts the electrolyser's power twice.
+`cost_h2_production_eur_per_t_steel` is the same total per tonne of steel, made
+of `cost_electrolyser_eur_per_t_steel`, `cost_h2_buffer_eur_per_t_steel` and
+`cost_electricity_electrolyser_eur_per_t_steel`, and the same warning holds:
+its electricity part is already inside `cost_electricity_eur_per_t_steel`, so
+it is never added to the six group totals or to `lcos_eur_per_t`.
+`cost_h2_production_eur_per_t_iron` is the same total per tonne of iron, all of
+it, since all the hydrogen goes into ironmaking: `cost_electrolyser_eur_per_t_iron`
+(itself capex, fixed O&M and water), `cost_h2_buffer_eur_per_t_iron` and
+`cost_electricity_electrolyser_eur_per_t_iron`. Its electricity part is already
+inside `cost_electricity_eur_per_t_iron`, so it is never added to that.
+
 **Field names use `_` throughout**, including the part that names a tech or a
 link. The network and the scenario tables hyphenate those ids, so the report
 puts every one through `field_stem`: the tech `wind-onshore` reports as

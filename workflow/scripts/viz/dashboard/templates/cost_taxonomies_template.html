@@ -740,7 +740,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const scale = isLcoe ? 1 : H2LHV/1000;
     // A route that bought no hydrogen has no levelised cost of it, whatever the
     // report says. The blended-reductant route rejects hydrogen outright wherever
-    // grid power is available — `iron_from_h2_share` is 0.000 in every grid area —
+    // grid power is available — `reductant_h2_share` is 0.000 in every grid area —
     // and the LCOH the run still writes there is a quotient with nothing in its
     // denominator: Sudeste/C-Oeste reports -366.9 €/MWh, Norte -9.2. Plot a
     // hydrogen cost only where hydrogen was actually made.
