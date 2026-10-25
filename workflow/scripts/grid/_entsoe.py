@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from common._paths import DATA
+from common._paths import DATA, REPO_ROOT
 from scripts.grid._helpers_grid import assert_window_complete, iso, to_utc_naive
 from scripts.grid.download_entsoe import (
     CONSUMPTION_SUFFIX,
@@ -214,7 +214,8 @@ def retrieve(snakemake, area: str) -> None:
     if variant not in VARIANTS:
         raise ValueError(f"Unknown variant {variant!r}. Expected one of {sorted(VARIANTS)}.")
 
-    valid_zones = _load_bidding_zones(raw_cache_dir)
+    # The registry is tracked, so it is read from this checkout, not the store.
+    valid_zones = _load_bidding_zones(REPO_ROOT / "data" / "entsoe_cache")
     if area not in valid_zones:
         raise ValueError(
             f"{area!r} is not a recognised ENTSO-E bidding zone. "

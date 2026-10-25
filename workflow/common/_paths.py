@@ -11,6 +11,8 @@ package (see "Setup" in README.md).
 import os
 from pathlib import Path
 
+from dotenv import dotenv_values
+
 # workflow/common/_paths.py → workflow/common/ → workflow/ → repo root
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -24,14 +26,18 @@ MAIN_CHECKOUT = (
     else REPO_ROOT
 )
 
-# Where the expensive inputs live: the main checkout, so every worktree reads and
-# writes one copy. A cutout is gigabytes and its CDS download queues for hours, so
-# a per-worktree copy costs far more than it saves. `LCOX_STORE` overrides it,
-# which a checkout outside the repo's worktrees (a `git archive` copy, a second
-# clone) needs to reach the same store. Only what is expensive to fetch moves —
+# Where the expensive inputs live, shared by every worktree: a cutout is gigabytes
+# and its CDS download queues for hours, so a per-worktree copy costs far more than
+# it saves. `LCOX_STORE` names it, from the environment or else from the main
+# checkout's `.env`, so one line there serves all its worktrees; unset, the store
+# is the main checkout itself. Only what is expensive to fetch moves —
 # `resources/` and `results/` stay per worktree, since they are derived and one
 # branch's output is not another's.
-STORE_ROOT = Path(os.environ.get("LCOX_STORE", MAIN_CHECKOUT))
+STORE_ROOT = Path(
+    os.environ.get("LCOX_STORE")
+    or dotenv_values(MAIN_CHECKOUT / ".env").get("LCOX_STORE")
+    or MAIN_CHECKOUT
+)
 
 # Raw / external / expensive (won't be re-fetched on rebuild)
 DATA = STORE_ROOT / "data"
