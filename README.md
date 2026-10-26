@@ -599,7 +599,7 @@ electricity that made the hydrogen (`el_electrolyser_mwh_per_t_steel`,
 `cost_electricity_electrolyser_eur_per_t_steel`), melting in the furnace, briquetting, or the
 battery's and lines' losses. Being per tonne of steel rather than per tonne of
 iron, a DRI route's figure carries the furnace's iron yield: about 1.17 t of
-iron goes into each tonne of steel (`eaf_iron_t_per_t_steel`).
+iron goes into each tonne of steel (`iron_produced_mt` over `steel_produced_mt`).
 
 `cost_electricity_eur_per_t_iron` is the electricity cost of making the iron,
 per tonne of iron. Ironmaking ends at the DRI, liquid iron or plates the shaft

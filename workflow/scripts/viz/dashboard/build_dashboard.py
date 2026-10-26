@@ -130,7 +130,8 @@ H2_MIN = 0.02
 # plot_lcos_bars.py. Keys match the cost_{group}_meur columns in the report.
 COST_GROUPS = [
     ["process",         "Process plant (capex+opex)", "#33434D"],
-    ["ore_consumables", "Ore & consumables",          "#E2B681"],
+    ["ore",             "Iron ore",                   "#E2B681"],
+    ["eaf_consumables", "EAF consumables",            "#C99A5E"],
     ["gas",             "Natural gas (fuel + CO₂)",   "#525F6A"],
     ["iron_or_hbi_store", "Iron / HBI stockpile",     "#B7C1C8"],
     ["transport",       "Freight",                    "#BDCCD9"],
@@ -326,7 +327,7 @@ def _record(row, lcos_row, cap_row):
             lcoh_parts[key] = v * 1000.0 / H2_LHV_KWH_PER_KG
     # €/t-steel cost detail: per-plant cost, capital and upkeep together (sums to
     # the "process" group), plus the ore/consumables split (sums to
-    # "ore_consumables"). For the segment hovers, read off the cost leaves. The
+    # the "ore" and "eaf_consumables" groups). For the segment hovers, read off the cost leaves. The
     # blended shaft and the press are here too, or on a blended or an export
     # route the per-plant lines would come to less than the group they add up to.
     cost_detail = {}
@@ -343,7 +344,7 @@ def _record(row, lcos_row, cap_row):
         if any(v is not None for v in halves):
             cost_detail[stem] = sum(v or 0.0 for v in halves)
     for col, key in (("cost_ore_eur_per_t_steel", "ore"),
-                     ("cost_consumables_eur_per_t_steel", "consumables")):
+                     ("cost_eaf_consumables_eur_per_t_steel", "consumables")):
         v = _opt(row[col])
         if v is not None:
             cost_detail[key] = v

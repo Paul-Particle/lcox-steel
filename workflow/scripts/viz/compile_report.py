@@ -548,7 +548,10 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         "electrolyser": link_capital(["electrolyser"]) + link_marginal(["electrolyser"]),
         "h2_buffer": store_capital("h2_buffer"),
         "process": link_capital(PROCESS_LINKS),
-        "ore_consumables": link_marginal(PROCESS_LINKS),
+        # The ore the ironmaking step bought, and apart from it the furnace's
+        # consumables: one is ironmaking's, the other steelmaking's.
+        "ore": link_marginal(ORE_LINKS),
+        "eaf_consumables": link_marginal(["eaf"]),
         # Named for what it may hold, iron or briquettes; the network's store
         # keeps its own name.
         "iron_or_hbi_store": store_capital("iron_store"),
@@ -643,7 +646,7 @@ def _leaf_breakdown(
     # a list of the routes that have them, so a shaft reducing with a blend pays
     # for its ore here like either single-fuel shaft does.
     leaves["ore"] = sum(link_marginal(link) for link in ORE_LINKS)
-    leaves["consumables"] = link_marginal("eaf")
+    leaves["eaf_consumables"] = link_marginal("eaf")
 
     # -- process plants, each cut into annualised capital and fixed O&M
     for link in PROCESS_LINKS:
@@ -967,11 +970,6 @@ def _leaf_breakdown(
         fields[f"annuity_factor_{field_stem(link)}"] = annuity_factor(
             wacc_of(link), assumptions[link]["lifetime_years"]
         )
-    if "eaf" in n.links.index:
-        # The furnace's efficiency is tonnes of steel per tonne of iron, so its
-        # reciprocal is the charge this route feeds it — off the network, rather
-        # than back through the route's own charge table.
-        fields["eaf_iron_t_per_t_steel"] = 1.0 / float(n.links.at["eaf", "efficiency"])
     return fields
 
 
@@ -1012,14 +1010,19 @@ def _iron_produced_t(n: pypsa.Network) -> float:
     return float(sum(-n.links_t.p1[link].sum() for link in ORE_LINKS if link in n.links.index))
 
 
-def _h2_buffer_discharged_mwh(n: pypsa.Network, hours_per_year: float) -> float:
-    """Hydrogen the buffer gave back to the hydrogen bus in a year, MWh LHV.
+def _store_discharged(n: pypsa.Network, store: str, hours_per_year: float) -> float:
+    """What a lossless, cyclic store gave back to its bus in a year, in its own unit.
 
     A Store's p is positive when it feeds its bus, so the positive hours are its
-    discharge. Lossless and cyclic, so the same again went in.
+    discharge; it ends the year where it began, so the same again went in.
     """
-    discharge = n.stores_t.p["h2_buffer"].clip(lower=0.0)
+    discharge = n.stores_t.p[store].clip(lower=0.0)
     return float(discharge.sum()) * hours_per_year / len(n.snapshots)
+
+
+def _h2_buffer_discharged_mwh(n: pypsa.Network, hours_per_year: float) -> float:
+    """Hydrogen the buffer gave back to the hydrogen bus in a year, MWh LHV."""
+    return _store_discharged(n, "h2_buffer", hours_per_year)
 
 
 def _battery_discharged_mwh(n: pypsa.Network, hours_per_year: float) -> float:
@@ -1289,6 +1292,16 @@ def extract_summary(
         # tonne charged, so its reciprocal is the charge per tonne of steel.
         charge_t_per_t_steel = 1.0 / float(n.links.at["eaf", "efficiency"])
         summary["iron_or_hbi_store_hours_steel"] = store_t / (steel_t_per_h * charge_t_per_t_steel)
+        # What went through it, and how much of what the route made that was: the
+        # briquettes where it holds them, the iron otherwise.
+        discharged_t = _store_discharged(n, "iron_store", hours_per_year)
+        summary["iron_or_hbi_store_discharged_kt"] = discharged_t / 1e3
+        if store_t > 0:
+            summary["iron_or_hbi_store_cycles_per_year"] = discharged_t / store_t
+        made_t = (float(-n.links_t.p1["briquetting"].sum()) if "briquetting" in n.links.index
+                  else _iron_produced_t(n)) * hours_per_year / len(n.snapshots)
+        if made_t > 0:
+            summary["iron_or_hbi_store_share_pct"] = discharged_t * 100.0 / made_t
 
     annual = hours_per_year / len(n.snapshots)
     for link, field in (("iron_transport", "iron_shipped_kt"),

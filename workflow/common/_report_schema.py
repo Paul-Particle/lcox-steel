@@ -87,7 +87,7 @@ PROCESS_LINKS = ("dri-h2", "dri-ng", "dri-mix", "eaf", "moe", "ew", "briquetting
 # Annualised cost groups, in the order `compile_report._cost_breakdown` builds
 # them. Together they are the total annual cost.
 COST_GROUPS = ("res", "battery", "grid", "gas", "electrolyser", "h2_buffer",
-               "process", "ore_consumables", "iron_or_hbi_store", "steel_store",
+               "process", "ore", "eaf_consumables", "iron_or_hbi_store", "steel_store",
                "transmission", "transport", "destination_electricity")
 
 # The links that draw electricity, by the id `build_network` gives them. Each
@@ -140,7 +140,7 @@ REDUCTION_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew", "reductant-h2")
 # structural and lives here.
 LEAF_COSTS_BY_GROUP = (
     ("ore", "feedstock"),
-    ("consumables", "feedstock"),
+    ("eaf_consumables", "feedstock"),
     # The ironmaking plant is one pair whatever the route — the shaft or cells it
     # built, the others being none — so the row reads the same on every route.
     # The furnace and the press after it keep a pair each.
@@ -391,6 +391,12 @@ REPORT_FIELDS = {
     # the furnace for, at the furnace's own iron or briquettes per tonne of steel.
     "iron_or_hbi_store_kt": ZERO,
     "iron_or_hbi_store_hours_steel": UNDEFINED,
+    # What it took out in a year (lossless, so also what went in), its equivalent
+    # full cycles, and the share of the iron or briquettes made that went through
+    # it rather than straight on, as the hydrogen buffer's rows are.
+    "iron_or_hbi_store_discharged_kt": ZERO,
+    "iron_or_hbi_store_cycles_per_year": UNDEFINED,
+    "iron_or_hbi_store_share_pct": UNDEFINED,
     # Zero on a route that melts its iron where it made it and stops at the
     # plant gate. Only one of the two commodities is ever shipped.
     "transport_km": ZERO,
@@ -501,9 +507,9 @@ REPORT_FIELDS = {
     # is per tonne of iron out, so `cost_ore_eur_per_t_iron` always equals it,
     # and the run's own assumptions file beside the report holds it as given.
     **{f"annuity_factor_{field_stem(link)}": UNDEFINED for link in PROCESS_LINKS},
-    # How much iron the furnace charged per tonne of steel, which turns the ore
-    # per tonne of iron into the ore per tonne of steel.
-    "eaf_iron_t_per_t_steel": UNDEFINED,
+    # The furnace's charge per tonne of steel is not a row either: it is an input
+    # the route picks, and `iron_produced_mt` (or `hbi_produced_mt` where the
+    # route briquettes) over `steel_produced_mt` gives it from the run itself.
 
     # Built capacity.
     **{f"{field_stem(tech)}_gw_opt": ZERO for tech in RES_TECHS},

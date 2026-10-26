@@ -472,8 +472,11 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       if(!rec) return [];
       const out=[]; const push=(t,v)=>out.push({t,v});
       if(g==="gas"){ if(rec.ng_gwh>0) push("gas price:", eur(gasPrice(s))); return out; }
-      if(g==="ore_consumables"){
+      if(g==="ore"){
         if(cdv(rec,"ore")!=null)         push("· iron ore", tLine(rec,"ore"));
+        return out;
+      }
+      if(g==="eaf_consumables"){
         if(cdv(rec,"consumables")!=null) push("· EAF consumables (electrodes, fluxes, alloys)", tLine(rec,"consumables"));
         return out;
       }

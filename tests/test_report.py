@@ -487,4 +487,11 @@ def test_iron_is_counted_at_the_shaft_and_the_briquettes_beside_it():
     # furnace charges an hour, more than a tonne of briquettes per tonne of steel.
     steel_t_per_h = s["steel_produced_mt"] * 1e6 / 8760
     assert s["iron_or_hbi_store_hours_steel"] == pytest.approx(
-        s["iron_or_hbi_store_kt"] * 1e3 / (steel_t_per_h * s["eaf_iron_t_per_t_steel"]))
+        s["iron_or_hbi_store_kt"] * 1e3
+        / (steel_t_per_h * s["hbi_produced_mt"] / s["steel_produced_mt"]))
+    # What went through the stockpile: its cycles are that over its size, its
+    # share that over the briquettes made, which is where it sits on this route.
+    assert s["iron_or_hbi_store_cycles_per_year"] == pytest.approx(
+        s["iron_or_hbi_store_discharged_kt"] / s["iron_or_hbi_store_kt"])
+    assert s["iron_or_hbi_store_share_pct"] == pytest.approx(
+        s["iron_or_hbi_store_discharged_kt"] / 1e3 * 100 / s["hbi_produced_mt"])

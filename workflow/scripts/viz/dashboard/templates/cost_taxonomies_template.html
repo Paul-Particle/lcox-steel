@@ -692,7 +692,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         ["· annualised capex", amountOf(a.capex, L, "LCOS", "€/t")],
         ["· fixed O&M", amountOf(a.fixed_om, L, "LCOS", "€/t")],
       ].concat(plantLines(rec));
-      if(g==="ore_consumables") return oreLines(rec);
+      if(g==="ore") return oreLines(rec).filter(([t])=>t.startsWith("· iron ore"));
+      if(g==="eaf_consumables") return oreLines(rec).filter(([t])=>t.startsWith("· EAF"));
       if(g==="gas") return gasLines(rec, S);
       if(g==="electrolyser" || g==="h2_buffer") return lcohLines(rec, true);
       if(g==="res") return lcoeTechLines(rec, true);

@@ -194,8 +194,9 @@ def test_a_blended_shaft_pays_for_its_ore(route, assumptions):
     fields, breakdown, steel_t = _fields(n, assumptions)
 
     assert fields["cost_ore_eur_per_t_steel"] > 0
-    assert (fields["cost_ore_eur_per_t_steel"] + fields["cost_consumables_eur_per_t_steel"]
-            == pytest.approx(breakdown["ore_consumables"] / steel_t, rel=1e-9))
+    assert fields["cost_ore_eur_per_t_steel"] == pytest.approx(breakdown["ore"] / steel_t, rel=1e-9)
+    assert fields["cost_eaf_consumables_eur_per_t_steel"] == pytest.approx(
+        breakdown["eaf_consumables"] / steel_t, rel=1e-9)
 
 
 @pytest.mark.parametrize("group", ["ladle_metallurgy", "process"])
@@ -363,7 +364,7 @@ def test_the_iron_and_everything_after_it_are_the_whole_steel(route, assumptions
     _, fields, yearly, iron_t, _, holds = _iron_and_after(route, assumptions)
     origin_power = sum(yearly[leaf] for leaf in ORIGIN_ELECTRICITY_LEAVES)
     iron_power = fields["cost_electricity_eur_per_t_iron"] * iron_t
-    after = (yearly["consumables"]
+    after = (yearly["eaf_consumables"]
              + sum(yearly[f"{stem}_{half}"] for stem in ("eaf", "briquetting") for half in ("capex", "fom"))
              + yearly["steel_store"] + yearly["transport"]
              + (yearly["iron_or_hbi_store"] if holds != "iron" else 0.0)

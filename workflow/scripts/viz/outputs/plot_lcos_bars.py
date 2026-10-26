@@ -32,6 +32,7 @@ from scripts.viz.style import (
     highlight_blue,
     light_blue,
     light_blue_gray,
+    light_gray,
     magenta_red,
     sand_yellow,
     save_figure,
@@ -49,7 +50,8 @@ _OUT = Path(snakemake.output[0])
 # cost_{group}_meur columns written by compile_report.
 COST_GROUPS = [
     ("process",         "Process plant (capex+opex)",   blue_black),
-    ("ore_consumables", "Ore & consumables",            sand_yellow),
+    ("ore",             "Iron ore",                     sand_yellow),
+    ("eaf_consumables", "EAF consumables",              light_gray),
     ("gas",             "Natural gas (fuel + CO₂)",     very_dark_gray),
     ("iron_or_hbi_store", "Iron / HBI stockpile",       gray),
     ("steel_store",     "Steel inventory",              blue_gray),

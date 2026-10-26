@@ -161,9 +161,9 @@ def leaf_inputs(row: pd.Series) -> dict:
     ore_lines = [quantity("cost_ore_eur_per_t_iron",
                           f"feedstock, {built_iron[1].lower()}" if built_iron else "feedstock",
                           "{:,.0f} €/t iron")]
-    if _value(row, "cost_eaf_capex_eur_per_t_steel"):
-        ore_lines.append(quantity("eaf_iron_t_per_t_steel", "iron per t steel",
-                                  "{:.2f} t (gangue and melting loss)"))
+    iron, steel = _value(row, "iron_produced_mt"), _value(row, "steel_produced_mt")
+    if _value(row, "cost_eaf_capex_eur_per_t_steel") and iron and steel:
+        ore_lines.append(("iron per t steel", f"{iron / steel:.2f} t (gangue and melting loss)"))
     add("ore", *ore_lines)
 
     # -- process plants. The same two lines under either half of a plant's annual
@@ -337,7 +337,7 @@ def spec(assumptions: dict) -> list:
     # each route tolerates differs — so the quote that applies is per scenario, and
     # travels with the record rather than here.
     add("ore", "Iron ore", "#E2B681")
-    add("consumables", "EAF consumables", "#C99A5E",
+    add("eaf_consumables", "EAF consumables", "#C99A5E",
         [("electrodes, fluxes, alloys, carbon",
           f"{assumptions['eaf']['consumables_eur_per_t']:,.0f} €/t steel")])
 
