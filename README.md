@@ -546,13 +546,29 @@ The **identity fields lead**: the run (`scenario`, `origin` — where the iron i
 made — `destination` — where the steel is made, the origin again unless the
 route exports — `route, start_date, end_date`; the column's name says which run
 it is, and the hidden diagnostic beside the report also carries `run`), one `{tech}_variant` row per input series
-(`solar_variant: bestsite-p95`, `wind_onshore_variant: bestsite-p95`), and the
-`inputs_hash`. Everything below them is numbers, so a
+(`solar_variant: bestsite-p95`, `wind_onshore_variant: bestsite-p95`), the
+`inputs_hash` and `code_hash`, the `run_timestamp` and the `model_run_id`. Everything below them is numbers, so a
 reader can skip the block on top and take the rest as a numeric table. The
 variant matters because a best-site P95 profile and an area average answer
 different questions, and the solved network does not carry it (the solve reads
 the parquet, not its name), so `compile_report` takes the scenario table as an
 input and reads it back off the run's rows.
+
+`run_timestamp` is when the scenario run was produced: the moment its solve
+finished, in ISO 8601 on Europe/Berlin's clock with its UTC offset (e.g.
+`2026-10-26T14:03:12+01:00`, or `+02:00` in summer time). It is taken at the
+solve, so rebuilding the report from the same solved network does not change
+it. It is blank for a run solved before the stamp existed.
+
+`model_run_id` names one solve and no other: the run's `inputs_hash`, the
+moment the solve finished on Europe/Berlin's clock, and eight random
+characters, as `{inputs_hash}-{YYYYMMDDTHHMMSS}-{random}` (e.g.
+`4f2a9c1b8e30-20261026T140312-a1b2c3d4`). Solving the same inputs again gives
+the same `inputs_hash` but a new `model_run_id`, so it tells two solves of
+identical inputs apart; the random part keeps even two solves finished in the
+same second distinct. Like `run_timestamp` it is taken at the solve, so
+rebuilding the report does not change it, and it is blank for a run solved
+before it existed.
 
 `grid_variant_origin` says whether the plant at the origin was connected to the
 grid, and which version of that market's data priced its power. Blank means the
@@ -882,6 +898,22 @@ and the lines (`el_losses_gwh`); the losses go in both, because they emitted
 and were also drawn. So `emissions_scope2_kg_co2e_per_mwh_el` ×
 (`el_users_gwh` + `el_losses_gwh`) ÷ 1,000,000 =
 `emissions_scope2_electricity_mt_co2e_per_year`.
+
+`emissions_scope2_reduction_kg_co2e_per_mwh_el`,
+`emissions_scope2_eaf_kg_co2e_per_mwh_el`,
+`emissions_scope2_electrolyser_kg_co2e_per_mwh_el` and
+`emissions_scope2_briquetting_kg_co2e_per_mwh_el` are each step's own average
+CO2e per MWh it drew: its scope 2 emissions divided by its own electricity,
+without any share of the losses. The reduction is the shaft or cells and the
+hydrogen preheat together. Each equals its `emissions_scope2_*_t_co2e_per_t_steel`
+row × 1000 ÷ its MWh per tonne of steel (e.g.
+`emissions_scope2_eaf_kg_co2e_per_mwh_el` =
+`emissions_scope2_eaf_t_co2e_per_t_steel` × 1000 ÷ `el_eaf_mwh_per_t_steel`).
+They are ratios, not parts, and do not add up to anything. Read against the
+plant average `emissions_scope2_kg_co2e_per_mwh_el`: a step above it drew more
+of its power in dirty hours, one below it in clean hours. On an export route
+the furnace's figure is the destination grid's, in the hours it melted. A step
+that drew nothing is blank.
 
 **Field names use `_` throughout**, including the part that names a tech or a
 link. The network and the scenario tables hyphenate those ids, so the report

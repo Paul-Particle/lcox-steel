@@ -1565,11 +1565,18 @@ def extract_summary(
             sources["electricity"] * 1e3 / total_el_mwh
         )
     summary["el_users_gwh"] = sum(electricity_mwh.values()) / 1e3
+    step_mwh, step_t = {}, {}
     for user, mwh in electricity_mwh.items():
         summary[f"el_{field_stem(user)}_gwh"] = mwh / 1e3
+        step = emission_step(user)
+        step_mwh[step] = step_mwh.get(step, 0.0) + mwh
+        step_t[step] = step_t.get(step, 0.0) + emitted["electricity_t"][user]
+    # Each step's intensity over all its MWh, wherever it drew them: an export
+    # route's furnace reads the destination's hours.
+    for step, mwh in step_mwh.items():
         if mwh > 0:
-            summary[f"emissions_{field_stem(user)}_kg_co2e_per_mwh_el"] = (
-                emitted["electricity_t"][user] * 1e3 / mwh
+            summary[f"emissions_scope2_{field_stem(step)}_kg_co2e_per_mwh_el"] = (
+                step_t[step] * 1e3 / mwh
             )
     # And what nobody drew, so the draws above account for the whole of what was
     # generated rather than most of it.
@@ -1660,6 +1667,10 @@ def main() -> None:
     # them: the per-file map it stands for is in the network.
     summary["inputs_hash"] = n.meta["inputs_hash"]
     summary["code_hash"] = n.meta.get("code_hash", "")
+    # When the solve produced the run; blank on a network solved before it was
+    # stamped.
+    summary["run_timestamp"] = n.meta.get("run_timestamp")
+    summary["model_run_id"] = n.meta.get("model_run_id")
 
     # The report is the seam viz reads; the diagnostic keeps every field,
     # including the ones the report is not the place for.

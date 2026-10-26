@@ -681,8 +681,10 @@ REPORT_FIELDS = {
     # generated, which is what lets the `cost_electricity_*_eur_per_t_steel` jobs close on
     # the electricity bill.
     "el_losses_gwh": ZERO,
-    **{f"emissions_{field_stem(user)}_kg_co2e_per_mwh_el": UNDEFINED
-       for user in ELECTRICITY_USERS},
+    # Each step's own intensity, cut as the step rows are: its electricity CO2e
+    # over the MWh it drew, no losses. The losses have none: nobody drew them.
+    **{f"emissions_scope2_{field_stem(step)}_kg_co2e_per_mwh_el": UNDEFINED
+       for step in EMISSION_STEPS if not step.endswith("_losses")},
 
     # Why the emission fields above are blank, when they are. A market that
     # publishes prices but no per-carrier generation leaves a run that imports
@@ -695,6 +697,12 @@ REPORT_FIELDS = {
     # Two runs that agree on both agree on everything the model could control.
     "inputs_hash": UNDEFINED,
     "code_hash": UNDEFINED,
+    # When the solve produced the run: ISO 8601 on Europe/Berlin's clock with
+    # its UTC offset, e.g. 2026-10-26T14:03:12+01:00.
+    "run_timestamp": UNDEFINED,
+    # This solve and no other: `{inputs_hash}-{YYYYMMDDTHHMMSS}-{8 random hex}`,
+    # the time on Berlin's clock. Solving the same inputs again gives a new one.
+    "model_run_id": UNDEFINED,
 }
 
 ZERO_FILLED = tuple(field for field, fill in REPORT_FIELDS.items() if fill == ZERO)
@@ -712,7 +720,7 @@ IDENTITY_FIELDS = ("scenario", "run", "origin", "destination", "route", "start_d
                    # Prose, not a measurement: everything outside this tuple is
                    # coerced to a number when a report is read back.
                    "emissions_basis", "emissions_unavailable_reason", "inputs_hash",
-                   "code_hash")
+                   "code_hash", "run_timestamp", "model_run_id")
 
 # Fields only the diagnostic carries, for three separate reasons. The run,
 # because the report's column is named after it. The freight, because it is

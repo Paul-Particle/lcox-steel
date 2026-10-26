@@ -257,6 +257,24 @@ def test_emissions_in_tonnes_keep_four_decimals(tmp_path):
     assert report["emissions_scope2_kg_co2e_per_mwh_el"] == 4.81
 
 
+def test_the_run_timestamp_reads_back_as_written_with_its_offset(tmp_path):
+    """It is text, not a number, so the offset survives the round trip."""
+    df = _report([("s", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
+    df["run_timestamp"] = "2026-10-26T14:03:12+01:00"
+    report_path, _ = _write(df, tmp_path)
+
+    assert read_report(report_path).iloc[0]["run_timestamp"] == "2026-10-26T14:03:12+01:00"
+
+
+def test_the_model_run_id_reads_back_as_text(tmp_path):
+    """Hex digits that happen to be all numbers must not come back as a number."""
+    df = _report([("s", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
+    df["model_run_id"] = "401290128830-20261026T140312-00112233"
+    report_path, _ = _write(df, tmp_path)
+
+    assert read_report(report_path).iloc[0]["model_run_id"] == "401290128830-20261026T140312-00112233"
+
+
 def test_a_report_reads_back_as_it_was_written(tmp_path):
     """read_report is the only thing that undoes the layout, so it has to be exact."""
     df = _report([("s", "VIC1", "VIC1", "h2-dri-eaf", "20250101", "20251231", 606.78)])
@@ -641,3 +659,11 @@ def test_ironmaking_s_emissions_take_their_share_of_the_losses_by_the_mwh_drawn(
     assert h2_t * 1e6 / steel_t == pytest.approx(
         s["emissions_scope2_electrolyser_t_co2e_per_t_steel"]
         + losses * s["el_electrolyser_gwh"] / s["el_users_gwh"])
+    # A step's intensity is its CO2e over the MWh it drew, shaft and preheat
+    # together for the reduction.
+    assert "emissions_dri_h2_kg_co2e_per_mwh_el" not in s
+    reduction_mwh_per_t = s["el_reduction_mwh_per_t_steel"]
+    assert s["emissions_scope2_reduction_kg_co2e_per_mwh_el"] == pytest.approx(
+        s["emissions_scope2_reduction_t_co2e_per_t_steel"] * 1e3 / reduction_mwh_per_t)
+    assert s["emissions_scope2_eaf_kg_co2e_per_mwh_el"] == pytest.approx(
+        s["emissions_scope2_eaf_t_co2e_per_t_steel"] * 1e3 / s["el_eaf_mwh_per_t_steel"])
