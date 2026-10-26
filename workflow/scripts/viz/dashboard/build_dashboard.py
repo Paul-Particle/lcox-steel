@@ -372,7 +372,8 @@ def _record(row, lcos_row, cap_row):
         "lcoh_kg": round(_num(row["lcoh_eur_per_kg"]), 3) or None,
         # Blank wherever the area publishes prices but no generation mix, which is
         # most of the grid side; the page says so rather than printing a zero.
-        "emissions": _opt(row["emissions_kg_co2e_per_t_steel"]),
+        # In kg, as the page shows it: the report gives t per t of steel.
+        "emissions": _opt(row["emissions_energy_t_co2e_per_t_steel"] * 1e3),
         "steel_mt": round(_num(row["steel_produced_mt"]), 4),
         "ng_gwh": round(_num(row["gas_consumed_gwh_lhv"]), 1),
         # Optional, not zero-filled: a blended run that took no H2 has a share of

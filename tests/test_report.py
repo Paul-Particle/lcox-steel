@@ -30,8 +30,10 @@ from scripts.viz.compile_report import (
 )
 from common._report_schema import (
     DIAGNOSTIC_FIELDS,
+    EMISSION_STEPS,
     FIELD_ORDER,
     IDENTITY_FIELDS,
+    field_stem,
     read_report,
     write_report_file,
 )
@@ -215,10 +217,10 @@ def test_the_freight_a_run_reports_is_held_back_from_the_report(tmp_path):
     they share and differ only in that the report has no freight at all.
     """
     df = _report([("s", "VIC1", "VIC1", "moe-eaf-export", "20250101", "20251231", 900.0)])
-    df["emissions_kg_co2e_per_t_steel"] = 157.4
+    df["emissions_energy_t_co2e_per_t_steel"] = 0.1574
     df["emissions_freight_kt_co2e_per_year"] = 215.0
     df["emissions_steel_transport_kg_co2e_per_t_steel"] = 215.0
-    df["emissions_moe_kg_co2e_per_t_steel"] = 149.3
+    df["emissions_scope2_moe_t_co2e_per_t_steel"] = 0.1493
     report_path, diagnostic_path = _write(df, tmp_path)
     report = read_report(report_path).iloc[0]
     diagnostic = read_report(diagnostic_path).iloc[0]
@@ -227,8 +229,8 @@ def test_the_freight_a_run_reports_is_held_back_from_the_report(tmp_path):
     assert "emissions_freight_kt_co2e_per_year" not in report.index
     assert diagnostic["emissions_steel_transport_kg_co2e_per_t_steel"] == 215.0
     # The total counts neither file's freight, so the two agree on it.
-    assert report["emissions_kg_co2e_per_t_steel"] == 157.4
-    assert diagnostic["emissions_kg_co2e_per_t_steel"] == 157.4
+    assert report["emissions_energy_t_co2e_per_t_steel"] == 0.1574
+    assert diagnostic["emissions_energy_t_co2e_per_t_steel"] == 0.1574
 
 
 def test_a_freight_field_no_run_produced_still_reaches_the_diagnostic(tmp_path):
@@ -239,6 +241,20 @@ def test_a_freight_field_no_run_produced_still_reaches_the_diagnostic(tmp_path):
     diagnostic = read_report(diagnostic_path)
     assert diagnostic.at["s_VIC1", "emissions_steel_transport_kg_co2e_per_t_steel"] == 0.0
     assert diagnostic.at["s_VIC1", "emissions_freight_kt_co2e_per_year"] == 0.0
+
+
+def test_emissions_in_tonnes_keep_four_decimals(tmp_path):
+    """A clean route lands in thousandths of a tonne, which two decimals would erase."""
+    df = _report([("s", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0)])
+    df["emissions_energy_mt_co2e_per_year"] = 0.004812
+    df["emissions_energy_t_co2e_per_t_steel"] = 0.004812
+    df["emissions_scope2_kg_co2e_per_mwh_el"] = 4.8123
+    report_path, _ = _write(df, tmp_path)
+    report = read_report(report_path).iloc[0]
+
+    assert report["emissions_energy_mt_co2e_per_year"] == 0.0048
+    assert report["emissions_energy_t_co2e_per_t_steel"] == 0.0048
+    assert report["emissions_scope2_kg_co2e_per_mwh_el"] == 4.81
 
 
 def test_a_report_reads_back_as_it_was_written(tmp_path):
@@ -569,3 +585,59 @@ def test_the_gas_side_reports_its_peak_draw_not_a_free_rating():
     assert "gas_supply_gw_opt" not in s
     assert s["gas_peak_draw_gw"] == pytest.approx(float(n.generators_t.p["gas_supply"].max()) / 1e3)
     assert s["gas_peak_draw_gw"] * 8760 >= s["gas_consumed_gwh_lhv"] - 1e-6
+    # A gas shaft emits both ways, so its split has two real parts to add up.
+    assert s["emissions_scope1_gas_t_co2e_per_t_steel"] > 0
+    assert (s["emissions_scope1_gas_t_co2e_per_t_steel"]
+            + s["emissions_scope2_electricity_t_co2e_per_t_steel"]
+            == pytest.approx(s["emissions_energy_t_co2e_per_t_steel"]))
+    # The steps are the electricity's alone, and with the gas's share beside
+    # them the shares make the whole.
+    steps = [f"emissions_scope2_{field_stem(step)}_t_co2e_per_t_steel" for step in EMISSION_STEPS]
+    assert sum(s[field] for field in steps) == pytest.approx(
+        s["emissions_scope2_electricity_t_co2e_per_t_steel"])
+    shares = [f"emissions_scope2_{field_stem(step)}_pct" for step in EMISSION_STEPS]
+    assert sum(s.get(field, 0.0) for field in shares) + s["emissions_scope1_gas_pct"] == pytest.approx(100.0)
+    # Every shaft and cell is one reduction step, and ironmaking is it plus the
+    # electrolyser and its share of the losses: no less than its own steps, no
+    # more than the whole of scope 2.
+    assert "emissions_scope2_dri_ng_t_co2e_per_t_steel" not in s
+    iron_steps = (s["emissions_scope2_reduction_t_co2e_per_t_steel"]
+                  + s["emissions_scope2_electrolyser_t_co2e_per_t_steel"])
+    assert iron_steps - 1e-12 <= s["emissions_scope2_ironmaking_t_co2e_per_t_steel"]
+    assert (s["emissions_scope2_ironmaking_t_co2e_per_t_steel"]
+            <= s["emissions_scope2_electricity_t_co2e_per_t_steel"] + 1e-12)
+
+
+def test_ironmaking_s_emissions_take_their_share_of_the_losses_by_the_mwh_drawn():
+    """Reduction and electrolyser, plus the losses in proportion to the MWh they
+    drew among everything drawn at the origin, as their electricity bill is cut."""
+    assumptions = yaml.safe_load((REPO_ROOT / "config" / ".template.yaml").read_text())
+    # A dirty solar and wind, made up, so every step and every loss emits.
+    factors = assumptions["emissions"][assumptions["emissions"]["basis"]]["electricity_t_co2e_per_mwh"]
+    factors["solar"] = factors["wind_onshore"] = 0.1
+    hours = np.arange(48)
+    cf = pd.DataFrame({"solar": np.clip(np.sin((hours % 24 - 6) / 12 * np.pi), 0, None),
+                       "wind-onshore": 0.35 + 0.3 * np.sin(hours / 7.0)},
+                      index=pd.date_range("2025-01-01", periods=48, freq="h"))
+    n = build_network("h2-dri-eaf", assumptions, cf)
+    n.optimize(solver_name="highs", solver_options={"output_flag": False})
+    s = extract_summary(n, "s", {"origin": "X", "destination": "X", "route": "h2-dri-eaf",
+                                 "start_date": "20250101", "end_date": "20250102"}, assumptions)
+
+    losses = (s["emissions_scope2_battery_losses_t_co2e_per_t_steel"]
+              + s["emissions_scope2_transmission_losses_t_co2e_per_t_steel"])
+    assert losses > 0, "the test needs a run that lost electricity"
+    iron_gwh = s["el_dri_h2_gwh"] + s["el_h2_preheat_gwh"] + s["el_electrolyser_gwh"]
+    share = iron_gwh / s["el_users_gwh"]
+    assert s["emissions_scope2_ironmaking_t_co2e_per_t_steel"] == pytest.approx(
+        s["emissions_scope2_reduction_t_co2e_per_t_steel"]
+        + s["emissions_scope2_electrolyser_t_co2e_per_t_steel"]
+        + losses * share)
+    # The preheat is part of the reduction step, not a step of its own.
+    assert "emissions_scope2_h2_preheat_t_co2e_per_t_steel" not in s
+    # The hydrogen takes its share of the same losses by the same rule.
+    h2_t = s["emissions_scope2_kg_co2e_per_kg_h2"] * s["h2_produced_kt"] / 1e3
+    steel_t = s["steel_produced_mt"] * 1e6
+    assert h2_t * 1e6 / steel_t == pytest.approx(
+        s["emissions_scope2_electrolyser_t_co2e_per_t_steel"]
+        + losses * s["el_electrolyser_gwh"] / s["el_users_gwh"])

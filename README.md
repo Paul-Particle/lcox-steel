@@ -795,6 +795,94 @@ it, since all the hydrogen goes into ironmaking: `cost_electrolyser_eur_per_t_ir
 `cost_electricity_electrolyser_eur_per_t_iron`. Its electricity part is already
 inside `cost_electricity_eur_per_t_iron`, so it is never added to that.
 
+`emissions_basis` is the name of the set of emission factors that turned the
+energy a run used into CO2e, for example t CO2e per MWh of coal, gas or
+renewable power. It is a label, not a model result: it says which factors the
+emission figures rest on, so that runs built on different factors are not
+compared by mistake. Today there is one set, `default_grid_emission_factors`
+(Agora Energiewende's Agorameter factors), which counts only what comes out of
+the stack, so renewables and nuclear count as zero.
+
+`emissions_energy_mt_co2e_per_year` is what the energy the plant used emitted
+over the year, in Mt CO2e, written to four decimals. It is made of a)
+`emissions_scope1_gas_mt_co2e_per_year`, the natural gas burned in a gas or
+blended shaft, and b) `emissions_scope2_electricity_mt_co2e_per_year`, all the
+electricity drawn, including the battery's and lines' losses, each MWh counted
+at the intensity of the hour it was drawn in: the plant's own wind and solar at
+zero, grid power at that hour's market mix (location-based, not market-based:
+no certificates or PPAs), battery power at the intensity of what charged it,
+and on an export route the furnace's power at the destination market's mix.
+Scope 1 is only the gas: the process emissions of the steps themselves, EAF
+electrodes, carbon injection, the carbon in the pellets, fluxes and the
+carburiser, are outside the model, so the figure is not a CBAM or an ETS
+number. Scope 3 is not counted either: not the gas's own supply chain
+(`emissions.natural_gas_reductant_t_co2e_per_mwh.upstream`, 0), and not the
+freight, which only the hidden diagnostic carries.
+`emissions_energy_t_co2e_per_t_steel` is what the energy the plant used
+emitted over the year, in t CO2e per tonne of steel produced, written to four
+decimals: `emissions_energy_mt_co2e_per_year` ÷ `steel_produced_mt`. It covers
+every step that went into the steel, from the ironmaking (shaft or cells,
+hydrogen preheat, electrolyser) through the briquetting press to the electric
+arc furnace, with the battery's and lines' losses; on an export route the iron
+made at the origin and the melting at the destination are both in it. Like the
+annual total it is scope 1 gas plus location-based scope 2 electricity, and
+excludes the process emissions of the steps themselves and freight, so it is
+not a CBAM or an ETS number. It is made of
+`emissions_scope1_gas_t_co2e_per_t_steel` and
+`emissions_scope2_electricity_t_co2e_per_t_steel`, the two annual parts
+divided the same way. The scope 1 row is all the gas burned, whichever shaft
+burned it, so no per-step row holds any gas: the per-step rows
+`emissions_scope2_*_t_co2e_per_t_steel` are each step's electricity, the
+battery's and lines' losses as rows of their own, and add up to
+`emissions_scope2_electricity_t_co2e_per_t_steel` exactly. Each step's share of
+the total is its `emissions_scope2_*_pct` row, and with the gas's share,
+`emissions_scope1_gas_pct`, they add up to 100 %.
+
+`emissions_scope2_reduction_t_co2e_per_t_steel` is the CO2e of the electricity
+that turned ore into iron, per tonne of steel: a) running the reduction shaft,
+whether it reduces with hydrogen, gas or a blend, b) preheating the hydrogen
+fed into a shaft, and c) the electrolysis cells on the MOE and EW routes, each
+MWh at the intensity of the hour it was drawn in. It holds the same
+electricity as `cost_electricity_reduction_eur_per_t_steel`, and like it does
+not contain the electrolyser, the briquetting press, the furnace or the losses,
+which are rows of their own.
+
+`emissions_scope2_ironmaking_t_co2e_per_t_steel` is all the electricity CO2e of
+making the iron, per tonne of steel: a) the reduction
+(`emissions_scope2_reduction_t_co2e_per_t_steel`), b) the electrolyser that
+made the hydrogen (`emissions_scope2_electrolyser_t_co2e_per_t_steel`), and c)
+ironmaking's share of the battery's and lines' losses, in proportion to the MWh
+a) and b) drew among all the electricity drawn at the origin, as
+`cost_electricity_ironmaking_eur_per_t_steel` takes its share of the bill. It
+is a subtotal beside the step rows and is never added to them, since it holds
+part of the losses a second time. On an export route the furnace draws its
+power at the destination, where there are no losses, so it takes no share.
+
+`emissions_scope2_kg_co2e_per_kg_h2` is the emissions of the hydrogen the
+electrolyser produced, per kg of hydrogen. Its numerator is a) the emissions of
+the electricity the electrolyser drew, each MWh counted at the intensity of the
+hour it ran in, plus b) the electrolyser's share of the battery's and lines'
+losses, in proportion to the MWh it drew among all the electricity drawn at
+the origin, the same rule `emissions_scope2_ironmaking_t_co2e_per_t_steel` and
+the electricity cost rows use. Its denominator is the hydrogen the electrolyser
+produced (`h2_produced_kt`). Both parts sit inside the scope 2 electricity
+total, and there is no gas in it. So `emissions_scope2_kg_co2e_per_kg_h2` ×
+`h2_produced_kt` ÷ 1000 gives the hydrogen's Mt CO2e per year, which is part
+of `emissions_scope2_electricity_mt_co2e_per_year`. The rest of that total is
+the other users of electricity: the shaft, the preheat, the EAF, the press, and
+their share of the losses. It is 0 when all the electricity came from sources
+the emission factors rate at zero, and blank when the grid's mix is unknown.
+
+`emissions_scope2_kg_co2e_per_mwh_el` is the average CO2e of a MWh of
+electricity the plant used over the year: all scope 2 emissions divided by all
+the electricity drawn. Its numerator is
+`emissions_scope2_electricity_mt_co2e_per_year`, in kg. Its denominator is all
+the electricity drawn (`el_users_gwh`) plus the electricity lost in the battery
+and the lines (`el_losses_gwh`); the losses go in both, because they emitted
+and were also drawn. So `emissions_scope2_kg_co2e_per_mwh_el` ×
+(`el_users_gwh` + `el_losses_gwh`) ÷ 1,000,000 =
+`emissions_scope2_electricity_mt_co2e_per_year`.
+
 **Field names use `_` throughout**, including the part that names a tech or a
 link. The network and the scenario tables hyphenate those ids, so the report
 puts every one through `field_stem`: the tech `wind-onshore` reports as

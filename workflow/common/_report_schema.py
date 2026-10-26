@@ -104,12 +104,22 @@ ELECTRICITY_USERS = (*PROCESS_LINKS, "electrolyser", "reductant-h2")
 # Delivery is outside the accounting boundary below, so these are not steps.
 FREIGHT_LEGS = ("iron_transport", "steel_transport")
 
-# Everything a run can emit through, in the order `compile_report`'s breakdown
-# builds them: the electricity users, the one link that burns gas and no power,
-# and the two losses that belong to no step in particular. Together they are the
-# run's total, so the shares stack to 100 %.
-EMISSION_STEPS = (*ELECTRICITY_USERS, "reductant-ng",
+# Every step the run's electricity is charged to: the electricity jobs, named
+# and cut as ELECTRICITY_JOBS cuts the bill (see `emission_step`), and the two
+# losses that belong to no step in particular. Together they are the scope 2
+# total. The gas is not a step: whichever shaft burned it, it is reported once,
+# as scope 1, so no step row ever holds both scopes.
+EMISSION_STEPS = ("reduction", "eaf", "electrolyser", "briquetting",
                   "battery_losses", "transmission_losses")
+
+
+def emission_step(element_id: str) -> str:
+    """The emission step a drawing link or a loss is reported under.
+
+    Every link in REDUCTION_LINKS is `reduction`, whichever shaft or cell the
+    route built, as on the electricity bill; everything else is its own step.
+    """
+    return "reduction" if element_id in REDUCTION_LINKS else element_id
 
 # The links that buy ore, by the id `build_network` gives them: each carries an
 # `ore_eur_per_t` quote on its marginal cost. The furnace buys consumables
@@ -616,25 +626,44 @@ REPORT_FIELDS = {
     # comes from its own `variant: emissions` generation series, never from a
     # stand-in.
     #
-    # In kg rather than t throughout: the report rounds to two decimals, and a
-    # clean route's tonne of steel lands near a thousandth of a tonne of CO2e.
+    # The totals are in Mt per year and t per t of steel, the units steel
+    # emissions are quoted in, and keep four decimals (see MORE_DECIMALS): a
+    # clean route lands near a thousandth of a tonne per tonne, which two
+    # decimals would read as nothing.
+    #
+    # The scope is in the names because the boundary is narrower than "the
+    # plant's emissions": scope 1 is the gas burned only, without the process
+    # emissions above, and scope 2 is location-based, hour by hour. Together
+    # they are the energy's emissions, hence `energy` in the totals.
     "emissions_basis": UNDEFINED,
-    "emissions_kt_co2e_per_year": ZERO,
-    "emissions_kg_co2e_per_t_steel": UNDEFINED,
-    "emissions_kg_co2e_per_kg_h2": UNDEFINED,
+    "emissions_energy_mt_co2e_per_year": ZERO,
+    "emissions_energy_t_co2e_per_t_steel": UNDEFINED,
+    "emissions_scope2_kg_co2e_per_kg_h2": UNDEFINED,
     # The two things inside the boundary that emit, as annual totals. Together
-    # they are `emissions_kt_co2e_per_year`.
-    "emissions_electricity_kt_co2e_per_year": ZERO,
-    "emissions_gas_kt_co2e_per_year": ZERO,
-    # Per step: what it added to a tonne of steel, and what share of the tonne
-    # that was. The shares stack to 100 %.
-    **{f"emissions_{field_stem(step)}_kg_co2e_per_t_steel": ZERO
+    # they are `emissions_energy_mt_co2e_per_year`.
+    "emissions_scope2_electricity_mt_co2e_per_year": ZERO,
+    "emissions_scope1_gas_mt_co2e_per_year": ZERO,
+    # The same two per tonne of steel, adding up to
+    # `emissions_energy_t_co2e_per_t_steel`.
+    "emissions_scope2_electricity_t_co2e_per_t_steel": ZERO,
+    "emissions_scope1_gas_t_co2e_per_t_steel": ZERO,
+    # Per step: what its electricity added to a tonne of steel, and what share
+    # of the tonne that was. The steps stack to the scope 2 row; the gas's share
+    # beside them makes the shares stack to 100 %.
+    **{f"emissions_scope2_{field_stem(step)}_t_co2e_per_t_steel": ZERO
        for step in EMISSION_STEPS},
-    **{f"emissions_{field_stem(step)}_pct": UNDEFINED for step in EMISSION_STEPS},
+    # All the electricity CO2e of making the iron, per tonne of steel: the
+    # reduction and the electrolyser, with ironmaking's share of the losses by
+    # the MWh it drew at the origin, as `cost_electricity_ironmaking_eur_per_t_steel`
+    # takes its share of the bill. Beside the steps, never added to them: it
+    # holds part of the losses a second time.
+    "emissions_scope2_ironmaking_t_co2e_per_t_steel": ZERO,
+    **{f"emissions_scope2_{field_stem(step)}_pct": UNDEFINED for step in EMISSION_STEPS},
+    "emissions_scope1_gas_pct": UNDEFINED,
     # What delivering the steel added, which none of the totals above counts:
     # the boundary is the plant, and the distance to a customer is a question
     # asked of a route rather than a property of it. Add these to
-    # `emissions_kg_co2e_per_t_steel` for a delivered figure. Only the
+    # `emissions_energy_t_co2e_per_t_steel` for a delivered figure. Only the
     # diagnostic carries them (see DIAGNOSTIC_FIELDS), and unlike everything
     # else here they survive an unknown grid mix, being a distance and a factor.
     "emissions_freight_kt_co2e_per_year": ZERO,
@@ -643,7 +672,7 @@ REPORT_FIELDS = {
     # Electricity by who drew it, and how dirty their own hours were. The system
     # average is what a MWh cost the run on average; a user above it bought the
     # dirty hours, one below it chased the clean ones.
-    "emissions_kg_co2e_per_mwh_el": UNDEFINED,
+    "emissions_scope2_kg_co2e_per_mwh_el": UNDEFINED,
     # All of them together: the electricity the users drew, losses excluded.
     "el_users_gwh": ZERO,
     **{f"el_{field_stem(user)}_gwh": ZERO for user in ELECTRICITY_USERS},
@@ -669,6 +698,12 @@ REPORT_FIELDS = {
 }
 
 ZERO_FILLED = tuple(field for field, fill in REPORT_FIELDS.items() if fill == ZERO)
+
+# Fields written to four decimals rather than two: emissions in Mt per year or
+# t per t of steel, where a clean route lands in the thousandths and two
+# decimals would read it as nothing.
+MORE_DECIMALS = tuple(field for field in REPORT_FIELDS
+                      if field.endswith(("_mt_co2e_per_year", "_t_co2e_per_t_steel")))
 
 # The fields that say what the run was rather than what it cost. They lead the
 # file, so everything below them is numbers and a reader can skip straight to it.
@@ -743,7 +778,8 @@ def write_report_file(frame: pd.DataFrame, path: Path, hold_back: tuple = ()) ->
     # Adding 0.0 turns a negative zero into a plain one: a flow the solver left at
     # -1e-12, or an output whose sign was flipped when it was nothing, would
     # otherwise round to a "-0.0" that reads like a value.
-    on_schema[numeric] = on_schema[numeric].round(2) + 0.0
+    decimals = {field: 4 if field in MORE_DECIMALS else 2 for field in numeric}
+    on_schema[numeric] = on_schema[numeric].round(decimals) + 0.0
     on_schema.index = column_names
     path.parent.mkdir(parents=True, exist_ok=True)
     on_schema.T.to_csv(path, index_label="field")

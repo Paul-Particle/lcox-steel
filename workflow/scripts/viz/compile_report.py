@@ -25,6 +25,7 @@ from common._report_schema import (
     IRON_ELECTRICITY_JOBS,
     EMISSION_STEPS,
     FREIGHT_LEGS,
+    emission_step,
     LEAF_COSTS,
     LEAF_GROUP,
     LEAF_PARENTS,
@@ -212,13 +213,13 @@ def _emissions_breakdown(
 ) -> dict[str, object]:
     """What the run emitted in a year, and who to charge it to.
 
-    `by_step` is annual t CO2e per step and stacks to the total. `electricity_mwh`
-    and `electricity_t` are each user's draw and the emissions of that draw alone
-    — kept apart from `by_step` because a gas-fired shaft's step total carries its
-    combustion too, and dividing that by its MWh would report a furnace as
-    buying impossibly dirty power. `losses_mwh` is the electricity the round trip
-    and the lines took, which no user drew. `sources` splits the total into
-    electricity and gas.
+    `by_step` is the annual t CO2e of each step's electricity, the losses as
+    steps of their own, and stacks to `sources["electricity"]`. The gas is in
+    no step: whichever shaft burned it, it is `sources["gas"]` alone, so no step
+    holds both scopes. `electricity_mwh` and `electricity_t` are each user's
+    draw and the emissions of that draw alone. `losses_mwh` is the electricity
+    the round trip and the lines took, which no user drew. `sources` splits the
+    total into electricity and gas.
 
     `freight_by_leg` is what delivering the output emitted, and is no part of
     `by_step` or `sources`: the boundary is the plant, and how far a customer
@@ -384,16 +385,14 @@ def _emissions_breakdown(
     emissions = dict(electricity_by_user)
     electricity_t = sum(electricity_by_user.values())
 
-    # Gas combustion lands on whichever link burns it, so a blended shaft carries
-    # its own gas rather than having it broken out beside it. Not scope 2: it is
-    # what gives the NG-DRI comparison case a figure to hold the grid runs against.
+    # Gas combustion, whichever link burns it: the gas shaft takes it directly,
+    # the blended shaft through its gas feed. Scope 1, so it is kept out of the
+    # steps, which are the electricity's; it gives the NG-DRI comparison case a
+    # figure to hold the grid runs against.
     gas_factors = emissions_cfg["natural_gas_reductant_t_co2e_per_mwh"]
     gas_t_per_mwh = gas_factors["process"] + gas_factors["upstream"]
-    gas_t = 0.0
-    for link in n.links.index[n.links.bus0 == "gas"]:
-        burned = float(link_p0[link].sum()) * annual * gas_t_per_mwh
-        emissions[link] = emissions.get(link, 0.0) + burned
-        gas_t += burned
+    gas_t = sum(float(link_p0[link].sum()) * annual * gas_t_per_mwh
+                for link in n.links.index[n.links.bus0 == "gas"])
 
     # Freight over the run's own legs, each mode at its own factor. A diagnostic:
     # kept out of `emissions` so that no total counts it.
@@ -1476,27 +1475,37 @@ def extract_summary(
         run["origin"], transport_legs, grid_mix,
         run["destination"], destination_mix,
     )
-    emissions = emitted["by_step"]
+    # The breakdown charges each link; the report charges each step, every shaft
+    # or cell and the preheat being one `reduction`.
+    emissions = {}
+    for link, value in emitted["by_step"].items():
+        step = emission_step(link)
+        emissions[step] = emissions.get(step, 0.0) + value
     electricity_mwh = emitted["electricity_mwh"]
     sources = emitted["sources"]
     summary["emissions_basis"] = assumptions["emissions"]["basis"]
     if emitted["unavailable"]:
         summary["emissions_unavailable_reason"] = emitted["unavailable"]
-    emissions_t = sum(emissions.values())
+    emissions_t = sources["electricity"] + sources["gas"]
     freight_by_leg = emitted["freight_by_leg"]
-    summary["emissions_kt_co2e_per_year"] = emissions_t / 1e3
-    for source, value in sources.items():
-        summary[f"emissions_{source}_kt_co2e_per_year"] = value / 1e3
+    summary["emissions_energy_mt_co2e_per_year"] = emissions_t / 1e6
+    summary["emissions_scope2_electricity_mt_co2e_per_year"] = sources["electricity"] / 1e6
+    summary["emissions_scope1_gas_mt_co2e_per_year"] = sources["gas"] / 1e6
     summary["emissions_freight_kt_co2e_per_year"] = sum(freight_by_leg.values()) / 1e3
 
     # Per tonne of steel, and each step's share of it. The steps stack to the
-    # total, so a step this route has none of reads 0 rather than blank. The
+    # scope 2 row and the gas is the scope 1 row, so a step this route has none
+    # of reads 0 rather than blank. The
     # freight sits beside them rather than in them: it is what delivering the
     # tonne added, and no total above counts it.
-    summary["emissions_kg_co2e_per_t_steel"] = emissions_t * 1e3 / steel_t_per_year
+    summary["emissions_energy_t_co2e_per_t_steel"] = emissions_t / steel_t_per_year
+    summary["emissions_scope2_electricity_t_co2e_per_t_steel"] = (
+        sources["electricity"] / steel_t_per_year
+    )
+    summary["emissions_scope1_gas_t_co2e_per_t_steel"] = sources["gas"] / steel_t_per_year
     for step in EMISSION_STEPS:
-        summary[f"emissions_{field_stem(step)}_kg_co2e_per_t_steel"] = (
-            emissions.get(step, 0.0) * 1e3 / steel_t_per_year
+        summary[f"emissions_scope2_{field_stem(step)}_t_co2e_per_t_steel"] = (
+            emissions.get(step, 0.0) / steel_t_per_year
         )
     for leg in FREIGHT_LEGS:
         summary[f"emissions_{field_stem(leg)}_kg_co2e_per_t_steel"] = (
@@ -1504,33 +1513,47 @@ def extract_summary(
         )
     if emissions_t > 0:
         for step in EMISSION_STEPS:
-            summary[f"emissions_{field_stem(step)}_pct"] = (
+            summary[f"emissions_scope2_{field_stem(step)}_pct"] = (
                 emissions.get(step, 0.0) * 100.0 / emissions_t
             )
+        summary["emissions_scope1_gas_pct"] = sources["gas"] * 100.0 / emissions_t
+    # Ironmaking's electricity CO2e, with its share of the losses by the MWh it
+    # drew among everything drawn at the origin, which is where the losses are:
+    # an export route's furnace melts on the destination's grid and has none.
+    melts_abroad = "destination_supply" in n.generators.index
+    drawn_mwh = {step: 0.0 for step in EMISSION_STEPS}
+    for user, mwh in electricity_mwh.items():
+        if not (melts_abroad and user == "eaf"):
+            drawn_mwh[emission_step(user)] += mwh
+    iron_mwh = drawn_mwh["reduction"] + drawn_mwh["electrolyser"]
+    origin_mwh = sum(drawn_mwh.values())
+    iron_share = iron_mwh / origin_mwh if origin_mwh > 0 else 0.0
+    losses_t = emissions.get("battery_losses", 0.0) + emissions.get("transmission_losses", 0.0)
+    summary["emissions_scope2_ironmaking_t_co2e_per_t_steel"] = (
+        emissions.get("reduction", 0.0) + emissions.get("electrolyser", 0.0)
+        + losses_t * iron_share
+    ) / steel_t_per_year
     # The hydrogen's own emissions over the hydrogen, not the plant's over the
     # hydrogen: this is the figure that compares to the RFNBO ceiling of
     # 3.38 kg CO2e per kg H2, and only the electrolyser's electricity is in the
     # hydrogen's production chain. On a steel route the furnace is downstream of
     # it and belongs to the steel.
     #
-    # The losses ride along in proportion to what the electrolyser drew: the
-    # battery cycle and the line that delivered its power were incurred to
-    # deliver it, and a run whose every MWh exists to make hydrogen would
-    # otherwise read a third light against a threshold it is being held to.
-    drawn_t = sum(emitted["electricity_t"].values())
+    # The losses ride along in proportion to the MWh the electrolyser drew among
+    # everything drawn at the origin, as ironmaking's do above: the battery
+    # cycle and the line that delivered its power were incurred to deliver it,
+    # and a run whose every MWh exists to make hydrogen would otherwise read a
+    # third light against a threshold it is being held to. A run on carriers
+    # this basis rates at zero reports 0, the figure the RFNBO ceiling is read
+    # against; one whose mix is unknown has a NaN here and stays blank.
     if "electrolyser" in n.links.index:
         h2_kg = _h2_produced_kg(n)
-        if h2_kg > 0 and drawn_t > 0:
-            summary["emissions_kg_co2e_per_kg_h2"] = (
-                emitted["electricity_t"].get("electrolyser", 0.0)
-                * (sources["electricity"] / drawn_t) * 1e3 / h2_kg
-            )
-        elif h2_kg > 0 and drawn_t == 0:
-            # Every MWh came from carriers this basis rates at zero, so the
-            # hydrogen carries nothing. That is the figure the RFNBO ceiling is
-            # read against, so it is reported rather than left blank. A run whose
-            # mix is unknown has a NaN here instead and stays blank.
-            summary["emissions_kg_co2e_per_kg_h2"] = 0.0
+        if h2_kg > 0:
+            electrolyser_share = (drawn_mwh["electrolyser"] / origin_mwh
+                                  if origin_mwh > 0 else 0.0)
+            summary["emissions_scope2_kg_co2e_per_kg_h2"] = (
+                emissions.get("electrolyser", 0.0) + losses_t * electrolyser_share
+            ) * 1e3 / h2_kg
 
     # Electricity by who drew it, and how dirty their own hours were — the number
     # that separates a user chasing cheap renewable hours from one running flat.
@@ -1538,7 +1561,7 @@ def extract_summary(
     # were MWh the system drew, so a user can sit either side of it.
     total_el_mwh = sum(electricity_mwh.values()) + emitted["losses_mwh"]
     if total_el_mwh > 0:
-        summary["emissions_kg_co2e_per_mwh_el"] = (
+        summary["emissions_scope2_kg_co2e_per_mwh_el"] = (
             sources["electricity"] * 1e3 / total_el_mwh
         )
     summary["el_users_gwh"] = sum(electricity_mwh.values()) / 1e3
