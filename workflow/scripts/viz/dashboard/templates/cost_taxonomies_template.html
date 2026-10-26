@@ -688,7 +688,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     // dashboard: the reported groups, with the capex/O&M split in the process hover
     const dashLines = (g, r) => {
       const rec = recs[r], L = rec.lcos, a = rec.purpose || {};
-      if(g==="process") return [
+      if(g==="total_plant") return [
         ["· annualised capex", amountOf(a.capex, L, "LCOS", "€/t")],
         ["· fixed O&M", amountOf(a.fixed_om, L, "LCOS", "€/t")],
       ].concat(plantLines(rec));
@@ -721,7 +721,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
       if(only && g!==only) return;
       const v = (rec.leaves||{})[leaf];
       if(v==null) return;
-      const hours = (rec.caps||{})[g==="iron_or_hbi_store"?"iron_or_hbi_store_hours_steel":"steel_store_hours_steel"];
+      const hours = (rec.caps||{})[g==="iron_or_hbi_store"?"iron_or_hbi_store_duration_hours_steel":"steel_store_duration_hours_steel"];
       out.push([lab, amount(v,"€/t",2) + (hours!=null?` for ${nf(hours,0)} h of demand`:"")]);
     });
     return out;

@@ -43,7 +43,7 @@ RUN_FILES = ("report", "diagnostic", "network", "overlay", "base_assumptions", "
 def _report(rows):
     """A report-shaped frame: one row per run, in the column order compile_report uses."""
     frame = pd.DataFrame(
-        rows, columns=["scenario", "run", "origin", "route", "start_date", "end_date", "lcos_eur_per_t"]
+        rows, columns=["scenario", "run", "origin", "route", "start_date", "end_date", "lcos_eur_per_t_steel"]
     )
     # Iron and steel made in one place, as compile_report writes a domestic run.
     frame.insert(3, "destination", frame["origin"])
@@ -78,7 +78,7 @@ def test_a_run_is_a_column_and_a_field_is_a_row(tmp_path):
 
 
 def _pick(tmp_path, monkeypatch, costs):
-    """Run pick_best_run over one scenario whose runs cost `costs` ({run: lcos_eur_per_t})."""
+    """Run pick_best_run over one scenario whose runs cost `costs` ({run: lcos_eur_per_t_steel})."""
     inputs = {name: [] for name in RUN_FILES}
     for run, cost in costs.items():
         run_dir = tmp_path / ".runs" / f"s_{run}"
@@ -95,7 +95,7 @@ def _pick(tmp_path, monkeypatch, costs):
     monkeypatch.setattr(pick_best_run, "snakemake", SimpleNamespace(
         input=SimpleNamespace(**inputs),
         output=SimpleNamespace(**outputs, runs=tmp_path / ".runs" / "runs.csv"),
-        params=SimpleNamespace(best_run_by="lcos_eur_per_t"),
+        params=SimpleNamespace(best_run_by="lcos_eur_per_t_steel"),
         wildcards=SimpleNamespace(scenario="s"),
     ))
     pick_best_run.main()
@@ -163,7 +163,7 @@ def test_every_route_writes_the_same_fields(tmp_path):
         ("t", "VIC1", "VIC1", "moe-eaf", "20250101", "20251231", 914.0),
     ])
     # Only one run has a press to report, only the other an LCOH.
-    df["cost_briquetting_capex_eur_per_t_steel"] = [float("nan"), 120.0]
+    df["cost_briquetting_plant_capex_eur_per_t_steel"] = [float("nan"), 120.0]
     df["lcoh_eur_per_kg"] = [4.1, float("nan")]
     report_path, _ = _write(df, tmp_path)
     report = read_report(report_path)
@@ -182,7 +182,7 @@ def test_a_blank_means_undefined_and_a_zero_means_zero(tmp_path):
     # the cost of the hydrogen it never made is not a number.
     assert row["electrolyser_gw"] == 0.0
     assert row["cost_electrolyser_meur"] == 0.0
-    assert row["cost_briquetting_capex_eur_per_t_steel"] == 0.0
+    assert row["cost_briquetting_plant_capex_eur_per_t_steel"] == 0.0
     assert pd.isna(row["lcoh_eur_per_mwh_lhv"])
     assert pd.isna(row["electrolyser_utilization"])
     assert pd.isna(row["cf_wind_offshore"])
@@ -251,7 +251,7 @@ def test_a_report_reads_back_as_it_was_written(tmp_path):
     assert list(report.index) == ["s_VIC1"]
     assert list(report["cf_solar"]) == [0.19], "numbers come back as numbers"
     assert list(report["start_date"]) == ["20250101"], "and dates as text"
-    assert report["lcos_eur_per_t"].dtype == float
+    assert report["lcos_eur_per_t_steel"].dtype == float
 
 
 def _rows(*series):
@@ -358,7 +358,7 @@ def test_the_h2_shaft_reports_its_preheat_where_the_blend_shaft_does():
     shaft["h2_preheat_el_mwh_per_t"] = 0.0
     before, after = solved(lumped), solved(assumptions)
 
-    assert after["lcos_eur_per_t"] == pytest.approx(before["lcos_eur_per_t"])
+    assert after["lcos_eur_per_t_steel"] == pytest.approx(before["lcos_eur_per_t_steel"])
     assert after["el_users_gwh"] == pytest.approx(before["el_users_gwh"])
     assert after["el_dri_h2_gwh"] + after["el_h2_preheat_gwh"] == pytest.approx(before["el_dri_h2_gwh"])
     preheat_share = (assumptions["dri-h2"]["h2_preheat_el_mwh_per_t"]
@@ -452,6 +452,12 @@ def test_the_ironmaking_capacity_is_the_shaft_at_full_load_for_a_year():
     shaft_t_per_h = n.links.at["dri-h2", "p_nom_opt"] * n.links.at["dri-h2", "efficiency"]
     assert s["ironmaking_capacity_mt_opt"] == pytest.approx(shaft_t_per_h * 8760 / 1e6)
     assert "dri_h2_t_per_h_opt" not in s, "one ironmaking row, not one per shaft"
+    # The furnace's nameplate likewise: never below the steel it made.
+    furnace_t_per_h = n.links.at["eaf", "p_nom_opt"] * n.links.at["eaf", "efficiency"]
+    assert s["steelmaking_capacity_mt_opt"] == pytest.approx(furnace_t_per_h * 8760 / 1e6)
+    assert "eaf_t_per_h_opt" not in s, "the furnace's size is the steelmaking row"
+    assert s["steelmaking_capacity_mt_opt"] * s["steelmaking_utilization"] == pytest.approx(
+        s["steel_produced_mt"])
     made_mt = _iron_produced_t(n) * 8760 / len(n.snapshots) / 1e6
     assert s["ironmaking_capacity_mt_opt"] * s["ironmaking_utilization"] == pytest.approx(made_mt)
     # The feedstock is quoted per tonne of iron out, so what was spent on it over
@@ -481,12 +487,32 @@ def test_iron_is_counted_at_the_shaft_and_the_briquettes_beside_it():
         s["ironmaking_capacity_mt_opt"] * s["ironmaking_utilization"])
     assert s["hbi_produced_mt"] == pytest.approx(
         s["iron_produced_mt"] * assumptions["briquetting"]["yield_t_per_t"])
+    # The press's nameplate times how hard it ran is what it made.
+    assert s["briquetting_capacity_mt_opt"] * s["briquetting_utilization"] == pytest.approx(
+        s["hbi_produced_mt"])
     assert s["cost_h2_production_eur_per_t_iron"] * s["iron_produced_mt"] == pytest.approx(
         s["cost_h2_production_meur"])
+    # The destination furnace's power per MWh it drew, in three parts: together
+    # they are its whole bill, which is the destination's electricity group.
+    per_mwh = (s["destination_grid_price_eur_per_mwh"] + s["destination_grid_fee_eur_per_mwh"]
+               + s["destination_grid_connection_eur_per_mwh_imported"])
+    assert s["destination_grid_total_eur_per_mwh_imported"] == pytest.approx(per_mwh)
+    assert s["destination_grid_import_gw_opt"] == pytest.approx(
+        n.generators.at["destination_supply", "p_nom_opt"] / 1e3)
+    assert "destination_supply_gw_opt" not in s
+    assert per_mwh * s["el_eaf_gwh"] * 1e3 == pytest.approx(s["cost_destination_electricity_meur"] * 1e6)
+    # The connection's two halves, as the destination's cost leaves have them.
+    assert (s["destination_grid_connection_capex_eur_per_mwh_imported"]
+            + s["destination_grid_capacity_fee_eur_per_mwh_imported"]) == pytest.approx(
+        s["destination_grid_connection_eur_per_mwh_imported"])
+    steel_t = s["steel_produced_mt"] * 1e6
+    assert s["destination_grid_capacity_fee_eur_per_mwh_imported"] * s["el_eaf_gwh"] * 1e3 == pytest.approx(
+        s["cost_destination_grid_capacity_fee_eur_per_t_steel"] * steel_t)
+
     # The briquette stockpile in hours of steel: what it holds over what the
     # furnace charges an hour, more than a tonne of briquettes per tonne of steel.
     steel_t_per_h = s["steel_produced_mt"] * 1e6 / 8760
-    assert s["iron_or_hbi_store_hours_steel"] == pytest.approx(
+    assert s["iron_or_hbi_store_duration_hours_steel"] == pytest.approx(
         s["iron_or_hbi_store_kt"] * 1e3
         / (steel_t_per_h * s["hbi_produced_mt"] / s["steel_produced_mt"]))
     # What went through the stockpile: its cycles are that over its size, its
@@ -495,3 +521,51 @@ def test_iron_is_counted_at_the_shaft_and_the_briquettes_beside_it():
         s["iron_or_hbi_store_discharged_kt"] / s["iron_or_hbi_store_kt"])
     assert s["iron_or_hbi_store_share_pct"] == pytest.approx(
         s["iron_or_hbi_store_discharged_kt"] / 1e3 * 100 / s["hbi_produced_mt"])
+    # The steel store's rows, built the same way over the steel made.
+    if s["steel_store_kt"] > 0:
+        assert s["steel_store_cycles_per_year"] == pytest.approx(
+            s["steel_store_discharged_kt"] / s["steel_store_kt"])
+    assert s["steel_store_share_pct"] == pytest.approx(
+        s["steel_store_discharged_kt"] / 1e3 * 100 / s["steel_produced_mt"])
+
+def test_the_origin_s_grid_per_mwh_has_the_cost_leaves_four_parts():
+    """Price, volumetric fee, connection capital and capacity fee per MWh imported,
+    each the matching cost leaf over the MWh, and the connection their subtotal."""
+    assumptions = yaml.safe_load((REPO_ROOT / "config" / ".template.yaml").read_text())
+    hours = np.arange(48)
+    index = pd.date_range("2025-01-01", periods=48, freq="h")
+    cf = pd.DataFrame({"solar": np.clip(np.sin((hours % 24 - 6) / 12 * np.pi), 0, None),
+                       "wind-onshore": 0.35 + 0.3 * np.sin(hours / 7.0)}, index=index)
+    price = pd.Series(40 + 30 * np.sin(hours / 24 * 2 * np.pi), index=index)
+    n = build_network("h2-dri-eaf", assumptions, cf, price_series=price)
+    n.optimize(solver_name="highs", solver_options={"output_flag": False})
+    s = extract_summary(n, "s", {"origin": "X", "destination": "X", "route": "h2-dri-eaf",
+                                 "start_date": "20250101", "end_date": "20250102"}, assumptions)
+    imported_mwh = s["grid_imported_gwh"] * 1e3
+    steel_t = s["steel_produced_mt"] * 1e6
+    assert imported_mwh > 0, "the test needs a run that bought power"
+
+    assert (s["grid_connection_capex_eur_per_mwh_imported"]
+            + s["grid_capacity_fee_eur_per_mwh_imported"]) == pytest.approx(
+        s["grid_connection_eur_per_mwh_imported"])
+    for per_mwh, leaf in (("grid_connection_capex", "grid_connection_capex"),
+                          ("grid_capacity_fee", "grid_capacity_fee")):
+        assert s[f"{per_mwh}_eur_per_mwh_imported"] * imported_mwh == pytest.approx(
+            s[f"cost_{leaf}_eur_per_t_steel"] * steel_t)
+
+def test_the_gas_side_reports_its_peak_draw_not_a_free_rating():
+    """The gas supply costs nothing to size, so its rating is not reported; its
+    busiest hour is, and that is at least the year's average draw."""
+    assumptions = yaml.safe_load((REPO_ROOT / "config" / ".template.yaml").read_text())
+    hours = np.arange(48)
+    cf = pd.DataFrame({"solar": np.clip(np.sin((hours % 24 - 6) / 12 * np.pi), 0, None),
+                       "wind-onshore": 0.35 + 0.3 * np.sin(hours / 7.0)},
+                      index=pd.date_range("2025-01-01", periods=48, freq="h"))
+    n = build_network("ng-dri-eaf", assumptions, cf)
+    n.optimize(solver_name="highs", solver_options={"output_flag": False})
+    s = extract_summary(n, "s", {"origin": "X", "destination": "X", "route": "ng-dri-eaf",
+                                 "start_date": "20250101", "end_date": "20250102"}, assumptions)
+
+    assert "gas_supply_gw_opt" not in s
+    assert s["gas_peak_draw_gw"] == pytest.approx(float(n.generators_t.p["gas_supply"].max()) / 1e3)
+    assert s["gas_peak_draw_gw"] * 8760 >= s["gas_consumed_gwh_lhv"] - 1e-6

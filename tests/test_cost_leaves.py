@@ -25,6 +25,7 @@ from common._report_schema import (
     LEAF_PARENTS,
     LEAF_SUBTOTALS,
     ORE_LINKS,
+    plant_stem,
     IRON_ELECTRICITY_JOBS,
     ORIGIN_ELECTRICITY_LEAVES,
     PROCESS_LINKS,
@@ -153,7 +154,7 @@ def test_a_plants_two_halves_are_its_whole_annual_cost(route, assumptions):
         if link not in n.links.index:
             continue
         # The route's one ironmaking step reports as the ironmaking plant.
-        stem = "ironmaking_plant" if link in ORE_LINKS else field_stem(link)
+        stem = plant_stem(link)
         whole = float(n.links.at[link, "capital_cost"]
                       * n.links.at[link, "p_nom_opt"]) / steel_t
         halves = (fields[f"cost_{stem}_capex_eur_per_t_steel"]
@@ -199,7 +200,7 @@ def test_a_blended_shaft_pays_for_its_ore(route, assumptions):
         breakdown["eaf_consumables"] / steel_t, rel=1e-9)
 
 
-@pytest.mark.parametrize("group", ["ladle_metallurgy", "process"])
+@pytest.mark.parametrize("group", ["ladle_metallurgy", "total_plant"])
 def test_a_cost_group_with_nowhere_to_go_is_refused(group, assumptions):
     """A cost group no leaf accounts for stops the report.
 
@@ -365,7 +366,8 @@ def test_the_iron_and_everything_after_it_are_the_whole_steel(route, assumptions
     origin_power = sum(yearly[leaf] for leaf in ORIGIN_ELECTRICITY_LEAVES)
     iron_power = fields["cost_electricity_eur_per_t_iron"] * iron_t
     after = (yearly["eaf_consumables"]
-             + sum(yearly[f"{stem}_{half}"] for stem in ("eaf", "briquetting") for half in ("capex", "fom"))
+             + sum(yearly[f"{stem}_{half}"] for stem in ("steelmaking_plant", "briquetting_plant")
+                   for half in ("capex", "fom"))
              + yearly["steel_store"] + yearly["transport"]
              + (yearly["iron_or_hbi_store"] if holds != "iron" else 0.0)
              + sum(v for leaf, v in yearly.items() if leaf.startswith("destination_grid_"))
@@ -380,10 +382,26 @@ def test_the_briquettes_are_the_iron_plus_the_press_and_their_stockpile(route, a
     hbi_t = float(-n.links_t.p1["briquetting"].sum()) * 8760.0 / len(n.snapshots)
     job = lambda name: fields[f"cost_electricity_{name}_eur_per_t_steel"] * steel_t
     press_share = job("briquetting") / (job("reduction") + job("electrolyser") + job("briquetting"))
-    press = (yearly["briquetting_capex"] + yearly["briquetting_fom"]
+    press = (yearly["briquetting_plant_capex"] + yearly["briquetting_plant_fom"]
              + job("briquetting") + job("losses") * press_share)
 
     assert holds == "hbi"
+    # Its breakdown: the iron, the press's two halves, its power, the stockpile.
+    parts = ("ironmaking", "briquetting_plant_capex", "briquetting_plant_fom",
+             "electricity_briquetting", "iron_or_hbi_store")
+    assert sum(fields[f"cost_{part}_eur_per_t_hbi"] for part in parts) == pytest.approx(
+        fields["lcohbi_eur_per_t_hbi"], rel=1e-9)
+    assert fields["cost_briquetting_plant_eur_per_t_hbi"] == pytest.approx(
+        fields["cost_briquetting_plant_capex_eur_per_t_hbi"]
+        + fields["cost_briquetting_plant_fom_eur_per_t_hbi"], rel=1e-9)
+    # And per tonne of steel: the same euros, and the steel-basis rows that are
+    # its parts add up to it.
+    assert fields["cost_hbi_eur_per_t_steel"] * steel_t == pytest.approx(
+        fields["lcohbi_eur_per_t_hbi"] * hbi_t, rel=1e-9)
+    steel_parts = ("ironmaking", "briquetting_plant", "electricity_briquetting_incl_losses",
+                   "iron_or_hbi_store")
+    assert sum(fields[f"cost_{part}_eur_per_t_steel"] for part in steel_parts) == pytest.approx(
+        fields["cost_hbi_eur_per_t_steel"], rel=1e-9)
     assert fields["lcohbi_eur_per_t_hbi"] * hbi_t == pytest.approx(
         fields["lcoi_eur_per_t_iron"] * iron_t + press + yearly["iron_or_hbi_store"], rel=1e-9)
 
@@ -417,3 +435,32 @@ def test_the_cost_of_iron_per_tonne_of_steel_is_its_parts_on_that_basis(route, a
              "electricity_ironmaking", "ironmaking_store")
     assert sum(fields[f"cost_{part}_eur_per_t_steel"] for part in parts) == pytest.approx(
         total, rel=1e-9)
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_the_steel_s_electricity_is_ironmaking_with_its_losses_and_the_rest(route, assumptions):
+    """Ironmaking (its losses in), the press, the furnace and the losses left over
+    close on the steel's whole electricity bill."""
+    _, fields, _, _, _, _ = _iron_and_after(route, assumptions)
+    job = lambda name: fields[f"cost_electricity_{name}_eur_per_t_steel"]
+    assert (job("ironmaking") + job("briquetting") + job("eaf")
+            + job("losses_excl_ironmaking")) == pytest.approx(
+        fields["cost_electricity_eur_per_t_steel"], rel=1e-9)
+
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_the_iron_delivered_is_the_gate_plus_its_freight(route, assumptions):
+    """At the furnace: the gate's product and its freight, over what arrived. A
+    home-made route ships nothing first, so there it is the gate's own cost."""
+    n, fields, yearly, iron_t, _, _ = _iron_and_after(route, assumptions)
+    total = fields["lcoi_delivered_eur_per_t_iron_or_hbi"]
+    assert total == pytest.approx(fields["cost_plant_gate_eur_per_t_iron_or_hbi"]
+                                  + fields["cost_transport_eur_per_t_iron_or_hbi"], rel=1e-9)
+    if "iron_transport" not in n.links.index:
+        assert fields["cost_transport_eur_per_t_iron_or_hbi"] == 0.0
+        assert total == pytest.approx(fields["lcoi_eur_per_t_iron"], rel=1e-9)
+    else:
+        arrived_t = float(-n.links_t.p1["iron_transport"].sum()) * 8760.0 / len(n.snapshots)
+        assert fields["cost_transport_eur_per_t_iron_or_hbi"] * arrived_t == pytest.approx(
+            yearly["transport"], rel=1e-9)

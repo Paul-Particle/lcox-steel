@@ -87,7 +87,7 @@ PROCESS_LINKS = ("dri-h2", "dri-ng", "dri-mix", "eaf", "moe", "ew", "briquetting
 # Annualised cost groups, in the order `compile_report._cost_breakdown` builds
 # them. Together they are the total annual cost.
 COST_GROUPS = ("res", "battery", "grid", "gas", "electrolyser", "h2_buffer",
-               "process", "ore", "eaf_consumables", "iron_or_hbi_store", "steel_store",
+               "total_plant", "ore", "eaf_consumables", "iron_or_hbi_store", "steel_store",
                "transmission", "transport", "destination_electricity")
 
 # The links that draw electricity, by the id `build_network` gives them. Each
@@ -116,6 +116,17 @@ EMISSION_STEPS = (*ELECTRICITY_USERS, "reductant-ng",
 # instead and the briquetting press buys nothing, so neither is here.
 ORE_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew")
 
+
+def plant_stem(link: str) -> str:
+    """The report's name for a process plant's cost: what it does, not what it is.
+
+    The route's one ironmaking step is `ironmaking_plant` whichever shaft or cell
+    it built, the furnace `steelmaking_plant`, the press `briquetting_plant`.
+    """
+    if link in ORE_LINKS or link == "ironmaking_plant":
+        return "ironmaking_plant"
+    return {"eaf": "steelmaking_plant", "briquetting": "briquetting_plant"}[link]
+
 # The links whose electricity turns ore into iron — the three shafts, the two
 # cells, and the preheat on the blended shaft's hydrogen feed. What separates
 # them from the rest of the drawing links is what their power was for, which is
@@ -141,13 +152,11 @@ REDUCTION_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew", "reductant-h2")
 LEAF_COSTS_BY_GROUP = (
     ("ore", "feedstock"),
     ("eaf_consumables", "feedstock"),
-    # The ironmaking plant is one pair whatever the route — the shaft or cells it
-    # built, the others being none — so the row reads the same on every route.
-    # The furnace and the press after it keep a pair each.
-    ("ironmaking_plant_capex", "process"),
-    ("ironmaking_plant_fom", "process"),
-    *((f"{field_stem(link)}_{half}", "process")
-      for link in PROCESS_LINKS if link not in ORE_LINKS for half in ("capex", "fom")),
+    # Each plant is one pair named for what it does (`plant_stem`): the ironmaking
+    # plant whatever shaft or cells the route built, the press, the furnace.
+    *((f"{plant}_{half}", "total_plant")
+      for plant in ("ironmaking_plant", "briquetting_plant", "steelmaking_plant")
+      for half in ("capex", "fom")),
     ("gas_fuel", "gas"),
     ("gas_carbon", "gas"),
     ("electrolyser_capex", "hydrogen"),
@@ -194,6 +203,8 @@ LEAF_SUBTOTALS = {
     # The route's ironmaking plant, capital and upkeep: whichever shaft or cell it
     # built, the others being 0, so one row reads the same on every route.
     "ironmaking_plant": ("ironmaking_plant_capex", "ironmaking_plant_fom"),
+    "briquetting_plant": ("briquetting_plant_capex", "briquetting_plant_fom"),
+    "steelmaking_plant": ("steelmaking_plant_capex", "steelmaking_plant_fom"),
     # The electrolyser alone; with the buffer it is the `hydrogen` parent.
     "electrolyser": ("electrolyser_capex", "electrolyser_fom", "electrolyser_water"),
     # The origin's grid connection and the energy bought through it.
@@ -285,8 +296,12 @@ REPORT_FIELDS = {
     # What the briquetting press made of it, on a route that briquettes; 0 elsewhere.
     "hbi_produced_mt": ZERO,
     "h2_produced_kt": ZERO,
-    "ng_gwh_lhv": ZERO,
-    "lcos_eur_per_t": UNDEFINED,
+    "gas_consumed_gwh_lhv": ZERO,
+    # The fastest the plant drew gas in any hour, GW LHV. The gas supply itself
+    # costs nothing to size, so its own rating says nothing; this is what a
+    # connection would have to carry.
+    "gas_peak_draw_gw": ZERO,
+    "lcos_eur_per_t_steel": UNDEFINED,
     # The levelised cost of the iron at the plant gate, per tonne of
     # `iron_produced_mt`: everything inside a line drawn round the ironmaking
     # asset — ore, the shaft or cells, the hydrogen, its electricity, the gas, and
@@ -296,6 +311,13 @@ REPORT_FIELDS = {
     # And of the briquettes, on a route that presses its DRI: the iron above plus
     # the press and the HBI stockpile, per tonne of `hbi_produced_mt`.
     "lcohbi_eur_per_t_hbi": UNDEFINED,
+    # And the iron where the furnace stands, per tonne arriving there: what left
+    # the plant gate (the briquettes where the route presses its DRI, the iron
+    # otherwise) plus the freight that carried it. On a home-made route the
+    # furnace is at the gate, so it is the gate's own cost and the freight is 0.
+    "lcoi_delivered_eur_per_t_iron_or_hbi": UNDEFINED,
+    "cost_plant_gate_eur_per_t_iron_or_hbi": UNDEFINED,
+    "cost_transport_eur_per_t_iron_or_hbi": UNDEFINED,
     "lcoh_eur_per_kg": UNDEFINED,
 
     # Electricity: the system LCOE, the contributions that sum to it, then each
@@ -318,10 +340,23 @@ REPORT_FIELDS = {
     "cf_grid_connection": UNDEFINED,
     "grid_price_eur_per_mwh": UNDEFINED,
     "grid_fee_eur_per_mwh": UNDEFINED,
+    # The connection per MWh imported, and its two halves as the cost leaves have
+    # them: the annualised capital, and the capacity fee per MW and year. The
+    # first is their subtotal, never added to them.
     "grid_connection_eur_per_mwh_imported": UNDEFINED,
-    # Blank on every route that melts its iron where it made it: there is no
-    # furnace in another market, so there is no price it paid there.
-    "destination_price_eur_per_mwh": UNDEFINED,
+    "grid_connection_capex_eur_per_mwh_imported": UNDEFINED,
+    "grid_capacity_fee_eur_per_mwh_imported": UNDEFINED,
+    # The same three for the destination furnace's connection on an export route,
+    # per MWh it drew: market price, volumetric fee, connection. Together they are
+    # what a MWh delivered to it cost. Blank on every route that melts its iron
+    # where it made it: there is no furnace in another market.
+    # Their total first: what one MWh delivered to the furnace cost in all.
+    "destination_grid_total_eur_per_mwh_imported": UNDEFINED,
+    "destination_grid_price_eur_per_mwh": UNDEFINED,
+    "destination_grid_fee_eur_per_mwh": UNDEFINED,
+    "destination_grid_connection_eur_per_mwh_imported": UNDEFINED,
+    "destination_grid_connection_capex_eur_per_mwh_imported": UNDEFINED,
+    "destination_grid_capacity_fee_eur_per_mwh_imported": UNDEFINED,
 
     # Hydrogen: the levelised cost, its parts, and the plant behind them. The
     # parts are per kg, the unit hydrogen is quoted in; they stack to
@@ -342,7 +377,7 @@ REPORT_FIELDS = {
     # The same total per tonne of steel. Its electricity part per tonne of steel
     # is `cost_electricity_electrolyser_eur_per_t_steel`, and the same warning
     # holds: it is already inside `cost_electricity_eur_per_t_steel`, so this
-    # total is never added to the six group totals or to `lcos_eur_per_t`.
+    # total is never added to the six group totals or to `lcos_eur_per_t_steel`.
     "cost_h2_production_eur_per_t_steel": ZERO,
     # `cost_electrolyser_meur` in its three parts: the annualised capital, the
     # fixed O&M, and the water and consumables. They add up to it, so they are
@@ -364,7 +399,7 @@ REPORT_FIELDS = {
     # supply went through the buffer rather than straight to its users.
     "h2_buffer_discharged_kt": ZERO,
     "h2_buffer_cycles_per_year": UNDEFINED,
-    "h2_buffer_share_of_h2_pct": UNDEFINED,
+    "h2_buffer_share_pct": UNDEFINED,
 
     # The steel chain: how big each step is, how hard it runs, and the stores
     # that let it run at a different rate from the plant. What each step cost per
@@ -376,9 +411,14 @@ REPORT_FIELDS = {
     # How hard that step ran: its mean output over its nameplate, so what it made
     # is the capacity above times this.
     "ironmaking_utilization": UNDEFINED,
-    # The other two steps' sizes, in t/h of their own output.
-    **{f"{field_stem(link)}_t_per_h_opt": ZERO for link in PROCESS_LINKS if link not in ORE_LINKS},
-    **{f"{field_stem(link)}_utilization": UNDEFINED for link in PROCESS_LINKS if link not in ORE_LINKS},
+    # The same nameplate for the steel: the furnace's possible output in a year at
+    # full utilisation, in Mt — every route melts in the EAF.
+    "steelmaking_capacity_mt_opt": ZERO,
+    "steelmaking_utilization": UNDEFINED,
+    # And for the briquetting press on a route that presses its DRI: the briquettes
+    # it could put out in a year at full utilisation, in Mt HBI, and how hard it ran.
+    "briquetting_capacity_mt_opt": ZERO,
+    "briquetting_utilization": UNDEFINED,
     # Hydrogen's share of the reducing agent, two ways. By reduction: the share of
     # the iron reduced with hydrogen, each fuel counted as the hydrogen it stands
     # in for. By energy: hydrogen's share of the reducing agent's energy content
@@ -390,7 +430,7 @@ REPORT_FIELDS = {
     # what it holds, and how many hours of steel production that much would feed
     # the furnace for, at the furnace's own iron or briquettes per tonne of steel.
     "iron_or_hbi_store_kt": ZERO,
-    "iron_or_hbi_store_hours_steel": UNDEFINED,
+    "iron_or_hbi_store_duration_hours_steel": UNDEFINED,
     # What it took out in a year (lossless, so also what went in), its equivalent
     # full cycles, and the share of the iron or briquettes made that went through
     # it rather than straight on, as the hydrogen buffer's rows are.
@@ -400,13 +440,19 @@ REPORT_FIELDS = {
     # Zero on a route that melts its iron where it made it and stops at the
     # plant gate. Only one of the two commodities is ever shipped.
     "transport_km": ZERO,
-    "iron_shipped_kt": ZERO,
+    "iron_or_hbi_shipped_kt": ZERO,
     "steel_shipped_kt": ZERO,
     "steel_store_kt": ZERO,
-    "steel_store_hours_steel": UNDEFINED,
+    "steel_store_duration_hours_steel": UNDEFINED,
+    # What went through it, as for the other stores: taken out in a year
+    # (lossless, so also what went in), equivalent full cycles, and the share of
+    # the steel made that waited in it rather than going straight out.
+    "steel_store_discharged_kt": ZERO,
+    "steel_store_cycles_per_year": UNDEFINED,
+    "steel_store_share_pct": UNDEFINED,
 
     # The levelised cost of steel by what was bought, €/t steel and stacking to
-    # `lcos_eur_per_t`: the leaves (LEAF_COSTS) and the parent groups they roll
+    # `lcos_eur_per_t_steel`: the leaves (LEAF_COSTS) and the parent groups they roll
     # up into. A leaf a route has none of reads 0 — it contributed nothing, the
     # same way its cost group does.
     #
@@ -477,7 +523,30 @@ REPORT_FIELDS = {
     # already; the store is the iron's own, never the briquettes'.
     "cost_ironmaking_eur_per_t_steel": ZERO,
     "cost_electricity_ironmaking_eur_per_t_steel": ZERO,
+    # The losses ironmaking does not carry: the press's and the furnace's share.
+    # With the ironmaking row above and the `briquetting` and `eaf` job rows, it
+    # closes `cost_electricity_eur_per_t_steel` a third way; never added to the
+    # `losses` job row, which holds all of them.
+    "cost_electricity_losses_excl_ironmaking_eur_per_t_steel": ZERO,
     "cost_ironmaking_store_eur_per_t_steel": ZERO,
+    # `lcohbi_eur_per_t_hbi` in its parts, on a route that presses its DRI: the
+    # iron whole (the cost of iron over the briquettes rather than the DRI), the
+    # press with its capex and fixed O&M halves, the press's electricity with its
+    # share of the losses, and the stockpile the briquettes wait in. Blank on
+    # every route that does not briquette.
+    "cost_ironmaking_eur_per_t_hbi": UNDEFINED,
+    "cost_briquetting_plant_eur_per_t_hbi": UNDEFINED,
+    "cost_briquetting_plant_capex_eur_per_t_hbi": UNDEFINED,
+    "cost_briquetting_plant_fom_eur_per_t_hbi": UNDEFINED,
+    "cost_electricity_briquetting_eur_per_t_hbi": UNDEFINED,
+    "cost_iron_or_hbi_store_eur_per_t_hbi": UNDEFINED,
+    # The briquettes per tonne of steel: their whole cost, the same yearly euros
+    # as `lcohbi_eur_per_t_hbi`, and the one part the steel's own rows do not
+    # carry — the press's power with its share of the losses. That share is
+    # inside `cost_electricity_losses_excl_ironmaking_eur_per_t_steel` too, so
+    # the two are never added; nor to the `briquetting` job row, its power alone.
+    "cost_hbi_eur_per_t_steel": UNDEFINED,
+    "cost_electricity_briquetting_incl_losses_eur_per_t_steel": UNDEFINED,
     # The same capital/upkeep split on the two carriers, in their own units, so
     # each pair stacks to the reported part above it that it divides.
     "lcoe_res_capex_eur_per_mwh": ZERO,
@@ -521,13 +590,12 @@ REPORT_FIELDS = {
     # What the origin's connection carried in a year; `cf_grid_connection` is
     # this over the connection running flat out.
     "grid_imported_gwh": ZERO,
-    "gas_supply_gw_opt": ZERO,
     # The destination furnace's own connection, which only an export route
     # builds. Declared like the other two so it sits with them rather than after
     # every field the schema names.
-    "destination_supply_gw_opt": ZERO,
-    "battery_gw_opt": ZERO,
-    "battery_mwh_opt": ZERO,
+    "destination_grid_import_gw_opt": ZERO,
+    "battery_gw": ZERO,
+    "battery_mwh": ZERO,
     # What it gave back in a year, after the discharge loss.
     "battery_discharged_gwh": ZERO,
     # Equivalent full cycles: what it gave back over its energy capacity, so two

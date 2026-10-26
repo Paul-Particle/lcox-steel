@@ -129,7 +129,7 @@ H2_MIN = 0.02
 # Cost-group stack order (bottom → top), label and colour — mirrors COST_GROUPS in
 # plot_lcos_bars.py. Keys match the cost_{group}_meur columns in the report.
 COST_GROUPS = [
-    ["process",         "Process plant (capex+opex)", "#33434D"],
+    ["total_plant",     "Process plant (capex+opex)", "#33434D"],
     ["ore",             "Iron ore",                   "#E2B681"],
     ["eaf_consumables", "EAF consumables",            "#C99A5E"],
     ["gas",             "Natural gas (fuel + CO₂)",   "#525F6A"],
@@ -159,12 +159,12 @@ CAP_PANELS = [
     ]],
     ["Process capacity (t/h output)", "t/h", [
         ["ironmaking_t_per_h", "Ironmaking", "#8CA5B7"],
-        ["eaf_t_per_h",    "EAF",            "#525F6A"],
+        ["steelmaking_t_per_h", "Steelmaking (EAF)", "#525F6A"],
     ]],
     ["Storage (hours of demand)", "h", [
         ["h2_buffer_duration_hours", "H₂ buffer",      "#70D2F0"],
-        ["iron_or_hbi_store_hours_steel", "Iron / HBI store", "#B7C1C8"],
-        ["steel_store_hours_steel", "Steel inventory", "#8CA5B7"],
+        ["iron_or_hbi_store_duration_hours_steel", "Iron / HBI store", "#B7C1C8"],
+        ["steel_store_duration_hours_steel", "Steel inventory", "#8CA5B7"],
     ]],
 ]
 _CAP_KEYS = [b[0] for _, _, bars in CAP_PANELS for b in bars]
@@ -326,7 +326,7 @@ def _record(row, lcos_row, cap_row):
         if v is not None:
             lcoh_parts[key] = v * 1000.0 / H2_LHV_KWH_PER_KG
     # €/t-steel cost detail: per-plant cost, capital and upkeep together (sums to
-    # the "process" group), plus the ore/consumables split (sums to
+    # the "total_plant" group), plus the ore/consumables split (sums to
     # the "ore" and "eaf_consumables" groups). For the segment hovers, read off the cost leaves. The
     # blended shaft and the press are here too, or on a blended or an export
     # route the per-plant lines would come to less than the group they add up to.
@@ -339,10 +339,10 @@ def _record(row, lcos_row, cap_row):
         key = {"dri-h2": "dri", "dri-ng": "dri_ng", "dri-mix": "dri_mix",
                "moe": "moe", "ew": "electrowinning"}[built[0]]
         cost_detail[key] = plant
-    for stem in ("briquetting", "eaf"):
-        halves = [_opt(row[f"cost_{stem}_{half}_eur_per_t_steel"]) for half in ("capex", "fom")]
-        if any(v is not None for v in halves):
-            cost_detail[stem] = sum(v or 0.0 for v in halves)
+    for key, plant in (("briquetting", "briquetting_plant"), ("eaf", "steelmaking_plant")):
+        total = _opt(row[f"cost_{plant}_eur_per_t_steel"])
+        if total is not None:
+            cost_detail[key] = total
     for col, key in (("cost_ore_eur_per_t_steel", "ore"),
                      ("cost_eaf_consumables_eur_per_t_steel", "consumables")):
         v = _opt(row[col])
@@ -358,13 +358,13 @@ def _record(row, lcos_row, cap_row):
         ("grid_mw", "cf_grid_connection"),
         ("electrolyser_mw", "electrolyser_utilization"),
         ("ironmaking_t_per_h", "ironmaking_utilization"),
-        ("eaf_t_per_h", "eaf_utilization"),
+        ("steelmaking_t_per_h", "steelmaking_utilization"),
     ):
         raw = row[col]
         if pd.notna(raw):
             cf[capkey] = round(float(raw) * 100)
     return {
-        "lcos": round(_num(row["lcos_eur_per_t"]), 0),
+        "lcos": round(_num(row["lcos_eur_per_t_steel"]), 0),
         "lcoe": _opt(row["lcoe_eur_per_mwh"]),
         "lcoh": _opt(row["lcoh_eur_per_mwh_lhv"]),
         # The same cost per kg, which the report carries on every route that
@@ -374,7 +374,7 @@ def _record(row, lcos_row, cap_row):
         # most of the grid side; the page says so rather than printing a zero.
         "emissions": _opt(row["emissions_kg_co2e_per_t_steel"]),
         "steel_mt": round(_num(row["steel_produced_mt"]), 4),
-        "ng_gwh": round(_num(row["ng_gwh_lhv"]), 1),
+        "ng_gwh": round(_num(row["gas_consumed_gwh_lhv"]), 1),
         # Optional, not zero-filled: a blended run that took no H2 has a share of
         # 0, and a route with no blend at all has none, which the card reads as
         # two different things.

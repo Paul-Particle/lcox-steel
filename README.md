@@ -436,7 +436,7 @@ salt-cavern H2 store for the H2 routes, a lower MOE turndown for the MOE ones.
 
 An area on the grid that trades through market zones is run once per zone.
 `report.best_run_by` in `config/config.yaml` names the field that decides which
-run stands for the scenario, defaulting to `lcos_eur_per_t`, the levelised cost
+run stands for the scenario, defaulting to `lcos_eur_per_t_steel`, the levelised cost
 of steel. The lowest wins, and a run without a value is never picked over one
 with it.
 
@@ -539,7 +539,7 @@ origin,DEMO
 destination,ES_SYN
 route,moe-eaf-export
 ...
-lcos_eur_per_t,914.11
+lcos_eur_per_t_steel,914.11
 ```
 
 The **identity fields lead**: the run (`scenario`, `origin` — where the iron is
@@ -588,6 +588,28 @@ contain c) the cost of the power that charged it, because that power is already
 paid for in the renewables and grid rows, so the figure is what the battery
 adds per MWh it delivers, not the full cost of a MWh that came out of it. It is
 blank when no battery was built or it never discharged.
+
+On an export route the furnace at the destination buys its power from that
+market, and what a MWh delivered to it cost is reported per MWh it drew, in the
+same four parts as the cost leaves: a) `destination_grid_price_eur_per_mwh`, the
+market price it paid, weighted by the hours it drew in, which is below the
+market's yearly average because the furnace chooses cheap hours, and can be
+negative where it melted in hours the price was; b)
+`destination_grid_fee_eur_per_mwh`, the volumetric grid fee
+(`grid.fee_eur_per_mwh`, 0 in the template); c)
+`destination_grid_connection_capex_eur_per_mwh_imported`, the connection's
+annualised capex; and d) `destination_grid_capacity_fee_eur_per_mwh_imported`,
+its yearly capacity fee per MW, both spread over the MWh it carried. c) and d)
+together are `destination_grid_connection_eur_per_mwh_imported`, a subtotal
+never added to them. The four add up to the furnace's whole electricity cost per
+MWh, reported as `destination_grid_total_eur_per_mwh_imported`: times the MWh it
+drew, they give `cost_destination_electricity_meur`. The
+origin's grid has the same set (`grid_price_eur_per_mwh`, `grid_fee_eur_per_mwh`,
+`grid_connection_capex_eur_per_mwh_imported`,
+`grid_capacity_fee_eur_per_mwh_imported`, and the subtotal
+`grid_connection_eur_per_mwh_imported`), per MWh imported at the origin. The
+destination's are blank on every route that makes its steel where it made its
+iron.
 
 `el_reduction_mwh_per_t_steel` is the electricity that turned ore into iron
 over the year, per tonne of steel produced, and `cost_electricity_reduction_eur_per_t_steel`
@@ -639,6 +661,27 @@ iron per tonne of steel, because the hydrogen buffer is lossless and ends the
 year where it began. On `mix-dri-eaf` it is the model's own choice of how much
 of the reductant is hydrogen, and on the gas, MOE and EW routes it is 0.
 
+`gas_consumed_gwh_lhv` is the natural gas the plant burnt over the year, in
+GWh of energy content (LHV). Only the gas and blended DRI shafts burn gas, as
+their reducing agent. It is a model result, but on `ng-dri-eaf` it always comes
+back to the inputs: the gas shaft's gas per tonne of iron
+(`dri-ng.gas_mwh_per_t`) times the iron produced, since that shaft has no
+choice of reductant. On `mix-dri-eaf` it is the model's own choice of how much
+of the reductant is gas. On the hydrogen, MOE and EW routes it is 0. Per tonne
+of steel it is `gas_mwh_per_t_steel`.
+
+`gas_peak_draw_gw` is the highest rate the plant drew gas at in any hour of the
+year, in GW LHV: what a gas connection would have to carry. It is 0 on the
+routes that burn no gas.
+
+`gas_mwh_per_t_steel` is the natural gas burnt over the year, in MWh LHV, per
+tonne of steel produced (`gas_consumed_gwh_lhv` over `steel_produced_mt`). It is a model
+result, but on `ng-dri-eaf` it always comes back to the inputs, the gas shaft's
+gas per tonne of iron (`dri-ng.gas_mwh_per_t`) times the iron per tonne of
+steel, since that shaft has no choice of reductant. On `mix-dri-eaf` it is the
+model's own choice, the gas side of the blend whose hydrogen side is
+`h2_produced_kg_per_t_steel`. On the hydrogen, MOE and EW routes it is 0.
+
 `lcoi_eur_per_t_iron` is the levelised cost of the iron at the plant gate, per
 tonne of iron produced (`iron_produced_mt`: the DRI, liquid iron or plates the
 shaft or cells put out). Its numerator is every yearly cost inside a line drawn
@@ -672,7 +715,61 @@ capex and fixed O&M, and its electricity with its share of the battery's and
 lines' losses, and c) the stockpile the briquettes wait in before shipping.
 Dividing by the briquettes rather than the DRI spreads the cost of the fines
 the press screens out over the tonnes that are left. It is blank on every route
-that does not briquette.
+that does not briquette. Its parts, all per tonne of briquettes, are
+`cost_ironmaking_eur_per_t_hbi` (the iron's whole cost), the press's
+`cost_briquetting_plant_capex_eur_per_t_hbi` and
+`cost_briquetting_plant_fom_eur_per_t_hbi` (together
+`cost_briquetting_plant_eur_per_t_hbi`, a subtotal never added to them),
+`cost_electricity_briquetting_eur_per_t_hbi` (the press's electricity with its
+share of the losses) and `cost_iron_or_hbi_store_eur_per_t_hbi`, and they add
+up to it exactly.
+
+`cost_ironmaking_eur_per_t_hbi` is the cost of making the DRI that went into the
+briquettes, per tonne of briquettes. It contains everything in
+`lcoi_eur_per_t_iron`: a) the ore, the shaft's annualised capex and fixed O&M,
+the natural gas and separately its carbon price, b) the electrolyser
+(annualised capex, fixed O&M and water) and the hydrogen buffer, and c)
+ironmaking's electricity with its share of the losses. It does not contain the
+briquetting press, the press's electricity or the HBI stockpile, which are the
+other parts of `lcohbi_eur_per_t_hbi`, nor freight or anything on the steel
+side. It is the same yearly cost as `lcoi_eur_per_t_iron` times
+`iron_produced_mt`, divided by `hbi_produced_mt` instead, so it is about 2 %
+higher per tonne: the press screens out about 2 % of the DRI as fines, and the
+iron in them was paid for all the same.
+
+`cost_hbi_eur_per_t_steel` is the cost of the briquettes at the plant gate per
+tonne of steel produced: the same yearly cost as `lcohbi_eur_per_t_hbi` times
+`hbi_produced_mt`, divided by `steel_produced_mt`. It is made of
+`cost_ironmaking_eur_per_t_steel`, `cost_briquetting_plant_eur_per_t_steel`,
+`cost_electricity_briquetting_incl_losses_eur_per_t_steel` and
+`cost_iron_or_hbi_store_eur_per_t_steel`, and is blank on every route that does
+not briquette.
+
+`cost_electricity_briquetting_incl_losses_eur_per_t_steel` is the briquetting
+press's electricity per tonne of steel, priced at the system's average cost,
+together with the press's share of the battery's and lines' losses. It is
+blank on every route that does not briquette. It is not the same as
+`cost_electricity_briquetting_eur_per_t_steel`, which is the press's
+electricity alone, one of the five job rows that carry the losses as a row of
+their own. It is never added to that row, nor to
+`cost_electricity_losses_excl_ironmaking_eur_per_t_steel`, which holds the
+press's share of the losses already.
+
+`lcoi_delivered_eur_per_t_iron_or_hbi` is the cost of the iron where the
+electric arc furnace stands, per tonne arriving there: what left the plant gate
+plus the freight that carried it. It has two parts. a)
+`cost_plant_gate_eur_per_t_iron_or_hbi` is the cost of what left the gate: on
+the three DRI routes that ship it, the briquettes, because hot DRI re-oxidises
+and cannot be shipped or stored until it is pressed, so it equals
+`lcohbi_eur_per_t_hbi`; on every other route, the iron itself, which MOE iron
+and EW plates can be shipped as and a home-made DRI route never ships, so it
+equals `lcoi_eur_per_t_iron`. It repeats whichever of the two applies, so that
+one row reads the same on every route. b) `cost_transport_eur_per_t_iron_or_hbi`
+is the freight per tonne arriving, which is the input freight rate over the
+route's distance, and 0 on a home-made route, whose furnace stands at the gate.
+Freight on a home-made route's finished steel comes after the furnace and is
+not part of it. Freight loses nothing and the stockpile ends the year where it
+began, so the tonnes arriving are the tonnes that left the gate.
 
 `cost_h2_production_meur` is the yearly cost of producing the hydrogen, in M€:
 a) the electrolyser itself (`cost_electrolyser_meur`), b) the hydrogen buffer
@@ -691,7 +788,7 @@ buffer rows. Adding either to the electricity cost groups or to
 of `cost_electrolyser_eur_per_t_steel`, `cost_h2_buffer_eur_per_t_steel` and
 `cost_electricity_electrolyser_eur_per_t_steel`, and the same warning holds:
 its electricity part is already inside `cost_electricity_eur_per_t_steel`, so
-it is never added to the six group totals or to `lcos_eur_per_t`.
+it is never added to the six group totals or to `lcos_eur_per_t_steel`.
 `cost_h2_production_eur_per_t_iron` is the same total per tonne of iron, all of
 it, since all the hydrogen goes into ironmaking: `cost_electrolyser_eur_per_t_iron`
 (itself capex, fixed O&M and water), `cost_h2_buffer_eur_per_t_iron` and
@@ -716,7 +813,7 @@ run's row, and a consumer asking for a field nobody wrote would get silence.
 A cell a run has no value for says which of two things it means:
 
 - **`0`** — an amount, and this run's is nothing. A route without a briquetting
-  press reports `cost_briquetting_capex_eur_per_t_steel: 0`; it built none, and zero is what that step
+  press reports `cost_briquetting_plant_capex_eur_per_t_steel: 0`; it built none, and zero is what that step
   contributed to the cost of its steel. The cost groups stack to
   `total_annual_cost_meur` for every run.
 - **blank** — undefined here: a ratio with nothing in its denominator. The

@@ -25,7 +25,7 @@ if "snakemake" not in globals():
 
 from common._constants import HOURS_PER_YEAR
 from common._logging import configure_logging
-from common._report_schema import ORE_LINKS, PROCESS_LINKS, field_stem, read_report
+from common._report_schema import read_report
 from scripts.viz._run_display import run_labels
 from scripts.viz.style import (
     apply_header,
@@ -66,14 +66,14 @@ _BAR_WIDTH = 0.12
 
 PROCESS_BARS = [
     ("ironmaking_t_per_h", "Ironmaking (t/h iron)",  blue_gray),
-    ("eaf_t_per_h",    "EAF (t/h steel)",           very_dark_gray),
+    ("steelmaking_t_per_h", "Steelmaking / EAF (t/h steel)", very_dark_gray),
     ("briquetting_t_per_h", "Briquetting (t/h HBI)", gray),
 ]
 
 STORAGE_BARS = [
     ("h2_buffer_duration_hours", "H₂ buffer (h of avg DRI H₂ draw)", light_blue),
-    ("iron_or_hbi_store_hours_steel", "Iron / HBI store (h of steel output)",  gray),
-    ("steel_store_hours_steel", "Steel inventory (h of steel output)", blue_gray),
+    ("iron_or_hbi_store_duration_hours_steel", "Iron / HBI store (h of steel output)",  gray),
+    ("steel_store_duration_hours_steel", "Steel inventory (h of steel output)", blue_gray),
 ]
 
 
@@ -114,7 +114,7 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
     for idx, r in df.iterrows():
         row = {"label": labels[idx]}
         row["electrolyser_mw"]  = r["electrolyser_gw"] * 1e3
-        row["battery_mw"]       = r["battery_gw_opt"] * 1e3
+        row["battery_mw"]       = r["battery_gw"] * 1e3
         row["grid_mw"]          = r["grid_import_gw_opt"] * 1e3
         # If no orientation-resolved solar columns are present, fall back to the
         # plain solar_gw_opt column so single-orientation runs (e.g. DE baseline)
@@ -129,17 +129,14 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
             row["solar_mw"] = r["solar_gw_opt"] * 1e3
         for col in wind_cols:
             row[f"{col.replace('_gw_opt','')}_mw"] = r[col] * 1e3
-        # The ironmaking step is one row whatever the route, in Mt a year at
-        # full utilisation; the bars are t/h, so it goes back to an hour.
-        # The furnace and the press keep `{link}_t_per_h_opt`, 0 where unbuilt.
+        # Ironmaking, steelmaking and the press are one row each, in Mt a year at
+        # full utilisation; the bars are t/h, so they go back to an hour.
         row["ironmaking_t_per_h"] = r["ironmaking_capacity_mt_opt"] * 1e6 / HOURS_PER_YEAR
-        for link in PROCESS_LINKS:
-            if link not in ORE_LINKS:
-                stem = field_stem(link)
-                row[f"{stem}_t_per_h"] = r[f"{stem}_t_per_h_opt"]
+        row["steelmaking_t_per_h"] = r["steelmaking_capacity_mt_opt"] * 1e6 / HOURS_PER_YEAR
+        row["briquetting_t_per_h"] = r["briquetting_capacity_mt_opt"] * 1e6 / HOURS_PER_YEAR
         row["h2_buffer_duration_hours"] = r["h2_buffer_duration_hours"]
-        row["iron_or_hbi_store_hours_steel"] = r["iron_or_hbi_store_hours_steel"]
-        row["steel_store_hours_steel"] = r["steel_store_hours_steel"]
+        row["iron_or_hbi_store_duration_hours_steel"] = r["iron_or_hbi_store_duration_hours_steel"]
+        row["steel_store_duration_hours_steel"] = r["steel_store_duration_hours_steel"]
         rows.append(row)
     return pd.DataFrame(rows).set_index("label")
 

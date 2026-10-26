@@ -49,7 +49,7 @@ _OUT = Path(snakemake.output[0])
 # Stack order (bottom → top) with legend label and color. Keys match the
 # cost_{group}_meur columns written by compile_report.
 COST_GROUPS = [
-    ("process",         "Process plant (capex+opex)",   blue_black),
+    ("total_plant",     "Process plant (capex+opex)",   blue_black),
     ("ore",             "Iron ore",                     sand_yellow),
     ("eaf_consumables", "EAF consumables",              light_gray),
     ("gas",             "Natural gas (fuel + CO₂)",     very_dark_gray),
@@ -79,7 +79,7 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
     plot_df = pd.DataFrame({"label": run_labels(df)})
     for group, _, _ in COST_GROUPS:
         plot_df[group] = df[f"cost_{group}_meur"] * 1e6 / steel_t_per_year.values
-    plot_df["lcos_total"] = df["lcos_eur_per_t"].values
+    plot_df["lcos_total"] = df["lcos_eur_per_t_steel"].values
     return plot_df.set_index("label")
 
 

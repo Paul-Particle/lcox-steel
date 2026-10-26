@@ -32,7 +32,7 @@ import yaml
 from scripts.viz.dashboard import cost_taxonomy
 from scripts.viz.dashboard.build_dashboard import HTML_DIR, _axes, build_html, scenario_files
 from common._constants import H2_LHV_KWH_PER_KG
-from common._report_schema import field_stem, read_report
+from common._report_schema import field_stem, plant_stem, read_report
 from scripts.solve._helpers_solve import deep_merge
 
 REPO = Path(__file__).resolve().parents[4]        # workflow/scripts/viz/dashboard/ -> repo root
@@ -132,7 +132,7 @@ def attach(payload: dict, cases: dict) -> None:
     # The plants, by the stem their leaves are keyed on, so a hover over the
     # capital or the upkeep band can name each one and reach its own half of
     # that plant's annual cost.
-    payload["process_plants"] = [[field_stem(link), label]
+    payload["process_plants"] = [[plant_stem(link), label]
                                  for link, label in cost_taxonomy.PROCESS_PLANTS]
     payload["purpose_bands"] = PURPOSE_BANDS
     payload["lcoe_split_bands"] = LCOE_SPLIT_BANDS

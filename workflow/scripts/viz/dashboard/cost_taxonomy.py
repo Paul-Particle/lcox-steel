@@ -3,7 +3,7 @@
 
 The report cuts each of its thirteen cost groups (`cost_*_meur`) as finely as
 the model allows and writes the result out as `cost_*_eur_per_t_steel`, one column per
-priced thing, stacking to `lcos_eur_per_t`. Beside them `cost_electricity_*_eur_per_t_steel` divides
+priced thing, stacking to `lcos_eur_per_t_steel`. Beside them `cost_electricity_*_eur_per_t_steel` divides
 one of those groups — the electricity — by the job each euro of it paid for.
 This module reads them, keys them the way the chart bands are keyed, and puts
 the hover lines together.
@@ -40,13 +40,14 @@ from common._report_schema import (
     ORE_LINKS,
     PROCESS_LINKS,
     field_stem,
+    plant_stem,
 )
 
 # Parent groups, in stack order (bottom -> top), with the colour the coarse
 # taxonomies already use for that role.
 GROUPS = [
     ("feedstock",   "Ore & consumables",  "#E2B681"),
-    ("process",     "Process plant",      "#33434D"),
+    ("total_plant", "Process plant",      "#33434D"),
     ("gas",         "Natural gas",        "#525F6A"),
     ("hydrogen",    "Hydrogen",           "#91C096"),
     ("electricity", "Electricity system", "#0A5680"),
@@ -162,7 +163,7 @@ def leaf_inputs(row: pd.Series) -> dict:
                           f"feedstock, {built_iron[1].lower()}" if built_iron else "feedstock",
                           "{:,.0f} €/t iron")]
     iron, steel = _value(row, "iron_produced_mt"), _value(row, "steel_produced_mt")
-    if _value(row, "cost_eaf_capex_eur_per_t_steel") and iron and steel:
+    if _value(row, "cost_steelmaking_plant_capex_eur_per_t_steel") and iron and steel:
         ore_lines.append(("iron per t steel", f"{iron / steel:.2f} t (gangue and melting loss)"))
     add("ore", *ore_lines)
 
@@ -180,11 +181,15 @@ def leaf_inputs(row: pd.Series) -> dict:
     for link, _ in PROCESS_PLANTS:
         if link == "ironmaking_plant":
             continue
-        stem = field_stem(link)
-        built = quantity(f"{stem}_t_per_h_opt", "built", "{:,.0f} t/h output")
-        utilisation = quantity(f"{stem}_utilization", "utilisation", "{:.0%}")
+        stem, own = plant_stem(link), field_stem(link)
+        if link == "eaf":
+            built = quantity("steelmaking_capacity_mt_opt", "built", "{:,.2f} Mt steel/yr at full utilisation")
+            utilisation = quantity("steelmaking_utilization", "utilisation", "{:.0%}")
+        else:
+            built = quantity(f"{own}_capacity_mt_opt", "built", "{:,.2f} Mt HBI/yr at full utilisation")
+            utilisation = quantity(f"{own}_utilization", "utilisation", "{:.0%}")
         add(f"{stem}_capex", built, utilisation,
-            quantity(f"annuity_factor_{stem}", "annuity factor", "{:.4f}"))
+            quantity(f"annuity_factor_{own}", "annuity factor", "{:.4f}"))
         add(f"{stem}_fom", built, utilisation)
 
     # -- gas. Both halves of the bill ride on the same burnt megawatt-hours.
@@ -214,7 +219,7 @@ def leaf_inputs(row: pd.Series) -> dict:
         add(f"res_{stem}_capex", own, capacity_factor)
         add(f"res_{stem}_fom", own, capacity_factor)
 
-    battery_lines = (quantity("battery_mwh_opt", "energy built", "{:,.0f} MWh"),
+    battery_lines = (quantity("battery_mwh", "energy built", "{:,.0f} MWh"),
                      quantity("battery_duration_hours", "duration chosen", "{:,.1f} h"))
     add("battery_power_capex", *battery_lines)
     add("battery_energy_capex", *battery_lines)
@@ -234,14 +239,14 @@ def leaf_inputs(row: pd.Series) -> dict:
     # -- getting the iron to a furnace that is somewhere else
     add("transport",
         quantity("transport_km", "distance", "{:,.0f} km"),
-        quantity("iron_shipped_kt", "iron shipped", "{:,.0f} kt/yr"),
+        quantity("iron_or_hbi_shipped_kt", "iron / HBI shipped", "{:,.0f} kt/yr"),
         quantity("steel_shipped_kt", "steel shipped", "{:,.0f} kt/yr"))
 
     # -- the solid stores that make turndown possible
     for store in ("iron_or_hbi_store", "steel_store"):
         add(store,
             quantity(f"{store}_kt", "size", "{:,.1f} kt"),
-            quantity(f"{store}_hours_steel", "cover", "{:,.0f} h of demand"))
+            quantity(f"{store}_duration_hours_steel", "cover", "{:,.0f} h of demand"))
     return inputs
 
 
@@ -253,7 +258,7 @@ def purpose_bands(row: pd.Series) -> dict:
     two ways, and the electricity bands are the jobs. The underscored keys are
     hover detail rather than bands, which is what keeps them out of the stack.
     """
-    plants = [field_stem(link) for link, _ in PROCESS_PLANTS]
+    plants = [plant_stem(link) for link, _ in PROCESS_PLANTS]
     electrolyser = ["electrolyser_capex", "electrolyser_fom", "electrolyser_water"]
     composed = {
         "ore": ["cost_feedstock_eur_per_t_steel"],
@@ -359,7 +364,7 @@ def spec(assumptions: dict) -> list:
         if link == "ironmaking_plant":
             continue
         plant = assumptions[link]
-        stem = field_stem(link)
+        stem = plant_stem(link)
         capex_colour, om_colour = shades[link]
         add(f"{stem}_capex", f"{label} — capital", capex_colour,
             [("capex quote", f"{plant['capex_per_t_per_year_eur']:,.0f} €/(t·yr)"),
