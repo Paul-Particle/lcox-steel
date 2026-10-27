@@ -8,7 +8,10 @@ isolation). This file is the IO + orchestration shell driven by the
 import json
 import logging
 import os
+import uuid
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 # pandas 3.0 defaults to ArrowStringArray for strings; xarray (used by PyPSA
 # internally) doesn't support it. Set python-native strings before any import
@@ -292,6 +295,16 @@ def main() -> None:
     n.meta.update(code_manifest(
         REPO_ROOT, extra_paths=(REPO_ROOT / "workflow/scripts/solve/solve_network.py",)
     ))
+
+    # When the run was produced, on Berlin's clock with its UTC offset, so the
+    # time reads unambiguously in winter and summer alike. Stamped at the solve
+    # rather than at the report, which a rerun of compile_report would move.
+    solved_at = datetime.now(ZoneInfo("Europe/Berlin"))
+    n.meta["run_timestamp"] = solved_at.isoformat(timespec="seconds")
+    # And a name for this solve alone: which inputs, when, and a random part so
+    # two solves of the same inputs in the same second still differ.
+    n.meta["model_run_id"] = (f"{n.meta['inputs_hash']}-{solved_at:%Y%m%dT%H%M%S}"
+                              f"-{uuid.uuid4().hex[:8]}")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     n.export_to_netcdf(out_path)

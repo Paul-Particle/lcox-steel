@@ -572,8 +572,12 @@ def _add_dri_link(
     """DRI shaft: hydrogen (MW LHV) → sponge iron (t/h), drawing shaft electricity.
 
     `efficiency` converts MWh H2 into t iron via the plant's H2 intensity;
-    `efficiency2` (negative) withdraws shaft electricity in fixed proportion.
-    Ore cost enters as marginal_cost, converted from €/t iron to per-MWh-H2 (p0).
+    `efficiency2` (negative) withdraws the shaft's own electricity in fixed
+    proportion, and `efficiency3` the electricity that preheats its H2 feed — the
+    same draw the blend shaft takes on `reductant-h2`, on a port of its own so the
+    report can tell the two apart. Both are on the same bus, so the solve sees
+    one draw. Ore cost enters as marginal_cost, converted from €/t iron to
+    per-MWh-H2 (p0).
     """
     t_iron_per_mwh_h2 = 1000.0 / (
         plant["h2_intensity_kg_per_t_dri"] * H2_LHV_KWH_PER_KG
@@ -584,10 +588,12 @@ def _add_dri_link(
         bus0="hydrogen",
         bus1="iron",
         bus2=elec_bus,
+        bus3=elec_bus,
         carrier="dri-h2",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh_h2,
         efficiency2=-dri_cfg["el_mwh_per_t"] * t_iron_per_mwh_h2,
+        efficiency3=-dri_cfg["h2_preheat_el_mwh_per_t"] * t_iron_per_mwh_h2,
         p_min_pu=dri_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(dri_cfg, wacc, t_iron_per_mwh_h2),
         marginal_cost=dri_cfg["ore_eur_per_t"] * t_iron_per_mwh_h2,

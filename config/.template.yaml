@@ -95,7 +95,11 @@ dri-h2:
   # European figures, one value being all this file can hold.
   opex_per_t_per_year_eur: 70.32
   lifetime_years: 20
-  el_mwh_per_t: 1.005                 # 177 kWh/t auxiliaries + 828 kWh/t electric heat
+  # Shaft auxiliaries, and the electric heat that preheats the H2 feed: the
+  # register's two figures, kept apart as the blend shaft keeps them, so the
+  # report puts the preheat in one row whichever route drew it.
+  el_mwh_per_t: 0.1768
+  h2_preheat_el_mwh_per_t: 0.8282
   ore_eur_per_t: 238.2                  # DR-grade pellets, per t of DRI
   iron_t_per_t_steel: 1.17            # DR pellets: gangue plus metallisation loss
   p_min_pu: 0.5

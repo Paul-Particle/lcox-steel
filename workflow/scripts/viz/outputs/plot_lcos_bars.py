@@ -32,6 +32,7 @@ from scripts.viz.style import (
     highlight_blue,
     light_blue,
     light_blue_gray,
+    light_gray,
     magenta_red,
     sand_yellow,
     save_figure,
@@ -48,10 +49,11 @@ _OUT = Path(snakemake.output[0])
 # Stack order (bottom → top) with legend label and color. Keys match the
 # cost_{group}_meur columns written by compile_report.
 COST_GROUPS = [
-    ("process",         "Process plant (capex+opex)",   blue_black),
-    ("ore_consumables", "Ore & consumables",            sand_yellow),
+    ("total_plant",     "Process plant (capex+opex)",   blue_black),
+    ("ore",             "Iron ore",                     sand_yellow),
+    ("eaf_consumables", "EAF consumables",              light_gray),
     ("gas",             "Natural gas (fuel + CO₂)",     very_dark_gray),
-    ("iron_store",      "Iron stockpile",               gray),
+    ("iron_or_hbi_store", "Iron / HBI stockpile",       gray),
     ("steel_store",     "Steel inventory",              blue_gray),
     ("electrolyser",    "Electrolyser",                 green),
     ("h2_buffer",       "H₂ buffer",                    light_blue),
@@ -60,7 +62,7 @@ COST_GROUPS = [
     ("transmission",    "Transmission (HVDC)",          turquois),
     ("grid",            "Grid (connection + energy)",   dark_gray),
     ("transport",       "Freight",                      light_blue_gray),
-    ("destination_power", "Destination power",          highlight_blue),
+    ("destination_electricity", "Destination electricity", highlight_blue),
 ]
 
 
@@ -77,7 +79,7 @@ def build_plot_data(df: pd.DataFrame) -> pd.DataFrame:
     plot_df = pd.DataFrame({"label": run_labels(df)})
     for group, _, _ in COST_GROUPS:
         plot_df[group] = df[f"cost_{group}_meur"] * 1e6 / steel_t_per_year.values
-    plot_df["lcos_total"] = df["lcos_eur_per_t"].values
+    plot_df["lcos_total"] = df["lcos_eur_per_t_steel"].values
     return plot_df.set_index("label")
 
 

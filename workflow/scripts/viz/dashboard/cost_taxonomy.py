@@ -2,8 +2,8 @@
 """Read the finely cut levelised steel cost the report carries, for the charts.
 
 The report cuts each of its thirteen cost groups (`cost_*_meur`) as finely as
-the model allows and writes the result out as `cost_*_eur_per_t`, one column per
-priced thing, stacking to `lcos_eur_per_t`. Beside them `el_*_eur_per_t` divides
+the model allows and writes the result out as `cost_*_eur_per_t_steel`, one column per
+priced thing, stacking to `lcos_eur_per_t_steel`. Beside them `cost_electricity_*_eur_per_t_steel` divides
 one of those groups — the electricity — by the job each euro of it paid for.
 This module reads them, keys them the way the chart bands are keyed, and puts
 the hover lines together.
@@ -31,38 +31,58 @@ from __future__ import annotations
 
 import pandas as pd
 
+from common._constants import H2_LHV_KWH_PER_KG
 from common._report_schema import (
     ELECTRICITY_JOBS,
     LEAF_COSTS,
     LEAF_GROUP,
     LEAF_PARENTS,
+    ORE_LINKS,
     PROCESS_LINKS,
     field_stem,
+    plant_stem,
 )
 
 # Parent groups, in stack order (bottom -> top), with the colour the coarse
 # taxonomies already use for that role.
 GROUPS = [
     ("feedstock",   "Ore & consumables",  "#E2B681"),
-    ("process",     "Process plant",      "#33434D"),
+    ("total_plant", "Process plant",      "#33434D"),
     ("gas",         "Natural gas",        "#525F6A"),
     ("hydrogen",    "Hydrogen",           "#91C096"),
     ("electricity", "Electricity system", "#0A5680"),
     ("storage",     "Solid stores",       "#D75674"),
+    ("transport",   "Freight",            "#BDCCD9"),
 ]
 
 # The steel chain's plants, in stack order: the link id `build_network` gives
 # each one — which is also the assumptions block it is quoted in — and its
 # label. `field_stem` turns the id into the stem the report and the leaves use.
-PROCESS_PLANTS = [
+# The ironmaking steps a route can build, one per route: the report carries
+# whichever it built as the one `ironmaking_plant` pair of leaves, and these
+# say which it was and what it was quoted at.
+IRONMAKING_PLANTS = [
     ("dri-h2", "H2-DRI shaft"),
     ("dri-ng", "NG-DRI shaft"),
     ("dri-mix", "Blended-reductant shaft"),
     ("moe",    "MOE cell"),
     ("ew",     "Electrowinning"),
+]
+PROCESS_PLANTS = [
+    ("ironmaking_plant", "Ironmaking plant"),
     ("briquetting", "Briquetting press"),
     ("eaf",    "EAF"),
 ]
+
+
+def built_ironmaking(row: pd.Series):
+    """(link, label) of the ironmaking step a run built, read off the power it
+    drew — every one of them draws some — or None if it built none."""
+    for link, label in IRONMAKING_PLANTS:
+        drawn = row.get(f"el_{field_stem(link)}_gwh")
+        if drawn is not None and pd.notna(drawn) and float(drawn) > 0:
+            return link, label
+    return None
 
 # Renewable technology -> label. The tech names the assumptions block under
 # `res` and the network's carrier; `field_stem` gives the report's stem.
@@ -103,7 +123,7 @@ def leaf_costs(row: pd.Series) -> dict:
     from the solved network and checked the leaves still stack to LCOS, so there
     is nothing to derive here and no assumptions to derive it from.
     """
-    return _present(row, {leaf: f"cost_{leaf}_eur_per_t" for leaf in LEAF_COSTS})
+    return _present(row, {leaf: f"cost_{leaf}_eur_per_t_steel" for leaf in LEAF_COSTS})
 
 
 def parent_costs(row: pd.Series) -> dict:
@@ -112,7 +132,7 @@ def parent_costs(row: pd.Series) -> dict:
     Reported rather than summed from the rounded leaves in the payload, so a
     hover quoting a leaf's share of its group divides by the whole group.
     """
-    return _present(row, {parent: f"cost_{parent}_eur_per_t"
+    return _present(row, {parent: f"cost_{parent}_eur_per_t_steel"
                           for parent in LEAF_PARENTS})
 
 
@@ -136,63 +156,74 @@ def leaf_inputs(row: pd.Series) -> dict:
         value = _value(row, field)
         return None if value is None else (label, template.format(value))
 
-    # -- feedstock. The quote that applies is the one on whichever reduction step
-    # was built, and a route melting DRI in a furnace also pays for the iron it
-    # loses in the melt.
-    ore_lines = []
-    for link, label in PROCESS_PLANTS:
-        stem = field_stem(link)
-        quote_field = f"ore_quote_{stem}_eur_per_t"
-        if quote_field not in row.index or not _value(row, f"plant_{stem}_eur_per_t"):
-            continue
-        ore_lines.append((f"ore quote, {label.lower()}",
-                          f"{_value(row, quote_field):,.0f} €/t output"))
-    if _value(row, "plant_eaf_eur_per_t"):
-        ore_lines.append(quantity("eaf_iron_t_per_t_steel", "iron per t steel",
-                                  "{:.2f} t (gangue and melting loss)"))
+    # -- feedstock, per tonne of the iron the run built (which is the quote it was
+    # priced at, the quote being per tonne of iron out), and a route melting DRI
+    # in a furnace also pays for the iron it loses in the melt.
+    built_iron = built_ironmaking(row)
+    ore_lines = [quantity("cost_ore_eur_per_t_iron",
+                          f"feedstock, {built_iron[1].lower()}" if built_iron else "feedstock",
+                          "{:,.0f} €/t iron")]
+    iron, steel = _value(row, "iron_produced_mt"), _value(row, "steel_produced_mt")
+    if _value(row, "cost_steelmaking_plant_capex_eur_per_t_steel") and iron and steel:
+        ore_lines.append(("iron per t steel", f"{iron / steel:.2f} t (gangue and melting loss)"))
     add("ore", *ore_lines)
 
     # -- process plants. The same two lines under either half of a plant's annual
     # cost, plus the factor its capital was annuitised at under the capital half.
+    # The ironmaking plant is whichever step the run built: its size, how hard it
+    # ran, and the factor that step's capital was annuitised at.
+    ironmaking = [quantity("ironmaking_capacity_mt_opt", "built", "{:,.2f} Mt iron/yr at full utilisation"),
+                  quantity("ironmaking_utilization", "utilisation", "{:.0%}")]
+    if built_iron is not None:
+        link, label = built_iron
+        add("ironmaking_plant_capex", ("plant", label), *ironmaking,
+            quantity(f"annuity_factor_{field_stem(link)}", "annuity factor", "{:.4f}"))
+        add("ironmaking_plant_fom", ("plant", label), *ironmaking)
     for link, _ in PROCESS_PLANTS:
-        stem = field_stem(link)
-        built = quantity(f"{stem}_t_per_h_opt", "built", "{:,.0f} t/h output")
-        utilisation = quantity(f"{stem}_utilization", "utilisation", "{:.0%}")
+        if link == "ironmaking_plant":
+            continue
+        stem, own = plant_stem(link), field_stem(link)
+        if link == "eaf":
+            built = quantity("steelmaking_capacity_mt_opt", "built", "{:,.2f} Mt steel/yr at full utilisation")
+            utilisation = quantity("steelmaking_utilization", "utilisation", "{:.0%}")
+        else:
+            built = quantity(f"{own}_capacity_mt_opt", "built", "{:,.2f} Mt HBI/yr at full utilisation")
+            utilisation = quantity(f"{own}_utilization", "utilisation", "{:.0%}")
         add(f"{stem}_capex", built, utilisation,
-            quantity(f"annuity_factor_{stem}", "annuity factor", "{:.4f}"))
+            quantity(f"annuity_factor_{own}", "annuity factor", "{:.4f}"))
         add(f"{stem}_fom", built, utilisation)
 
     # -- gas. Both halves of the bill ride on the same burnt megawatt-hours.
     gas_burnt = quantity("gas_mwh_per_t_steel", "gas burnt",
                          "{:,.2f} MWh LHV / t steel")
-    add("gas_fuel", gas_burnt)
+    add("gas_purchase", gas_burnt)
     add("gas_carbon", gas_burnt)
 
     # -- hydrogen
     electrolyser_built = quantity("electrolyser_gw", "built", "{:,.3f} GW input")
     electrolyser_use = quantity("electrolyser_utilization", "utilisation", "{:.0%}")
-    h2_made = quantity("h2_kg_per_t_steel", "H₂ produced", "{:,.0f} kg H₂ / t steel")
+    h2_made = quantity("h2_produced_kg_per_t_steel", "H₂ produced", "{:,.0f} kg H₂ / t steel")
     add("electrolyser_capex", electrolyser_built, electrolyser_use, h2_made)
     add("electrolyser_fom", electrolyser_built, electrolyser_use)
     add("electrolyser_water", h2_made,
-        quantity("electrolyser_el_mwh_per_t_steel", "electricity drawn",
+        quantity("el_electrolyser_mwh_per_t_steel", "electricity drawn",
                  "{:,.2f} MWh / t steel"))
     add("h2_buffer",
         quantity("h2_buffer_gwh", "size", "{:,.2f} GWh LHV"),
-        quantity("h2_buffer_hours_dri", "cover", "{:,.0f} h of DRI demand"))
+        quantity("h2_buffer_duration_hours", "cover", "{:,.0f} h of DRI demand"))
 
     # -- the electricity system
     for tech, _ in RES_TECH_LABELS:
         stem = field_stem(tech)
-        own = quantity(f"lcoe_{stem}_own_eur_per_mwh", "own LCOE", "{:,.1f} €/MWh")
+        own = quantity(f"lcoe_{stem}_eur_per_mwh_{stem}", "LCOE per MWh it generated", "{:,.1f} €/MWh")
         capacity_factor = quantity(f"cf_{stem}", "capacity factor", "{:.0%}")
         add(f"res_{stem}_capex", own, capacity_factor)
         add(f"res_{stem}_fom", own, capacity_factor)
 
-    battery_lines = (quantity("battery_mwh_opt", "energy built", "{:,.0f} MWh"),
+    battery_lines = (quantity("battery_mwh", "energy built", "{:,.0f} MWh"),
                      quantity("battery_duration_hours", "duration chosen", "{:,.1f} h"))
-    add("battery_power", *battery_lines)
-    add("battery_energy", *battery_lines)
+    add("battery_power_capex", *battery_lines)
+    add("battery_energy_capex", *battery_lines)
 
     connection_lines = (
         quantity("lcoe_grid_connection_eur_per_mwh", "levelised",
@@ -209,14 +240,14 @@ def leaf_inputs(row: pd.Series) -> dict:
     # -- getting the iron to a furnace that is somewhere else
     add("transport",
         quantity("transport_km", "distance", "{:,.0f} km"),
-        quantity("iron_shipped_kt", "iron shipped", "{:,.0f} kt/yr"),
+        quantity("iron_or_hbi_shipped_kt", "iron / HBI shipped", "{:,.0f} kt/yr"),
         quantity("steel_shipped_kt", "steel shipped", "{:,.0f} kt/yr"))
 
     # -- the solid stores that make turndown possible
-    for group in ("iron_store", "steel_store"):
-        add(group,
-            quantity(f"{group}_kt", "size", "{:,.1f} kt"),
-            quantity(f"{group}_hours_steel", "cover", "{:,.0f} h of demand"))
+    for store in ("iron_or_hbi_store", "steel_store"):
+        add(store,
+            quantity(f"{store}_kt", "size", "{:,.1f} kt"),
+            quantity(f"{store}_duration_hours_steel", "cover", "{:,.0f} h of demand"))
     return inputs
 
 
@@ -228,34 +259,34 @@ def purpose_bands(row: pd.Series) -> dict:
     two ways, and the electricity bands are the jobs. The underscored keys are
     hover detail rather than bands, which is what keeps them out of the stack.
     """
-    plants = [field_stem(link) for link in PROCESS_LINKS]
+    plants = [plant_stem(link) for link, _ in PROCESS_PLANTS]
     electrolyser = ["electrolyser_capex", "electrolyser_fom", "electrolyser_water"]
     composed = {
-        "ore": ["cost_feedstock_eur_per_t"],
-        "capex": [f"cost_{plant}_capex_eur_per_t" for plant in plants],
-        "fixed_om": [f"cost_{plant}_fom_eur_per_t" for plant in plants],
-        "hydrogen": ([f"cost_{leaf}_eur_per_t" for leaf in electrolyser]
-                     + ["cost_h2_buffer_eur_per_t", "el_hydrogen_eur_per_t"]),
-        "gas": ["cost_gas_eur_per_t"],
-        "transport": ["cost_transport_eur_per_t"],
-        "store": ["cost_iron_store_eur_per_t", "cost_steel_store_eur_per_t"],
-        "_hydrogen_electrolyser": [f"cost_{leaf}_eur_per_t" for leaf in electrolyser],
-        "_hydrogen_buffer": ["cost_h2_buffer_eur_per_t"],
-        "_hydrogen_electricity": ["el_hydrogen_eur_per_t"],
-        "_electricity_total": ["cost_electricity_eur_per_t"],
+        "ore": ["cost_feedstock_eur_per_t_steel"],
+        "capex": [f"cost_{plant}_capex_eur_per_t_steel" for plant in plants],
+        "fixed_om": [f"cost_{plant}_fom_eur_per_t_steel" for plant in plants],
+        "hydrogen": ([f"cost_{leaf}_eur_per_t_steel" for leaf in electrolyser]
+                     + ["cost_h2_buffer_eur_per_t_steel", "cost_electricity_electrolyser_eur_per_t_steel"]),
+        "gas": ["cost_gas_eur_per_t_steel"],
+        "transport": ["cost_transport_eur_per_t_steel"],
+        "store": ["cost_iron_or_hbi_store_eur_per_t_steel", "cost_steel_store_eur_per_t_steel"],
+        "_hydrogen_electrolyser": [f"cost_{leaf}_eur_per_t_steel" for leaf in electrolyser],
+        "_hydrogen_buffer": ["cost_h2_buffer_eur_per_t_steel"],
+        "_hydrogen_electricity": ["cost_electricity_electrolyser_eur_per_t_steel"],
+        "_electricity_total": ["cost_electricity_eur_per_t_steel"],
     }
     bands = {}
     for key, fields in composed.items():
         total = sum(_value(row, field) or 0.0 for field in fields if field in row)
         if total:
             bands[key] = total
-    bands.update(_present(row, {job: f"el_{job}_eur_per_t"
-                                for job in ELECTRICITY_JOBS if job != "hydrogen"}))
+    bands.update(_present(row, {job: f"cost_electricity_{job}_eur_per_t_steel"
+                                for job in ELECTRICITY_JOBS if job != "electrolyser"}))
     # What the two electricity bands that have a natural per-tonne figure took,
     # measured over the year each ran rather than from the coefficient that
     # priced it.
-    for key, field in (("_melt_mwh_per_t", "eaf_el_mwh_per_t_steel"),
-                       ("_reduction_mwh_per_t", "reduction_el_mwh_per_t_steel")):
+    for key, field in (("_eaf_mwh_per_t", "el_eaf_mwh_per_t_steel"),
+                       ("_reduction_mwh_per_t", "el_reduction_mwh_per_t_steel")):
         drawn = _value(row, field)
         if drawn:
             bands[key] = drawn
@@ -276,15 +307,17 @@ def carrier_splits(row: pd.Series) -> dict:
         "grid_connection": "lcoe_grid_connection_eur_per_mwh",
         "grid_energy": "lcoe_grid_energy_eur_per_mwh",
         "transmission": "lcoe_transmission_eur_per_mwh",
-        "destination_power": "lcoe_destination_power_eur_per_mwh",
+        "destination_electricity": "lcoe_destination_electricity_eur_per_mwh",
     })
-    lcoh = _present(row, {
-        "electrolyser_capex": "lcoh_electrolyser_capex_eur_per_mwh_lhv",
-        "electrolyser_fom": "lcoh_electrolyser_fom_eur_per_mwh_lhv",
-        "electrolyser_water": "lcoh_electrolyser_water_eur_per_mwh_lhv",
-        "storage": "lcoh_h2_storage_eur_per_mwh_lhv",
-        "electricity": "lcoh_electricity_eur_per_mwh_lhv",
-    })
+    # The report gives the hydrogen's parts per kg; the page works in €/MWh LHV
+    # and converts to kg itself, so they go back to that unit here.
+    lcoh = {key: value * 1000.0 / H2_LHV_KWH_PER_KG for key, value in _present(row, {
+        "electrolyser_capex": "lcoh_electrolyser_capex_eur_per_kg",
+        "electrolyser_fom": "lcoh_electrolyser_fom_eur_per_kg",
+        "electrolyser_water": "lcoh_electrolyser_water_eur_per_kg",
+        "storage": "lcoh_h2_storage_eur_per_kg",
+        "electricity": "lcoh_electricity_eur_per_kg",
+    }).items()}
     return {"lcoe": lcoe, "lcoh": lcoh}
 
 # ---- the published leaf specification ------------------------------------
@@ -310,23 +343,29 @@ def spec(assumptions: dict) -> list:
     # each route tolerates differs — so the quote that applies is per scenario, and
     # travels with the record rather than here.
     add("ore", "Iron ore", "#E2B681")
-    add("consumables", "EAF consumables", "#C99A5E",
+    add("eaf_consumables", "EAF consumables", "#C99A5E",
         [("electrodes, fluxes, alloys, carbon",
           f"{assumptions['eaf']['consumables_eur_per_t']:,.0f} €/t steel")])
 
-    # Process plants: two leaves each, capital then fixed O&M.
-    # One entry per PROCESS_PLANTS link: capital first, then its fixed O&M a shade
-    # lighter. The blended shaft sits between the two single-fuel ones, as it does
-    # everywhere else.
-    shades = {"dri-h2": ("#33434D", "#5A6B77"), "dri-ng": ("#3D4E59", "#687985"),
-              "dri-mix": ("#374852", "#63747F"),
-              "moe": ("#2B3A44", "#54656F"),
-              "ew": ("#25333B", "#4C5D66"),
-              "briquetting": ("#44555F", "#77888F"),
+    # Process plants: two leaves each, capital then fixed O&M a shade lighter.
+    # The ironmaking plant is whichever step a run built, so its constants are
+    # every step's quote; the run's own hover names which applied.
+    add("ironmaking_plant_capex", "Ironmaking plant — capital", "#33434D",
+        [(f"capex quote, {label.lower()}",
+          f"{assumptions[link]['capex_per_t_per_year_eur']:,.0f} €/(t·yr), "
+          f"{assumptions[link]['lifetime_years']:.0f} y")
+         for link, label in IRONMAKING_PLANTS] + [wacc_line])
+    add("ironmaking_plant_fom", "Ironmaking plant — fixed O&M", "#5A6B77",
+        [(f"fixed opex, {label.lower()}",
+          f"{assumptions[link]['opex_per_t_per_year_eur']:,.1f} €/(t·yr)")
+         for link, label in IRONMAKING_PLANTS])
+    shades = {"briquetting": ("#44555F", "#77888F"),
               "eaf": ("#3A4A54", "#6E7F89")}
     for link, label in PROCESS_PLANTS:
+        if link == "ironmaking_plant":
+            continue
         plant = assumptions[link]
-        stem = field_stem(link)
+        stem = plant_stem(link)
         capex_colour, om_colour = shades[link]
         add(f"{stem}_capex", f"{label} — capital", capex_colour,
             [("capex quote", f"{plant['capex_per_t_per_year_eur']:,.0f} €/(t·yr)"),
@@ -337,7 +376,7 @@ def spec(assumptions: dict) -> list:
               f"{plant['opex_per_t_per_year_eur'] / plant['capex_per_t_per_year_eur'] * 100:.1f}% / yr")])
 
     gas = assumptions["natural_gas"]
-    add("gas_fuel", "Natural gas — fuel", "#525F6A",
+    add("gas_purchase", "Natural gas — purchase", "#525F6A",
         [("price", f"{gas['price_eur_per_mwh']:,.1f} €/MWh LHV")])
     # A run priced at zero carbon has no carbon band: it would be worth 0 €/t on
     # every route, so it draws nothing and only puts the words "carbon price" in
@@ -378,13 +417,12 @@ def spec(assumptions: dict) -> list:
              ("lifetime", f"{cfg['lifetime_years']:.0f} y"), wacc_line])
         add(f"res_{stem}_fom", f"{label} — fixed O&M", om_colour,
             [("fixed opex", f"{cfg['opex_per_mw_per_year_eur'] / 1e3:,.0f} k€/MW·yr")])
-    add("res_other", "Renewables (not itemised)", "#7FA8C0")
 
     battery = assumptions["battery"]
-    add("battery_power", "Battery — power capacity", "#D75674",
+    add("battery_power_capex", "Battery — power capacity, capital", "#D75674",
         [("capex quote", f"{battery['capex_per_mw_eur'] / 1e6:,.2f} M€/MW"),
          ("lifetime", f"{battery['lifetime_years']:.0f} y"), wacc_line])
-    add("battery_energy", "Battery — energy capacity", "#E58AA0",
+    add("battery_energy_capex", "Battery — energy capacity, capital", "#E58AA0",
         [("capex quote", f"{battery['capex_per_mwh_eur'] / 1e6:,.2f} M€/MWh"),
          ("duration", "sized by the optimiser"),
          ("round-trip efficiency", f"{battery['efficiency_roundtrip'] * 100:.0f}%")])
@@ -400,9 +438,19 @@ def spec(assumptions: dict) -> list:
     add("grid_fee", "Grid energy — volumetric fee", "#D3DAE0",
         [("volumetric charge (Arbeitspreis)", f"{grid['fee_eur_per_mwh']:,.1f} €/MWh imported")])
     add("transmission", "Transmission (HVDC)", "#83D1DD")
+    # The destination furnace's connection, on the same grid quotes as the
+    # origin's, in the destination blue so the two sides read apart.
     destination = assumptions["destination"]
-    add("destination_power", "Destination power", "#0293D2",
+    add("destination_grid_connection_capex", "Destination grid connection — capital", "#0293D2",
+        [("capex quote", f"{grid['connection_capex_eur_per_mw'] / 1e3:,.0f} k€/MW"),
+         ("lifetime", f"{grid['connection_lifetime_years']:.0f} y")])
+    add("destination_grid_capacity_fee", "Destination grid connection — capacity charge", "#3AA9DB",
+        [("capacity charge (Leistungspreis)",
+          f"{grid['fee_eur_per_mw_per_year'] / 1e3:,.0f} k€/MW·yr")])
+    add("destination_grid_market", "Destination grid energy — market price", "#70C0E5",
         [("market", f"{destination['area']}, hourly day-ahead")])
+    add("destination_grid_fee", "Destination grid energy — volumetric fee", "#A6D7EF",
+        [("volumetric charge (Arbeitspreis)", f"{grid['fee_eur_per_mwh']:,.1f} €/MWh imported")])
     freight = assumptions["transport"]
     add("transport", "Freight", "#BDCCD9",
         [(f"{mode}, {commodity}",
@@ -410,7 +458,7 @@ def spec(assumptions: dict) -> list:
           f"+ {freight[mode][commodity]['eur_per_t_km'] * 1000:,.2f} €/t per 1000 km")
          for mode in ("sea", "rail") for commodity in ("iron", "steel")])
 
-    add("iron_store", "Iron stockpile", "#D75674",
+    add("iron_or_hbi_store", "Iron / HBI stockpile", "#D75674",
         [("capex quote", f"{assumptions['iron_store']['capex_per_t_eur']:,.0f} €/t"),
          ("lifetime", f"{assumptions['iron_store']['lifetime_years']:.0f} y")])
     add("steel_store", "Steel inventory", "#EE8DA3",

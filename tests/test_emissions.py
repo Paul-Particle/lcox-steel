@@ -14,7 +14,7 @@ import pypsa
 import pytest
 
 from scripts.viz import compile_report
-from common._report_schema import EMISSION_STEPS
+from common._report_schema import EMISSION_STEPS, emission_step
 
 # A deliberately round factor table: coal at 1, gas at 0.5, wind free, so every
 # expected number below can be read off by hand.
@@ -144,10 +144,9 @@ def test_a_flat_user_and_a_flexible_one_carry_different_intensities():
     assert emitted["by_step"]["eaf"] == pytest.approx(2 * 5.0 * SCALE * 0.8)
 
 
-def test_a_gas_shaft_carries_its_combustion_but_not_in_its_power_intensity():
-    """Its step total includes the gas; its per-MWh figure must not, or it reads as
-    having bought impossibly dirty electricity. The gas is not scope 2: it is the
-    NG-DRI baseline the grid runs are compared against."""
+def test_a_gas_shaft_s_step_is_its_electricity_and_its_gas_is_scope_1():
+    """Its step is its electricity alone and the gas is scope 1, so neither its
+    step nor its per-MWh figure reads as impossibly dirty electricity."""
     n = _network()
     n.add("Bus", "gas", carrier="gas")
     n.add("Generator", "grid_import", bus="electricity", carrier="AC")
@@ -160,7 +159,7 @@ def test_a_gas_shaft_carries_its_combustion_but_not_in_its_power_intensity():
 
     gas_t = 10.0 * 4 * SCALE * (0.2 + 0.1)
     power_t = 2.0 * 4 * SCALE * 0.8
-    assert emitted["by_step"]["dri-ng"] == pytest.approx(gas_t + power_t)
+    assert emitted["by_step"]["dri-ng"] == pytest.approx(power_t)
     assert emitted["electricity_t"]["dri-ng"] == pytest.approx(power_t)
     assert emitted["sources"]["gas"] == pytest.approx(gas_t)
 
@@ -528,7 +527,8 @@ def test_the_steps_stack_to_the_total():
 
     emitted = _breakdown(n, grid_mix=_grid_mix(n))
 
-    assert set(emitted["by_step"]) <= set(EMISSION_STEPS)
+    assert {emission_step(step) for step in emitted["by_step"]} <= set(EMISSION_STEPS)
     assert emitted["by_step"]["battery_losses"] == pytest.approx(2.0 * SCALE * 0.8)
-    total = sum(emitted["by_step"].values())
-    assert total == pytest.approx(sum(emitted["sources"].values()))
+    # The steps are the electricity's; the gas stands beside them, in no step.
+    assert sum(emitted["by_step"].values()) == pytest.approx(emitted["sources"]["electricity"])
+    assert emitted["sources"]["gas"] > 0
