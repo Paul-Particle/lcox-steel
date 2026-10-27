@@ -167,7 +167,7 @@ LEAF_COSTS_BY_GROUP = (
     *((f"{plant}_{half}", "total_plant")
       for plant in ("ironmaking_plant", "briquetting_plant", "steelmaking_plant")
       for half in ("capex", "fom")),
-    ("gas_fuel", "gas"),
+    ("gas_purchase", "gas"),
     ("gas_carbon", "gas"),
     ("electrolyser_capex", "hydrogen"),
     ("electrolyser_fom", "hydrogen"),
@@ -194,12 +194,32 @@ LEAF_COSTS_BY_GROUP = (
     # DRI for export. The whole of the `iron_or_hbi_store` cost group.
     ("iron_or_hbi_store", "storage"),
     ("steel_store", "storage"),
-    ("transport", "storage"),
+    # Freight is a parent of its own rather than a store: it is a cost of
+    # distance, not of inventory, and what separates an export route from a
+    # home-made one. Its one leaf is the whole parent, so the two share the
+    # one row `cost_transport_eur_per_t_steel`.
+    ("transport", "transport"),
 )
 LEAF_COSTS = tuple(leaf for leaf, _ in LEAF_COSTS_BY_GROUP)
 LEAF_GROUP = dict(LEAF_COSTS_BY_GROUP)
 # The parent groups, in the order their leaves first appear.
 LEAF_PARENTS = tuple(dict.fromkeys(group for _, group in LEAF_COSTS_BY_GROUP))
+
+# Which parent each annual cost group belongs to, so the M€ block can be read in
+# the same seven parents as the €/t steel stack. Where a group is the whole of
+# its parent (gas, total_plant, transport) the two share one row.
+COST_GROUP_PARENT = {
+    "ore": "feedstock", "eaf_consumables": "feedstock",
+    "total_plant": "total_plant",
+    "gas": "gas",
+    "electrolyser": "hydrogen", "h2_buffer": "hydrogen",
+    "res": "electricity", "battery": "electricity", "grid": "electricity",
+    "transmission": "electricity", "destination_electricity": "electricity",
+    "iron_or_hbi_store": "storage", "steel_store": "storage",
+    "transport": "transport",
+}
+assert set(COST_GROUP_PARENT) == set(COST_GROUPS)
+assert set(COST_GROUP_PARENT.values()) == set(LEAF_PARENTS)
 
 # Totals of a few leaves inside one parent, for a reader who wants a component's
 # cost without adding its halves up. Each is reported as `cost_{name}_eur_per_t_steel`
@@ -295,6 +315,9 @@ REPORT_FIELDS = {
 
     # Annual system cost and the groups it is made of.
     "total_annual_cost_meur": ZERO,
+    # The seven parents of `lcos_eur_per_t_steel` per year: each its €/t steel
+    # row times the steel produced. A parent that is one group shares its row.
+    **{f"cost_{parent}_meur": ZERO for parent in LEAF_PARENTS},
     **{f"cost_{group}_meur": ZERO for group in COST_GROUPS},
 
     # What the run produced, and what a unit of it cost.
@@ -521,7 +544,7 @@ REPORT_FIELDS = {
     "cost_ironmaking_plant_eur_per_t_iron": ZERO,
     "cost_ironmaking_plant_capex_eur_per_t_iron": ZERO,
     "cost_ironmaking_plant_fom_eur_per_t_iron": ZERO,
-    "cost_gas_fuel_eur_per_t_iron": ZERO,
+    "cost_gas_purchase_eur_per_t_iron": ZERO,
     "cost_gas_carbon_eur_per_t_iron": ZERO,
     "cost_iron_store_eur_per_t_iron": ZERO,
     # The cost of the iron per tonne of steel: the same yearly euros as
@@ -631,39 +654,44 @@ REPORT_FIELDS = {
     # clean route lands near a thousandth of a tonne per tonne, which two
     # decimals would read as nothing.
     #
+    # CO2 rather than CO2e: the energy's factors are combustion CO2 (the grid's
+    # what comes out of the stack, the gas's what burning it gives), and the one
+    # thing that would make them CO2e, the gas's upstream methane, is zero. The
+    # freight below is GLEC's, which is CO2e, and says so.
+    #
     # The scope is in the names because the boundary is narrower than "the
     # plant's emissions": scope 1 is the gas burned only, without the process
     # emissions above, and scope 2 is location-based, hour by hour. Together
     # they are the energy's emissions, hence `energy` in the totals.
     "emissions_basis": UNDEFINED,
-    "emissions_energy_mt_co2e_per_year": ZERO,
-    "emissions_energy_t_co2e_per_t_steel": UNDEFINED,
-    "emissions_scope2_kg_co2e_per_kg_h2": UNDEFINED,
+    "emissions_energy_mt_co2_per_year": ZERO,
+    "emissions_energy_t_co2_per_t_steel": UNDEFINED,
+    "emissions_scope2_kg_co2_per_kg_h2": UNDEFINED,
     # The two things inside the boundary that emit, as annual totals. Together
-    # they are `emissions_energy_mt_co2e_per_year`.
-    "emissions_scope2_electricity_mt_co2e_per_year": ZERO,
-    "emissions_scope1_gas_mt_co2e_per_year": ZERO,
+    # they are `emissions_energy_mt_co2_per_year`.
+    "emissions_scope2_electricity_mt_co2_per_year": ZERO,
+    "emissions_scope1_gas_mt_co2_per_year": ZERO,
     # The same two per tonne of steel, adding up to
-    # `emissions_energy_t_co2e_per_t_steel`.
-    "emissions_scope2_electricity_t_co2e_per_t_steel": ZERO,
-    "emissions_scope1_gas_t_co2e_per_t_steel": ZERO,
+    # `emissions_energy_t_co2_per_t_steel`.
+    "emissions_scope2_electricity_t_co2_per_t_steel": ZERO,
+    "emissions_scope1_gas_t_co2_per_t_steel": ZERO,
     # Per step: what its electricity added to a tonne of steel, and what share
     # of the tonne that was. The steps stack to the scope 2 row; the gas's share
     # beside them makes the shares stack to 100 %.
-    **{f"emissions_scope2_{field_stem(step)}_t_co2e_per_t_steel": ZERO
+    **{f"emissions_scope2_{field_stem(step)}_t_co2_per_t_steel": ZERO
        for step in EMISSION_STEPS},
-    # All the electricity CO2e of making the iron, per tonne of steel: the
+    # All the electricity CO2 of making the iron, per tonne of steel: the
     # reduction and the electrolyser, with ironmaking's share of the losses by
     # the MWh it drew at the origin, as `cost_electricity_ironmaking_eur_per_t_steel`
     # takes its share of the bill. Beside the steps, never added to them: it
     # holds part of the losses a second time.
-    "emissions_scope2_ironmaking_t_co2e_per_t_steel": ZERO,
+    "emissions_scope2_ironmaking_t_co2_per_t_steel": ZERO,
     **{f"emissions_scope2_{field_stem(step)}_pct": UNDEFINED for step in EMISSION_STEPS},
     "emissions_scope1_gas_pct": UNDEFINED,
     # What delivering the steel added, which none of the totals above counts:
     # the boundary is the plant, and the distance to a customer is a question
     # asked of a route rather than a property of it. Add these to
-    # `emissions_energy_t_co2e_per_t_steel` for a delivered figure. Only the
+    # `emissions_energy_t_co2_per_t_steel` for a delivered figure. Only the
     # diagnostic carries them (see DIAGNOSTIC_FIELDS), and unlike everything
     # else here they survive an unknown grid mix, being a distance and a factor.
     "emissions_freight_kt_co2e_per_year": ZERO,
@@ -672,7 +700,7 @@ REPORT_FIELDS = {
     # Electricity by who drew it, and how dirty their own hours were. The system
     # average is what a MWh cost the run on average; a user above it bought the
     # dirty hours, one below it chased the clean ones.
-    "emissions_scope2_kg_co2e_per_mwh_el": UNDEFINED,
+    "emissions_scope2_kg_co2_per_mwh_el": UNDEFINED,
     # All of them together: the electricity the users drew, losses excluded.
     "el_users_gwh": ZERO,
     **{f"el_{field_stem(user)}_gwh": ZERO for user in ELECTRICITY_USERS},
@@ -681,9 +709,9 @@ REPORT_FIELDS = {
     # generated, which is what lets the `cost_electricity_*_eur_per_t_steel` jobs close on
     # the electricity bill.
     "el_losses_gwh": ZERO,
-    # Each step's own intensity, cut as the step rows are: its electricity CO2e
+    # Each step's own intensity, cut as the step rows are: its electricity CO2
     # over the MWh it drew, no losses. The losses have none: nobody drew them.
-    **{f"emissions_scope2_{field_stem(step)}_kg_co2e_per_mwh_el": UNDEFINED
+    **{f"emissions_scope2_{field_stem(step)}_kg_co2_per_mwh_el": UNDEFINED
        for step in EMISSION_STEPS if not step.endswith("_losses")},
 
     # Why the emission fields above are blank, when they are. A market that
@@ -711,7 +739,8 @@ ZERO_FILLED = tuple(field for field, fill in REPORT_FIELDS.items() if fill == ZE
 # t per t of steel, where a clean route lands in the thousandths and two
 # decimals would read it as nothing.
 MORE_DECIMALS = tuple(field for field in REPORT_FIELDS
-                      if field.endswith(("_mt_co2e_per_year", "_t_co2e_per_t_steel")))
+                      if field.endswith(("_mt_co2_per_year", "_t_co2_per_t_steel",
+                                         "_mt_co2e_per_year", "_t_co2e_per_t_steel")))
 
 # The fields that say what the run was rather than what it cost. They lead the
 # file, so everything below them is numbers and a reader can skip straight to it.

@@ -20,6 +20,7 @@ import yaml
 from common._constants import H2_LHV_KWH_PER_KG
 from common._logging import configure_logging
 from common._report_schema import (
+    COST_GROUP_PARENT,
     DIAGNOSTIC_FIELDS,
     ELECTRICITY_USERS,
     IRON_ELECTRICITY_JOBS,
@@ -152,7 +153,7 @@ def _storage_carbon(
     storage_flow: pd.Series, closing_level: float, eta_in: float, eta_out: float,
     generation_intensity: pd.Series,
 ) -> tuple[pd.Series, float]:
-    """What storage gave back each hour, in t CO2e, and what it lost over the year.
+    """What storage gave back each hour, in t CO2, and what it lost over the year.
 
     `storage_flow` is signed as seen from the electricity bus — positive when the
     battery supplies it, negative when it charges — and `closing_level` is the
@@ -213,7 +214,7 @@ def _emissions_breakdown(
 ) -> dict[str, object]:
     """What the run emitted in a year, and who to charge it to.
 
-    `by_step` is the annual t CO2e of each step's electricity, the losses as
+    `by_step` is the annual t CO2 of each step's electricity, the losses as
     steps of their own, and stacks to `sources["electricity"]`. The gas is in
     no step: whichever shaft burned it, it is `sources["gas"]` alone, so no step
     holds both scopes. `electricity_mwh` and `electricity_t` are each user's
@@ -428,7 +429,7 @@ def _emissions_breakdown(
     if unavailable:
         # What each user drew, and what the losses took, are known whatever the
         # mix was — only what it emitted is not. So the MWh stay and every t of
-        # CO2e inside the boundary goes blank, the gas included: it stacks into
+        # CO2 inside the boundary goes blank, the gas included: it stacks into
         # one total with the electricity, and a total that is part known and part
         # not is the number most likely to be quoted as if it were whole. The
         # freight is a distance and a factor, and no total holds it, so it stands.
@@ -661,16 +662,17 @@ def _leaf_breakdown(
         leaves[f"{stem}_fom"] += annual * share
         leaves[f"{stem}_capex"] += annual * (1.0 - share)
 
-    # -- natural gas: the fuel bill, and separately any carbon price on it. Both
-    # ride on the gas generator's marginal cost, so the carbon comes out at the
-    # rate it was charged and the fuel is what is left of the group.
+    # -- natural gas: what was paid for the gas, and separately any carbon price
+    # on it. Both ride on the gas generator's marginal cost, so the carbon comes
+    # out at the rate it was charged and the purchase is what is left of the
+    # group. Not "fuel": a shaft's gas is mostly its reducing agent.
     emissions_cfg = assumptions["emissions"]
     gas_mwh = (float(n.generators_t.p["gas_supply"].sum()) * annual_scale
                if "gas_supply" in n.generators.index else 0.0)
     carbon_per_mwh = (emissions_cfg["co2_price_eur_per_t"]
                       * emissions_cfg["natural_gas_reductant_t_co2e_per_mwh"]["process"])
     leaves["gas_carbon"] = gas_mwh * carbon_per_mwh
-    leaves["gas_fuel"] = breakdown["gas"] - leaves["gas_carbon"]
+    leaves["gas_purchase"] = breakdown["gas"] - leaves["gas_carbon"]
 
     # -- hydrogen: the electrolyser's water and consumables are its marginal
     # cost, so the network separates them from its capital directly, without
@@ -901,7 +903,7 @@ def _leaf_breakdown(
             "ore": leaves["ore"],
             "ironmaking_plant_capex": leaves["ironmaking_plant_capex"],
             "ironmaking_plant_fom": leaves["ironmaking_plant_fom"],
-            "gas_fuel": leaves["gas_fuel"],
+            "gas_purchase": leaves["gas_purchase"],
             "gas_carbon": leaves["gas_carbon"],
             "electrolyser": sum(electrolyser.values()),
             "h2_buffer": leaves["h2_buffer"],
@@ -913,7 +915,7 @@ def _leaf_breakdown(
         # The parts the breakdown adds; the electrolyser, buffer and electricity
         # rows are already written above.
         for part in ("ore", "ironmaking_plant_capex", "ironmaking_plant_fom",
-                     "gas_fuel", "gas_carbon", "iron_store"):
+                     "gas_purchase", "gas_carbon", "iron_store"):
             fields[f"cost_{part}_eur_per_t_iron"] = iron_parts[part] / iron_t
         fields["cost_ironmaking_plant_eur_per_t_iron"] = (
             iron_parts["ironmaking_plant_capex"] + iron_parts["ironmaking_plant_fom"]) / iron_t
@@ -1110,6 +1112,11 @@ def extract_summary(
     # a result, not a gap. plot_lcos_bars stacks these.
     for group, value in breakdown.items():
         summary[f"cost_{group}_meur"] = value / 1e6
+    # And the same money in the seven parents of the €/t steel stack.
+    for parent in LEAF_PARENTS:
+        summary[f"cost_{parent}_meur"] = sum(
+            value for group, value in breakdown.items() if COST_GROUP_PARENT[group] == parent
+        ) / 1e6
 
     total_annual_cost = sum(breakdown.values())
 
@@ -1488,9 +1495,9 @@ def extract_summary(
         summary["emissions_unavailable_reason"] = emitted["unavailable"]
     emissions_t = sources["electricity"] + sources["gas"]
     freight_by_leg = emitted["freight_by_leg"]
-    summary["emissions_energy_mt_co2e_per_year"] = emissions_t / 1e6
-    summary["emissions_scope2_electricity_mt_co2e_per_year"] = sources["electricity"] / 1e6
-    summary["emissions_scope1_gas_mt_co2e_per_year"] = sources["gas"] / 1e6
+    summary["emissions_energy_mt_co2_per_year"] = emissions_t / 1e6
+    summary["emissions_scope2_electricity_mt_co2_per_year"] = sources["electricity"] / 1e6
+    summary["emissions_scope1_gas_mt_co2_per_year"] = sources["gas"] / 1e6
     summary["emissions_freight_kt_co2e_per_year"] = sum(freight_by_leg.values()) / 1e3
 
     # Per tonne of steel, and each step's share of it. The steps stack to the
@@ -1498,13 +1505,13 @@ def extract_summary(
     # of reads 0 rather than blank. The
     # freight sits beside them rather than in them: it is what delivering the
     # tonne added, and no total above counts it.
-    summary["emissions_energy_t_co2e_per_t_steel"] = emissions_t / steel_t_per_year
-    summary["emissions_scope2_electricity_t_co2e_per_t_steel"] = (
+    summary["emissions_energy_t_co2_per_t_steel"] = emissions_t / steel_t_per_year
+    summary["emissions_scope2_electricity_t_co2_per_t_steel"] = (
         sources["electricity"] / steel_t_per_year
     )
-    summary["emissions_scope1_gas_t_co2e_per_t_steel"] = sources["gas"] / steel_t_per_year
+    summary["emissions_scope1_gas_t_co2_per_t_steel"] = sources["gas"] / steel_t_per_year
     for step in EMISSION_STEPS:
-        summary[f"emissions_scope2_{field_stem(step)}_t_co2e_per_t_steel"] = (
+        summary[f"emissions_scope2_{field_stem(step)}_t_co2_per_t_steel"] = (
             emissions.get(step, 0.0) / steel_t_per_year
         )
     for leg in FREIGHT_LEGS:
@@ -1517,7 +1524,7 @@ def extract_summary(
                 emissions.get(step, 0.0) * 100.0 / emissions_t
             )
         summary["emissions_scope1_gas_pct"] = sources["gas"] * 100.0 / emissions_t
-    # Ironmaking's electricity CO2e, with its share of the losses by the MWh it
+    # Ironmaking's electricity CO2, with its share of the losses by the MWh it
     # drew among everything drawn at the origin, which is where the losses are:
     # an export route's furnace melts on the destination's grid and has none.
     melts_abroad = "destination_supply" in n.generators.index
@@ -1529,7 +1536,7 @@ def extract_summary(
     origin_mwh = sum(drawn_mwh.values())
     iron_share = iron_mwh / origin_mwh if origin_mwh > 0 else 0.0
     losses_t = emissions.get("battery_losses", 0.0) + emissions.get("transmission_losses", 0.0)
-    summary["emissions_scope2_ironmaking_t_co2e_per_t_steel"] = (
+    summary["emissions_scope2_ironmaking_t_co2_per_t_steel"] = (
         emissions.get("reduction", 0.0) + emissions.get("electrolyser", 0.0)
         + losses_t * iron_share
     ) / steel_t_per_year
@@ -1551,7 +1558,7 @@ def extract_summary(
         if h2_kg > 0:
             electrolyser_share = (drawn_mwh["electrolyser"] / origin_mwh
                                   if origin_mwh > 0 else 0.0)
-            summary["emissions_scope2_kg_co2e_per_kg_h2"] = (
+            summary["emissions_scope2_kg_co2_per_kg_h2"] = (
                 emissions.get("electrolyser", 0.0) + losses_t * electrolyser_share
             ) * 1e3 / h2_kg
 
@@ -1561,7 +1568,7 @@ def extract_summary(
     # were MWh the system drew, so a user can sit either side of it.
     total_el_mwh = sum(electricity_mwh.values()) + emitted["losses_mwh"]
     if total_el_mwh > 0:
-        summary["emissions_scope2_kg_co2e_per_mwh_el"] = (
+        summary["emissions_scope2_kg_co2_per_mwh_el"] = (
             sources["electricity"] * 1e3 / total_el_mwh
         )
     summary["el_users_gwh"] = sum(electricity_mwh.values()) / 1e3
@@ -1575,7 +1582,7 @@ def extract_summary(
     # route's furnace reads the destination's hours.
     for step, mwh in step_mwh.items():
         if mwh > 0:
-            summary[f"emissions_scope2_{field_stem(step)}_kg_co2e_per_mwh_el"] = (
+            summary[f"emissions_scope2_{field_stem(step)}_kg_co2_per_mwh_el"] = (
                 step_t[step] * 1e3 / mwh
             )
     # And what nobody drew, so the draws above account for the whole of what was

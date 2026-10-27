@@ -433,7 +433,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const values = known.map(r => recFor(S,r).emissions);
     const low = Math.min(...values), high = Math.max(...values);
     const span = (low===high ? nf(low,0) : nf(low,0) + "\u2013" + nf(high,0))
-      + " kg CO\u2082e/t steel";
+      + " kg CO\u2082/t steel";
     // The range says how far apart the routes are; which route sits where is on
     // hover, in the order the charts draw them.
     const title = known.map(r => `${RLAB[r]||r}: ${nf(recFor(S,r).emissions,0)}`).join("\n");

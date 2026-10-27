@@ -414,7 +414,7 @@ def test_the_cost_of_iron_is_the_sum_of_its_parts(route, assumptions):
     # The plant per tonne of steel is the same yearly euros as per tonne of iron.
     assert fields["cost_ironmaking_plant_eur_per_t_steel"] * steel_t == pytest.approx(
         fields["cost_ironmaking_plant_eur_per_t_iron"] * iron_t, rel=1e-9)
-    parts = ("ore", "ironmaking_plant_capex", "ironmaking_plant_fom", "gas_fuel", "gas_carbon",
+    parts = ("ore", "ironmaking_plant_capex", "ironmaking_plant_fom", "gas_purchase", "gas_carbon",
              "electrolyser", "h2_buffer", "electricity", "iron_store")
     assert sum(fields[f"cost_{part}_eur_per_t_iron"] for part in parts) == pytest.approx(
         fields["lcoi_eur_per_t_iron"], rel=1e-9)
@@ -431,7 +431,7 @@ def test_the_cost_of_iron_per_tonne_of_steel_is_its_parts_on_that_basis(route, a
     total = fields["cost_ironmaking_eur_per_t_steel"]
 
     assert total * steel_t == pytest.approx(fields["lcoi_eur_per_t_iron"] * iron_t, rel=1e-9)
-    parts = ("ore", "ironmaking_plant", "gas_fuel", "gas_carbon", "electrolyser", "h2_buffer",
+    parts = ("ore", "ironmaking_plant", "gas_purchase", "gas_carbon", "electrolyser", "h2_buffer",
              "electricity_ironmaking", "ironmaking_store")
     assert sum(fields[f"cost_{part}_eur_per_t_steel"] for part in parts) == pytest.approx(
         total, rel=1e-9)

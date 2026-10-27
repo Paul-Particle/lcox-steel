@@ -52,6 +52,7 @@ GROUPS = [
     ("hydrogen",    "Hydrogen",           "#91C096"),
     ("electricity", "Electricity system", "#0A5680"),
     ("storage",     "Solid stores",       "#D75674"),
+    ("transport",   "Freight",            "#BDCCD9"),
 ]
 
 # The steel chain's plants, in stack order: the link id `build_network` gives
@@ -195,7 +196,7 @@ def leaf_inputs(row: pd.Series) -> dict:
     # -- gas. Both halves of the bill ride on the same burnt megawatt-hours.
     gas_burnt = quantity("gas_mwh_per_t_steel", "gas burnt",
                          "{:,.2f} MWh LHV / t steel")
-    add("gas_fuel", gas_burnt)
+    add("gas_purchase", gas_burnt)
     add("gas_carbon", gas_burnt)
 
     # -- hydrogen
@@ -375,7 +376,7 @@ def spec(assumptions: dict) -> list:
               f"{plant['opex_per_t_per_year_eur'] / plant['capex_per_t_per_year_eur'] * 100:.1f}% / yr")])
 
     gas = assumptions["natural_gas"]
-    add("gas_fuel", "Natural gas — fuel", "#525F6A",
+    add("gas_purchase", "Natural gas — purchase", "#525F6A",
         [("price", f"{gas['price_eur_per_mwh']:,.1f} €/MWh LHV")])
     # A run priced at zero carbon has no carbon band: it would be worth 0 €/t on
     # every route, so it draws nothing and only puts the words "carbon price" in
