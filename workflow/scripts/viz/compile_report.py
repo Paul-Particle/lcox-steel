@@ -247,6 +247,10 @@ def _emissions_breakdown(
                if "p2" in n.links_t else link_p0 * 0.0)
     link_bus2 = (n.links["bus2"] if "bus2" in n.links.columns
                  else pd.Series("", index=n.links.index))
+    link_p3 = (n.links_t["p3"].reindex(columns=n.links.index, fill_value=0.0)
+               if "p3" in n.links_t else link_p0 * 0.0)
+    link_bus3 = (n.links["bus3"] if "bus3" in n.links.columns
+                 else pd.Series("", index=n.links.index))
 
     # The destination is found by who feeds it rather than by name, so the bus
     # can be renamed in build_network without breaking the report.
@@ -348,6 +352,10 @@ def _emissions_breakdown(
             )
         draw, bus = ((link_p0[link], n.links.at[link, "bus0"]) if on_bus0
                      else (link_p2[link], bus2))
+        # The H2 shaft draws the preheat of its feed on bus3, the bus its
+        # auxiliaries draw on.
+        if link_bus3[link] == bus:
+            draw = draw + link_p3[link]
         intensity = destination_intensity if bus == destination_bus else home_intensity
         electricity_mwh[link] = float(draw.sum()) * annual
         electricity_by_user[link] = float((draw * intensity).sum()) * annual

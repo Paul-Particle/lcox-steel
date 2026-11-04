@@ -165,6 +165,22 @@ def test_a_gas_shaft_carries_its_combustion_but_not_in_its_power_intensity():
     assert emitted["sources"]["gas"] == pytest.approx(gas_t)
 
 
+def test_an_h2_shaft_is_charged_its_auxiliaries_and_its_preheat():
+    """The preheat of the H2 feed is drawn on bus3, beside the auxiliaries on bus2."""
+    n = _network()
+    n.add("Bus", "hydrogen", carrier="hydrogen")
+    n.add("Generator", "grid_import", bus="electricity", carrier="AC")
+    n.add("Link", "dri-h2", bus0="hydrogen", bus1="iron", bus2="electricity", bus3="electricity")
+    _dispatch(n, "generators", "p", {"grid_import": [5.0] * 4})
+    _dispatch(n, "links", "p0", {"dri-h2": [20.0] * 4})
+    _dispatch(n, "links", "p2", {"dri-h2": [1.0] * 4})
+    _dispatch(n, "links", "p3", {"dri-h2": [4.0] * 4})
+
+    emitted = _breakdown(n, grid_mix=_grid_mix(n))
+
+    assert emitted["electricity_t"]["dri-h2"] == pytest.approx((1.0 + 4.0) * 4 * SCALE * 0.8)
+
+
 def test_a_destination_furnace_is_charged_to_the_destination_grid():
     """An export route's furnace runs where the iron lands, not where it was made."""
     n = _network()

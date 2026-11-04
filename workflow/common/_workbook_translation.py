@@ -53,6 +53,7 @@ SHARED_SOURCES = {
     "dri-h2.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
     "dri-mix.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
     "dri-ng.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
+    "dri-h2.el_mwh_per_t": "dri_ng.el_mwh_per_t",
     "dri-mix.el_mwh_per_t": "dri_ng.el_mwh_per_t",
     "iron_store.capex_per_t_eur": "iron_steel_store.capex_eur_per_t",
     "steel_store.capex_per_t_eur": "iron_steel_store.capex_eur_per_t",
@@ -68,9 +69,7 @@ MODEL_NAMED_SOURCES = {
     "eaf.charge.plates.el_mwh_per_t": "eaf_ewin.el_mwh_per_t",
     "eaf.charge.hot.el_mwh_per_t": "eaf_dri.el_mwh_per_t",
     "eaf.charge.liquid.el_mwh_per_t": "eaf_moe.el_mwh_per_t",
-}
-SUMMED_SOURCES = {
-    "dri-h2.el_mwh_per_t": {"sum": ["dri_h2.el_mwh_per_t", "dri_ng.el_mwh_per_t"]},
+    "dri-h2.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
     "dri-mix.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
 }
 IRON_OPEX = {"default": {"mean": ["iron.fom_eur_per_t_capacity_per_year_aus",
@@ -101,7 +100,7 @@ PER_SCENARIO_SOURCES = {
                                       "high": "natural_gas.price_eur_per_mwh_high",
                                       "low": "natural_gas.price_eur_per_mwh_low"},
 }
-WORKBOOK_SOURCES = (RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_NAMED_SOURCES | SUMMED_SOURCES
+WORKBOOK_SOURCES = (RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_NAMED_SOURCES
                     | PER_SCENARIO_SOURCES)
 # Rows the workbook still holds at 0, value and unit:
 #   "dri-h2.p_min_pu": "dri.p_min_pu",
