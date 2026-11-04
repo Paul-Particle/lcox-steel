@@ -42,9 +42,6 @@ OVERLAYS_DIR = CONFIG_DIR / "overlays"
 DEFAULT_WORKBOOK = REPO_ROOT / "data" / "assumptions" / "Assumptions_yaml_inputs.xlsx"
 INPUTS_SHEET = "assumptions_inputs"
 SCENARIOS_SHEET = "scenarios_clean"
-# ECB reference rate, 2025 annual average (EXR.A.USD.EUR.SP00.A): the rate the
-# master register converts with (its Conversions tab, EUR_to_USD_2025).
-USD_PER_EUR = 1.13
 COMBINATIONS = {"mean": np.mean, "sum": np.sum}
 ANCHOR_VARIANT_PREFIX = "anchor-colo-n"
 RELATIVE_CHANGE = re.compile(r"^([+-]\d+(?:\.\d+)?)%$")
@@ -79,13 +76,13 @@ def resolve_sources(workbook_inputs: pd.DataFrame, sources: dict) -> dict[str, d
         if rows["value"].isna().any() or rows["unit"].nunique() > 1:
             raise ValueError(f"{path}: workbook rows need a value each and one unit\n{rows}")
         unit = rows["unit"].iloc[0]
-        if ("eur" in path.rsplit(".", 1)[-1].split("_")) != ("USD" in unit or "EUR" in unit):
-            raise ValueError(f"{path}: workbook unit '{unit}' does not match the key's currency")
+        is_eur_key = "eur" in path.rsplit(".", 1)[-1].split("_")
+        if "USD" in unit or is_eur_key != ("EUR" in unit):
+            raise ValueError(f"{path}: workbook unit '{unit}' does not match the key's currency (the model is in EUR)")
         alternatives_by_path[path] = {}
         for name, entry in alternatives.items():
             combine = COMBINATIONS[next(iter(entry))] if isinstance(entry, dict) else np.sum
-            combined = float(combine(workbook_inputs.loc[keys[name], "value"]))
-            alternatives_by_path[path][name] = combined / USD_PER_EUR if "USD" in unit else combined
+            alternatives_by_path[path][name] = float(combine(workbook_inputs.loc[keys[name], "value"]))
     return alternatives_by_path
 
 
