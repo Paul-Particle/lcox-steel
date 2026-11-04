@@ -244,7 +244,11 @@ briquetting:
   opex_per_t_per_year_eur: 1.2        # ≈3 % of capex
   lifetime_years: 20
   el_mwh_per_t: 0.01                  # press, screening and handling
-  yield_t_per_t: 0.98                 # fines lost on screening
+  # Iron reaching the furnace per tonne leaving the shaft, over the whole HBI chain:
+  # fines at the press (1–3 %, Lohmeier et al. 2020, steel research int.), reoxidation
+  # in stock and at sea (about 1 % a month at first, IIMA HBI guide 2025) and breakage
+  # in handling (Midrex, "Maximizing iron unit yield", 2020). Plausibly 0.93–0.98.
+  yield_t_per_t: 0.96
 
 iron_store:
   # Stockpile of cold solid iron — electrowon plates for ew-eaf, briquettes for
