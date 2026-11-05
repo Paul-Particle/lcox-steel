@@ -11,7 +11,7 @@ fill itself. Synthetic frames, no download.
 import numpy as np
 import pandas as pd
 
-import _ons  # sys.path set by conftest
+from scripts.grid import _ons
 
 _fill_from_adjacent_week = _ons._fill_from_adjacent_week
 

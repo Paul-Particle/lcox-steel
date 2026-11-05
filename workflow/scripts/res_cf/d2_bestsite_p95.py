@@ -19,7 +19,7 @@ Method
 ------
 - Reads an annual Atlite cutout
 - Computes hourly CF per grid cell for each technology using:
-    - wind: smoothed turbine power curve (smooth=True)
+    - wind: turbine power curve (smoothing per `wind_cf.smooth`)
     - solar: standard PV conversion
 - Computes annual mean CF per grid cell
 - Builds area-based cell weights via atlite's indicatormatrix (area-fraction
@@ -62,8 +62,6 @@ import pandas as pd
 import xarray as xr
 import atlite
 import geopandas as gpd
-import yaml
-from shapely.geometry import box
 import logging
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -83,7 +81,7 @@ log = logging.getLogger(__name__)
 YEAR = 2023
 OUTDIR = TIMESERIES
 RES_CF_CFG = load_res_cf_cfg()
-AREAS = ["DE_LU"]          # area codes, as in config/scenarios.csv
+AREAS = ["DE_LU"]          # area codes, as in a scenario table
 REGION = "DE"              # region tag stored in the geo parquet
 
 CUTOUT_DIR = None # test: Path("cutouts/vic_20250101_20251231.nc")
@@ -111,7 +109,7 @@ PV_ORIENTATION        = RES_CF_CFG["pv_orientation"]
 
 WIND_ONSHORE_TURBINE  = WIND_TURBINE
 WIND_CF_CFG           = RES_CF_CFG.get("wind_cf", {})
-WIND_SMOOTH           = WIND_CF_CFG.get("smooth", True)
+WIND_SMOOTH           = WIND_CF_CFG.get("smooth", False)
 WIND_ADD_CUTOUT_WS    = WIND_CF_CFG.get("add_cutout_windspeed", True)
 # Land-sea eligibility cutoff (#41). Onshore only — offshore passes 0 below.
 MIN_LAND_FRACTION     = float(RES_CF_CFG.get("min_land_fraction", 0.0))
@@ -240,10 +238,13 @@ def main() -> None:
 
             co = atlite.Cutout(path=str(cutout))
             # Land-sea eligibility (#41): onshore drops sea-contaminated coastal
-            # border cells; offshore keeps all sea cells (min_lf = 0). Weights are
-            # also cos(lat) physical-area weighted (#37), folded into eligibility_weights.
-            min_lf = MIN_LAND_FRACTION if tech != "wind_offshore" else 0.0
-            weights = eligibility_weights(co, geom, min_lf, ELIGIBILITY_SOURCE)
+            # border cells; offshore keeps every cell it overlaps, weighted by the
+            # overlap, whichever land source is configured. Weights are also
+            # cos(lat) physical-area weighted (#37), folded into eligibility_weights.
+            offshore = tech == "wind_offshore"
+            min_lf = 0.0 if offshore else MIN_LAND_FRACTION
+            source = "indicatormatrix" if offshore else ELIGIBILITY_SOURCE
+            weights = eligibility_weights(co, geom, min_lf, source)
 
             cell_mean = cf_year.mean("time").values
             w_flat = weights.ravel()

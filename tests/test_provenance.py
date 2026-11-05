@@ -6,7 +6,7 @@ mtimes — assumptions get edited and timeseries get rebuilt under the same name
 and a fingerprint that missed that would connect a number to the wrong inputs.
 """
 
-from common._provenance import input_manifest  # sys.path set by conftest
+from common._provenance import input_manifest
 
 
 def _write(directory, name, text):

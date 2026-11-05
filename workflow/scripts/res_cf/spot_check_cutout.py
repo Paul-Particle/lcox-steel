@@ -22,10 +22,6 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from pathlib import Path
-
-# Standalone: put workflow/ on sys.path so `common.*` imports resolve.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import atlite
 

@@ -5,31 +5,32 @@ that draws electricity as its input against one that draws it alongside another
 conversion, a furnace on the far side of an ocean against one at the plant, and
 a shaft that burns gas as well as drawing power. These pin that on hand-built
 networks with the dispatch written in — no cutouts, no solves, so they run
-anywhere and a change in `config/assumptions.yaml` cannot move them.
+anywhere and a change in the assumptions cannot move them.
 """
+
+import copy
 
 import numpy as np
 import pandas as pd
 import pypsa
 import pytest
 
-import compile_report  # sys.path set by conftest
-from common._report_schema import EMISSION_STEPS
+from scripts.viz import compile_report
+from common._report_schema import EMISSION_STEPS, emission_step
 
 # A deliberately round factor table: coal at 1, gas at 0.5, wind free, so every
 # expected number below can be read off by hand.
 EMISSIONS = {
-    "basis": "test",
     "electricity_t_co2e_per_mwh": {
-        "hard_coal":    {"test": 1.0},
-        "gas":          {"test": 0.5},
-        "wind_onshore": {"test": 0.0},
-        "solar":        {"test": 0.2},
+        "hard_coal":    {"combustion": 1.0},
+        "gas":          {"combustion": 0.5},
+        "wind_onshore": {"combustion": 0.0},
+        "solar":        {"combustion": 0.2},
     },
-    "gas_upstream_t_co2e_per_mwh": {"test": 0.1},
-    "freight_kg_co2e_per_t_km": {"sea": {"test": 0.004}, "rail": {"test": 0.01}},
+    "natural_gas_reductant_t_co2e_per_mwh": {"process": 0.2, "upstream": 0.1},
+    "co2_price_eur_per_t": 0.0,
+    "freight_kg_co2e_per_t_km": {"sea": 0.004, "rail": 0.01},
 }
-NATURAL_GAS = {"co2_t_per_mwh": 0.2}
 # Four snapshots stand for the year, so an hourly MW is 2190 MWh annualised.
 SCALE = 8760 / 4
 
@@ -37,7 +38,7 @@ SCALE = 8760 / 4
 def _network() -> pypsa.Network:
     """A two-bus skeleton: an electricity bus feeding an iron bus through an EAF."""
     n = pypsa.Network()
-    n.set_snapshots(range(4))
+    n.set_snapshots(pd.date_range("2025-01-01", periods=4, freq="h"))
     n.add("Bus", "electricity", carrier="AC")
     n.add("Bus", "iron", carrier="iron")
     n.add("Bus", "steel", carrier="steel")
@@ -93,10 +94,10 @@ def _breakdown(n: pypsa.Network, legs: dict | None = None,
                destination_mix: pd.DataFrame | None = None) -> dict:
     """The function under test, with only the inputs a case varies named at the call.
 
-    The factor table, the gas figures and the two place names are the same in
+    The emission factors and the two place names are the same in
     every case, so they sit here rather than in eighteen argument lists."""
     return compile_report._emissions_breakdown(
-        n, EMISSIONS, NATURAL_GAS, "VIC1", legs, grid_mix, "DEU", destination_mix
+        n, EMISSIONS, "VIC1", legs, grid_mix, "DEU", destination_mix
     )
 
 
@@ -142,9 +143,9 @@ def test_a_flat_user_and_a_flexible_one_carry_different_intensities():
     assert emitted["by_step"]["eaf"] == pytest.approx(2 * 5.0 * SCALE * 0.8)
 
 
-def test_a_gas_shaft_carries_its_combustion_but_not_in_its_power_intensity():
-    """Its step total includes the gas; its per-MWh figure must not, or it reads as
-    having bought impossibly dirty electricity."""
+def test_a_gas_shaft_s_step_is_its_electricity_and_its_gas_is_scope_1():
+    """Its step is its electricity alone and the gas is scope 1, so neither its
+    step nor its per-MWh figure reads as impossibly dirty electricity."""
     n = _network()
     n.add("Bus", "gas", carrier="gas")
     n.add("Generator", "grid_import", bus="electricity", carrier="AC")
@@ -157,9 +158,26 @@ def test_a_gas_shaft_carries_its_combustion_but_not_in_its_power_intensity():
 
     gas_t = 10.0 * 4 * SCALE * (0.2 + 0.1)
     power_t = 2.0 * 4 * SCALE * 0.8
-    assert emitted["by_step"]["dri-ng"] == pytest.approx(gas_t + power_t)
+    assert emitted["by_step"]["dri-ng"] == pytest.approx(power_t)
     assert emitted["electricity_t"]["dri-ng"] == pytest.approx(power_t)
     assert emitted["sources"]["gas"] == pytest.approx(gas_t)
+
+
+def test_an_h2_shafts_preheat_is_charged_in_the_preheat_row_and_its_auxiliaries_to_the_shaft():
+    """The preheat of the H2 feed is drawn on bus3 and sits with the blend shaft's preheat, under `reductant-h2`."""
+    n = _network()
+    n.add("Bus", "hydrogen", carrier="hydrogen")
+    n.add("Generator", "grid_import", bus="electricity", carrier="AC")
+    n.add("Link", "dri-h2", bus0="hydrogen", bus1="iron", bus2="electricity", bus3="electricity")
+    _dispatch(n, "generators", "p", {"grid_import": [5.0] * 4})
+    _dispatch(n, "links", "p0", {"dri-h2": [20.0] * 4})
+    _dispatch(n, "links", "p2", {"dri-h2": [1.0] * 4})
+    _dispatch(n, "links", "p3", {"dri-h2": [4.0] * 4})
+
+    emitted = _breakdown(n, grid_mix=_grid_mix(n))
+
+    assert emitted["electricity_t"]["dri-h2"] == pytest.approx(1.0 * 4 * SCALE * 0.8)
+    assert emitted["electricity_t"]["reductant-h2"] == pytest.approx(4.0 * 4 * SCALE * 0.8)
 
 
 def test_a_destination_furnace_is_charged_to_the_destination_grid():
@@ -232,7 +250,9 @@ def test_a_destination_furnace_without_its_market_s_series_is_an_error():
         _breakdown(n)
 
 
-def test_freight_is_charged_per_tonne_over_the_run_s_own_legs():
+def test_freight_is_a_diagnostic_charged_per_tonne_over_the_run_s_own_legs():
+    """Freight emissions are for the diagnostic only: charged per tonne shipped
+    over the run's own legs, and counted in no step and no total."""
     n = _network()
     n.add("Bus", "iron_destination", carrier="iron")
     n.add("Generator", "wind-onshore", bus="electricity", carrier="wind-onshore")
@@ -245,7 +265,7 @@ def test_freight_is_charged_per_tonne_over_the_run_s_own_legs():
     per_t = (0.004 * 10_000 + 0.01 * 300) / 1000.0
     shipped = pytest.approx(1.0 * 4 * SCALE * per_t)
     assert emitted["freight_by_leg"]["iron_transport"] == shipped
-    # Outside the boundary: no step carries it and no source counts it.
+    # A diagnostic outside the boundary: no step carries it, no source counts it.
     assert "iron_transport" not in emitted["by_step"]
     assert set(emitted["sources"]) == {"electricity", "gas"}
 
@@ -406,6 +426,24 @@ def test_a_battery_that_never_ran_is_not_a_missing_column():
     assert emitted["by_step"]["eaf"] == pytest.approx(5.0 * 4 * SCALE * 0.2)
 
 
+def test_a_carrier_whose_factor_is_nan_counts_as_emitting_nothing():
+    """A NaN factor is decided where the factors are read: it enters the total as zero."""
+    n = _network()
+    n.add("Generator", "grid_import", bus="electricity", carrier="AC")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    _dispatch(n, "generators", "p", {"grid_import": [10.0] * 4})
+    _dispatch(n, "links", "p0", {"eaf": [5.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [10.0] * 4})
+    emissions_with_nan_wind = copy.deepcopy(EMISSIONS)
+    emissions_with_nan_wind["electricity_t_co2e_per_mwh"]["wind_onshore"]["combustion"] = np.nan
+
+    emitted = compile_report._emissions_breakdown(
+        n, emissions_with_nan_wind, "VIC1", None, _grid_mix(n), "DEU", None)
+
+    # Four parts coal to one part wind, as with a wind factor of 0.
+    assert emitted["by_step"]["eaf"] == pytest.approx(10.0 * 4 * SCALE * 0.8)
+
+
 def test_a_mix_from_another_window_is_an_error_not_a_clean_hour():
     """Reindexing a series onto snapshots it does not cover gives NaN, and a NaN
     intensity must not become a zero one: a provenance error would read as
@@ -523,7 +561,8 @@ def test_the_steps_stack_to_the_total():
 
     emitted = _breakdown(n, grid_mix=_grid_mix(n))
 
-    assert set(emitted["by_step"]) <= set(EMISSION_STEPS)
+    assert {emission_step(step) for step in emitted["by_step"]} <= set(EMISSION_STEPS)
     assert emitted["by_step"]["battery_losses"] == pytest.approx(2.0 * SCALE * 0.8)
-    total = sum(emitted["by_step"].values())
-    assert total == pytest.approx(sum(emitted["sources"].values()))
+    # The steps are the electricity's; the gas stands beside them, in no step.
+    assert sum(emitted["by_step"].values()) == pytest.approx(emitted["sources"]["electricity"])
+    assert emitted["sources"]["gas"] > 0

@@ -8,7 +8,10 @@ isolation). This file is the IO + orchestration shell driven by the
 import json
 import logging
 import os
+import uuid
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 # pandas 3.0 defaults to ArrowStringArray for strings; xarray (used by PyPSA
 # internally) doesn't support it. Set python-native strings before any import
@@ -20,18 +23,22 @@ import geopandas as gpd
 import pyarrow.parquet as pq
 import pypsa
 
-from build_network import build_network, load_assumptions
+from scripts.solve._helpers_solve import find_transport_legs, read_run_inputs
+from scripts.solve.build_network import build_network, load_assumptions
 
 from common._logging import configure_logging
 from common._paths import REPO_ROOT
 from common._provenance import code_manifest, input_manifest
-from common._runs import zone_parents
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
+
+# Grid-scale li-ion is built at 1-4 h, so a solved battery charging or discharging
+# faster than this is worth a look, though nothing in the model forbids it.
+MAX_PLAUSIBLE_C_RATE = 1.0
 
 
 def _area_representative_point(regions_path: Path) -> tuple[float, float]:
@@ -126,13 +133,17 @@ def _assemble_multisite_cf(
 def _tie_battery_inverter(n: pypsa.Network, snapshots) -> None:
     """Charge and discharge share one inverter rating, so its capex is paid once.
 
-    A grid battery's power electronics are bidirectional and rated in MW, which
-    is what `battery.capex_per_mw_eur` prices. Without this the two links size
-    independently and only the charger is priced, leaving free discharge power.
+    A grid battery's power electronics are bidirectional and rated in MW at the
+    grid terminals, which is what `battery.capex_per_mw_eur` prices. A Link's
+    p_nom is measured at its bus0, the grid for the charger but the battery for
+    the discharger, so the discharger's rating is scaled by its efficiency to
+    put both on the grid side (as PyPSA-Eur's `add_battery_constraints` does).
     """
     p_nom = n.model.variables["Link-p_nom"]
+    discharge_efficiency = n.links.at["battery_discharger", "efficiency"]
     n.model.add_constraints(
-        p_nom.loc["battery_charger"] - p_nom.loc["battery_discharger"] == 0,
+        p_nom.loc["battery_charger"]
+        - discharge_efficiency * p_nom.loc["battery_discharger"] == 0,
         name="battery_inverter_rating",
     )
 
@@ -140,24 +151,20 @@ def _tie_battery_inverter(n: pypsa.Network, snapshots) -> None:
 def main() -> None:
     """Assemble rule inputs, build and solve the network, export it to netCDF.
 
-    Capacity-factor and grid-price inputs arrive already separated by the rule
-    (the CSV's `tech` column does the classifying), so this concatenates the CF
-    columns into one multi-tech frame, aligns the optional price series, merges
-    base+overlay assumptions, then builds, optimises (HiGHS), and writes the
-    network for the one route named by the wildcard.
+    The run's rows in its scenario table say what each input series is for (see
+    `read_run_inputs`), so this concatenates the CF columns into one multi-tech
+    frame, aligns the price series, merges base+overlay assumptions, then builds,
+    optimises (HiGHS), and writes the network for the run's one route.
     """
     scenario = snakemake.wildcards.scenario
-    area     = snakemake.wildcards.area
-    route    = snakemake.wildcards.route
-    run      = f"{scenario}/{area}/{route}"
+    run      = f"{scenario}/{snakemake.wildcards.run}"
     out_path = Path(snakemake.output.network)
 
-    cf_paths   = [Path(raw) for raw in snakemake.input.cf_inputs]
-    grid_paths = [Path(raw) for raw in snakemake.input.grid_input]
-
-    if len(grid_paths) > 1:
-        raise ValueError(f"{run}: multiple grid inputs: {grid_paths}")
-    grid_path = grid_paths[0] if grid_paths else None
+    run_inputs = read_run_inputs(Path(snakemake.input.scenario_table), scenario,
+                                 snakemake.wildcards.run, list(snakemake.input.timeseries))
+    route = run_inputs["route"]
+    cf_paths = run_inputs["cf_paths"]
+    grid_path = run_inputs["grid_path"]
     # By name, not by position: every variant carries a `price` column, but only
     # `dayahead` carries nothing else, and `emissions` puts the generation mix
     # alongside it.
@@ -176,7 +183,7 @@ def main() -> None:
     demand_site = None
     if cf_paths and multisite:
         cf_timeseries, sites, demand_site = _assemble_multisite_cf(
-            cf_paths, _area_representative_point(Path(snakemake.input.regions))
+            cf_paths, _area_representative_point(Path(snakemake.input.regions[0]))
         )
     elif cf_paths:
         cf_parts: dict[str, pd.Series] = {}
@@ -206,7 +213,7 @@ def main() -> None:
             )
 
     # optional() yields a Namedlist of 0 or 1 paths: present iff a
-    # config/assumptions_{scenario}.yaml file exists on disk.
+    # config/overlays/{scenario}.yaml file exists on disk.
     overlays = list(snakemake.input.assumptions_overlay)
     overlay_path = Path(overlays[0]) if overlays else None
     base_path = Path(snakemake.input.assumptions_base)
@@ -215,42 +222,28 @@ def main() -> None:
     overlay_name = overlay_path.name if overlay_path else "none"
     mode = f"multi-site ({len(sites)} sites)" if sites is not None else "single-site"
     log.info(
-        f"building {mode} network for scenario={scenario} area={area} route={route} "
+        f"building {mode} network for {run}: origin={run_inputs['origin']} "
+        f"destination={run_inputs['destination']} route={route} "
         f"techs={list(cf_timeseries.columns)} (overlay={overlay_name})"
     )
-    # Freight legs are the producing country's, not the zone's: every NEM
-    # region is the same ocean away from Europe.
-    country = zone_parents(snakemake.config["areas"]).get(area, area)
-    transport_legs = assumptions["transport"]["distance_km"].get(country)
+    # A run with a destination elsewhere ships its iron (an export) or its steel.
+    transport_legs = (
+        find_transport_legs(assumptions["transport"]["distance_km"], run_inputs["origin"],
+                            run_inputs["destination"], snakemake.config["areas"])
+        if run_inputs["destination"] != run_inputs["origin"] else None
+    )
 
-    # Where an `-export` route melts its iron. The rule hands over that market's
-    # own series and nothing at all for a domestic route, so the file's presence
-    # is what decides — but which market it is gets checked against the merged
-    # assumptions, because the DAG only ever read the base file. An overlay that
-    # moves the destination has to fail here rather than be solved against
-    # whichever country the DAG happened to fetch.
-    destination_area = assumptions["destination"]["area"]
-    destination_paths = [Path(raw) for raw in snakemake.input.destination_input]
-    if len(destination_paths) > 1:
-        raise ValueError(f"{run}: multiple destination inputs: {destination_paths}")
+    # Where an `-export` route melts its iron: the destination's own market series,
+    # which a run without a destination elsewhere does not have.
+    destination_path = run_inputs["destination_path"]
     destination_price = None
-    if destination_paths:
-        # `{area}_grid_emissions_{start}_{end}`, split from the right so an area
-        # code with an underscore in it still comes back whole.
-        fetched_area = destination_paths[0].stem.rsplit("_", 4)[0]
-        if fetched_area != destination_area:
-            raise ValueError(
-                f"{run}: the workflow fetched {fetched_area}'s market series, but the "
-                f"merged assumptions put the destination in {destination_area}. A "
-                f"per-scenario overlay cannot move `destination.area` — it is read at "
-                f"DAG time from config/assumptions.yaml, so change it there."
-            )
+    if destination_path is not None:
         destination_price = (
-            pd.read_parquet(destination_paths[0])["price"].reindex(cf_timeseries.index)
+            pd.read_parquet(destination_path)["price"].reindex(cf_timeseries.index)
         )
         if destination_price.isna().any():
             raise ValueError(
-                f"{run}: {destination_area}'s price series has "
+                f"{run}: {run_inputs['destination']}'s price series has "
                 f"{destination_price.isna().sum()} missing values after aligning to "
                 f"the run's snapshots, so it covers a different period."
             )
@@ -280,8 +273,21 @@ def main() -> None:
         solver_options["solver"] = highs_solver
         if highs_solver == "ipm":
             solver_options["run_crossover"] = os.environ.get("HIGHS_CROSSOVER", "off")
-    n.optimize(solver_name="highs", solver_options=solver_options,
-               extra_functionality=_tie_battery_inverter)
+    status, condition = n.optimize(solver_name="highs", solver_options=solver_options,
+                                   extra_functionality=_tie_battery_inverter)
+    # Anything short of an optimum exports zero capacities that read as the cheapest run.
+    if condition != "optimal":
+        raise RuntimeError(f"{run}: the solver ended with status {status!r}, condition {condition!r}")
+
+    battery_energy_mwh = n.stores.at["battery", "e_nom_opt"]
+    inverter_mw = n.links.at["battery_charger", "p_nom_opt"]
+    if battery_energy_mwh > 1e-3:
+        c_rate = inverter_mw / battery_energy_mwh
+        if c_rate > MAX_PLAUSIBLE_C_RATE:
+            log.warning(
+                f"battery C-rate {c_rate:.2f} exceeds {MAX_PLAUSIBLE_C_RATE}: "
+                f"{inverter_mw:.0f} MW inverter on {battery_energy_mwh:.0f} MWh"
+            )
 
     # Every file the rule declared, fingerprinted into the network so the result
     # stays tied to what produced it. compile_report lifts `inputs_hash` into a
@@ -292,6 +298,16 @@ def main() -> None:
     n.meta.update(code_manifest(
         REPO_ROOT, extra_paths=(REPO_ROOT / "workflow/scripts/solve/solve_network.py",)
     ))
+
+    # When the run was produced, on Berlin's clock with its UTC offset, so the
+    # time reads unambiguously in winter and summer alike. Stamped at the solve
+    # rather than at the report, which a rerun of compile_report would move.
+    solved_at = datetime.now(ZoneInfo("Europe/Berlin"))
+    n.meta["run_timestamp"] = solved_at.isoformat(timespec="seconds")
+    # And a name for this solve alone: which inputs, when, and a random part so
+    # two solves of the same inputs in the same second still differ.
+    n.meta["model_run_id"] = (f"{n.meta['inputs_hash']}-{solved_at:%Y%m%dT%H%M%S}"
+                              f"-{uuid.uuid4().hex[:8]}")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     n.export_to_netcdf(out_path)

@@ -505,8 +505,8 @@ def save_figure(fig, out_dir, stem: str, *, scale: int = 2) -> list[str]:
     (scale=2) static PNG, named `{stem}.html` / `{stem}.png` under `out_dir`.
 
     HTML bundles plotly.js inline (offline-portable) and carries PLOTLY_CONFIG.
-    PNG export is required: any failure (e.g. kaleido's ChromeNotFoundError — see
-    TODO.md) is raised, not swallowed, so the missing output surfaces clearly.
+    PNG export is required: any failure (e.g. kaleido finding no Chrome — see the
+    README's Setup) is raised, not swallowed, so the missing output surfaces clearly.
     Returns the saved paths.
     """
     out = Path(out_dir)

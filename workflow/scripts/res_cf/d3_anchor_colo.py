@@ -56,7 +56,6 @@ consumed by solve_network (same as 03c's multi-n* outputs):
 """
 
 from pathlib import Path
-import importlib.util
 import json
 import logging
 
@@ -80,22 +79,16 @@ from scripts.res_cf._helpers_res_cf import (
     mask_cells_inside,
     pick_p95_cell,
 )
+from scripts.res_cf import d2_bestsite_p95
+from scripts.res_cf.d2_bestsite_p95 import (
+    build_cf_year,
+    extract_cell_timeseries,
+    geometry_for_tech,
+    get_cell_coords,
+)
 
 configure_logging(snakemake)
 log = logging.getLogger(__name__)
-
-# ── Import reusable functions from script 07 (importlib, not a package import) ──
-_spec = importlib.util.spec_from_file_location(
-    "bestsite",
-    Path(__file__).parent / "d2_bestsite_p95.py"
-)
-_bestsite = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_bestsite)
-
-build_cf_year     = _bestsite.build_cf_year
-geometry_for_tech = _bestsite.geometry_for_tech
-get_cell_coords    = _bestsite.get_cell_coords
-extract_cell_timeseries = _bestsite.extract_cell_timeseries
 
 # Standalone defaults (res_cf hardcoded-default pattern)
 _AREA = "DE_LU"
@@ -129,8 +122,8 @@ if "snakemake" in globals() and hasattr(snakemake, "wildcards"):
     _N_CANDIDATES = int(snakemake.wildcards.variant.rsplit("-n", 1)[1])
     _OUT = Path(snakemake.output[0])
 
-_bestsite.REGIONS_PATH = _REGIONS_PATH
-_bestsite.OFFSHORE_REGIONS_PATH = _OFFSHORE_REGIONS_PATH
+d2_bestsite_p95.REGIONS_PATH = _REGIONS_PATH
+d2_bestsite_p95.OFFSHORE_REGIONS_PATH = _OFFSHORE_REGIONS_PATH
 
 MAX_RADIUS_KM         = float(_ANCHOR_CFG.get("max_radius_km", 100.0))
 COINCIDENCE_THRESHOLD = float(_ANCHOR_CFG.get("coincidence_threshold", 0.20))
@@ -245,8 +238,13 @@ def build_anchor_scenario(cutout_path: Path, _AREA: str, anchor_tech: str,
     anchor_cf_year = build_cf_year(cutout_path, anchor_tech)
 
     co = atlite.Cutout(path=str(cutout_path))
-    anchor_min_lf = min_land_fraction if anchor_tech != "wind_offshore" else 0.0
-    anchor_weights = eligibility_weights(co, anchor_geom, anchor_min_lf, eligibility_source)
+    # Offshore keeps every cell it overlaps, whichever land source is configured.
+    anchor_offshore = anchor_tech == "wind_offshore"
+    anchor_weights = eligibility_weights(
+        co, anchor_geom,
+        0.0 if anchor_offshore else min_land_fraction,
+        "indicatormatrix" if anchor_offshore else eligibility_source,
+    )
 
     anchor_y_idx, anchor_x_idx = pick_p95_cell(anchor_cf_year.mean("time"), anchor_weights)
     anchor_series = extract_cell_timeseries(anchor_cf_year, anchor_y_idx, anchor_x_idx)
@@ -261,8 +259,12 @@ def build_anchor_scenario(cutout_path: Path, _AREA: str, anchor_tech: str,
         tech_cf_year = build_cf_year(cutout_path, tech)
         tech_geom = geometry_for_tech(_AREA, tech)
 
-        tech_min_lf = min_land_fraction if tech != "wind_offshore" else 0.0
-        eligible = eligibility_mask_2d(co, tech_geom, tech_min_lf, eligibility_source)
+        tech_offshore = tech == "wind_offshore"
+        eligible = eligibility_mask_2d(
+            co, tech_geom,
+            0.0 if tech_offshore else min_land_fraction,
+            "indicatormatrix" if tech_offshore else eligibility_source,
+        )
 
         found = find_top_candidates(
             anchor_x, anchor_y, tech_cf_year, tech_geom,

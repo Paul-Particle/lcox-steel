@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Batch-download ERA5 cutouts through the QC-gated, cached `download_cutout` rule,
+# Batch-download ERA5 cutouts through the QC-gated, cached `retrieve_area_cutout` rule,
 # one target at a time (CDS runs one job per user), continuing past failures and
 # QC-summarising at the end.
 #

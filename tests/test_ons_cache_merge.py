@@ -13,7 +13,7 @@ the second area. Synthetic frames, no download.
 import numpy as np
 import pandas as pd
 
-import _ons  # sys.path set by conftest
+from scripts.grid import _ons
 
 _merge_into_cache = _ons._merge_into_cache
 

@@ -39,8 +39,9 @@ from common._paths import CUTOUTS, REPO_ROOT
 #     ne_10m_land download; consumers are identical either way.
 # See docs/land_eligibility_design.md.
 #
-# ONSHORE ONLY: callers pass min_land_fraction=0 for offshore wind (which is
-# sited on sea by design), making every helper a no-op there.
+# ONSHORE ONLY: offshore wind is sited on sea by design, so its callers pass
+# min_land_fraction=0 and the indicatormatrix source: every cell weighs by how
+# much of it the offshore geometry covers.
 
 ELIGIBILITY_SOURCES = ("indicatormatrix", "availabilitymatrix")
 
@@ -81,8 +82,8 @@ def cell_availability_fraction(cutout, geom) -> np.ndarray:
     atlite's per-cell available fraction — 'fraction of cell that is land', the
     finer-coastline analogue of `cell_land_fraction` (which uses the coarse
     NE-110m outline). Same (y, x) C-order as `indicatormatrix`, so it drops into
-    the same downstream slot unchanged. Onshore only (offshore passes
-    min_land_fraction=0, so this is never invoked for offshore).
+    the same downstream slot unchanged. Onshore only: it measures land, so
+    offshore callers ask for `indicatormatrix` instead.
     """
     import geopandas as gpd
     from shapely.geometry import box
@@ -211,10 +212,10 @@ def load_res_cf_cfg() -> dict:
 def annual_cutout_path(area: str, year: int) -> Path:
     """Return the path to the single annual atlite cutout for (area, year).
 
-    Matches the output pattern of the `download_cutout` rule:
+    Matches the output pattern of the `retrieve_area_cutout` rule:
     cutouts/{area}_{year}0101_{year}1231.nc
     """
-    return CUTOUTS / f"{area.lower()}_{year}0101_{year}1231.nc"
+    return CUTOUTS / f"{area}_{year}0101_{year}1231.nc"
 
 
 def cos_lat_weights(cutout) -> np.ndarray:
@@ -285,7 +286,7 @@ def geom_area_weights(cutout, geom) -> np.ndarray:
     atlite's indicatormatrix gives each cell's fractional overlap with `geom`
     (computed in EPSG:4326); scaling by cos_lat_weights turns those degree-area
     fractions into physical-area weights (issue #37). Cells outside `geom` get
-    weight 0. Shared by scripts 03b, 07, 07b and viz/plot_cf_map so the whole
+    weight 0. Shared by scripts 03b, 07, 07b and viz/diagnostics/plot_cf_map so the whole
     pipeline uses one definition of area weighting.
     """
     indicator = cutout.indicatormatrix([geom]).tocsr()
@@ -302,7 +303,7 @@ def pick_p95_cell(cell_mean, weights: np.ndarray, q: float = 0.95) -> tuple[int,
     `cell_mean` is a 2-D (y, x) grid of annual-mean CF (xr.DataArray or ndarray);
     `weights` is the matching (y, x) grid from geom_area_weights. Cells with
     weight 0 (outside the region) are excluded. This is the single definition of
-    "the P95 cell" shared by scripts 03b, 07, 07b and viz/plot_cf_map.
+    "the P95 cell" shared by scripts 03b, 07, 07b and viz/diagnostics/plot_cf_map.
     """
     vals2d = np.asarray(getattr(cell_mean, "values", cell_mean))
     w = np.asarray(weights)

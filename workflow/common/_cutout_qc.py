@@ -8,7 +8,7 @@ broken cutout can flow silently into the CF pipeline.
 
 ``check_cutout`` reads a finished cutout and returns a report of every problem
 found; ``validate_cutout`` is the pipeline gate — it raises ``CutoutQCError`` so
-the ``download_cutout`` rule fails and Snakemake discards the bad output.
+the ``retrieve_area_cutout`` rule fails and Snakemake discards the bad output.
 
 The same function backs the standalone spot-check driver, so ad-hoc probes and
 the pipeline apply identical criteria.
