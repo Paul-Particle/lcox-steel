@@ -63,6 +63,7 @@ in the assumptions and is deliberately not repeated here.
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pypsa
 import yaml
@@ -77,6 +78,31 @@ from common._constants import H2_LHV_KWH_PER_KG, HOURS_PER_YEAR
 EXPORT_SUFFIX = "-export"
 _DOMESTIC_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf")
 ROUTES = (*_DOMESTIC_ROUTES, *(f"{route}{EXPORT_SUFFIX}" for route in _DOMESTIC_ROUTES))
+
+
+# The attributes that reach the optimisation as coefficients, capacities or loads.
+# Upper capacity bounds are left out: inf is their way of saying "unbounded".
+LP_INPUT_ATTRIBUTES = {
+    "Generator": ("capital_cost", "marginal_cost", "efficiency", "p_nom", "p_nom_min", "p_min_pu", "p_max_pu"),
+    "Link": ("capital_cost", "marginal_cost", "efficiency", "p_nom", "p_nom_min", "p_min_pu", "p_max_pu"),
+    "Store": ("capital_cost", "marginal_cost", "e_nom", "e_nom_min", "e_initial", "e_min_pu", "e_max_pu",
+              "standing_loss"),
+    "Load": ("p_set",),
+}
+
+
+class NanRefusingNetwork(pypsa.Network):
+    """A network whose `add` refuses a NaN, which PyPSA would replace with the attribute's
+    default (a free asset for a cost, 1 for an efficiency) without a word."""
+
+    def add(self, class_name, name, *args, **kwargs):
+        is_nan = lambda value: (pd.api.types.is_numeric_dtype(np.asarray(value).dtype)
+                                and np.isnan(np.asarray(value, dtype=float)).any())
+        nan_attributes = sorted(attribute for attribute, value in kwargs.items() if is_nan(value))
+        if nan_attributes:
+            raise ValueError(f"{class_name} {name}: NaN in {nan_attributes}")
+        added = super().add(class_name, name, *args, **kwargs)
+        return added
 
 
 def route_stem(route: str) -> str:
@@ -200,7 +226,7 @@ def build_network(
 
     multisite = sites is not None
 
-    n = pypsa.Network()
+    n = NanRefusingNetwork()
     n.set_snapshots(cf_timeseries.index)
     # Capital costs are one year's annuity, so the window's hours count as one average year.
     n.snapshot_weightings["objective"] = mean_year_hours(n.snapshots) / len(n.snapshots)
@@ -303,6 +329,27 @@ def build_network(
 
     if price_series is not None:
         _add_grid_import(n, price_series, assumptions["grid"], origin_wacc, bus=elec_bus)
+
+    # A NaN that `add` could not see (one in an hourly series) or an inf, which leaves
+    # the solver nothing to report, stops the build too: a key set to NaN because the
+    # workbook does not want it must never reach a run that uses it.
+    # Each input as a table with one row per component.
+    lp_inputs = {}
+    for component, attributes in LP_INPUT_ATTRIBUTES.items():
+        static, dynamic = n.components[component].static, n.components[component].dynamic
+        for attribute in attributes:
+            lp_inputs[f"{component} {attribute}"] = static[[attribute]]
+            if attribute in dynamic:
+                lp_inputs[f"{component} {attribute} (hourly)"] = dynamic[attribute].T
+    # A link's further ports count only where it has them.
+    for port in range(2, 10):
+        if f"bus{port}" in n.links:
+            lp_inputs[f"Link efficiency{port}"] = n.links.loc[n.links[f"bus{port}"] != "", [f"efficiency{port}"]]
+    non_finite = {name: list(values.index[~np.isfinite(values.to_numpy(dtype=float)).all(axis=1)])
+                  for name, values in lp_inputs.items()}
+    non_finite = {name: components for name, components in non_finite.items() if components}
+    if non_finite:
+        raise ValueError(f"{route}: NaN or inf in the inputs of the optimisation: {non_finite}")
 
     return n
 

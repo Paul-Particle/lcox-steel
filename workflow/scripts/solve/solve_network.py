@@ -270,8 +270,11 @@ def main() -> None:
         solver_options["solver"] = highs_solver
         if highs_solver == "ipm":
             solver_options["run_crossover"] = os.environ.get("HIGHS_CROSSOVER", "off")
-    n.optimize(solver_name="highs", solver_options=solver_options,
-               extra_functionality=_tie_battery_inverter)
+    status, condition = n.optimize(solver_name="highs", solver_options=solver_options,
+                                   extra_functionality=_tie_battery_inverter)
+    # Anything short of an optimum exports zero capacities that read as the cheapest run.
+    if condition != "optimal":
+        raise RuntimeError(f"{run}: the solver ended with status {status!r}, condition {condition!r}")
 
     battery_energy_mwh = n.stores.at["battery", "e_nom_opt"]
     inverter_mw = n.links.at["battery_charger", "p_nom_opt"]
