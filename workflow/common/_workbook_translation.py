@@ -74,29 +74,12 @@ MODEL_NAMED_SOURCES = {
     "dri-h2.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
     "dri-mix.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
 }
-IRON_OPEX = {"default": {"mean": ["iron.fom_eur_per_t_capacity_per_year_aus",
-                                  "iron.fom_eur_per_t_capacity_per_year_bra",
-                                  "iron.fom_eur_per_t_capacity_per_year_eu"]},
-             "aus": "iron.fom_eur_per_t_capacity_per_year_aus",
-             "bra": "iron.fom_eur_per_t_capacity_per_year_bra",
-             "eu": "iron.fom_eur_per_t_capacity_per_year_eu"}
 PER_SCENARIO_SOURCES = {
     **{path: source for tech in RES_TECHS for path, source in {
         f"res.{tech}.capex_per_mw_eur": {v: f"res.{tech}.capex_eur_per_mw_{v}" for v in ("base", "low", "high")},
         f"res.{tech}.opex_per_mw_per_year_eur": {v: f"res.{tech}.opex_eur_per_mw_per_year_{v}"
                                                  for v in ("base", "low", "high")},
     }.items()},
-    "finance.origin_wacc": "finance.other.eu_wacc",
-    "finance.destination_wacc": "finance.other.eu_wacc",
-    **{f"{plant}.opex_per_t_per_year_eur": IRON_OPEX for plant in ("dri-h2", "dri-mix", "dri-ng", "moe", "ew")},
-    "eaf.opex_per_t_per_year_eur": {"default": {"mean": ["eaf.fom_eur_per_t_capacity_per_year_aus",
-                                                         "eaf.fom_eur_per_t_capacity_per_year_bra",
-                                                         "eaf.fom_eur_per_t_capacity_per_year_eu"]},
-                                    "aus": "eaf.fom_eur_per_t_capacity_per_year_aus",
-                                    "bra": "eaf.fom_eur_per_t_capacity_per_year_bra",
-                                    "eu": "eaf.fom_eur_per_t_capacity_per_year_eu"},
-    "battery.capex_per_mw_eur": {"global": "battery.capex_eur_per_mw_global", "europe": "battery.capex_eur_per_mw_eu"},
-    "battery.capex_per_mwh_eur": {"global": "battery.capex_eur_per_mwh_global", "europe": "battery.capex_eur_per_mwh_eu"},
     "natural_gas.price_eur_per_mwh": {"default": {"mean": ["natural_gas.price_eur_per_mwh_high",
                                                            "natural_gas.price_eur_per_mwh_low"]},
                                       "high": "natural_gas.price_eur_per_mwh_high",
@@ -120,15 +103,6 @@ WORKBOOK_SOURCES = (RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL
 #   "transmission.lifetime_years": "transmission.lifetime_years",
 #   "transmission.losses_pct_per_1000km": "transmission.losses_pct_per_1000km",
 #   "transmission.indirect_route_factor": "transmission.indirect_route_factor",
-
-# Values the generator picks per scenario rather than writing into the base:
-# `wacc.{region}` by the region of an origin or destination.
-LOOKUP_SOURCES = {
-    "wacc.eu": "finance.other.eu_wacc",
-    "wacc.noneu": "finance.other.noneu_wacc",
-}
-# Which WACC row of the workbook finances a country.
-WACC_REGIONS = {"DEU": "eu", "ESP": "eu", "FRA": "eu", "AUS": "noneu", "BRA": "noneu"}
 
 # Workbook override keys that stand for several model keys.
 OVERRIDE_KEYS = {"finance.default_wacc": ("finance.origin_wacc", "finance.destination_wacc")}
@@ -155,7 +129,7 @@ def translate_scenario_rows(scenario_rows: pd.DataFrame) -> pd.DataFrame:
     return translated_rows
 
 
-def translate_override(key: str, value) -> list[tuple[str, object]]:
+def translate_override(key: str, value, sources: dict) -> list[tuple[str, object]]:
     """An override written in the workbook's keys, as (model key, value or alternative name) pairs.
 
     The workbook names a key by its stem (`electrolyser.capex_eur_per_mw`) and an
@@ -164,7 +138,7 @@ def translate_override(key: str, value) -> list[tuple[str, object]]:
     model key, a number or a `±n%` change passes through unchanged.
     """
     alternatives_by_workbook_key = {}
-    for path, spec in WORKBOOK_SOURCES.items():
+    for path, spec in sources.items():
         for name, source in ({"default": spec} if isinstance(spec, str) else spec).items():
             if isinstance(source, str):
                 alternatives_by_workbook_key.setdefault(source, []).append((path, name))
