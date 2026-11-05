@@ -9,7 +9,7 @@ CARRIERS = ("biomass", "brown_coal", "coal_gas", "energy_storage", "gas", "geoth
             "hydro", "hydro_reservoir", "hydro_river", "marine", "nuclear", "oil", "oil_shale", "other",
             "other_re", "peat", "pumped_storage", "solar", "waste", "wind_offshore", "wind_onshore")
 
-# Model key -> the workbook row(s) it is taken from: one row, or {"sum" | "mean": [rows]}.
+# Model key -> the workbook row it is taken from.
 RENAMED_SOURCES = {
     "plant.h2_intensity_kg_per_t_dri": "dri_h2.kg_h2_per_t_dri",
     "res.wind-onshore.capex_per_mw_eur": "res.wind-onshore.capex_eur_per_mw_base",

@@ -26,8 +26,7 @@ WORKBOOK_ROWS = pd.DataFrame(
     [("plant.capex_eur_base", 1000, "EUR/t"),
      ("plant.capex_eur_high", 2000, "EUR/t"),
      ("plant.capex_usd_base", 1130, "USD/t"),
-     ("plant.heat_mwh", 0.5, "MWh/t"),
-     ("plant.drive_mwh", 0.25, "MWh/t"),
+     ("plant.empty_mwh", None, "MWh/t"),
      ("plant.lifetime", 20, "years")],
     columns=["key", "value", "unit"],
 ).set_index("key")
@@ -36,20 +35,16 @@ WORKBOOK_ROWS = pd.DataFrame(
 read_with = lambda path, spec: read_workbook_value(WORKBOOK_ROWS, path, spec)
 
 
-def test_a_key_takes_its_row_or_its_rows_combined():
+def test_a_key_takes_its_row():
     assert read_with("plant.lifetime_years", "plant.lifetime") == 20
-    assert read_with("plant.opex_eur_per_t", {"mean": ["plant.capex_eur_base", "plant.capex_eur_high"]}) == 1500
-    assert read_with("plant.total_mwh_per_t", {"sum": ["plant.heat_mwh", "plant.drive_mwh"]}) == 0.75
+    assert read_with("plant.capex_eur_per_t", "plant.capex_eur_high") == 2000
 
 
-def test_a_missing_row_stops_the_build():
+def test_a_missing_row_or_value_stops_the_build():
     with pytest.raises(KeyError, match="plant.capex_eur_per_t"):
         read_with("plant.capex_eur_per_t", "plant.capex_eur_low")
-
-
-def test_rows_in_different_units_stop_the_build():
-    with pytest.raises(ValueError, match="one unit"):
-        read_with("plant.capex_eur_per_t", {"sum": ["plant.capex_eur_base", "plant.heat_mwh"]})
+    with pytest.raises(ValueError, match="no value"):
+        read_with("plant.heat_mwh_per_t", "plant.empty_mwh")
 
 
 def test_a_currency_the_key_does_not_name_stops_the_build():
