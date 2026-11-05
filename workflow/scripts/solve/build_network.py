@@ -13,14 +13,14 @@ assumptions, which only carry the numbers):
                reductant bus and the optimiser picks the mix, paying for one
                furnace rather than two (see `_add_mix_dri_links`)
   moe-eaf:     electricity → molten oxide electrolysis → iron → EAF → steel
-  ew-eaf:      electricity → iron electrowinning → iron → EAF → steel
+  ewin-eaf:      electricity → iron electrowinning → iron → EAF → steel
 
 Every route also has an `-export` twin, which makes iron at the run's
 origin and melts it at its destination: the same chain up to the iron,
 then a stockpile, a freight leg, and an EAF at the destination running on
 destination electricity. What survives a ship is cold solid iron, so the DRI
 routes press their sponge iron into briquettes first, while moe-eaf-export and
-ew-eaf-export need no such step — the MOE cell simply lets its iron go cold
+ewin-eaf-export need no such step — the MOE cell simply lets its iron go cold
 instead of pouring it into the furnace. Either way the iron arrives cold and
 the export route pays the full melt, which is what the domestic twin saves.
 
@@ -31,7 +31,7 @@ Bus unit convention:
   reductant bus:     MW LHV on an H2-equivalent basis, for mix-dri-eaf — gas
                      enters derated by what reforming costs (see below)
   iron bus:          t/h  (sponge iron for the DRI routes, hot metal for
-                     moe-eaf, electrolytic iron plates for ew-eaf)
+                     moe-eaf, electrolytic iron plates for ewin-eaf)
   hbi bus:           t/h  (briquettes, on a DRI export route only)
   destination buses: the far side of the freight leg — iron, and its own AC
   steel bus:         t/h  (liquid steel)
@@ -76,7 +76,7 @@ from common._constants import H2_LHV_KWH_PER_KG, HOURS_PER_YEAR
 # as the route it is named after and then ships the iron to a furnace somewhere
 # else.
 EXPORT_SUFFIX = "-export"
-_DOMESTIC_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf")
+_DOMESTIC_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ewin-eaf")
 ROUTES = (*_DOMESTIC_ROUTES, *(f"{route}{EXPORT_SUFFIX}" for route in _DOMESTIC_ROUTES))
 
 
@@ -123,10 +123,10 @@ def route_stem(route: str) -> str:
 # iron. The furnace charges them differently, so they are different states.
 # Which step made the iron is the route's name before `-eaf`.
 _CHARGE_STATE = {"h2-dri-eaf": "hot", "ng-dri-eaf": "hot", "mix-dri-eaf": "hot",
-                 "moe-eaf": "liquid", "ew-eaf": "plates"}
+                 "moe-eaf": "liquid", "ewin-eaf": "plates"}
 _EXPORT_CHARGE_STATE = {"h2-dri-eaf": "briquettes", "ng-dri-eaf": "briquettes",
                         "mix-dri-eaf": "briquettes",
-                        "moe-eaf": "plates", "ew-eaf": "plates"}
+                        "moe-eaf": "plates", "ewin-eaf": "plates"}
 EAF_CHARGE = {
     route: ((_EXPORT_CHARGE_STATE if route.endswith(EXPORT_SUFFIX) else _CHARGE_STATE)
             [route_stem(route)],
@@ -145,7 +145,7 @@ _GAS_ROUTES = ("ng-dri-eaf", "mix-dri-eaf")              # gas bus + NG-DRI shaf
 _H2_DRI_ROUTES = ("h2-dri-eaf",)                         # single-fuel H2 shaft
 _MIX_ROUTES = ("mix-dri-eaf",)                           # one shaft, blended feed
 _DRI_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf")
-_IRON_ROUTES = (*_DRI_ROUTES, "moe-eaf", "ew-eaf")
+_IRON_ROUTES = (*_DRI_ROUTES, "moe-eaf", "ewin-eaf")
 
 # Bus names for iron that has been made storable, and for the far side of the sea.
 HBI_BUS = "hbi"
@@ -269,15 +269,15 @@ def build_network(
         )
     if stem == "moe-eaf":
         _add_moe_link(n, assumptions["moe"], origin_wacc, elec_bus)
-    if stem == "ew-eaf":
-        _add_ew_link(n, assumptions["ew"], origin_wacc, elec_bus)
+    if stem == "ewin-eaf":
+        _add_ewin_link(n, assumptions["ewin"], origin_wacc, elec_bus)
 
     # Where this route's iron waits, if it is in a state that can wait at
     # all. Sponge iron has to be briquetted first; hot metal never can.
     if is_export and stem in _DRI_ROUTES:
         _add_briquetting_link(n, assumptions["briquetting"], origin_wacc, elec_bus)
         cold_iron_bus = HBI_BUS
-    elif is_export or stem == "ew-eaf":
+    elif is_export or stem == "ewin-eaf":
         cold_iron_bus = "iron"
     else:
         cold_iron_bus = None
@@ -375,8 +375,8 @@ def _add_carriers(
         base += ["h2-dri"]
     if stem in _MIX_ROUTES:
         base += ["reductant", "mix-dri"]
-    if stem == "ew-eaf":
-        base += ["ew"]
+    if stem == "ewin-eaf":
+        base += ["ewin"]
     if stem == "moe-eaf":
         base += ["moe"]
     if is_export and stem in _DRI_ROUTES:
@@ -800,15 +800,15 @@ def _add_moe_link(n: pypsa.Network, moe_cfg: dict, wacc: float, elec_bus: str) -
     )
 
 
-def _add_ew_link(n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str) -> None:
+def _add_ewin_link(n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str) -> None:
     """Iron electrowinning: electricity (MW) → electrolytic iron plates (t/h)."""
     t_iron_per_mwh = 1.0 / ew_cfg["el_mwh_per_t"]
     n.add(
         "Link",
-        "ew",
+        "ewin",
         bus0=elec_bus,
         bus1="iron",
-        carrier="ew",
+        carrier="ewin",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh,
         capital_cost=_process_capital_cost(ew_cfg, wacc, t_iron_per_mwh),

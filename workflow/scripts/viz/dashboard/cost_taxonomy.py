@@ -66,7 +66,7 @@ IRONMAKING_PLANTS = [
     ("ng-dri", "NG-DRI shaft"),
     ("mix-dri", "Blended-reductant shaft"),
     ("moe",    "MOE cell"),
-    ("ew",     "Electrowinning"),
+    ("ewin",     "Electrowinning"),
 ]
 PROCESS_PLANTS = [
     ("ironmaking_plant", "Ironmaking plant"),

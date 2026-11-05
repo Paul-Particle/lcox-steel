@@ -130,8 +130,8 @@ def test_the_terms_decide_the_route_and_the_series_each_run_draws_on():
 
     lines = lambda scenario: list(scenarios.query("scenario == @scenario")[["run", "route", "tech", "variant", "area"]]
                                   .itertuples(index=False, name=None))
-    assert lines("islanded-import") == [("AUS-ESP", "ew-eaf-export", "solar", "area-average", "AUS"),
-                                        ("AUS-ESP", "ew-eaf-export", "grid", "emissions", "ESP")]
+    assert lines("islanded-import") == [("AUS-ESP", "ewin-eaf-export", "solar", "area-average", "AUS"),
+                                        ("AUS-ESP", "ewin-eaf-export", "grid", "emissions", "ESP")]
     assert lines("grid-domestic") == [("NSW1", "moe-eaf", "solar", "bestsite-p95", "NSW1"),
                                       ("NSW1", "moe-eaf", "grid", "emissions", "NSW1"),
                                       ("QLD1", "moe-eaf", "solar", "bestsite-p95", "QLD1"),

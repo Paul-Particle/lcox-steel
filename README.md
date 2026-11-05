@@ -15,7 +15,7 @@ optimisation model into one Snakemake workflow:
   - `ng-dri-eaf` — fossil benchmark: natural-gas DRI (flat gas price, optional CO2 price) → EAF → steel
   - `mix-dri-eaf` — H2 and NG DRI shafts side by side; the optimiser picks the split
   - `moe-eaf` — molten oxide electrolysis → liquid iron → EAF → steel
-  - `ew-eaf` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
+  - `ewin-eaf` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
 
   Every route also has an `-export` twin that makes its iron at the run's
   origin and melts it at its destination. A route without the suffix makes its
@@ -370,7 +370,7 @@ each, set in the scenario tables, and every layer below spells them the same:
 the assumptions blocks, the Snakemake wildcards and rule names, the script
 filenames, and the PyPSA component names.
 
-Name scenarios with **dashes** between words (`VIC-2025-solar-ew`,
+Name scenarios with **dashes** between words (`VIC-2025-solar-ewin`,
 `DE-2023-grid-p95`), not underscores. The underscore is the field separator in
 the names these compose into (a run's folder is `<scenario>_<run>`), so reserving
 it keeps the boundaries legible at a glance. Route, tech and variant follow the
@@ -470,7 +470,7 @@ runs and says which one was picked. A scenario with one run has one entry, so
 | `config/config.yaml` | Pipeline knobs: `logging`, `inputs` (the base assumptions and scenario table to run), `entsoe` (data types), `nem` (`eur_per_aud` FX), `report` (`best_run_by`), `res_cf` (turbines, CF flags, cutout settings), `areas` (the area registry). |
 | `config/demo.yaml` | Runs the template instead: `snakemake --configfile config/demo.yaml`. |
 | `config/.template.yaml` | A complete assumptions file, every key the model reads: the demo runs on it as it stands, and `python -m common.generate_inputs [WORKBOOK]` writes `config/generated/assumptions.yaml` from it, replacing each value the input workbook, `data/assumptions/Assumptions_yaml_inputs.xlsx`, holds with the workbook's (in EUR); the rest are backstop values, copied over as they stand. |
-| `config/generated/assumptions.yaml` | Generated from the input workbook and `config/.template.yaml`; edit those instead. Base techno-economics: CAPEX/OPEX, financing periods, the WACC (`finance.origin_wacc` for everything up to the iron, `finance.destination_wacc` for an export route's EAF, steel store and the furnace's grid connection), electrolyser efficiency, plant sizing, the steel process steps (`h2-dri`, `ng-dri`, `eaf`, `moe`, `ew`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and what freight costs (`transport`), with the legs from each origin country to each destination in `transport.distance_km` — a run looks up its own, a market zone shipping as its country, and a pair not listed stops the run. Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the scenario table, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the scenario table's `tech`. |
+| `config/generated/assumptions.yaml` | Generated from the input workbook and `config/.template.yaml`; edit those instead. Base techno-economics: CAPEX/OPEX, financing periods, the WACC (`finance.origin_wacc` for everything up to the iron, `finance.destination_wacc` for an export route's EAF, steel store and the furnace's grid connection), electrolyser efficiency, plant sizing, the steel process steps (`h2-dri`, `ng-dri`, `eaf`, `moe`, `ewin`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and what freight costs (`transport`), with the legs from each origin country to each destination in `transport.distance_km` — a run looks up its own, a market zone shipping as its country, and a pair not listed stops the run. Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the scenario table, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the scenario table's `tech`. |
 | `config/overlays/{scenario}.yaml` | *Optional* per-scenario overlay, deep-merged onto the base so it carries only the keys it moves. **File presence is the toggle**: the `optional()` shim resolves it at job-evaluation time, and a scenario without one runs on the base as it stands. It never selects a route. The generator writes and removes its own (marked `# GENERATED`); the rest are kept by hand. |
 | `config/generated/scenarios.csv`, `config/.template.csv` | The scenario tables: one row per input series of a run. Columns: `scenario, run, route, tech, variant, area, start_date, end_date`. A run's rows name the origin's series first; its first area is its origin and its second its destination, and a third is an error. Route and dates are the same on every row of a run. `#` lines are comments. |
 

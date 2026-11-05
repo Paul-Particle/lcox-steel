@@ -13,7 +13,7 @@ import pandas as pd
 RESULTS = Path(__file__).resolve().parents[1] / "results"
 
 SWEEPS = {
-    "ew-capex": ("ew-eaf", "moe-eaf", "EW capex, EUR/(t.yr)"),
+    "ew-capex": ("ewin-eaf", "moe-eaf", "EW capex, EUR/(t.yr)"),
     "gas": ("ng-dri-eaf", "h2-dri-eaf", "gas price, EUR/MWh"),
 }
 

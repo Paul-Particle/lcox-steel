@@ -116,7 +116,7 @@ SECTIONS = [
 # a step has no such field — a press has no ore bill, a furnace burns no gas.
 PROCESS_STEPS = [("h2-dri", "H2 shaft"), ("mix-dri", "Blend shaft"),
                  ("ng-dri", "NG shaft"), ("eaf", "EAF"), ("moe", "MOE cell"),
-                 ("ew", "Electrowinning"), ("briquetting", "Briquetting")]
+                 ("ewin", "Electrowinning"), ("briquetting", "Briquetting")]
 PROCESS_FIELDS = [
     ("capex_eur_per_t", "Capex", "€/(t/yr)"),
     ("fom_eur_per_t_capacity_per_year", "Fixed O&M", "€/(t/yr)"),

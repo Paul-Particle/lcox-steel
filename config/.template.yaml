@@ -213,7 +213,7 @@ moe:
   iron_t_per_t_steel: 1.03
   p_min_pu: 0.95
 
-ew:
+ewin:
   # Low-temperature aqueous iron electrowinning (Electra type), electricity →
   # solid iron plates. ~2–3 MWh/t iron claimed; capex very uncertain
   # (500–3000 €/(t/yr) span in public estimates — sweep this).
@@ -273,7 +273,7 @@ briquetting:
   yield_t_per_t: 0.96
 
 iron_store:
-  # Stockpile of cold solid iron — electrowon plates for ew-eaf, briquettes for
+  # Stockpile of cold solid iron — electrowon plates for ewin-eaf, briquettes for
   # an export route waiting on a ship (shed + handling). Routes that hand the
   # furnace hot metal or hot sponge iron have nowhere to put it and get none.
   # Cheap but deliberately non-zero so the optimal size is unique and reportable.

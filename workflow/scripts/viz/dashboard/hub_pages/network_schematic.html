@@ -356,11 +356,11 @@
   const svg = document.getElementById("svg");
   const tip = document.getElementById("tip");
 
-  const ROUTES = ["h2-dri-eaf", "moe-eaf", "ew-eaf", "ng-dri-eaf", "mix-dri-eaf"];
+  const ROUTES = ["h2-dri-eaf", "moe-eaf", "ewin-eaf", "ng-dri-eaf", "mix-dri-eaf"];
   const H2   = ["h2-dri-eaf", "mix-dri-eaf"];
   const GAS  = ["ng-dri-eaf", "mix-dri-eaf"];
-  const IRON = ["h2-dri-eaf", "ew-eaf", "ng-dri-eaf", "mix-dri-eaf"];
-  const STEEL = ["h2-dri-eaf", "moe-eaf", "ew-eaf", "ng-dri-eaf", "mix-dri-eaf"];
+  const IRON = ["h2-dri-eaf", "ewin-eaf", "ng-dri-eaf", "mix-dri-eaf"];
+  const STEEL = ["h2-dri-eaf", "moe-eaf", "ewin-eaf", "ng-dri-eaf", "mix-dri-eaf"];
   const DRI  = ["h2-dri-eaf", "mix-dri-eaf"];
 
   const SIZE = {
@@ -400,7 +400,7 @@
     { id:"ng_dri",      kind:"link", color:"iron",name:"ng_dri",      x:694, y:482, routes:GAS,
       body:"Link  gas -> iron  (+ elec draw, bus2)\neff = 1 / 2.75 t/MWh gas · el 0.1 MWh/t\nore €200/t · p_min 0.5 · capex €230/(t·yr)" },
 
-    { id:"electrowinning",kind:"link",color:"iron",name:"electrowinning",x:694,y:372, routes:["ew-eaf"],
+    { id:"electrowinning",kind:"link",color:"iron",name:"electrowinning",x:694,y:372, routes:["ewin-eaf"],
       body:"Link  electricity -> iron plates\neff = 1 / 2.5 t/MWh · ore €150/t\np_min 0.2 (load-following) · capex €1200/(t·yr)" },
 
     { id:"iron",        kind:"bus",  color:"iron",name:"iron",        unit:"t/h", x:852, y:340, routes:IRON,
@@ -445,8 +445,8 @@
     { from:"gas",         to:"ng_dri",       carrier:"gas", kind:"flow", routes:GAS, sa:"r", ea:"l" },
     { from:"ng_dri",      to:"iron",         carrier:"iron", kind:"flow", routes:GAS, sa:"r", ea:"l" },
 
-    { from:"electricity", to:"electrowinning", carrier:"ac", kind:"flow", routes:["ew-eaf"], sa:"r", ea:"l" },
-    { from:"electrowinning", to:"iron",       carrier:"iron", kind:"flow", routes:["ew-eaf"], sa:"r", ea:"l" },
+    { from:"electricity", to:"electrowinning", carrier:"ac", kind:"flow", routes:["ewin-eaf"], sa:"r", ea:"l" },
+    { from:"electrowinning", to:"iron",       carrier:"iron", kind:"flow", routes:["ewin-eaf"], sa:"r", ea:"l" },
 
     { from:"iron",        to:"eaf",          carrier:"iron", kind:"flow", routes:IRON, sa:"r", ea:"l" },
     { from:"eaf",         to:"steel",        carrier:"steel", kind:"flow", routes:IRON, sa:"r", ea:"l" },
@@ -654,7 +654,7 @@
     expansions: "<b>Everything + planned expansions.</b> All routes overlaid together with the dashed components not yet in the model — the MOE hot-linked-EAF path (hot iron onto the shared iron bus) and the imported-iron path (merchant iron bulk-shipped in, feeding the iron bus and EAF).",
     "h2-dri-eaf": "<b>h2-dri-eaf</b> — electrolyser -> H2 (+ buffer) -> DRI shaft -> sponge iron (+ store) -> EAF -> steel.",
     "moe-eaf": "<b>MOE + EAF</b> — molten oxide electrolysis takes electricity to liquid iron on the shared iron bus, and the shared EAF melts it to steel. Hot metal is not storable, so the domestic route builds no iron store and the cell runs with the furnace.",
-    "ew-eaf": "<b>ew-eaf</b> — iron electrowinning: electricity -> iron plates (+ store) -> EAF -> steel.",
+    "ewin-eaf": "<b>ewin-eaf</b> — iron electrowinning: electricity -> iron plates (+ store) -> EAF -> steel.",
     "ng-dri-eaf": "<b>ng-dri-eaf</b> — the fossil benchmark: gas supply -> NG-DRI shaft -> sponge iron (+ store) -> EAF -> steel.",
     "mix-dri-eaf": "<b>mix-dri-eaf</b> — H2 and NG DRI shafts side by side on one iron bus -> EAF -> steel; the optimiser picks the split.",
   };
