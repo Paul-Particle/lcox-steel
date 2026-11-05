@@ -686,7 +686,7 @@ losses, `cost_electricity_eur_per_t_iron` gives back
 `h2_produced_kg_per_t_steel` is the hydrogen the electrolyser produced over the
 year, per tonne of steel produced (`h2_produced_kt` over `steel_produced_mt`).
 It is a model result, but on `h2-dri-eaf` it always comes back to the inputs,
-the shaft's hydrogen per tonne of iron (`h2_intensity_kg_per_t_dri`) times the
+the shaft's hydrogen per tonne of iron (`h2-dri.kg_h2_per_t_dri`) times the
 iron per tonne of steel, because the hydrogen buffer is lossless and ends the
 year where it began. On `mix-dri-eaf` it is the model's own choice of how much
 of the reductant is hydrogen, and on the gas, MOE and EW routes it is 0.

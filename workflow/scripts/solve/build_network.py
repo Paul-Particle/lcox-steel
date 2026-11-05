@@ -257,14 +257,14 @@ def build_network(
                     bus=DELIVERED_STEEL_BUS if deliver_steel else "steel")
     _add_steel_store(n, assumptions["steel_store"], furnace_wacc, steel_t_per_h)
     if stem in _H2_DRI_ROUTES:
-        _add_dri_link(n, plant, assumptions["h2-dri"], origin_wacc, elec_bus)
+        _add_dri_link(n, assumptions["h2-dri"], origin_wacc, elec_bus)
     if stem in _GAS_ROUTES:
         _add_gas_supply(n, assumptions["natural_gas"], assumptions["emissions"])
     if stem == "ng-dri-eaf":
         _add_ng_dri_link(n, assumptions["ng-dri"], origin_wacc, elec_bus)
     if stem in _MIX_ROUTES:
         _add_mix_dri_links(
-            n, plant, assumptions["mix-dri"], assumptions["ng-dri"], origin_wacc, elec_bus,
+            n, assumptions["mix-dri"], assumptions["ng-dri"], origin_wacc, elec_bus,
             steel_t_per_h=steel_t_per_h,
         )
     if stem == "moe-eaf":
@@ -616,11 +616,11 @@ def _process_capital_cost(cfg: dict, wacc: float, output_t_per_p0_unit: float) -
 
 
 def _add_dri_link(
-    n: pypsa.Network, plant: dict, dri_cfg: dict, wacc: float, elec_bus: str
+    n: pypsa.Network, dri_cfg: dict, wacc: float, elec_bus: str
 ) -> None:
     """DRI shaft: hydrogen (MW LHV) → sponge iron (t/h), drawing shaft electricity.
 
-    `efficiency` converts MWh H2 into t iron via the plant's H2 intensity;
+    `efficiency` converts MWh H2 into t iron via the shaft's H2 intensity;
     `efficiency2` (negative) withdraws the shaft's own electricity in fixed
     proportion, and `efficiency3` the electricity that preheats its H2 feed — the
     same draw the blend shaft takes on `reductant-h2`, on a port of its own so the
@@ -628,9 +628,7 @@ def _add_dri_link(
     one draw. Ore cost enters as marginal_cost, converted from €/t iron to
     per-MWh-H2 (p0).
     """
-    t_iron_per_mwh_h2 = 1000.0 / (
-        plant["h2_intensity_kg_per_t_dri"] * H2_LHV_KWH_PER_KG
-    )
+    t_iron_per_mwh_h2 = 1000.0 / (dri_cfg["kg_h2_per_t_dri"] * H2_LHV_KWH_PER_KG)
     n.add(
         "Link",
         "h2-dri",
@@ -651,7 +649,7 @@ def _add_dri_link(
 
 
 def _add_mix_dri_links(
-    n: pypsa.Network, plant: dict, mix_cfg: dict, ng_dri_cfg: dict,
+    n: pypsa.Network, mix_cfg: dict, ng_dri_cfg: dict,
     wacc: float, elec_bus: str, steel_t_per_h: float,
 ) -> None:
     """One shaft on a blended reductant: H2 and gas both feed it, it makes iron.
@@ -665,7 +663,7 @@ def _add_mix_dri_links(
     What makes the blend worth having is that there is one furnace to pay for,
     not two. The small fixed store is a smoothing buffer on top of that.
     """
-    reductant_mwh_per_t = plant["h2_intensity_kg_per_t_dri"] * H2_LHV_KWH_PER_KG / 1000.0
+    reductant_mwh_per_t = mix_cfg["kg_h2_per_t_dri"] * H2_LHV_KWH_PER_KG / 1000.0
     t_iron_per_mwh = 1.0 / reductant_mwh_per_t
 
     n.add(

@@ -30,7 +30,6 @@ finance:
 # workflow/scripts/solve/build_network.py.
 
 plant:
-  h2_intensity_kg_per_t_dri: 50.23
   # Demand anchor: a flat t/h load on the steel bus
   # (supply-side model; steel demand itself is not flexible).
   steel_mt_per_year: 1.0
@@ -112,6 +111,7 @@ h2-dri:
   # report puts the preheat in one row whichever route drew it.
   el_mwh_per_t: 0.1768
   h2_preheat_el_mwh_per_t: 0.8282
+  kg_h2_per_t_dri: 50.23
   ore_eur_per_t: 238.2                  # DR-grade pellets, per t of DRI
   iron_t_per_t_steel: 1.17            # DR pellets: gangue plus metallisation loss
   p_min_pu: 0.5
@@ -135,6 +135,9 @@ mix-dri:
   # between.
   el_mwh_per_t: 0.1768
   h2_preheat_el_mwh_per_t: 0.8282
+  # Its reductant need, in the hydrogen an all-H2 feed would take: the H2
+  # shaft's figure, so the all-H2 corner is that route.
+  kg_h2_per_t_dri: 50.23
   ore_eur_per_t: 238.2                  # DR-grade pellets, as the other shafts
   iron_t_per_t_steel: 1.17
   p_min_pu: 0.5

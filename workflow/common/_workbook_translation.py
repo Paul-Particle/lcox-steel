@@ -10,7 +10,6 @@ CARRIERS = ("biomass", "brown_coal", "coal_gas", "energy_storage", "gas", "geoth
 
 # Model key -> the workbook row it is taken from.
 RENAMED_SOURCES = {
-    "plant.h2_intensity_kg_per_t_dri": "dri_h2.kg_h2_per_t_dri",
     "res.wind-onshore.capex_eur_per_mw": "res.wind-onshore.capex_eur_per_mw_base",
     "res.wind-onshore.fom_eur_per_mw_per_year": "res.wind-onshore.opex_eur_per_mw_per_year_base",
     "res.solar.capex_eur_per_mw": "res.solar.capex_eur_per_mw_base",
@@ -48,6 +47,8 @@ CONVERTED_SOURCES = {
        for origin in ("AUS", "BRA") for destination in ("ESP", "DEU", "FRA")},
 }
 SHARED_SOURCES = {
+    "h2-dri.kg_h2_per_t_dri": "dri_h2.kg_h2_per_t_dri",
+    "mix-dri.kg_h2_per_t_dri": "dri_h2.kg_h2_per_t_dri",
     "h2-dri.capex_eur_per_t": "dri.capex_eur_per_t",
     "mix-dri.capex_eur_per_t": "dri.capex_eur_per_t",
     "ng-dri.capex_eur_per_t": "dri.capex_eur_per_t",

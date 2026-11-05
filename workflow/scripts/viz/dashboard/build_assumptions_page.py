@@ -53,7 +53,7 @@ SECTIONS = [
     ("Finance and plant",
      [("finance.default_wacc", "Discount rate (WACC)", ""),
       ("plant.steel_mt_per_year", "Steel output", "Mt/yr"),
-      ("plant.h2_intensity_kg_per_t_dri", "Hydrogen per tonne of DRI", "kg/t")]),
+      ("h2-dri.kg_h2_per_t_dri", "Hydrogen per tonne of DRI", "kg/t")]),
 
     ("Renewables, electrolyser, battery, hydrogen storage",
      [("res.wind-onshore.capex_eur_per_mw", "Onshore wind capex", "€/MW"),
