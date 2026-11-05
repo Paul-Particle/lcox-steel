@@ -19,9 +19,9 @@ import pandas as pd
 import yaml
 
 from common._paths import REPO_ROOT
-from common._workbook_translation import (RES_TECHS, UNREAD_ROWS,
+from common._workbook_translation import (UNREAD_ROWS,
                                           VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION,
-                                          WORKBOOK_SOURCES, translate_override)
+                                          WORKBOOK_SOURCES)
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ REGIONAL_SOURCES = {
     "battery.capex_per_mw_eur": ("iron_location", "battery", "battery.capex_eur_per_mw_{region}"),
     "battery.capex_per_mwh_eur": ("iron_location", "battery", "battery.capex_eur_per_mwh_{region}"),
 }
-# Each regional key's workbook row by region, for the pick and for overrides.
+# Each regional key's workbook row by region, for the pick and for an override naming a region.
 REGIONAL_ROWS = {path: {regions[kind]: row.format(region=regions[kind]) for regions in AREA_REGIONS.values()}
                  for path, (_, kind, row) in REGIONAL_SOURCES.items()}
 # Model key -> the workbook row an override switches it to, by sensitivity level.
@@ -211,7 +211,7 @@ def build_scenarios(scenario_rows: pd.DataFrame, named_inputs: dict,
             # The model's anchor-colo-nN variant keeps the N best cells of each other
             # technology around the anchor's P95 site.
             tech, variant = row.res_anchor, f"anchor-colo-n{int(partner_cells)}"
-        if tech not in RES_TECHS:
+        if tech not in assumptions["res"]:
             flag(f"unknown renewable technology {tech!r}")
             continue
 
@@ -223,25 +223,19 @@ def build_scenarios(scenario_rows: pd.DataFrame, named_inputs: dict,
         except json.JSONDecodeError as error:
             flag(f"overrides are not JSON ({error})")
             continue
-        for key, workbook_value in overrides.items():
-            # A regional row reaches only the keys this scenario takes from that row.
-            translated = [(path, value) for path, value
-                          in translate_override(key, workbook_value, WORKBOOK_SOURCES, SENSITIVITY_ROWS, REGIONAL_ROWS)
-                          if key not in REGIONAL_ROWS.get(path, {}).values()
-                          or key == REGIONAL_ROWS[path][region_by_path[path]]]
-            if not translated:
-                flag(f"override key {key!r} is a row of a region this scenario does not take")
-            for path, value in translated:
-                relative = RELATIVE_CHANGE.match(value) if isinstance(value, str) else None
-                if path not in base_values:
-                    flag(f"override key {key!r} is not a model key")
-                elif relative:
-                    settings[path] = settings.get(path, base_values[path]) * (1 + float(relative.group(1)) / 100)
-                elif isinstance(value, str) and value not in named_inputs.get(path, {}):
-                    flag(f"{path} has no sensitivity level or region {value!r} "
-                         f"(it has {sorted(named_inputs.get(path, {}))})")
-                else:
-                    settings[path] = named_inputs[path][value] if isinstance(value, str) else value
+        # An override names a model key and gives it a number, a change by `±n%` of the
+        # value it would take, or the name of a sensitivity level or a region.
+        for path, value in overrides.items():
+            relative = RELATIVE_CHANGE.match(value) if isinstance(value, str) else None
+            if path not in base_values:
+                flag(f"override key {path!r} is not a model key")
+            elif relative:
+                settings[path] = settings.get(path, base_values[path]) * (1 + float(relative.group(1)) / 100)
+            elif isinstance(value, str) and value not in named_inputs.get(path, {}):
+                flag(f"{path} has no sensitivity level or region {value!r} "
+                     f"(it has {sorted(named_inputs.get(path, {}))})")
+            else:
+                settings[path] = named_inputs[path][value] if isinstance(value, str) else value
 
         # On the grid, an area without a market of its own is run once per zone it
         # trades through, and a market whose series ended before the window drops out.

@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 from common import generate_inputs
-from common._workbook_translation import UNREAD_ROWS, WORKBOOK_SOURCES, translate_override
+from common._workbook_translation import UNREAD_ROWS
 from common.generate_inputs import (
     REGIONAL_SOURCES,
     SENSITIVITY_ROWS,
@@ -59,24 +59,8 @@ def test_a_currency_the_key_does_not_name_stops_the_build():
 
 
 def test_overrides_survive_excel_curly_quotes():
-    assert read_overrides('{“finance.default_wacc”:“+30%”}') == {"finance.default_wacc": "+30%"}
+    assert read_overrides('{“finance.origin_wacc”:“+30%”}') == {"finance.origin_wacc": "+30%"}
     assert read_overrides(float("nan")) == {}
-
-
-def test_workbook_override_keys_translate_to_model_keys_and_row_names():
-    """A row named in a source table becomes its name; any other value passes through."""
-    assert translate_override("res.solar.capex_eur_per_mw", "res.solar.capex_eur_per_mw_low",
-                              WORKBOOK_SOURCES, SENSITIVITY_ROWS) == [("res.solar.capex_per_mw_eur", "low")]
-    assert translate_override("electrolyser.capex_eur_per_mw", "electrolyser.capex_eur_per_mw_low",
-                              WORKBOOK_SOURCES, SENSITIVITY_ROWS) == [
-        ("electrolyser.capex_per_mw_eur", "electrolyser.capex_eur_per_mw_low")]
-
-
-def test_one_workbook_key_reaches_every_model_key_it_feeds():
-    assert translate_override("finance.default_wacc", "+30%", WORKBOOK_SOURCES) == [
-        ("finance.origin_wacc", "+30%"), ("finance.destination_wacc", "+30%")]
-    assert [path for path, _ in translate_override("dri.capex_eur_per_t", 400, WORKBOOK_SOURCES)] == [
-        "dri-h2.capex_per_t_per_year_eur", "dri-mix.capex_per_t_per_year_eur", "dri-ng.capex_per_t_per_year_eur"]
 
 
 IMPORT_ROW = {
@@ -102,17 +86,18 @@ def build_from_rows(changes_by_scenario: dict) -> tuple[pd.DataFrame, dict]:
 
 
 def test_an_import_takes_iron_side_values_from_its_iron_location_and_the_furnace_from_its_steel_location():
-    """The overrides apply on top: to the region's value, or switching to another region's row.
-    A regional row reaches only the keys the scenario takes from it."""
+    """The overrides apply on top, each to the model key it names: changing the region's value,
+    switching to another region's, or setting a number."""
     _, overlays = build_from_rows({
-        "wacc-up": {"sensitivity_overrides_JSON": json.dumps({"finance.default_wacc": "+30%"})},
+        "wacc-up": {"sensitivity_overrides_JSON": json.dumps({"finance.origin_wacc": "+30%",
+                                                              "finance.destination_wacc": "+30%"})},
         "rows-overridden": {"sensitivity_overrides_JSON": json.dumps({
-            "battery.capex_eur_per_mw_global": "battery.capex_eur_per_mw_eu",
-            "iron.fom_eur_per_t_capacity_per_year_aus": "+10%"})},
-        "eu-wacc-set": {"sensitivity_overrides_JSON": json.dumps({"finance.other.eu_wacc": 0.09})},
+            "battery.capex_per_mw_eur": "eu", "moe.opex_per_t_per_year_eur": "+10%"})},
+        "destination-wacc-set": {"sensitivity_overrides_JSON": json.dumps({"finance.destination_wacc": 0.09})},
     })
 
-    wacc_up, rows_overridden, eu_wacc_set = overlays["wacc-up"], overlays["rows-overridden"], overlays["eu-wacc-set"]
+    wacc_up, rows_overridden, destination_wacc_set = (
+        overlays["wacc-up"], overlays["rows-overridden"], overlays["destination-wacc-set"])
     assert wacc_up["finance.origin_wacc"] == pytest.approx(1.3)
     assert wacc_up["finance.destination_wacc"] == pytest.approx(2.6)
     assert wacc_up["moe.opex_per_t_per_year_eur"] == 1.0
@@ -121,14 +106,18 @@ def test_an_import_takes_iron_side_values_from_its_iron_location_and_the_furnace
     assert rows_overridden["moe.opex_per_t_per_year_eur"] == pytest.approx(1.1)
     assert rows_overridden["battery.capex_per_mw_eur"] == 2.0
     assert rows_overridden["battery.capex_per_mwh_eur"] == 1.0
-    assert eu_wacc_set["finance.origin_wacc"] == 1.0
-    assert eu_wacc_set["finance.destination_wacc"] == 0.09
+    assert destination_wacc_set["finance.origin_wacc"] == 1.0
+    assert destination_wacc_set["finance.destination_wacc"] == 0.09
 
 
-def test_an_override_of_a_row_the_scenario_takes_no_key_from_stops_the_build():
-    with pytest.raises(ValueError, match="a row of a region this scenario does not take"):
-        build_from_rows({"brazil-fom": {
-            "sensitivity_overrides_JSON": json.dumps({"iron.fom_eur_per_t_capacity_per_year_bra": 80})}})
+def test_an_override_naming_a_workbook_row_or_an_unknown_region_stops_the_build():
+    with pytest.raises(ValueError) as error:
+        build_from_rows({
+            "workbook-row": {"sensitivity_overrides_JSON": json.dumps({
+                "iron.fom_eur_per_t_capacity_per_year_bra": 80})},
+            "unknown-region": {"sensitivity_overrides_JSON": json.dumps({"moe.opex_per_t_per_year_eur": "brazil"})}})
+    assert "override key 'iron.fom_eur_per_t_capacity_per_year_bra' is not a model key" in str(error.value)
+    assert "moe.opex_per_t_per_year_eur has no sensitivity level or region 'brazil'" in str(error.value)
 
 
 def test_the_terms_decide_the_route_and_the_series_each_run_draws_on():
@@ -221,8 +210,7 @@ def test_every_workbook_row_is_read_or_listed_with_why_it_is_not(outputs_in_tmp,
 
 def test_an_override_naming_a_sensitivity_row_takes_that_level():
     _, overlays = build_from_rows({"solar-low-gas-high": {"sensitivity_overrides_JSON": json.dumps({
-        "res.solar.capex_eur_per_mw": "res.solar.capex_eur_per_mw_low",
-        "natural_gas.price_eur_per_mwh": "natural_gas.price_eur_per_mwh_high"})}})
+        "res.solar.capex_per_mw_eur": "low", "natural_gas.price_eur_per_mwh": "high"})}})
 
     assert overlays["solar-low-gas-high"]["res.solar.capex_per_mw_eur"] == 5.0
     assert overlays["solar-low-gas-high"]["natural_gas.price_eur_per_mwh"] == 7.0

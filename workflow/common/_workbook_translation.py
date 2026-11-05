@@ -4,7 +4,6 @@ What the scenario tab's terms mean for a scenario is the generator's business
 (generate_inputs.py); this file only says which row feeds which key.
 """
 
-RES_TECHS = ("wind-onshore", "solar", "wind-offshore")
 CARRIERS = ("biomass", "brown_coal", "coal_gas", "energy_storage", "gas", "geothermal", "hard_coal",
             "hydro", "hydro_reservoir", "hydro_river", "marine", "nuclear", "oil", "oil_shale", "other",
             "other_re", "peat", "pumped_storage", "solar", "waste", "wind_offshore", "wind_onshore")
@@ -34,7 +33,7 @@ RENAMED_SOURCES = {
     "ew.el_mwh_per_t": "ewin.el_mwh_per_t",
     "ew.ore_eur_per_t": "ewin.ore_eur_per_t_electrolytic_iron",
     "briquetting.el_mwh_per_t": "briquetting.el_mwh_per_t_hbi",
-    **{f"res.{tech}.lifetime_years": "res.financing_period" for tech in RES_TECHS},
+    **{f"res.{tech}.lifetime_years": "res.financing_period" for tech in ("wind-onshore", "solar", "wind-offshore")},
     "electrolyser.lifetime_years": "electrolyser.financing_period",
     "battery.lifetime_years": "battery.financing_period",
     "h2_buffer.lifetime_years": "h2_buffer.financing_period",
@@ -128,29 +127,3 @@ VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION = {
     "dri-mix.reductant_store_hours": float("nan"),
     "emissions.co2_price_eur_per_t": 0.0,
 }
-
-# Workbook override keys that stand for several model keys.
-OVERRIDE_KEYS = {"finance.default_wacc": ("finance.origin_wacc", "finance.destination_wacc")}
-
-
-def translate_override(key: str, value, *source_tables: dict) -> list[tuple[str, object]]:
-    """An override written in the workbook's keys, as (model key, value or row name) pairs.
-
-    The workbook names a key by its stem (`res.solar.capex_eur_per_mw`) and one of its
-    named rows (a sensitivity level or a region) by its full key
-    (`res.solar.capex_eur_per_mw_low`), which becomes that row's name (`low`). One
-    workbook row can feed several model keys, and the override then reaches all of
-    them. A model key, a number or a `±n%` change passes through unchanged.
-    """
-    paths_and_names_by_row = {}
-    for source_table in source_tables:
-        for path, spec in source_table.items():
-            named_rows = spec.items() if isinstance(spec, dict) else [(None, spec)]
-            for name, row in named_rows:
-                if isinstance(row, str):
-                    paths_and_names_by_row.setdefault(row, []).append((path, name))
-    matches = paths_and_names_by_row.get(key) or paths_and_names_by_row.get(f"{key}_base") or []
-    paths = OVERRIDE_KEYS.get(key) or list(dict.fromkeys(path for path, _ in matches)) or [key]
-    row_name = next((name for _, name in paths_and_names_by_row.get(value, []) if name), None)
-    translated = [(path, row_name or value) for path in paths]
-    return translated

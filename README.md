@@ -410,13 +410,13 @@ the machinery, not a study.
 reads the workbook's `assumptions_inputs` and `scenarios_clean` tabs and writes:
 
 - the base assumptions are `config/.template.yaml` with every value the workbook
-  holds replaced by the workbook's, converted from USD to EUR;
+  holds replaced by the workbook's (in EUR; a USD row stops the generator);
 - every row of `scenarios_clean` becomes a scenario named by its `scenario_id`,
   run once per market zone where the row puts such an area on the grid;
-- a scenario's overlay carries what differs from the base: the origin's and the
-  destination's WACC from the workbook's EU and non-EU rows, and the sensitivity
-  overrides the row names (`"finance.default_wacc": "+30%"` scales both WACCs).
-  A scenario that differs in nothing gets no overlay.
+- a scenario's overlay carries the values of its locations' regions (WACCs, plant
+  fixed O&M, battery costs), then the overrides the row names. An override names a
+  model key and gives it a number, a `±n%` change, or a sensitivity level or region
+  by name (`{"finance.origin_wacc": "+30%", "res.solar.capex_per_mw_eur": "low"}`).
 
 It stops before writing anything if a row cannot be translated, listing each
 problem with the workbook rows that have it. How the workbook names keys, as
