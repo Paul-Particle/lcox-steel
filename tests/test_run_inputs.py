@@ -63,7 +63,7 @@ def test_a_third_area_is_an_error(tmp_path):
         _inputs(tmp_path, "BAD")
 
 
-DISTANCES = {"default": {"sea": 3141.593}, "AUS": {"DEU": {"sea": 21_947}}}
+DISTANCES = {"AUS": {"DEU": {"sea": 21_947}}}
 AREAS = {"AUS": {"zones": ["NSW1", "VIC1"]}, "NSW1": {"market": "nem"}, "DEU": {"market": "entsoe"}}
 
 
@@ -71,6 +71,8 @@ def test_a_zone_ships_as_its_country():
     assert find_transport_legs(DISTANCES, "NSW1", "DEU", AREAS) == {"sea": 21_947}
 
 
-def test_a_pair_not_listed_gets_the_default():
-    assert find_transport_legs(DISTANCES, "AUS", "FRA", AREAS) == {"sea": 3141.593}
-    assert find_transport_legs(DISTANCES, "BRA", "DEU", AREAS) == {"sea": 3141.593}
+def test_a_pair_not_listed_stops_the_run():
+    with pytest.raises(KeyError, match="no legs from AUS \\(origin NSW1\\) to FRA"):
+        find_transport_legs(DISTANCES, "NSW1", "FRA", AREAS)
+    with pytest.raises(KeyError, match="no legs from BRA"):
+        find_transport_legs(DISTANCES, "BRA", "DEU", AREAS)

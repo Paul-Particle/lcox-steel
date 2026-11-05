@@ -314,15 +314,13 @@ transport:
 
   # Freight legs, km by mode, from an origin country to a destination. A run
   # looks its own up by its origin's country (a market zone ships as the
-  # country it is in) and its destination. A pair not listed gets `default`,
-  # π × 1000 km, a number nobody would quote, so such a run stands out.
+  # country it is in) and its destination. A pair not listed stops the run.
   #
   # The sea legs from Australia and Brazil are the input workbook's. The rest are
   # drawn to the Spanish coast: an EU producer has only an overland run to the
   # furnace, Alberta is landlocked, so its iron goes to Vancouver before it
   # floats, and Ontario reaches the Atlantic down the St. Lawrence.
   distance_km:
-    default: { sea: 3141.593 }
     AUS:
       ESP: { sea: 17_965 }
       DEU: { sea: 21_947 }

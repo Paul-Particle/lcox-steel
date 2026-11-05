@@ -1303,10 +1303,14 @@ def main() -> None:
     n = pypsa.Network()
     n.import_from_netcdf(Path(snakemake.input.network))
     read_mix = lambda path: pd.read_parquet(path) if path is not None else None
-    summary = extract_summary(
-        n, scenario_name, run, assumptions,
+    # As the solve: only a run with a destination elsewhere has freight legs.
+    transport_legs = (
         find_transport_legs(assumptions["transport"]["distance_km"], run_inputs["origin"],
-                            run_inputs["destination"], snakemake.config["areas"]),
+                            run_inputs["destination"], snakemake.config["areas"])
+        if run_inputs["destination"] != run_inputs["origin"] else None
+    )
+    summary = extract_summary(
+        n, scenario_name, run, assumptions, transport_legs,
         read_mix(run_inputs["grid_path"]), read_mix(run_inputs["destination_path"]),
     )
     # Trailing the row, because it identifies the inputs rather than describing

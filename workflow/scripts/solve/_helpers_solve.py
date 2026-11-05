@@ -15,12 +15,14 @@ def mean_year_hours(snapshots: pd.DatetimeIndex) -> float:
 
 
 def find_transport_legs(distances: dict, origin: str, destination: str, areas: dict) -> dict:
-    """A run's freight legs, km by mode: its origin country's to its destination, else the default.
+    """A run's freight legs, km by mode, from its origin's country to its destination.
 
     A market zone ships as the country whose `zones` list it is in.
     """
     country = next((parent for parent, entry in areas.items() if origin in entry.get("zones", [])), origin)
-    legs = distances.get(country, {}).get(destination, distances["default"])
+    if destination not in distances.get(country, {}):
+        raise KeyError(f"transport.distance_km has no legs from {country} (origin {origin}) to {destination}")
+    legs = distances[country][destination]
     return legs
 
 
