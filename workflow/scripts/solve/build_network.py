@@ -452,7 +452,7 @@ def _add_generators(
     MultiIndex; each generator is named `{tech}_{site}` and sits on its site's bus.
     Either way the tech key is looked up in `res_cfg`; orientation-suffixed keys
     (e.g. `solar_az180`, `..._east_30`) fall back to their base tech. Capital cost
-    is annuitised CAPEX + fixed OPEX; the CF profile enters as p_max_pu.
+    is annuitised CAPEX + fixed O&M; the CF profile enters as p_max_pu.
     """
     for col in cf_timeseries.columns:
         if multisite:
@@ -473,7 +473,7 @@ def _add_generators(
 
         cap_cost = (
             annuity_factor(wacc, cfg["financing_period"]) * cfg["capex_per_mw_eur"]
-            + cfg["opex_per_mw_per_year_eur"]
+            + cfg["fom_eur_per_mw_per_year"]
         )
         # The anchor cell is the plant site, so a scenario that asks what a
         # project *here* costs can require that something is built here. Every
@@ -515,7 +515,7 @@ def _add_battery(
         carrier="battery",
         e_nom_extendable=True,
         e_cyclic=True,
-        capital_cost=annuity * bat_cfg["capex_per_mwh_eur"] + bat_cfg["opex_per_mwh_per_year_eur"],
+        capital_cost=annuity * bat_cfg["capex_per_mwh_eur"] + bat_cfg["fom_eur_per_mwh_per_year"],
         marginal_cost=0.0,
     )
     n.add(
@@ -526,7 +526,7 @@ def _add_battery(
         carrier="battery",
         p_nom_extendable=True,
         efficiency=eta,
-        capital_cost=annuity * bat_cfg["capex_per_mw_eur"] + bat_cfg["opex_per_mw_per_year_eur"],
+        capital_cost=annuity * bat_cfg["capex_per_mw_eur"] + bat_cfg["fom_eur_per_mw_per_year"],
     )
     n.add(
         "Link",
@@ -549,7 +549,7 @@ def _add_electrolyser(
     """Add the extendable electrolyser link (electricity → hydrogen), sized by the optimiser."""
     cap_cost = (
         annuity_factor(wacc, el_cfg["financing_period"]) * el_cfg["capex_per_mw_eur"]
-        + el_cfg["opex_per_mw_per_year_eur"]
+        + el_cfg["fom_eur_per_mw_per_year"]
     )
     n.add(
         "Link",
@@ -572,7 +572,7 @@ def _add_h2_buffer(n: pypsa.Network, buf_cfg: dict, wacc: float) -> None:
     # Store capital_cost is per MWh of e_nom (H2 LHV energy capacity)
     cap_cost = (
         annuity_factor(wacc, buf_cfg["financing_period"]) * buf_cfg["capex_per_mwh_eur"]
-        + buf_cfg["opex_per_mwh_per_year_eur"]
+        + buf_cfg["fom_eur_per_mwh"]
     )
     n.add(
         "Store",
@@ -614,7 +614,7 @@ def _process_capital_cost(cfg: dict, wacc: float, output_t_per_p0_unit: float) -
     """
     per_t_per_year = (
         annuity_factor(wacc, cfg["financing_period"]) * cfg["capex_per_t_per_year_eur"]
-        + cfg["opex_per_t_per_year_eur"]
+        + cfg["fom_eur_per_t_capacity_per_year"]
     )
     return per_t_per_year * output_t_per_p0_unit * HOURS_PER_YEAR
 

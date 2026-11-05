@@ -356,8 +356,8 @@ def spec(assumptions: dict) -> list:
           f"{assumptions[link]['financing_period']:.0f} y")
          for link, label in IRONMAKING_PLANTS] + [wacc_line])
     add("ironmaking_plant_fom", "Ironmaking plant — fixed O&M", "#5A6B77",
-        [(f"fixed opex, {label.lower()}",
-          f"{assumptions[link]['opex_per_t_per_year_eur']:,.1f} €/(t·yr)")
+        [(f"fixed O&M, {label.lower()}",
+          f"{assumptions[link]['fom_eur_per_t_capacity_per_year']:,.1f} €/(t·yr)")
          for link, label in IRONMAKING_PLANTS])
     shades = {"briquetting": ("#44555F", "#77888F"),
               "eaf": ("#3A4A54", "#6E7F89")}
@@ -371,9 +371,9 @@ def spec(assumptions: dict) -> list:
             [("capex quote", f"{plant['capex_per_t_per_year_eur']:,.0f} €/(t·yr)"),
              ("financing period", f"{plant['financing_period']:.0f} y"), wacc_line])
         add(f"{stem}_fom", f"{label} — fixed O&M", om_colour,
-            [("fixed opex", f"{plant['opex_per_t_per_year_eur']:,.1f} €/(t·yr)"),
+            [("fixed O&M", f"{plant['fom_eur_per_t_capacity_per_year']:,.1f} €/(t·yr)"),
              ("as a share of capex",
-              f"{plant['opex_per_t_per_year_eur'] / plant['capex_per_t_per_year_eur'] * 100:.1f}% / yr")])
+              f"{plant['fom_eur_per_t_capacity_per_year'] / plant['capex_per_t_per_year_eur'] * 100:.1f}% / yr")])
 
     gas = assumptions["natural_gas"]
     add("gas_purchase", "Natural gas — purchase", "#525F6A",
@@ -394,7 +394,7 @@ def spec(assumptions: dict) -> list:
          ("financing period", f"{el_cfg['financing_period']:.0f} y"), wacc_line,
          ("efficiency", f"{el_cfg['efficiency_kwh_per_kg']:,.0f} kWh/kg H₂")])
     add("electrolyser_fom", "Electrolyser — fixed O&M", "#91C096",
-        [("fixed opex", f"{el_cfg['opex_per_mw_per_year_eur'] / 1e3:,.0f} k€/MW·yr")])
+        [("fixed O&M", f"{el_cfg['fom_eur_per_mw_per_year'] / 1e3:,.0f} k€/MW·yr")])
     add("electrolyser_water", "Electrolyser — water & variable opex", "#B4D4B8",
         [("variable opex", f"{el_cfg['varopex_eur_per_mwh_h2']:,.2f} €/MWh H₂")])
     # Quoted in €/MWh rather than k€/MWh: the salt-cavern sensitivity drops this from
@@ -416,7 +416,7 @@ def spec(assumptions: dict) -> list:
             [("capex quote", f"{cfg['capex_per_mw_eur'] / 1e6:,.2f} M€/MW"),
              ("financing period", f"{cfg['financing_period']:.0f} y"), wacc_line])
         add(f"res_{stem}_fom", f"{label} — fixed O&M", om_colour,
-            [("fixed opex", f"{cfg['opex_per_mw_per_year_eur'] / 1e3:,.0f} k€/MW·yr")])
+            [("fixed O&M", f"{cfg['fom_eur_per_mw_per_year'] / 1e3:,.0f} k€/MW·yr")])
 
     battery = assumptions["battery"]
     add("battery_power_capex", "Battery — power capacity, capital", "#D75674",

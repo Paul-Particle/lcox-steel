@@ -150,7 +150,7 @@ REDUCTION_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew", "reductant-h2")
 # total rather than trusting that they do.
 #
 # Two leaves per plant, per renewable and per electrolyser, because a component
-# whose annual cost is `annuity x capex + fixed opex` is two decisions and a
+# whose annual cost is `annuity x capex + fixed O&M` is two decisions and a
 # reader comparing routes wants them apart. The network carries only their sum,
 # so the share is taken from the quotes that priced it.
 #

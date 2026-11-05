@@ -34,22 +34,22 @@ plant:
 res:
   wind-onshore:
     capex_per_mw_eur: 863_717
-    opex_per_mw_per_year_eur: 21_593
+    fom_eur_per_mw_per_year: 21_593
     financing_period: 20
   solar:
     capex_per_mw_eur: 590_265
-    opex_per_mw_per_year_eur: 11_805
+    fom_eur_per_mw_per_year: 11_805
     financing_period: 20
   wind-offshore:
     capex_per_mw_eur: 2_593_805
-    opex_per_mw_per_year_eur: 64_845
+    fom_eur_per_mw_per_year: 64_845
     financing_period: 20
 
 electrolyser:
   # Alkaline. The register carries alkaline and PEM side by side throughout; this
   # run is priced on the alkaline column.
   capex_per_mw_eur: 928_319
-  opex_per_mw_per_year_eur: 18_566   # 2 % of capex
+  fom_eur_per_mw_per_year: 18_566   # 2 % of capex
   financing_period: 30
   efficiency_kwh_per_kg: 48.3
   # Variable opex per MWh of H2 out (water, consumables), so it does not move with
@@ -64,8 +64,8 @@ battery:
   capex_per_mwh_eur: 89_684   # energy capacity cost
   # Fixed O&M per unit of each capacity per year, eyeballed at 2.5 % of its capex
   # until the workbook gives a value.
-  opex_per_mw_per_year_eur: 3_461
-  opex_per_mwh_per_year_eur: 2_242
+  fom_eur_per_mw_per_year: 3_461
+  fom_eur_per_mwh_per_year: 2_242
   financing_period: 20
   efficiency_roundtrip: 0.85
 
@@ -74,13 +74,13 @@ h2_buffer:
   # sensitivity case.
   capex_per_mwh_eur: 60_050
   # Fixed O&M per MWh of storage capacity per year: about 1.1 % of the capex.
-  opex_per_mwh_per_year_eur: 668.54
+  fom_eur_per_mwh: 668.54
   financing_period: 30
   # e_nom_extendable always True — PyPSA finds optimal buffer size
 
 # ---------------------------------------------------------------------------
 # Steel-route process steps. Capex is quoted per tonne of annual output
-# capacity (€/(t/yr), the standard industry quote); fixed opex likewise per
+# capacity (€/(t/yr), the standard industry quote); fixed O&M likewise per
 # t/yr (≈3 % of capex). p_min_pu is the minimum turndown while built —
 # capacity can never run below that fraction of p_nom (candidates for
 # sweeping later). Ore enters as a variable cost per tonne of iron/steel
@@ -99,7 +99,7 @@ dri-h2:
   # it is an eighth of capex rather than the few per cent a maintenance-only
   # figure would be. The mean of the register's Australian, Brazilian and
   # European figures, one value being all this file can hold.
-  opex_per_t_per_year_eur: 70.32
+  fom_eur_per_t_capacity_per_year: 70.32
   financing_period: 20
   # Shaft auxiliaries, and the electric heat that preheats the H2 feed: the
   # register's two figures, kept apart as the blend shaft keeps them, so the
@@ -120,7 +120,7 @@ dri-mix:
   # dual-capable one is taken at that level too. See dri-h2 for where the
   # figure comes from and why it is not the familiar 230.
   capex_per_t_per_year_eur: 566.4
-  opex_per_t_per_year_eur: 70.32
+  fom_eur_per_t_capacity_per_year: 70.32
   financing_period: 20
   # Shaft auxiliaries alone, as the NG shaft. The H2 feed's preheat is charged
   # where it belongs, on the H2 side, and the register splits the H2 shaft the
@@ -145,12 +145,12 @@ eaf:
   # steel, and the refining, alloying and superheating still have to happen
   # somewhere. Hannah's cheap-ladle case is that same furnace with the capex
   # written down by a scenario overlay, e.g.
-  #   eaf: {capex_per_t_per_year_eur: 50, opex_per_t_per_year_eur: 1.5}
+  #   eaf: {capex_per_t_per_year_eur: 50, fom_eur_per_t_capacity_per_year: 1.5}
   # Per tonne of annual liquid steel, which is the basis an EAF is quoted on.
   capex_per_t_per_year_eur: 362.8
   # As the shaft's: all-in, labour and overhead included, and the mean of the
   # register's three regions.
-  opex_per_t_per_year_eur: 90.68
+  fom_eur_per_t_capacity_per_year: 90.68
   financing_period: 20
   consumables_eur_per_t: 40           # electrodes, fluxes, alloys, carbon; per t steel
 
@@ -185,7 +185,7 @@ moe:
   capex_per_t_per_year_eur: 1416
   # The register gives the shaft, the MOE cell and the electrowinning cell one
   # fixed-operating-cost row between them, so all three carry the same figure.
-  opex_per_t_per_year_eur: 70.32
+  fom_eur_per_t_capacity_per_year: 70.32
   financing_period: 20
   el_mwh_per_t: 3.181                 # per t liquid iron, mid ore grade
   # Concentrate rather than DR-grade pellets, which is most of why it is cheaper
@@ -209,7 +209,7 @@ ew:
   # solid iron plates. ~2–3 MWh/t iron claimed; capex very uncertain
   # (500–3000 €/(t/yr) span in public estimates — sweep this).
   capex_per_t_per_year_eur: 708.0
-  opex_per_t_per_year_eur: 70.32         # shares the register's row with DRI and MOE
+  fom_eur_per_t_capacity_per_year: 70.32         # shares the register's row with DRI and MOE
   financing_period: 20
   el_mwh_per_t: 3.739                 # per t iron plate, excluding ore prep
   # The same concentrate the MOE cell takes, at the same price.
@@ -236,7 +236,7 @@ dri-ng:
   # Same shaft capex level as the H2 shaft (see dri-h2 for the source); gas use
   # ~10 GJ/t DRI. Electricity is lower than the H2 shaft (no H2 preheat).
   capex_per_t_per_year_eur: 566.4
-  opex_per_t_per_year_eur: 70.32
+  fom_eur_per_t_capacity_per_year: 70.32
   financing_period: 20
   gas_mwh_per_t: 3.469                # LHV, per t DRI: reductant plus heat
   el_mwh_per_t: 0.1768                 # machine drive and auxiliaries
@@ -251,7 +251,7 @@ briquetting:
   # mechanical and cheap to run; what the route really pays for this step is
   # downstream, where the briquettes reach the furnace cold.
   capex_per_t_per_year_eur: 40
-  opex_per_t_per_year_eur: 1.2        # ≈3 % of capex
+  fom_eur_per_t_capacity_per_year: 1.2        # ≈3 % of capex
   financing_period: 20
   el_mwh_per_t: 0.01                  # press, screening and handling
   # Iron reaching the furnace per tonne leaving the shaft, over the whole HBI chain:

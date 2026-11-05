@@ -166,7 +166,7 @@ def test_a_plants_two_halves_are_its_whole_annual_cost(route, assumptions):
         halves = (fields[f"cost_{stem}_capex_eur_per_t_steel"]
                   + fields[f"cost_{stem}_fom_eur_per_t_steel"])
         assert halves == pytest.approx(whole, rel=1e-9)
-        # And neither half is the whole of it: a fixed-opex quote of about an
+        # And neither half is the whole of it: a fixed O&M quote of about an
         # eighth of capex puts the upkeep well inside these bounds.
         assert 0.0 < fields[f"cost_{stem}_fom_eur_per_t_steel"] < whole
 
@@ -221,7 +221,7 @@ def test_the_hydrogen_buffer_pays_its_fixed_om_on_top_of_its_annuitised_capex(as
     annuitised_capex = (annuity_factor(assumptions["finance"]["origin_wacc"], buffer_cfg["financing_period"])
                         * buffer_cfg["capex_per_mwh_eur"])
 
-    assert buffer["capital_cost"] == pytest.approx(annuitised_capex + buffer_cfg["opex_per_mwh_per_year_eur"])
+    assert buffer["capital_cost"] == pytest.approx(annuitised_capex + buffer_cfg["fom_eur_per_mwh"])
 
 
 def test_the_battery_pays_fixed_om_on_its_energy_and_its_inverter(assumptions):
@@ -231,9 +231,9 @@ def test_the_battery_pays_fixed_om_on_its_energy_and_its_inverter(assumptions):
     annuity = annuity_factor(assumptions["finance"]["origin_wacc"], battery_cfg["financing_period"])
 
     assert n.stores.at["battery", "capital_cost"] == pytest.approx(
-        annuity * battery_cfg["capex_per_mwh_eur"] + battery_cfg["opex_per_mwh_per_year_eur"])
+        annuity * battery_cfg["capex_per_mwh_eur"] + battery_cfg["fom_eur_per_mwh_per_year"])
     assert n.links.at["battery_charger", "capital_cost"] == pytest.approx(
-        annuity * battery_cfg["capex_per_mw_eur"] + battery_cfg["opex_per_mw_per_year_eur"])
+        annuity * battery_cfg["capex_per_mw_eur"] + battery_cfg["fom_eur_per_mw_per_year"])
 
 
 @pytest.mark.parametrize("route", ["h2-dri-eaf", "moe-eaf", "ew-eaf",

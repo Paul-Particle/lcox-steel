@@ -581,7 +581,7 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
 def _fixed_om_share(wacc: float, cfg: dict, capex_key: str, opex_key: str) -> float:
     """Fixed O&M's share of one component's annual cost, as build_network priced it.
 
-    A `capital_cost` in the network is `annuity x capex + fixed opex` per unit of
+    A `capital_cost` in the network is `annuity x capex + fixed O&M` per unit of
     capacity, so the share carries over unchanged to the annual cost of whatever
     the solve went on to build.
     """
@@ -664,7 +664,7 @@ def _leaf_breakdown(
         if not annual:
             continue
         share = _fixed_om_share(wacc_of(link), assumptions[link],
-                                "capex_per_t_per_year_eur", "opex_per_t_per_year_eur")
+                                "capex_per_t_per_year_eur", "fom_eur_per_t_capacity_per_year")
         # Each split on its own quotes; the ironmaking steps land in one pair.
         stem = plant_stem(link)
         leaves[f"{stem}_fom"] += annual * share
@@ -690,7 +690,7 @@ def _leaf_breakdown(
     electrolyser_capital = link_capital("electrolyser")
     if electrolyser_capital:
         share = _fixed_om_share(origin_wacc, assumptions["electrolyser"],
-                                "capex_per_mw_eur", "opex_per_mw_per_year_eur")
+                                "capex_per_mw_eur", "fom_eur_per_mw_per_year")
         leaves["electrolyser_fom"] = electrolyser_capital * share
         leaves["electrolyser_capex"] = electrolyser_capital * (1.0 - share)
     leaves["h2_buffer"] = breakdown["h2_buffer"]
@@ -715,7 +715,7 @@ def _leaf_breakdown(
         if not annual:
             continue
         share = _fixed_om_share(origin_wacc, assumptions["res"][tech],
-                                "capex_per_mw_eur", "opex_per_mw_per_year_eur")
+                                "capex_per_mw_eur", "fom_eur_per_mw_per_year")
         leaves[f"res_{field_stem(tech)}_fom"] = annual * share
         leaves[f"res_{field_stem(tech)}_capex"] = annual * (1.0 - share)
     # A generator none of the three techs names has no capex and O&M split to

@@ -92,7 +92,7 @@ def test_an_import_takes_iron_side_values_from_its_iron_location_and_the_furnace
         "wacc-up": {"sensitivity_overrides_JSON": json.dumps({"finance.origin_wacc": "+30%",
                                                               "finance.destination_wacc": "+30%"})},
         "rows-overridden": {"sensitivity_overrides_JSON": json.dumps({
-            "battery.capex_per_mw_eur": "eu", "moe.opex_per_t_per_year_eur": "+10%"})},
+            "battery.capex_per_mw_eur": "eu", "moe.fom_eur_per_t_capacity_per_year": "+10%"})},
         "destination-wacc-set": {"sensitivity_overrides_JSON": json.dumps({"finance.destination_wacc": 0.09})},
     })
 
@@ -100,10 +100,10 @@ def test_an_import_takes_iron_side_values_from_its_iron_location_and_the_furnace
         overlays["wacc-up"], overlays["rows-overridden"], overlays["destination-wacc-set"])
     assert wacc_up["finance.origin_wacc"] == pytest.approx(1.3)
     assert wacc_up["finance.destination_wacc"] == pytest.approx(2.6)
-    assert wacc_up["moe.opex_per_t_per_year_eur"] == 1.0
+    assert wacc_up["moe.fom_eur_per_t_capacity_per_year"] == 1.0
     assert wacc_up["battery.capex_per_mw_eur"] == 1.0
-    assert wacc_up["eaf.opex_per_t_per_year_eur"] == 2.0
-    assert rows_overridden["moe.opex_per_t_per_year_eur"] == pytest.approx(1.1)
+    assert wacc_up["eaf.fom_eur_per_t_capacity_per_year"] == 2.0
+    assert rows_overridden["moe.fom_eur_per_t_capacity_per_year"] == pytest.approx(1.1)
     assert rows_overridden["battery.capex_per_mw_eur"] == 2.0
     assert rows_overridden["battery.capex_per_mwh_eur"] == 1.0
     assert destination_wacc_set["finance.origin_wacc"] == 1.0
@@ -115,9 +115,9 @@ def test_an_override_naming_a_workbook_row_or_an_unknown_region_stops_the_build(
         build_from_rows({
             "workbook-row": {"sensitivity_overrides_JSON": json.dumps({
                 "iron.fom_eur_per_t_capacity_per_year_bra": 80})},
-            "unknown-region": {"sensitivity_overrides_JSON": json.dumps({"moe.opex_per_t_per_year_eur": "brazil"})}})
+            "unknown-region": {"sensitivity_overrides_JSON": json.dumps({"moe.fom_eur_per_t_capacity_per_year": "brazil"})}})
     assert "override key 'iron.fom_eur_per_t_capacity_per_year_bra' is not a model key" in str(error.value)
-    assert "moe.opex_per_t_per_year_eur has no sensitivity level or region 'brazil'" in str(error.value)
+    assert "moe.fom_eur_per_t_capacity_per_year has no sensitivity level or region 'brazil'" in str(error.value)
 
 
 def test_the_terms_decide_the_route_and_the_series_each_run_draws_on():

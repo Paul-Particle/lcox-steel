@@ -12,18 +12,18 @@ CARRIERS = ("biomass", "brown_coal", "coal_gas", "energy_storage", "gas", "geoth
 RENAMED_SOURCES = {
     "plant.h2_intensity_kg_per_t_dri": "dri_h2.kg_h2_per_t_dri",
     "res.wind-onshore.capex_per_mw_eur": "res.wind-onshore.capex_eur_per_mw_base",
-    "res.wind-onshore.opex_per_mw_per_year_eur": "res.wind-onshore.opex_eur_per_mw_per_year_base",
+    "res.wind-onshore.fom_eur_per_mw_per_year": "res.wind-onshore.opex_eur_per_mw_per_year_base",
     "res.solar.capex_per_mw_eur": "res.solar.capex_eur_per_mw_base",
-    "res.solar.opex_per_mw_per_year_eur": "res.solar.opex_eur_per_mw_per_year_base",
+    "res.solar.fom_eur_per_mw_per_year": "res.solar.opex_eur_per_mw_per_year_base",
     "res.wind-offshore.capex_per_mw_eur": "res.wind-offshore.capex_eur_per_mw_base",
-    "res.wind-offshore.opex_per_mw_per_year_eur": "res.wind-offshore.opex_eur_per_mw_per_year_base",
+    "res.wind-offshore.fom_eur_per_mw_per_year": "res.wind-offshore.opex_eur_per_mw_per_year_base",
     "electrolyser.capex_per_mw_eur": "electrolyser.capex_eur_per_mw_base",
-    "electrolyser.opex_per_mw_per_year_eur": "electrolyser.opex_eur_per_mw_per_year_base",
+    "electrolyser.fom_eur_per_mw_per_year": "electrolyser.opex_eur_per_mw_per_year_base",
     "electrolyser.varopex_eur_per_mwh_h2": "electrolyser.varopex_eur_per_mwh_h2_base",
     "electrolyser.efficiency_kwh_per_kg": "electrolyser.efficiency_kwh_per_kg",
     "battery.efficiency_roundtrip": "battery.efficiency_roundtrip",
     "h2_buffer.capex_per_mwh_eur": "h2_buffer.capex_eur_per_mwh",
-    "h2_buffer.opex_per_mwh_per_year_eur": "h2_buffer.fom_eur_per_mwh",
+    "h2_buffer.fom_eur_per_mwh": "h2_buffer.fom_eur_per_mwh",
     "dri-ng.gas_mwh_per_t": "dri_ng.gas_mwh_per_t",
     "dri-ng.el_mwh_per_t": "dri_ng.el_mwh_per_t",
     "eaf.capex_per_t_per_year_eur": "eaf.capex_eur_per_t",
@@ -103,10 +103,10 @@ UNREAD_ROWS = {
 # Keys the model needs and the workbook has no row for; the template's value stands in,
 # and the generator warns until the workbook gives one:
 #   "anchor.min_capacity_mw"  (the anchor floor: https://github.com/Paul-Particle/lcox-steel/issues/47)
-#   "battery.opex_per_mw_per_year_eur"   (fixed O&M; the template's is eyeballed)
-#   "battery.opex_per_mwh_per_year_eur"
+#   "battery.fom_eur_per_mw_per_year"   (fixed O&M; the template's is eyeballed)
+#   "battery.fom_eur_per_mwh_per_year"
 #   "briquetting.capex_per_t_per_year_eur"
-#   "briquetting.opex_per_t_per_year_eur"
+#   "briquetting.fom_eur_per_t_capacity_per_year"
 #   "briquetting.financing_period"
 #   "briquetting.yield_t_per_t"
 #   "eaf.consumables_eur_per_t"
