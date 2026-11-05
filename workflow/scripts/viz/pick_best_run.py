@@ -30,6 +30,8 @@ def main() -> None:
     metric = snakemake.params.best_run_by
     # One row per run, in the order the rule collected their files.
     runs = pd.concat([read_report(path) for path in snakemake.input.diagnostic], ignore_index=True)
+    if runs[metric].isna().all():
+        raise ValueError(f"{snakemake.wildcards.scenario}: no run has a value for {metric}")
     # A run with no value for the metric is never picked over one that has it.
     best = runs[metric].sort_values(na_position="last").index[0]
     # Every output but the run list has an input of the same name, one path per run.
