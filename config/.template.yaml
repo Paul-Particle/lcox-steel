@@ -252,6 +252,9 @@ briquetting:
   # fines at the press (1–3 %, Lohmeier et al. 2020, steel research int.), reoxidation
   # in stock and at sea (about 1 % a month at first, IIMA HBI guide 2025) and breakage
   # in handling (Midrex, "Maximizing iron unit yield", 2020). Plausibly 0.93–0.98.
+  # Worth splitting into the press's own yield and the losses after it (stock, sea,
+  # handling). Whatever the split, count each loss once: an iron ratio at the
+  # furnace quoted for HBI as received already holds the losses on the way.
   yield_t_per_t: 0.96
 
 iron_store:
