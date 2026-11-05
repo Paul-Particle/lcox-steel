@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 EMISSIONS = yaml.safe_load((REPO_ROOT / "config" / ".template.yaml").read_text())[
     "emissions"
 ]
-FACTORS = EMISSIONS[EMISSIONS["basis"]]["electricity_t_co2e_per_mwh"]
+FACTORS = EMISSIONS["electricity_t_co2e_per_mwh"]
 
 
 def test_every_carrier_either_downloader_can_emit_has_a_factor():

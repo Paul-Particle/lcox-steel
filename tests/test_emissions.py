@@ -8,6 +8,8 @@ networks with the dispatch written in — no cutouts, no solves, so they run
 anywhere and a change in the assumptions cannot move them.
 """
 
+import copy
+
 import numpy as np
 import pandas as pd
 import pypsa
@@ -19,14 +21,11 @@ from common._report_schema import EMISSION_STEPS
 # A deliberately round factor table: coal at 1, gas at 0.5, wind free, so every
 # expected number below can be read off by hand.
 EMISSIONS = {
-    "basis": "test_grid_emission_factors",
-    "test_grid_emission_factors": {
-        "electricity_t_co2e_per_mwh": {
-            "hard_coal":    1.0,
-            "gas":          0.5,
-            "wind_onshore": 0.0,
-            "solar":        0.2,
-        },
+    "electricity_t_co2e_per_mwh": {
+        "hard_coal":    {"combustion": 1.0},
+        "gas":          {"combustion": 0.5},
+        "wind_onshore": {"combustion": 0.0},
+        "solar":        {"combustion": 0.2},
     },
     "natural_gas_reductant_t_co2e_per_mwh": {"process": 0.2, "upstream": 0.1},
     "co2_price_eur_per_t": 0.0,
@@ -425,6 +424,24 @@ def test_a_battery_that_never_ran_is_not_a_missing_column():
     emitted = _breakdown(n)
     assert emitted["by_step"]["battery_losses"] == pytest.approx(0.0)
     assert emitted["by_step"]["eaf"] == pytest.approx(5.0 * 4 * SCALE * 0.2)
+
+
+def test_a_carrier_whose_factor_is_nan_counts_as_emitting_nothing():
+    """A NaN factor is decided where the factors are read: it enters the total as zero."""
+    n = _network()
+    n.add("Generator", "grid_import", bus="electricity", carrier="AC")
+    n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
+    _dispatch(n, "generators", "p", {"grid_import": [10.0] * 4})
+    _dispatch(n, "links", "p0", {"eaf": [5.0] * 4})
+    _dispatch(n, "links", "p2", {"eaf": [10.0] * 4})
+    emissions_with_nan_wind = copy.deepcopy(EMISSIONS)
+    emissions_with_nan_wind["electricity_t_co2e_per_mwh"]["wind_onshore"]["combustion"] = np.nan
+
+    emitted = compile_report._emissions_breakdown(
+        n, emissions_with_nan_wind, "VIC1", None, _grid_mix(n), "DEU", None)
+
+    # Four parts coal to one part wind, as with a wind factor of 0.
+    assert emitted["by_step"]["eaf"] == pytest.approx(10.0 * 4 * SCALE * 0.8)
 
 
 def test_a_mix_from_another_window_is_an_error_not_a_clean_hour():

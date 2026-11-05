@@ -39,7 +39,7 @@ RENAMED_SOURCES = {
     "battery.lifetime_years": "battery.financing_period",
     "h2_buffer.lifetime_years": "h2_buffer.financing_period",
     **{f"{plant}.lifetime_years": "IS.financing_period" for plant in ("dri-h2", "dri-mix", "dri-ng", "eaf", "moe", "ew")},
-    **{f"emissions.default_grid_emission_factors.electricity_t_co2e_per_mwh.{carrier}":
+    **{f"emissions.electricity_t_co2e_per_mwh.{carrier}.combustion":
        f"emissions.electricity_t_co2e_per_mwh.{carrier}.combustion" for carrier in CARRIERS},
 }
 CONVERTED_SOURCES = {

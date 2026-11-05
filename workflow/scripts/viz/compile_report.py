@@ -54,6 +54,12 @@ STORAGE_CARRIERS = ("energy_storage", "pumped_storage")
 # for solar and onshore wind as well as for its storage.
 CONSUMPTION_SUFFIX = "_cons"
 
+# The basis the grid emission factors are read on: what comes out of the stack,
+# the workbook's key under each carrier. Every report names the set of factors,
+# so no number can be read on the wrong footing.
+EMISSION_FACTOR_BASIS = "combustion"
+EMISSION_FACTORS_NAME = "emissions_peter_paul"
+
 
 def _carrier_key(carrier: str) -> str:
     """The emission table's key for a generator carrier: `wind-onshore` → `wind_onshore`.
@@ -223,7 +229,16 @@ def _emissions_breakdown(
     plant's own renewables mix with whatever it imports, and — on an export
     route — the destination's, which is a grid and nothing else.
     """
-    factors = emissions_cfg[emissions_cfg["basis"]]["electricity_t_co2e_per_mwh"]
+    # The one place a missing factor is decided: a carrier's emissions enter the
+    # run's total, so a factor given as NaN counts as zero. Below this, a NaN is
+    # an intensity that could not be read, and stays one.
+    factors = (
+        pd.Series({carrier: by_basis[EMISSION_FACTOR_BASIS]
+                   for carrier, by_basis in emissions_cfg["electricity_t_co2e_per_mwh"].items()},
+                  dtype=float)
+        .fillna(0.0)
+        .to_dict()
+    )
     annual = mean_year_hours(n.snapshots) / len(n.snapshots)
 
     # PyPSA's netCDF export drops a time-varying column whose every value is the
@@ -300,8 +315,8 @@ def _emissions_breakdown(
     # (see `_storage_carbon`). Without it an hour supplied out of the battery
     # has nothing generating in it, and everything drawn in that hour comes out
     # free: a solar plant that runs its furnace through the night reports about
-    # a third light.
-    generation_intensity = (carried / generated.where(generated > 0)).fillna(0.0)
+    # a third light. An hour with nothing generated in it carries nothing.
+    generation_intensity = (carried / generated).where(generated > 0, 0.0)
     # Signed as the electricity bus sees it: the charger's p0 is a withdrawal,
     # and the discharger's p1 is already negative leaving the link, so negating
     # it lands positive. A network built without a battery has neither link.
@@ -316,8 +331,7 @@ def _emissions_breakdown(
         generation_intensity,
     )
     supplied = generated + discharged
-    home_intensity = ((carried + stored_carried)
-                      / supplied.where(supplied > 0)).fillna(0.0)
+    home_intensity = ((carried + stored_carried) / supplied).where(supplied > 0, 0.0)
 
     # Which links draw electricity is read off the network — on bus0 as their
     # input (an electrolyser, a MOE cell) or on bus2 alongside the conversion
@@ -1159,7 +1173,7 @@ def extract_summary(
                 at_sites["p_nom_opt"].sum() / 1e3
             )
 
-    # Emissions, on the basis the assumptions name. Reported in kg so the
+    # Emissions, on EMISSION_FACTOR_BASIS. Reported in kg so the
     # report's two decimals still say something about a clean route.
     emitted = _emissions_breakdown(
         n, assumptions["emissions"],
@@ -1169,7 +1183,7 @@ def extract_summary(
     emissions = emitted["by_step"]
     electricity_mwh = emitted["electricity_mwh"]
     sources = emitted["sources"]
-    summary["emissions_basis"] = assumptions["emissions"]["basis"]
+    summary["emissions_basis"] = EMISSION_FACTORS_NAME
     if emitted["unavailable"]:
         summary["emissions_unavailable_reason"] = emitted["unavailable"]
     emissions_t = sum(emissions.values())

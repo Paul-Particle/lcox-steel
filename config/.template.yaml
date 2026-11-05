@@ -369,55 +369,51 @@ emissions:
   # one. What is counted is the energy and the freight: grid and renewable
   # electricity, natural gas combustion, and the ships and trains.
   #
-  # Which set of grid emission factors below a run uses. Reports carry its name
-  # so a number cannot be read on the wrong one.
-  basis: default_grid_emission_factors
-
-  default_grid_emission_factors:
-    # t CO2e per MWh of electricity generated: what comes out of the stack, and
-    # nothing else, so renewables and nuclear are zero. This is what a grid CO2
-    # monitor reports and what most "grid carbon intensity" figures mean.
-    # Agora Energiewende's Agorameter factors. The 1.57 shared by the dirty
-    # catch-alls is deliberately punitive: they are small, mixed, and mostly
-    # worse than lignite.
-    #
-    # Keyed by the carrier names the grid pipeline uses (see
-    # grid/download_entsoe.py and grid/download_nem.py, which were deliberately
-    # given one shared vocabulary — the same keys serve both markets). These
-    # keys are what a `variant: emissions` grid series has columns for, which is
-    # how the two meet. A carrier appearing in a generation series but missing
-    # here is an error, not a zero.
-    #
-    # Storage carriers are here for the vocabulary rather than for their factor:
-    # the report leaves them out of a mix altogether, both what a reservoir gives
-    # back and what it took to fill it, which is what makes stored energy carry
-    # the average of everything else. Counting the discharge at a factor of zero
-    # would instead read as free power and dilute the mix (a couple of per cent
-    # in DE, more in a hydro-heavy NEM region). Their round-trip loss is charged
-    # where it belongs, as extra electricity drawn.
-    electricity_t_co2e_per_mwh:
-      biomass:         0
-      brown_coal:      1.12
-      coal_gas:        1.57
-      energy_storage:  0
-      gas:             0.38
-      geothermal:      0
-      hard_coal:       0.82
-      hydro:           0        # NEM's undivided hydro
-      hydro_reservoir: 0
-      hydro_river:     0
-      marine:          0
-      nuclear:         0
-      oil:             1.57
-      oil_shale:       1.57
-      other:           1.57
-      other_re:        0
-      peat:            1.57
-      pumped_storage:  0
-      solar:           0
-      waste:           1.57
-      wind_offshore:   0
-      wind_onshore:    0
+  # t CO2e per MWh of electricity generated, on the `combustion` basis: what
+  # comes out of the stack, and nothing else, so renewables and nuclear are
+  # zero. This is what a grid CO2 monitor reports and what most "grid carbon
+  # intensity" figures mean. Reports carry the basis's name so a number cannot
+  # be read on the wrong one. Agora Energiewende's Agorameter factors. The 1.57
+  # shared by the dirty catch-alls is deliberately punitive: they are small,
+  # mixed, and mostly worse than lignite.
+  #
+  # Keyed by the carrier names the grid pipeline uses (see
+  # grid/download_entsoe.py and grid/download_nem.py, which were deliberately
+  # given one shared vocabulary — the same keys serve both markets). These
+  # keys are what a `variant: emissions` grid series has columns for, which is
+  # how the two meet. A carrier appearing in a generation series but missing
+  # here is an error, not a zero; a carrier whose factor is NaN counts as zero.
+  #
+  # Storage carriers are here for the vocabulary rather than for their factor:
+  # the report leaves them out of a mix altogether, both what a reservoir gives
+  # back and what it took to fill it, which is what makes stored energy carry
+  # the average of everything else. Counting the discharge at a factor of zero
+  # would instead read as free power and dilute the mix (a couple of per cent
+  # in DE, more in a hydro-heavy NEM region). Their round-trip loss is charged
+  # where it belongs, as extra electricity drawn.
+  electricity_t_co2e_per_mwh:
+    biomass:         { combustion: 0    }
+    brown_coal:      { combustion: 1.12 }
+    coal_gas:        { combustion: 1.57 }
+    energy_storage:  { combustion: 0    }
+    gas:             { combustion: 0.38 }
+    geothermal:      { combustion: 0    }
+    hard_coal:       { combustion: 0.82 }
+    hydro:           { combustion: 0    }   # NEM's undivided hydro
+    hydro_reservoir: { combustion: 0    }
+    hydro_river:     { combustion: 0    }
+    marine:          { combustion: 0    }
+    nuclear:         { combustion: 0    }
+    oil:             { combustion: 1.57 }
+    oil_shale:       { combustion: 1.57 }
+    other:           { combustion: 1.57 }
+    other_re:        { combustion: 0    }
+    peat:            { combustion: 1.57 }
+    pumped_storage:  { combustion: 0    }
+    solar:           { combustion: 0    }
+    waste:           { combustion: 1.57 }
+    wind_offshore:   { combustion: 0    }
+    wind_onshore:    { combustion: 0    }
 
   # There is deliberately no per-area annual figure here, and none for the
   # destination either. Every intensity in the model comes from a generation
