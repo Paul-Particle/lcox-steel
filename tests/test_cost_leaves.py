@@ -18,6 +18,7 @@ import pandas as pd
 import pytest
 import yaml
 
+from common._constants import H2_LHV_KWH_PER_KG
 from common._workbook_translation import VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION
 from common.generate_inputs import set_nested
 from scripts.viz import compile_report
@@ -241,6 +242,44 @@ def test_the_workbooks_routes_build_and_cost_without_the_keys_its_scenarios_do_n
     assert all(np.isfinite(value) for value in fields.values())
     leaves = sum(fields[f"cost_{leaf}_eur_per_t"] for leaf in LEAF_COSTS)
     assert leaves == pytest.approx(sum(breakdown.values()) / steel_t, rel=1e-9)
+
+
+def summarise_written_in_run_with_generation_matching_the_draws(route: str, assumptions: dict) -> dict:
+    """The report row of a written-in run whose home generation is exactly its draws and losses.
+
+    The written-in flows draw more than the generators make, which the report's
+    electricity jobs refuse, so the home generators are scaled to what was drawn.
+    """
+    n = _solved(route, assumptions)
+    is_export = route.endswith("-export")
+    run = {"run": "test", "area": "ESP", "destination": "DEU" if is_export else "ESP"}
+    legs = {"sea": 8945} if is_export else None
+    grid_mix = pd.DataFrame({"gas": 100.0, "solar": 100.0}, index=n.snapshots)
+    emitted = compile_report._emissions_breakdown(n, assumptions["emissions"], run["area"], legs, grid_mix,
+                                                  run["destination"], grid_mix)
+    home_draws_mwh = sum(mwh for link, mwh in emitted["electricity_mwh"].items()
+                         if not (is_export and link == "eaf"))
+    home_generators = [g for g in n.generators.index if g not in ("gas_supply", "destination_supply")]
+    annual = 8760.0 / len(n.snapshots)
+    generated_mwh = float(n.generators_t.p[home_generators].sum().sum()) * annual
+    n.generators_t.p[home_generators] *= (home_draws_mwh + emitted["losses_mwh"]) / generated_mwh
+    summary = compile_report.extract_summary(n, "test", run, assumptions, legs, grid_mix, grid_mix)
+    return summary
+
+
+def test_hydrogen_is_priced_at_the_origins_electricity_on_an_export_route_too(assumptions):
+    """The furnace's power abroad made no hydrogen, so LCOH reads the home rate, as `el_hydrogen` does."""
+    domestic = summarise_written_in_run_with_generation_matching_the_draws("h2-dri-eaf", assumptions)
+    export = summarise_written_in_run_with_generation_matching_the_draws("h2-dri-eaf-export", assumptions)
+
+    for summary in (domestic, export):
+        h2_mwh = summary["h2_produced_kt"] * 1e6 * H2_LHV_KWH_PER_KG / 1000.0
+        steel_t = summary["steel_produced_mt"] * 1e6
+        assert summary["lcoh_electricity_eur_per_mwh_lhv"] * h2_mwh == pytest.approx(
+            summary["el_hydrogen_eur_per_t"] * steel_t, rel=1e-9)
+    # Both twins build the same plant at home, so they make hydrogen at the same cost.
+    assert export["lcoh_eur_per_mwh_lhv"] == pytest.approx(domestic["lcoh_eur_per_mwh_lhv"], rel=1e-9)
+    assert export["lcoe_eur_per_mwh"] != pytest.approx(domestic["lcoe_eur_per_mwh"], rel=1e-6)
 
 
 @pytest.mark.parametrize("group", ["ladle_metallurgy", "process"])

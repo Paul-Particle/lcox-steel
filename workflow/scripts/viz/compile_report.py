@@ -911,8 +911,7 @@ def extract_summary(
     #          carries `destination_power` alongside it. Numerator and denominator
     #          cover the same generators, or an export route reads cheaper than its
     #          domestic twin by the MWh nobody was charged for.
-    #   LCOH = (electrolyser capex/opex + H2 buffer + the electrolyser's electricity
-    #          valued at LCOE) per MWh of H2 produced, LHV.
+    # LCOH is further down, after the electricity bill is divided by job.
     annual_scale = hours_per_year / len(n.snapshots)
     elec_gens = [g for g in n.generators.index if g != "gas_supply"]
     elec_mwh = (float(n.generators_t.p[elec_gens].sum().sum()) * annual_scale) if elec_gens else 0.0
@@ -1022,26 +1021,6 @@ def extract_summary(
                 destination_energy / destination_mwh
                 - float(assumptions["grid"]["fee_eur_per_mwh"])
             )
-
-    if "electrolyser" in n.links.index:
-        el_mwh = float(n.links_t.p0["electrolyser"].sum()) * annual_scale
-        h2_mwh = _h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
-        if h2_mwh > 0:
-            elec_for_h2 = el_mwh * (lcoe if lcoe == lcoe else 0.0)
-            el_cost = breakdown["electrolyser"]
-            buf_cost = breakdown["h2_buffer"]
-            lcoh = (el_cost + buf_cost + elec_for_h2) / h2_mwh
-            summary["lcoh_eur_per_mwh_lhv"] = lcoh
-            # And per kg, which is the unit the cost-breakdown page charts
-            # hydrogen in.
-            summary["lcoh_eur_per_kg"] = lcoh * H2_LHV_KWH_PER_KG / 1000.0
-            # LCOH decomposition, €/MWh LHV over the same H2 denominator so the
-            # parts sum back to LCOH: the electrolyser plant, its electricity
-            # (valued at LCOE) and — where built — the H2 buffer store.
-            summary["lcoh_electrolyser_eur_per_mwh_lhv"] = el_cost / h2_mwh
-            summary["lcoh_electricity_eur_per_mwh_lhv"] = elec_for_h2 / h2_mwh
-            if buf_cost > 0:
-                summary["lcoh_h2_storage_eur_per_mwh_lhv"] = buf_cost / h2_mwh
 
     # Cost detail for the hover: per-plant levelised capex and the ore-vs-consumables
     # split, all €/t steel on the same denominator as the LCOS cost groups — so the
@@ -1264,6 +1243,30 @@ def extract_summary(
         {"by_user": electricity_mwh, "losses_mwh": emitted["losses_mwh"],
          "generation_mwh": elec_mwh},
     ))
+
+    # LCOH = (electrolyser capex/opex + H2 buffer + the electrolyser's electricity)
+    # per MWh of H2 produced, LHV. The electricity is the hydrogen's own job of the
+    # bill above, `el_hydrogen_eur_per_t`: the electrolyser's draw at the rate of
+    # the system it stands in, the origin's. On an export route the furnace buys
+    # the destination's power, and none of that power made hydrogen.
+    if "electrolyser" in n.links.index:
+        h2_mwh = _h2_produced_kg(n) * H2_LHV_KWH_PER_KG / 1000.0
+        if h2_mwh > 0:
+            elec_for_h2 = summary["el_hydrogen_eur_per_t"] * steel_t_per_year
+            el_cost = breakdown["electrolyser"]
+            buf_cost = breakdown["h2_buffer"]
+            lcoh = (el_cost + buf_cost + elec_for_h2) / h2_mwh
+            summary["lcoh_eur_per_mwh_lhv"] = lcoh
+            # And per kg, which is the unit the cost-breakdown page charts
+            # hydrogen in.
+            summary["lcoh_eur_per_kg"] = lcoh * H2_LHV_KWH_PER_KG / 1000.0
+            # LCOH decomposition, €/MWh LHV over the same H2 denominator so the
+            # parts sum back to LCOH: the electrolyser plant, its electricity and,
+            # where built, the H2 buffer store.
+            summary["lcoh_electrolyser_eur_per_mwh_lhv"] = el_cost / h2_mwh
+            summary["lcoh_electricity_eur_per_mwh_lhv"] = elec_for_h2 / h2_mwh
+            if buf_cost > 0:
+                summary["lcoh_h2_storage_eur_per_mwh_lhv"] = buf_cost / h2_mwh
 
     return summary
 
