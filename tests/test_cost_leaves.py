@@ -218,7 +218,7 @@ def test_the_hydrogen_buffer_pays_its_fixed_om_on_top_of_its_annuitised_capex(as
     """Per MWh of storage a year, as every other element's capital cost carries its fixed O&M."""
     buffer = _solved("h2-dri-eaf", assumptions).stores.loc["h2_buffer"]
     buffer_cfg = assumptions["h2_buffer"]
-    annuitised_capex = (annuity_factor(assumptions["finance"]["origin_wacc"], buffer_cfg["lifetime_years"])
+    annuitised_capex = (annuity_factor(assumptions["finance"]["origin_wacc"], buffer_cfg["financing_period"])
                         * buffer_cfg["capex_per_mwh_eur"])
 
     assert buffer["capital_cost"] == pytest.approx(annuitised_capex + buffer_cfg["opex_per_mwh_per_year_eur"])
@@ -228,7 +228,7 @@ def test_the_battery_pays_fixed_om_on_its_energy_and_its_inverter(assumptions):
     """Each capacity carries its own fixed O&M on top of its annuitised capex."""
     n = _solved("h2-dri-eaf", assumptions)
     battery_cfg = assumptions["battery"]
-    annuity = annuity_factor(assumptions["finance"]["origin_wacc"], battery_cfg["lifetime_years"])
+    annuity = annuity_factor(assumptions["finance"]["origin_wacc"], battery_cfg["financing_period"])
 
     assert n.stores.at["battery", "capital_cost"] == pytest.approx(
         annuity * battery_cfg["capex_per_mwh_eur"] + battery_cfg["opex_per_mwh_per_year_eur"])

@@ -7,7 +7,7 @@ rule compile_report:
         # table is where the variant survives.
         scenario_table=lookup(dpath="inputs/scenarios", within=config),
         # Emission factors, freight legs, the grid fee, and the capex and
-        # lifetime quotes the cost leaves are split on, merged exactly as the
+        # financing periods the cost leaves are split on, merged exactly as the
         # solve merged them, so a leaf is split on the numbers that priced it.
         assumptions_base=lookup(dpath="inputs/assumptions", within=config),
         assumptions_overlay=optional("config/overlays/{scenario}.yaml"),

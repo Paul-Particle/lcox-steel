@@ -353,7 +353,7 @@ def spec(assumptions: dict) -> list:
     add("ironmaking_plant_capex", "Ironmaking plant — capital", "#33434D",
         [(f"capex quote, {label.lower()}",
           f"{assumptions[link]['capex_per_t_per_year_eur']:,.0f} €/(t·yr), "
-          f"{assumptions[link]['lifetime_years']:.0f} y")
+          f"{assumptions[link]['financing_period']:.0f} y")
          for link, label in IRONMAKING_PLANTS] + [wacc_line])
     add("ironmaking_plant_fom", "Ironmaking plant — fixed O&M", "#5A6B77",
         [(f"fixed opex, {label.lower()}",
@@ -369,7 +369,7 @@ def spec(assumptions: dict) -> list:
         capex_colour, om_colour = shades[link]
         add(f"{stem}_capex", f"{label} — capital", capex_colour,
             [("capex quote", f"{plant['capex_per_t_per_year_eur']:,.0f} €/(t·yr)"),
-             ("lifetime", f"{plant['lifetime_years']:.0f} y"), wacc_line])
+             ("financing period", f"{plant['financing_period']:.0f} y"), wacc_line])
         add(f"{stem}_fom", f"{label} — fixed O&M", om_colour,
             [("fixed opex", f"{plant['opex_per_t_per_year_eur']:,.1f} €/(t·yr)"),
              ("as a share of capex",
@@ -391,7 +391,7 @@ def spec(assumptions: dict) -> list:
     el_cfg = assumptions["electrolyser"]
     add("electrolyser_capex", "Electrolyser — capital", "#6FA875",
         [("capex quote", f"{el_cfg['capex_per_mw_eur'] / 1e6:,.2f} M€/MW"),
-         ("lifetime", f"{el_cfg['lifetime_years']:.0f} y"), wacc_line,
+         ("financing period", f"{el_cfg['financing_period']:.0f} y"), wacc_line,
          ("efficiency", f"{el_cfg['efficiency_kwh_per_kg']:,.0f} kWh/kg H₂")])
     add("electrolyser_fom", "Electrolyser — fixed O&M", "#91C096",
         [("fixed opex", f"{el_cfg['opex_per_mw_per_year_eur'] / 1e3:,.0f} k€/MW·yr")])
@@ -402,7 +402,7 @@ def spec(assumptions: dict) -> list:
     buffer = assumptions["h2_buffer"]
     add("h2_buffer", "H₂ buffer store", "#70D2F0",
         [("capex quote", f"{buffer['capex_per_mwh_eur']:,.0f} €/MWh LHV"),
-         ("lifetime", f"{buffer['lifetime_years']:.0f} y"), wacc_line])
+         ("financing period", f"{buffer['financing_period']:.0f} y"), wacc_line])
 
     res_colours = {"solar": ("#0A5680", "#3E7CA3"), "wind_onshore": ("#0E6FA4", "#4B93BF"),
                    "wind_offshore": ("#0293D2", "#57B6E2")}
@@ -414,14 +414,14 @@ def spec(assumptions: dict) -> list:
         capex_colour, om_colour = res_colours[stem]
         add(f"res_{stem}_capex", f"{label} — capital", capex_colour,
             [("capex quote", f"{cfg['capex_per_mw_eur'] / 1e6:,.2f} M€/MW"),
-             ("lifetime", f"{cfg['lifetime_years']:.0f} y"), wacc_line])
+             ("financing period", f"{cfg['financing_period']:.0f} y"), wacc_line])
         add(f"res_{stem}_fom", f"{label} — fixed O&M", om_colour,
             [("fixed opex", f"{cfg['opex_per_mw_per_year_eur'] / 1e3:,.0f} k€/MW·yr")])
 
     battery = assumptions["battery"]
     add("battery_power_capex", "Battery — power capacity, capital", "#D75674",
         [("capex quote", f"{battery['capex_per_mw_eur'] / 1e6:,.2f} M€/MW"),
-         ("lifetime", f"{battery['lifetime_years']:.0f} y"), wacc_line])
+         ("financing period", f"{battery['financing_period']:.0f} y"), wacc_line])
     add("battery_energy_capex", "Battery — energy capacity, capital", "#E58AA0",
         [("capex quote", f"{battery['capex_per_mwh_eur'] / 1e6:,.2f} M€/MWh"),
          ("duration", "sized by the optimiser"),
@@ -430,7 +430,7 @@ def spec(assumptions: dict) -> list:
     grid = assumptions["grid"]
     add("grid_connection_capex", "Grid connection — capital", "#71828F",
         [("capex quote", f"{grid['connection_capex_eur_per_mw'] / 1e3:,.0f} k€/MW"),
-         ("lifetime", f"{grid['connection_lifetime_years']:.0f} y"), wacc_line])
+         ("financing period", f"{grid['connection_financing_period']:.0f} y"), wacc_line])
     add("grid_capacity_fee", "Grid connection — capacity charge", "#98A5AE",
         [("capacity charge (Leistungspreis)",
           f"{grid['fee_eur_per_mw_per_year'] / 1e3:,.0f} k€/MW·yr")])
@@ -443,7 +443,7 @@ def spec(assumptions: dict) -> list:
     destination = assumptions["destination"]
     add("destination_grid_connection_capex", "Destination grid connection — capital", "#0293D2",
         [("capex quote", f"{grid['connection_capex_eur_per_mw'] / 1e3:,.0f} k€/MW"),
-         ("lifetime", f"{grid['connection_lifetime_years']:.0f} y")])
+         ("financing period", f"{grid['connection_financing_period']:.0f} y")])
     add("destination_grid_capacity_fee", "Destination grid connection — capacity charge", "#3AA9DB",
         [("capacity charge (Leistungspreis)",
           f"{grid['fee_eur_per_mw_per_year'] / 1e3:,.0f} k€/MW·yr")])
@@ -460,8 +460,8 @@ def spec(assumptions: dict) -> list:
 
     add("iron_or_hbi_store", "Iron / HBI stockpile", "#D75674",
         [("capex quote", f"{assumptions['iron_store']['capex_per_t_eur']:,.0f} €/t"),
-         ("lifetime", f"{assumptions['iron_store']['lifetime_years']:.0f} y")])
+         ("financing period", f"{assumptions['iron_store']['financing_period']:.0f} y")])
     add("steel_store", "Steel inventory", "#EE8DA3",
         [("capex quote", f"{assumptions['steel_store']['capex_per_t_eur']:,.0f} €/t"),
-         ("lifetime", f"{assumptions['steel_store']['lifetime_years']:.0f} y")])
+         ("financing period", f"{assumptions['steel_store']['financing_period']:.0f} y")])
     return entries

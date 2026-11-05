@@ -34,11 +34,11 @@ RENAMED_SOURCES = {
     "ew.el_mwh_per_t": "ewin.el_mwh_per_t",
     "ew.ore_eur_per_t": "ewin.ore_eur_per_t_electrolytic_iron",
     "briquetting.el_mwh_per_t": "briquetting.el_mwh_per_t_hbi",
-    **{f"res.{tech}.lifetime_years": "res.financing_period" for tech in ("wind-onshore", "solar", "wind-offshore")},
-    "electrolyser.lifetime_years": "electrolyser.financing_period",
-    "battery.lifetime_years": "battery.financing_period",
-    "h2_buffer.lifetime_years": "h2_buffer.financing_period",
-    **{f"{plant}.lifetime_years": "IS.financing_period" for plant in ("dri-h2", "dri-mix", "dri-ng", "eaf", "moe", "ew")},
+    **{f"res.{tech}.financing_period": "res.financing_period" for tech in ("wind-onshore", "solar", "wind-offshore")},
+    "electrolyser.financing_period": "electrolyser.financing_period",
+    "battery.financing_period": "battery.financing_period",
+    "h2_buffer.financing_period": "h2_buffer.financing_period",
+    **{f"{plant}.financing_period": "IS.financing_period" for plant in ("dri-h2", "dri-mix", "dri-ng", "eaf", "moe", "ew")},
     **{f"emissions.electricity_t_co2e_per_mwh.{carrier}.combustion":
        f"emissions.electricity_t_co2e_per_mwh.{carrier}.combustion" for carrier in CARRIERS},
 }
@@ -61,8 +61,8 @@ SHARED_SOURCES = {
     "dri-mix.el_mwh_per_t": "dri_ng.el_mwh_per_t",
     "iron_store.capex_per_t_eur": "iron_steel_store.capex_eur_per_t",
     "steel_store.capex_per_t_eur": "iron_steel_store.capex_eur_per_t",
-    "iron_store.lifetime_years": "iron_steel_store.financing_period",
-    "steel_store.lifetime_years": "iron_steel_store.financing_period",
+    "iron_store.financing_period": "iron_steel_store.financing_period",
+    "steel_store.financing_period": "iron_steel_store.financing_period",
     "transport.sea.iron.eur_per_t": "shipping.cost_eur_per_t",
     "transport.sea.steel.eur_per_t": "shipping.cost_eur_per_t",
     "transport.sea.iron.eur_per_t_km": "shipping.cost_eur_per_t_per_km",
@@ -107,7 +107,7 @@ UNREAD_ROWS = {
 #   "battery.opex_per_mwh_per_year_eur"
 #   "briquetting.capex_per_t_per_year_eur"
 #   "briquetting.opex_per_t_per_year_eur"
-#   "briquetting.lifetime_years"
+#   "briquetting.financing_period"
 #   "briquetting.yield_t_per_t"
 #   "eaf.consumables_eur_per_t"
 #   "plant.steel_mt_per_year"

@@ -633,8 +633,9 @@ REPORT_FIELDS = {
     "battery_discharged_gwh": ZERO,
     # Equivalent full cycles: what it gave back over its energy capacity, so two
     # half cycles count as one. Blank without a battery, as there is nothing to
-    # divide by. The model sets a lifetime in years but no cycle limit, so this
-    # is what says whether that lifetime is plausible.
+    # divide by. The model annualises the battery over a financing period in
+    # years but sets no cycle limit, so this is what says whether that period is
+    # plausible as a lifetime.
     "battery_cycles_per_year": UNDEFINED,
 
     # Emissions from the energy a run used. Accounting only — none of it reaches

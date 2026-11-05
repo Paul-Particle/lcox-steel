@@ -585,7 +585,7 @@ def _fixed_om_share(wacc: float, cfg: dict, capex_key: str, opex_key: str) -> fl
     capacity, so the share carries over unchanged to the annual cost of whatever
     the solve went on to build.
     """
-    annual_capex = annuity_factor(wacc, cfg["lifetime_years"]) * cfg[capex_key]
+    annual_capex = annuity_factor(wacc, cfg["financing_period"]) * cfg[capex_key]
     total = annual_capex + cfg[opex_key]
     return cfg[opex_key] / total if total else 0.0
 
@@ -745,7 +745,7 @@ def _leaf_breakdown(
     def split_connection(generator: str, wacc: float, group_total: float, prefix: str) -> None:
         connection = generator_capital(generator)
         if connection:
-            annual_capex = (annuity_factor(wacc, grid_cfg["connection_lifetime_years"])
+            annual_capex = (annuity_factor(wacc, grid_cfg["connection_financing_period"])
                             * grid_cfg["connection_capex_eur_per_mw"])
             yearly_fee = grid_cfg["fee_eur_per_mw_per_year"]
             fee_share = yearly_fee / (annual_capex + yearly_fee) if (annual_capex + yearly_fee) else 0.0
@@ -903,7 +903,7 @@ def _leaf_breakdown(
 
         # -- the levelised cost of the iron at the plant gate: every yearly euro
         # inside a line round the ironmaking asset, capital already annualised at
-        # its own WACC and lifetime, over the iron the shaft or cells made. The
+        # its own WACC and financing period, over the iron the shaft or cells made. The
         # electricity is the iron's share above, so the electrolyser's power is
         # counted there and not again with the hydrogen. A store goes with what
         # it holds: the iron's into the iron, the briquettes' into the briquettes.
@@ -1011,7 +1011,7 @@ def _leaf_breakdown(
     # -- the inputs behind the split, so a cost can be checked against them
     for link in PROCESS_LINKS:
         fields[f"annuity_factor_{field_stem(link)}"] = annuity_factor(
-            wacc_of(link), assumptions[link]["lifetime_years"]
+            wacc_of(link), assumptions[link]["financing_period"]
         )
     return fields
 
@@ -1059,7 +1059,7 @@ def _capacity_fee_share(grid_cfg: dict, wacc: float) -> float:
     A connection's `capital_cost` is its annuitised capex plus the fee per MW and
     year, so the share carries over to whatever size the solve built.
     """
-    annual_capex = annuity_factor(wacc, grid_cfg["connection_lifetime_years"]) * grid_cfg["connection_capex_eur_per_mw"]
+    annual_capex = annuity_factor(wacc, grid_cfg["connection_financing_period"]) * grid_cfg["connection_capex_eur_per_mw"]
     yearly_fee = grid_cfg["fee_eur_per_mw_per_year"]
     return yearly_fee / (annual_capex + yearly_fee) if (annual_capex + yearly_fee) else 0.0
 

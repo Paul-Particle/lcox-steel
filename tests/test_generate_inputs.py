@@ -37,7 +37,7 @@ read_with = lambda path, spec: read_workbook_value(WORKBOOK_ROWS, path, spec)
 
 
 def test_a_key_takes_its_row():
-    assert read_with("plant.lifetime_years", "plant.lifetime") == 20
+    assert read_with("plant.financing_period", "plant.lifetime") == 20
     assert read_with("plant.capex_eur_per_t", "plant.capex_eur_high") == 2000
 
 
@@ -53,7 +53,7 @@ def test_a_currency_the_key_does_not_name_stops_the_build():
     with pytest.raises(ValueError, match="currency"):
         read_with("plant.capex_eur_per_t", "plant.capex_usd_base")
     with pytest.raises(ValueError, match="currency"):
-        read_with("plant.lifetime_years", "plant.capex_eur_base")
+        read_with("plant.financing_period", "plant.capex_eur_base")
     with pytest.raises(ValueError, match="currency"):
         read_with("plant.capex_eur_per_t", "plant.lifetime")
 
