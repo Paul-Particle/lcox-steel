@@ -11,8 +11,8 @@ rule make_area_geometry:
         # and is dissolved from Admin 1; any other area is its Admin 0 country.
         branch(
             lookup(dpath="areas/{area}/admin1_names", within=config, default=None),
-            then="data/shapes/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.zip",
-            otherwise="data/shapes/ne_110m_admin_0_countries/ne_110m_admin_0_countries.zip",
+            then=NATURAL_EARTH_STATES,
+            otherwise=NATURAL_EARTH_COUNTRIES,
         ),
     output:
         "resources/shapes/{area}_geo.parquet",
@@ -38,7 +38,7 @@ rule make_offshore_geometry:
         area=COUNTRY_AREAS,
     input:
         regions="resources/shapes/{area}_geo.parquet",
-        offshore_zone="data/shapes/offshore_zones/eez_v12.zip",
+        offshore_zone=EEZ_ZONES,
     output:
         "resources/shapes/{area}_offshore_geo.parquet",
     log:
@@ -58,8 +58,8 @@ rule make_zone_offshore_geometry:
     wildcard_constraints:
         area=SUBNATIONAL_AREAS,
     input:
-        admin1="data/shapes/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.zip",
-        offshore_zone="data/shapes/offshore_zones/eez_v12.zip",
+        admin1=NATURAL_EARTH_STATES,
+        offshore_zone=EEZ_ZONES,
     output:
         "resources/shapes/{area}_offshore_geo.parquet",
     log:
