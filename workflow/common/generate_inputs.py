@@ -325,8 +325,8 @@ def main() -> None:
         scenarios = pd.concat([scenarios, template_scenarios], ignore_index=True)
 
     is_generated = lambda path: path.read_text().startswith(f"# {GENERATED_NOTE}")
-    hand_kept = sorted(scenario for scenario, overlay in overlays.items()
-                       if overlay and (OVERLAYS_DIR / f"{scenario}.yaml").exists()
+    hand_kept = sorted(scenario for scenario in overlays
+                       if (OVERLAYS_DIR / f"{scenario}.yaml").exists()
                        and not is_generated(OVERLAYS_DIR / f"{scenario}.yaml"))
     if hand_kept:
         raise ValueError(f"the overlays of {hand_kept} in {OVERLAYS_DIR} are kept by hand; "

@@ -5,10 +5,12 @@ data/assumptions/Assumptions_yaml_inputs.xlsx, indexed by its YAML key column.
 """
 
 import json
+import sys
 
 import pandas as pd
 import pytest
 
+from common import generate_inputs
 from common._workbook_translation import WORKBOOK_SOURCES, translate_override
 from common.generate_inputs import (
     REGIONAL_SOURCES,
@@ -179,3 +181,19 @@ def test_unknown_or_contradicting_terms_stop_the_build():
     assert "unknown power_supply 'grid_only'" in message
     assert "scenario_group 'domestic' with iron in AUS and steel in ESP" in message
     assert "national-average on the grid of an area that runs per zone" in message
+
+
+def test_an_overlay_kept_by_hand_under_a_generated_scenario_name_stops_the_build(tmp_path, monkeypatch):
+    """Whatever the generated overlay holds, the solve would otherwise read the hand-kept one."""
+    overlays_dir, generated_dir = tmp_path / "overlays", tmp_path / "generated"
+    overlays_dir.mkdir()
+    (overlays_dir / "domestic-ESP-moe-eaf-solar-p95.yaml").write_text("finance:\n  origin_wacc: 0.05\n")
+    monkeypatch.setattr(generate_inputs, "OVERLAYS_DIR", overlays_dir)
+    monkeypatch.setattr(generate_inputs, "GENERATED_DIR", generated_dir)
+    monkeypatch.setattr(generate_inputs, "ASSUMPTIONS_PATH", generated_dir / "assumptions.yaml")
+    monkeypatch.setattr(generate_inputs, "SCENARIOS_PATH", generated_dir / "scenarios.csv")
+    monkeypatch.setattr(sys, "argv", ["generate_inputs"])
+
+    with pytest.raises(ValueError, match=r"\['domestic-ESP-moe-eaf-solar-p95'\] .* are kept by hand"):
+        generate_inputs.main()
+    assert not generated_dir.exists()
