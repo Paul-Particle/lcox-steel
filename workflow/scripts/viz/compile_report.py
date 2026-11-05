@@ -7,7 +7,6 @@ the solve stamped into the network, so a number stays tied to its inputs. What
 the files look like is common/_report_schema.py's business.
 """
 
-import calendar
 import logging
 import re
 from pathlib import Path
@@ -34,7 +33,9 @@ from common._report_schema import (
     field_stem,
     write_report_file,
 )
-from scripts.solve._helpers_solve import annuity_factor, deep_merge, find_transport_legs, read_run_inputs
+from scripts.solve._helpers_solve import (
+    annuity_factor, deep_merge, find_transport_legs, mean_year_hours, read_run_inputs,
+)
 
 if "snakemake" not in globals():
     from common._stubs import snakemake
@@ -61,13 +62,6 @@ def _carrier_key(carrier: str) -> str:
     `build_network._add_generators` resolves them against the res assumptions.
     """
     return field_stem(re.sub(r"_(east|west)_\d+$|_az\d+$", "", carrier))
-
-
-def _hours_per_year(snapshots: pd.DatetimeIndex) -> float:
-    """Mean length in hours of the calendar years the snapshots fall in."""
-    year_hours = [8784.0 if calendar.isleap(year) else 8760.0 for year in snapshots.year.unique()]
-    hours_per_year = float(np.mean(year_hours))
-    return hours_per_year
 
 
 def _grid_intensity(
@@ -230,7 +224,7 @@ def _emissions_breakdown(
     route — the destination's, which is a grid and nothing else.
     """
     factors = emissions_cfg[emissions_cfg["basis"]]["electricity_t_co2e_per_mwh"]
-    annual = _hours_per_year(n.snapshots) / len(n.snapshots)
+    annual = mean_year_hours(n.snapshots) / len(n.snapshots)
 
     # PyPSA's netCDF export drops a time-varying column whose every value is the
     # default, so a component that never ran comes back missing from the
@@ -436,7 +430,7 @@ def _h2_produced_kg(n: pypsa.Network) -> float:
     t_hours = len(n.snapshots)
     # PyPSA Link sign convention: p1 < 0 when the link injects power into bus1,
     # so -p1 is the (positive) H2 LHV output on the hydrogen bus.
-    h2_mwh_lhv = -float(n.links_t.p1["electrolyser"].sum()) * (_hours_per_year(n.snapshots) / t_hours)
+    h2_mwh_lhv = -float(n.links_t.p1["electrolyser"].sum()) * (mean_year_hours(n.snapshots) / t_hours)
     return h2_mwh_lhv / (H2_LHV_KWH_PER_KG / 1000.0)
 
 
@@ -471,7 +465,7 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
     of these groups, so breakdown and total cannot drift apart.
     """
     t_hours = len(n.snapshots)
-    annual_scale = _hours_per_year(n.snapshots) / t_hours
+    annual_scale = mean_year_hours(n.snapshots) / t_hours
 
     def link_capital(names) -> float:
         idx = [l for l in names if l in n.links.index and n.links.at[l, "p_nom_extendable"]]
@@ -583,7 +577,7 @@ def _leaf_breakdown(
     `losses_mwh`, and the generation both are supplied out of in
     `generation_mwh`.
     """
-    annual_scale = _hours_per_year(n.snapshots) / len(n.snapshots)
+    annual_scale = mean_year_hours(n.snapshots) / len(n.snapshots)
     # The furnace is financed where it stands, everything before it where the
     # iron is made, exactly as build_network financed them. It stands at the
     # destination when it buys that market's power.
@@ -869,7 +863,7 @@ def extract_summary(
     that melts its iron at home.
     """
     breakdown = _cost_breakdown(n)
-    hours_per_year = _hours_per_year(n.snapshots)
+    hours_per_year = mean_year_hours(n.snapshots)
     summary = {
         "scenario": scenario_name,
         **run,

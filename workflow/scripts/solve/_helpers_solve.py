@@ -1,9 +1,17 @@
 """Financial, sizing and config utilities for the steel model."""
 
+import calendar
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+
+def mean_year_hours(snapshots: pd.DatetimeIndex) -> float:
+    """Mean length in hours of the calendar years the snapshots fall in."""
+    year_hours = [8784.0 if calendar.isleap(year) else 8760.0 for year in snapshots.year.unique()]
+    hours_per_year = float(np.mean(year_hours))
+    return hours_per_year
 
 
 def find_transport_legs(distances: dict, origin: str, destination: str, areas: dict) -> dict:

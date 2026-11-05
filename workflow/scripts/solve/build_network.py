@@ -67,7 +67,7 @@ import pandas as pd
 import pypsa
 import yaml
 
-from scripts.solve._helpers_solve import annuity_factor, deep_merge, haversine_km
+from scripts.solve._helpers_solve import annuity_factor, deep_merge, haversine_km, mean_year_hours
 
 from common._constants import H2_LHV_KWH_PER_KG, HOURS_PER_YEAR
 
@@ -202,6 +202,8 @@ def build_network(
 
     n = pypsa.Network()
     n.set_snapshots(cf_timeseries.index)
+    # Capital costs are one year's annuity, so the window's hours count as one average year.
+    n.snapshot_weightings["objective"] = mean_year_hours(n.snapshots) / len(n.snapshots)
 
     if multisite:
         res_techs = list(dict.fromkeys(tech for _, tech in cf_timeseries.columns))
