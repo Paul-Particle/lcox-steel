@@ -20,6 +20,7 @@ RENAMED_SOURCES = {
     "res.wind-offshore.opex_per_mw_per_year_eur": "res.wind-offshore.opex_eur_per_mw_per_year_base",
     "electrolyser.capex_per_mw_eur": "electrolyser.capex_eur_per_mw_base",
     "electrolyser.opex_per_mw_per_year_eur": "electrolyser.opex_eur_per_mw_per_year_base",
+    "electrolyser.varopex_eur_per_mwh_h2": "electrolyser.varopex_eur_per_mwh_h2_base",
     "electrolyser.efficiency_kwh_per_kg": "electrolyser.efficiency_kwh_per_kg",
     "battery.efficiency_roundtrip": "battery.efficiency_roundtrip",
     "h2_buffer.capex_per_mwh_eur": "h2_buffer.capex_eur_per_mwh",
@@ -102,7 +103,6 @@ WORKBOOK_SOURCES = RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_
 #   "eaf.consumables_eur_per_t"
 #   "plant.steel_mt_per_year"
 #   "natural_gas.price_eur_per_mwh"  (the workbook gives only its low and high)
-#   "electrolyser.varopex_eur_per_mwh_el"  (the workbook gives it per MWh of H2: a model change)
 # Rows held at 0 for keys the model does not have (a minimum load: to be discussed):
 #   "eaf.p_min_pu", "ewin.p_min_pu"
 

@@ -69,7 +69,7 @@ SECTIONS = [
       ("electrolyser.opex_per_mw_per_year_eur", "Electrolyser fixed opex", "€/MW/yr"),
       ("electrolyser.lifetime_years", "Electrolyser lifetime", "years"),
       ("electrolyser.efficiency_kwh_per_kg", "Electrolyser efficiency", "kWh/kg H2"),
-      ("electrolyser.varopex_eur_per_mwh_el", "Electrolyser variable opex", "€/MWh el"),
+      ("electrolyser.varopex_eur_per_mwh_h2", "Electrolyser variable opex", "€/MWh H2"),
       ("battery.capex_per_mw_eur", "Battery power capex", "€/MW"),
       ("battery.capex_per_mwh_eur", "Battery energy capex", "€/MWh"),
       ("battery.lifetime_years", "Battery lifetime", "years"),

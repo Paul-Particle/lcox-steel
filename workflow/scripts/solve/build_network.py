@@ -513,8 +513,9 @@ def _add_electrolyser(
         p_nom_extendable=True,
         efficiency=el_efficiency,
         capital_cost=cap_cost,
-        # Variable opex (water, consumables) per MWh electricity input (p0 side).
-        marginal_cost=el_cfg.get("varopex_eur_per_mwh_el", 0.0),
+        # Variable opex (water, consumables) is quoted per MWh of H2 out; the link
+        # charges marginal cost on what goes in, so it pays that times the efficiency.
+        marginal_cost=el_cfg["varopex_eur_per_mwh_h2"] * el_efficiency,
         **_ramp_limits(el_cfg),
     )
 

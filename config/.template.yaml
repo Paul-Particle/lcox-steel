@@ -52,9 +52,9 @@ electrolyser:
   opex_per_mw_per_year_eur: 18_566   # 2 % of capex
   lifetime_years: 30
   efficiency_kwh_per_kg: 48.3
-  # Variable opex per MWh electricity input (water, consumables); applied as
-  # marginal_cost on the link's p0 side.
-  varopex_eur_per_mwh_el: 1.0
+  # Variable opex per MWh of H2 out (water, consumables), so it does not move with
+  # the efficiency.
+  varopex_eur_per_mwh_h2: 0.71
 
 battery:
   # Duration is not set here: energy and power capacity are priced separately

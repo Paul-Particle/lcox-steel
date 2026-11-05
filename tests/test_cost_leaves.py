@@ -193,6 +193,14 @@ def test_a_blended_shaft_pays_for_its_ore(route, assumptions):
             == pytest.approx(breakdown["ore_consumables"] / steel_t, rel=1e-9))
 
 
+def test_the_electrolyser_pays_its_water_per_mwh_of_hydrogen_out(assumptions):
+    """Quoted per MWh of H2, so a better efficiency does not change the water bill per MWh of H2."""
+    electrolyser = _solved("h2-dri-eaf", assumptions).links.loc["electrolyser"]
+
+    assert electrolyser["marginal_cost"] / electrolyser["efficiency"] == pytest.approx(
+        assumptions["electrolyser"]["varopex_eur_per_mwh_h2"])
+
+
 @pytest.mark.parametrize("group", ["ladle_metallurgy", "process"])
 def test_a_cost_group_with_nowhere_to_go_is_refused(group, assumptions):
     """A cost group no leaf accounts for stops the report.

@@ -103,6 +103,8 @@ SENSITIVITY_ROWS = {
                                                    "high": "res.wind-offshore.opex_eur_per_mw_per_year_high"},
     "natural_gas.price_eur_per_mwh": {"low": "natural_gas.price_eur_per_mwh_low",
                                       "high": "natural_gas.price_eur_per_mwh_high"},
+    "electrolyser.varopex_eur_per_mwh_h2": {"low": "electrolyser.varopex_eur_per_mwh_h2_low",
+                                            "high": "electrolyser.varopex_eur_per_mwh_h2_high"},
 }
 
 

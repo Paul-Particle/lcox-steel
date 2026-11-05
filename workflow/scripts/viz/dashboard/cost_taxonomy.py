@@ -357,7 +357,7 @@ def spec(assumptions: dict) -> list:
     add("electrolyser_fom", "Electrolyser — fixed O&M", "#91C096",
         [("fixed opex", f"{el_cfg['opex_per_mw_per_year_eur'] / 1e3:,.0f} k€/MW·yr")])
     add("electrolyser_water", "Electrolyser — water & variable opex", "#B4D4B8",
-        [("variable opex", f"{el_cfg['varopex_eur_per_mwh_el']:,.2f} €/MWh electricity")])
+        [("variable opex", f"{el_cfg['varopex_eur_per_mwh_h2']:,.2f} €/MWh H₂")])
     # Quoted in €/MWh rather than k€/MWh: the salt-cavern sensitivity drops this from
     # 10,000 to 350, which rounds away entirely on the larger unit.
     buffer = assumptions["h2_buffer"]
