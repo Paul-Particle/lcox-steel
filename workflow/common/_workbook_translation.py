@@ -79,22 +79,30 @@ MODEL_NAMED_SOURCES = {
     "dri-mix.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
 }
 WORKBOOK_SOURCES = RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_NAMED_SOURCES
-# Keys the model needs and the workbook gives no value for; the template's value
-# stands in, and the generator warns until the workbook gives one. Where the workbook
-# has a row, it holds 0 in both value and unit and is left unread.
-#   "dri-h2.p_min_pu": "dri.p_min_pu",
-#   "dri-mix.p_min_pu": "dri.p_min_pu",
-#   "dri-ng.p_min_pu": "dri.p_min_pu",
-#   "moe.p_min_pu": "moe.p_min_pu",
-#   "steel_store.max_weeks": "steel_store.max_weeks",
-#   "grid.connection_capex_eur_per_mw": "grid.connection_capex_eur_per_mw",
-#   "grid.connection_lifetime_years": "grid.connection_lifetime_years",
-#   "grid.fee_eur_per_mw_per_year": "grid.fee_eur_per_mw_per_year",
-#   "grid.fee_eur_per_mwh": "grid.fee_eur_per_mwh",
-#   "transmission.cost_per_mw_per_km_eur": "transmission.cost_per_mw_per_km_eur",
-#   "transmission.lifetime_years": "transmission.lifetime_years",
-#   "transmission.losses_pct_per_1000km": "transmission.losses_pct_per_1000km",
-#   "transmission.indirect_route_factor": "transmission.indirect_route_factor",
+# Workbook row -> why the generator does not read it. A row the generator neither reads
+# nor finds here stops it.
+UNREAD_ROWS = {
+    # Held at 0 in both value and unit: not provided yet, so the template's value stands
+    # in and the generator warns. Once given, each is read under the model key named.
+    **{row: f"not provided: {row}" for row in (
+        "steel_store.max_weeks",
+        "grid.connection_capex_eur_per_mw", "grid.connection_lifetime_years",
+        "grid.fee_eur_per_mw_per_year", "grid.fee_eur_per_mwh",
+        "transmission.cost_per_mw_per_km_eur", "transmission.lifetime_years",
+        "transmission.losses_pct_per_1000km", "transmission.indirect_route_factor")},
+    # Held at 0 in both value and unit; the template's minimum loads stand in where the
+    # model has one (dri-h2, dri-mix, dri-ng, moe).
+    **{row: "to be discussed: is a minimum load the right approach?"
+       for row in ("dri.p_min_pu", "moe.p_min_pu", "eaf.p_min_pu", "ewin.p_min_pu")},
+    "finance.res.eu_wacc": "to be discussed: a WACC of its own for the renewables",
+    "finance.res.noneu_wacc": "to be discussed: a WACC of its own for the renewables",
+    "dri_h2.ng_mwh_per_t": "to be discussed: natural gas into the H2 shaft?",
+    "eaf_hbi.iron_t_per_t_steel": "to be discussed: the iron ratio of the HBI charge, which repeats the DRI's",
+    "h2_buffer.fom_eur_per_mwh": "model change to make: fixed O&M on the hydrogen buffer, as on every other element",
+    "battery.max_hours": "the model does not use it: the optimiser sizes the battery's power and energy apart",
+}
+# Keys the model needs and the workbook has no row for; the template's value stands in,
+# and the generator warns until the workbook gives one:
 #   "anchor.min_capacity_mw"  (the anchor floor: https://github.com/Paul-Particle/lcox-steel/issues/47)
 #   "briquetting.capex_per_t_per_year_eur"
 #   "briquetting.opex_per_t_per_year_eur"
@@ -103,8 +111,6 @@ WORKBOOK_SOURCES = RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_
 #   "eaf.consumables_eur_per_t"
 #   "plant.steel_mt_per_year"
 #   "natural_gas.price_eur_per_mwh"  (the workbook gives only its low and high)
-# Rows held at 0 for keys the model does not have (a minimum load: to be discussed):
-#   "eaf.p_min_pu", "ewin.p_min_pu"
 
 # Model key -> its value where no scenario the workbook configures requires the key. NaN
 # stops any run that reads it; the carbon price is zero because no scenario prices carbon.

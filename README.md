@@ -419,10 +419,11 @@ reads the workbook's `assumptions_inputs` and `scenarios_clean` tabs and writes:
   A scenario that differs in nothing gets no overlay.
 
 It stops before writing anything if a row cannot be translated, listing each
-problem with the workbook rows that have it. How the workbook names keys and
-scenario vocabulary, as against the model, is in
-`workflow/common/_workbook_translation.py`; `--verbose` lists the backstop values
-the template supplies and the workbook rows left unused.
+problem with the workbook rows that have it. How the workbook names keys, as
+against the model, is in `workflow/common/_workbook_translation.py`; what the
+scenario tab's words mean is in the term tables of `generate_inputs.py`. Every workbook row is read or listed
+there in `UNREAD_ROWS` with the reason it is not; any other row stops the generator.
+`--verbose` lists the unread rows and their reasons.
 
 ### The demo
 

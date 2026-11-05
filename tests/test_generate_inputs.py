@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 from common import generate_inputs
-from common._workbook_translation import WORKBOOK_SOURCES, translate_override
+from common._workbook_translation import UNREAD_ROWS, WORKBOOK_SOURCES, translate_override
 from common.generate_inputs import (
     REGIONAL_SOURCES,
     SENSITIVITY_ROWS,
@@ -203,6 +203,20 @@ def test_the_template_values_standing_in_for_the_workbook_are_named_with_the_sce
     warning = next(record.message for record in caplog.records if "as the workbook gives none" in record.message)
     assert re.search(r"briquetting\.yield_t_per_t: \d+", warning)
     assert "finance.origin_wacc" not in warning
+
+
+def test_every_workbook_row_is_read_or_listed_with_why_it_is_not(outputs_in_tmp, monkeypatch):
+    """A row nobody accounted for stops the build, as does a listing the workbook or the reading has outgrown."""
+    without_battery_hours = {row: reason for row, reason in UNREAD_ROWS.items() if row != "battery.max_hours"}
+    monkeypatch.setattr(generate_inputs, "UNREAD_ROWS", without_battery_hours)
+    with pytest.raises(ValueError, match=r"\['battery.max_hours'\] are neither read nor listed"):
+        generate_inputs.main()
+
+    with_read_and_absent_rows = UNREAD_ROWS | {"moe.el_mwh_per_t": "", "moe.no_such_row": ""}
+    monkeypatch.setattr(generate_inputs, "UNREAD_ROWS", with_read_and_absent_rows)
+    with pytest.raises(ValueError, match=r"lists \['moe.el_mwh_per_t', 'moe.no_such_row'\]"):
+        generate_inputs.main()
+    assert not (outputs_in_tmp / "generated").exists()
 
 
 def test_an_override_naming_a_sensitivity_row_takes_that_level():

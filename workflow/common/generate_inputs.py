@@ -19,7 +19,8 @@ import pandas as pd
 import yaml
 
 from common._paths import REPO_ROOT
-from common._workbook_translation import (RES_TECHS, VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION,
+from common._workbook_translation import (RES_TECHS, UNREAD_ROWS,
+                                          VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION,
                                           WORKBOOK_SOURCES, translate_override)
 
 log = logging.getLogger(__name__)
@@ -298,7 +299,7 @@ def main() -> None:
     parser.add_argument("workbook", nargs="?", type=Path, default=DEFAULT_WORKBOOK)
     parser.add_argument("--include-template", action="store_true",
                         help=f"also run the scenarios of {TEMPLATE_SCENARIOS_PATH.name}")
-    parser.add_argument("--verbose", "-v", action="store_true", help="also list the workbook rows not used")
+    parser.add_argument("--verbose", "-v", action="store_true", help="also list the workbook rows not read, and why")
     arguments = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     log.setLevel(logging.DEBUG if arguments.verbose else logging.INFO)
@@ -328,6 +329,13 @@ def main() -> None:
     mixed_units = sorted(path for path in named_rows if workbook_inputs.loc[rows_of_key(path), "unit"].nunique() > 1)
     if mixed_units:
         raise ValueError(f"the base, sensitivity and regional rows of {mixed_units} come in different units")
+    used_workbook_keys = {*WORKBOOK_SOURCES.values(), *(row for rows in named_rows.values() for row in rows.values())}
+    unaccounted_rows = sorted(set(workbook_inputs.index) - used_workbook_keys - set(UNREAD_ROWS))
+    if unaccounted_rows:
+        raise ValueError(f"the workbook rows {unaccounted_rows} are neither read nor listed in UNREAD_ROWS")
+    stale_unread_rows = sorted((set(UNREAD_ROWS) & used_workbook_keys) | (set(UNREAD_ROWS) - set(workbook_inputs.index)))
+    if stale_unread_rows:
+        raise ValueError(f"UNREAD_ROWS lists {stale_unread_rows}, which the generator reads or the workbook lacks")
     template_values = flatten(template)
     base_values = workbook_values | VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION
     unknown_paths = sorted((set(base_values) | set(named_rows)) - set(template_values))
@@ -375,13 +383,12 @@ def main() -> None:
     for stale_overlay in stale_overlays:
         stale_overlay.unlink()
 
-    used_workbook_keys = {*WORKBOOK_SOURCES.values(), *(row for rows in named_rows.values() for row in rows.values())}
     log.info(f"{len(workbook_values)} values from {arguments.workbook.name}, "
              f"{len(VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION)} for keys its scenarios do not require, {len(backstop_counts)} backstop "
              f"values from {TEMPLATE_PATH.name}; {scenarios['scenario'].nunique()} scenarios, "
              f"{len(scenarios)} scenario rows, {sum(map(bool, overlays.values()))} overlays; "
              f"{len(changed)} files written, {len(stale_overlays)} stale overlays removed")
-    log.debug("workbook rows not used:\n  " + "\n  ".join(sorted(set(workbook_inputs.index) - used_workbook_keys)))
+    log.debug("workbook rows not read:\n  " + "\n  ".join(f"{row}: {reason}" for row, reason in UNREAD_ROWS.items()))
 
 
 if __name__ == "__main__":
