@@ -138,6 +138,21 @@ def test_the_terms_decide_the_route_and_the_series_each_run_draws_on():
                                       ("QLD1", "moe-eaf", "grid", "emissions", "QLD1")]
 
 
+def test_a_grid_only_run_draws_on_its_grids_alone_and_names_no_renewables():
+    """Run per zone as res_grid is; a renewables column on such a row is a contradiction."""
+    no_renewables = {"power_supply": "grid", "res_configuration": None, "res_technology": None,
+                     "site_variant": None}
+    scenarios, _ = build_from_rows({"grid-import": no_renewables})
+
+    lines = list(scenarios[["run", "route", "tech", "variant", "area"]].itertuples(index=False, name=None))
+    assert lines == [("NSW1-ESP", "moe-eaf-export", "grid", "emissions", "NSW1"),
+                     ("NSW1-ESP", "moe-eaf-export", "grid", "emissions", "ESP"),
+                     ("QLD1-ESP", "moe-eaf-export", "grid", "emissions", "QLD1"),
+                     ("QLD1-ESP", "moe-eaf-export", "grid", "emissions", "ESP")]
+    with pytest.raises(ValueError, match="res_technology on power_supply 'grid', which has no renewables"):
+        build_from_rows({"grid-with-solar": {**no_renewables, "res_technology": "solar"}})
+
+
 def test_a_mix_is_built_around_its_anchor_with_the_partner_cells_it_names_and_skipped_without():
     mix = {"res_configuration": "mix", "res_technology": None, "res_anchor": "wind-onshore"}
     scenarios, _ = build_from_rows({"named": {**mix, "res_partner_cells": 3},
