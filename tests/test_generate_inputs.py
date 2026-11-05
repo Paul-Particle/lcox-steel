@@ -14,10 +14,11 @@ from common import generate_inputs
 from common._workbook_translation import WORKBOOK_SOURCES, translate_override
 from common.generate_inputs import (
     REGIONAL_SOURCES,
+    SENSITIVITY_ROWS,
     build_scenarios,
     flatten,
     read_overrides,
-    resolve_sources,
+    read_workbook_value,
     set_nested,
 )
 
@@ -32,42 +33,33 @@ WORKBOOK_ROWS = pd.DataFrame(
 ).set_index("key")
 
 
-def resolve_with(sources):
-    return resolve_sources(WORKBOOK_ROWS, sources)
+read_with = lambda path, spec: read_workbook_value(WORKBOOK_ROWS, path, spec)
 
 
-def test_values_are_combined_and_kept_with_their_alternatives():
-    resolved = resolve_with({
-        "plant.capex_eur_per_t": {"base": "plant.capex_eur_base", "high": "plant.capex_eur_high"},
-        "plant.opex_eur_per_t": {"mean": ["plant.capex_eur_base", "plant.capex_eur_high"]},
-        "plant.total_mwh_per_t": {"sum": ["plant.heat_mwh", "plant.drive_mwh"]},
-        "plant.lifetime_years": "plant.lifetime",
-    })
-
-    assert resolved["plant.capex_eur_per_t"] == pytest.approx({"base": 1000, "high": 2000})
-    assert resolved["plant.opex_eur_per_t"] == pytest.approx({"default": 1500})
-    assert resolved["plant.total_mwh_per_t"] == pytest.approx({"default": 0.75})
-    assert resolved["plant.lifetime_years"] == {"default": 20}
+def test_a_key_takes_its_row_or_its_rows_combined():
+    assert read_with("plant.lifetime_years", "plant.lifetime") == 20
+    assert read_with("plant.opex_eur_per_t", {"mean": ["plant.capex_eur_base", "plant.capex_eur_high"]}) == 1500
+    assert read_with("plant.total_mwh_per_t", {"sum": ["plant.heat_mwh", "plant.drive_mwh"]}) == 0.75
 
 
 def test_a_missing_row_stops_the_build():
     with pytest.raises(KeyError, match="plant.capex_eur_per_t"):
-        resolve_with({"plant.capex_eur_per_t": "plant.capex_eur_low"})
+        read_with("plant.capex_eur_per_t", "plant.capex_eur_low")
 
 
 def test_rows_in_different_units_stop_the_build():
     with pytest.raises(ValueError, match="one unit"):
-        resolve_with({"plant.capex_eur_per_t": {"sum": ["plant.capex_eur_base", "plant.heat_mwh"]}})
+        read_with("plant.capex_eur_per_t", {"sum": ["plant.capex_eur_base", "plant.heat_mwh"]})
 
 
 def test_a_currency_the_key_does_not_name_stops_the_build():
     """The model is in EUR: a USD row, a EUR row under a key without `eur`, or the reverse is a wrong row."""
     with pytest.raises(ValueError, match="currency"):
-        resolve_with({"plant.capex_eur_per_t": "plant.capex_usd_base"})
+        read_with("plant.capex_eur_per_t", "plant.capex_usd_base")
     with pytest.raises(ValueError, match="currency"):
-        resolve_with({"plant.lifetime_years": "plant.capex_eur_base"})
+        read_with("plant.lifetime_years", "plant.capex_eur_base")
     with pytest.raises(ValueError, match="currency"):
-        resolve_with({"plant.capex_eur_per_t": "plant.lifetime"})
+        read_with("plant.capex_eur_per_t", "plant.lifetime")
 
 
 def test_overrides_survive_excel_curly_quotes():
@@ -75,11 +67,13 @@ def test_overrides_survive_excel_curly_quotes():
     assert read_overrides(float("nan")) == {}
 
 
-def test_workbook_override_keys_translate_to_model_keys_and_alternatives():
-    assert translate_override("res.solar.capex_eur_per_mw", "res.solar.capex_eur_per_mw_low", WORKBOOK_SOURCES) == [
-        ("res.solar.capex_per_mw_eur", "low")]
+def test_workbook_override_keys_translate_to_model_keys_and_row_names():
+    """A row named in a source table becomes its name; any other value passes through."""
+    assert translate_override("res.solar.capex_eur_per_mw", "res.solar.capex_eur_per_mw_low",
+                              WORKBOOK_SOURCES, SENSITIVITY_ROWS) == [("res.solar.capex_per_mw_eur", "low")]
     assert translate_override("electrolyser.capex_eur_per_mw", "electrolyser.capex_eur_per_mw_low",
-                              WORKBOOK_SOURCES) == [("electrolyser.capex_per_mw_eur", "electrolyser.capex_eur_per_mw_low")]
+                              WORKBOOK_SOURCES, SENSITIVITY_ROWS) == [
+        ("electrolyser.capex_per_mw_eur", "electrolyser.capex_eur_per_mw_low")]
 
 
 def test_one_workbook_key_reaches_every_model_key_it_feeds():
@@ -94,8 +88,8 @@ IMPORT_ROW = {
     "power_supply": "islanded_res", "res_configuration": "single", "res_technology": "solar", "res_anchor": None,
     "site_variant": "bestsite-p95", "start_date": 20250101, "end_date": 20251231, "sensitivity_overrides_JSON": "{}",
 }
-REGIONAL_ALTERNATIVES_BY_PATH = {path: {"noneu": 1.0, "aus": 1.0, "global": 1.0, "bra": 3.0, "eu": 2.0}
-                                 for path in REGIONAL_SOURCES}
+NAMED_INPUTS = ({path: {"noneu": 1.0, "aus": 1.0, "global": 1.0, "bra": 3.0, "eu": 2.0} for path in REGIONAL_SOURCES}
+                | {path: {"low": 5.0, "high": 7.0} for path in SENSITIVITY_ROWS})
 AREAS = {"AUS": {"zones": ["NSW1", "QLD1"]}, "ESP": {"market": "entsoe"}}
 
 
@@ -104,9 +98,9 @@ def build_from_rows(changes_by_scenario: dict) -> tuple[pd.DataFrame, dict]:
     scenario_rows = pd.DataFrame([{**IMPORT_ROW, "scenario_id": scenario, **changes}
                                   for scenario, changes in changes_by_scenario.items()])
     assumptions = {}
-    for path in REGIONAL_SOURCES:
+    for path in NAMED_INPUTS:
         set_nested(assumptions, path, 0.0)
-    scenarios, overlays = build_scenarios(scenario_rows, REGIONAL_ALTERNATIVES_BY_PATH, assumptions, AREAS)
+    scenarios, overlays = build_scenarios(scenario_rows, NAMED_INPUTS, assumptions, AREAS)
     flat_overlays = {scenario: flatten(overlay) for scenario, overlay in overlays.items()}
     return scenarios, flat_overlays
 
@@ -197,3 +191,12 @@ def test_an_overlay_kept_by_hand_under_a_generated_scenario_name_stops_the_build
     with pytest.raises(ValueError, match=r"\['domestic-ESP-moe-eaf-solar-p95'\] .* are kept by hand"):
         generate_inputs.main()
     assert not generated_dir.exists()
+
+
+def test_an_override_naming_a_sensitivity_row_takes_that_level():
+    _, overlays = build_from_rows({"solar-low-gas-high": {"sensitivity_overrides_JSON": json.dumps({
+        "res.solar.capex_eur_per_mw": "res.solar.capex_eur_per_mw_low",
+        "natural_gas.price_eur_per_mwh": "natural_gas.price_eur_per_mwh_high"})}})
+
+    assert overlays["solar-low-gas-high"]["res.solar.capex_per_mw_eur"] == 5.0
+    assert overlays["solar-low-gas-high"]["natural_gas.price_eur_per_mwh"] == 7.0

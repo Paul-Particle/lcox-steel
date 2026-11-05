@@ -9,10 +9,15 @@ CARRIERS = ("biomass", "brown_coal", "coal_gas", "energy_storage", "gas", "geoth
             "hydro", "hydro_reservoir", "hydro_river", "marine", "nuclear", "oil", "oil_shale", "other",
             "other_re", "peat", "pumped_storage", "solar", "waste", "wind_offshore", "wind_onshore")
 
-# Model key -> the workbook row(s) it is taken from: one key; {"sum" | "mean": [keys]};
-# or named alternatives, the first being the default.
+# Model key -> the workbook row(s) it is taken from: one row, or {"sum" | "mean": [rows]}.
 RENAMED_SOURCES = {
     "plant.h2_intensity_kg_per_t_dri": "dri_h2.kg_h2_per_t_dri",
+    "res.wind-onshore.capex_per_mw_eur": "res.wind-onshore.capex_eur_per_mw_base",
+    "res.wind-onshore.opex_per_mw_per_year_eur": "res.wind-onshore.opex_eur_per_mw_per_year_base",
+    "res.solar.capex_per_mw_eur": "res.solar.capex_eur_per_mw_base",
+    "res.solar.opex_per_mw_per_year_eur": "res.solar.opex_eur_per_mw_per_year_base",
+    "res.wind-offshore.capex_per_mw_eur": "res.wind-offshore.capex_eur_per_mw_base",
+    "res.wind-offshore.opex_per_mw_per_year_eur": "res.wind-offshore.opex_eur_per_mw_per_year_base",
     "electrolyser.capex_per_mw_eur": "electrolyser.capex_eur_per_mw_base",
     "electrolyser.opex_per_mw_per_year_eur": "electrolyser.opex_eur_per_mw_per_year_base",
     "electrolyser.efficiency_kwh_per_kg": "electrolyser.efficiency_kwh_per_kg",
@@ -72,19 +77,7 @@ MODEL_NAMED_SOURCES = {
     "dri-h2.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
     "dri-mix.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
 }
-PER_SCENARIO_SOURCES = {
-    **{path: source for tech in RES_TECHS for path, source in {
-        f"res.{tech}.capex_per_mw_eur": {v: f"res.{tech}.capex_eur_per_mw_{v}" for v in ("base", "low", "high")},
-        f"res.{tech}.opex_per_mw_per_year_eur": {v: f"res.{tech}.opex_eur_per_mw_per_year_{v}"
-                                                 for v in ("base", "low", "high")},
-    }.items()},
-    "natural_gas.price_eur_per_mwh": {"default": {"mean": ["natural_gas.price_eur_per_mwh_high",
-                                                           "natural_gas.price_eur_per_mwh_low"]},
-                                      "high": "natural_gas.price_eur_per_mwh_high",
-                                      "low": "natural_gas.price_eur_per_mwh_low"},
-}
-WORKBOOK_SOURCES = (RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_NAMED_SOURCES
-                    | PER_SCENARIO_SOURCES)
+WORKBOOK_SOURCES = RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_NAMED_SOURCES
 # Rows the workbook still holds at 0, value and unit:
 #   "dri-h2.p_min_pu": "dri.p_min_pu",
 #   "dri-mix.p_min_pu": "dri.p_min_pu",
@@ -106,21 +99,24 @@ WORKBOOK_SOURCES = (RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL
 OVERRIDE_KEYS = {"finance.default_wacc": ("finance.origin_wacc", "finance.destination_wacc")}
 
 
-def translate_override(key: str, value, sources: dict) -> list[tuple[str, object]]:
-    """An override written in the workbook's keys, as (model key, value or alternative name) pairs.
+def translate_override(key: str, value, *source_tables: dict) -> list[tuple[str, object]]:
+    """An override written in the workbook's keys, as (model key, value or row name) pairs.
 
-    The workbook names a key by its stem (`electrolyser.capex_eur_per_mw`) and an
-    alternative by its full key (`electrolyser.capex_eur_per_mw_low`). One workbook
-    row can feed several model keys, and the override then reaches all of them. A
-    model key, a number or a `±n%` change passes through unchanged.
+    The workbook names a key by its stem (`res.solar.capex_eur_per_mw`) and one of its
+    named rows (a sensitivity level or a region) by its full key
+    (`res.solar.capex_eur_per_mw_low`), which becomes that row's name (`low`). One
+    workbook row can feed several model keys, and the override then reaches all of
+    them. A model key, a number or a `±n%` change passes through unchanged.
     """
-    alternatives_by_workbook_key = {}
-    for path, spec in sources.items():
-        for name, source in ({"default": spec} if isinstance(spec, str) else spec).items():
-            if isinstance(source, str):
-                alternatives_by_workbook_key.setdefault(source, []).append((path, name))
-    matches = alternatives_by_workbook_key.get(key) or alternatives_by_workbook_key.get(f"{key}_base") or []
+    paths_and_names_by_row = {}
+    for source_table in source_tables:
+        for path, spec in source_table.items():
+            named_rows = spec.items() if isinstance(spec, dict) else [(None, spec)]
+            for name, row in named_rows:
+                if isinstance(row, str):
+                    paths_and_names_by_row.setdefault(row, []).append((path, name))
+    matches = paths_and_names_by_row.get(key) or paths_and_names_by_row.get(f"{key}_base") or []
     paths = OVERRIDE_KEYS.get(key) or list(dict.fromkeys(path for path, _ in matches)) or [key]
-    translated_value = alternatives_by_workbook_key[value][0][1] if value in alternatives_by_workbook_key else value
-    translated = [(path, translated_value) for path in paths]
+    row_name = next((name for _, name in paths_and_names_by_row.get(value, []) if name), None)
+    translated = [(path, row_name or value) for path in paths]
     return translated

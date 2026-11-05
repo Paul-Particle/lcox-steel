@@ -83,9 +83,28 @@ REGIONAL_SOURCES = {
     "battery.capex_per_mw_eur": ("iron_location", "battery", "battery.capex_eur_per_mw_{region}"),
     "battery.capex_per_mwh_eur": ("iron_location", "battery", "battery.capex_eur_per_mwh_{region}"),
 }
-# Each regional key's rows as alternatives named by region, for the pick and for overrides.
-REGIONAL_ALTERNATIVES = {path: {regions[kind]: row.format(region=regions[kind]) for regions in AREA_REGIONS.values()}
-                         for path, (_, kind, row) in REGIONAL_SOURCES.items()}
+# Each regional key's workbook row by region, for the pick and for overrides.
+REGIONAL_ROWS = {path: {regions[kind]: row.format(region=regions[kind]) for regions in AREA_REGIONS.values()}
+                 for path, (_, kind, row) in REGIONAL_SOURCES.items()}
+# Model key -> the workbook row an override switches it to, by sensitivity level.
+# The base value comes from the translation, or from the template where the
+# workbook gives none (the gas price).
+SENSITIVITY_ROWS = {
+    "res.wind-onshore.capex_per_mw_eur": {"low": "res.wind-onshore.capex_eur_per_mw_low",
+                                          "high": "res.wind-onshore.capex_eur_per_mw_high"},
+    "res.wind-onshore.opex_per_mw_per_year_eur": {"low": "res.wind-onshore.opex_eur_per_mw_per_year_low",
+                                                  "high": "res.wind-onshore.opex_eur_per_mw_per_year_high"},
+    "res.solar.capex_per_mw_eur": {"low": "res.solar.capex_eur_per_mw_low",
+                                   "high": "res.solar.capex_eur_per_mw_high"},
+    "res.solar.opex_per_mw_per_year_eur": {"low": "res.solar.opex_eur_per_mw_per_year_low",
+                                           "high": "res.solar.opex_eur_per_mw_per_year_high"},
+    "res.wind-offshore.capex_per_mw_eur": {"low": "res.wind-offshore.capex_eur_per_mw_low",
+                                           "high": "res.wind-offshore.capex_eur_per_mw_high"},
+    "res.wind-offshore.opex_per_mw_per_year_eur": {"low": "res.wind-offshore.opex_eur_per_mw_per_year_low",
+                                                   "high": "res.wind-offshore.opex_eur_per_mw_per_year_high"},
+    "natural_gas.price_eur_per_mwh": {"low": "natural_gas.price_eur_per_mwh_low",
+                                      "high": "natural_gas.price_eur_per_mwh_high"},
+}
 
 
 def set_nested(tree: dict, dotted_path: str, value) -> None:
@@ -100,29 +119,21 @@ def flatten(tree: dict, prefix: str = "") -> dict:
     return flat
 
 
-def resolve_sources(workbook_inputs: pd.DataFrame, sources: dict) -> dict[str, dict[str, float]]:
-    """Every key's value per alternative, in EUR; the first alternative is the default."""
-    alternatives_by_path = {}
-    for path, spec in sources.items():
-        is_alternatives = isinstance(spec, dict) and not set(spec) <= set(COMBINATIONS)
-        alternatives = spec if is_alternatives else {"default": spec}
-        keys = {name: [entry] if isinstance(entry, str) else next(iter(entry.values()))
-                for name, entry in alternatives.items()}
-        missing = sorted({k for names in keys.values() for k in names} - set(workbook_inputs.index))
-        if missing:
-            raise KeyError(f"{path}: the workbook has no row {missing}")
-        rows = workbook_inputs.loc[[k for names in keys.values() for k in names]]
-        if rows["value"].isna().any() or rows["unit"].nunique() > 1:
-            raise ValueError(f"{path}: workbook rows need a value each and one unit\n{rows}")
-        unit = rows["unit"].iloc[0]
-        is_eur_key = "eur" in path.rsplit(".", 1)[-1].split("_")
-        if "USD" in unit or is_eur_key != ("EUR" in unit):
-            raise ValueError(f"{path}: workbook unit '{unit}' does not match the key's currency (the model is in EUR)")
-        alternatives_by_path[path] = {}
-        for name, entry in alternatives.items():
-            combine = COMBINATIONS[next(iter(entry))] if isinstance(entry, dict) else np.sum
-            alternatives_by_path[path][name] = float(combine(workbook_inputs.loc[keys[name], "value"]))
-    return alternatives_by_path
+def read_workbook_value(workbook_inputs: pd.DataFrame, path: str, spec) -> float:
+    """A model key's value from one workbook row, or from rows combined ({"sum" | "mean": [rows]}), in EUR."""
+    combination, workbook_rows = next(iter(spec.items())) if isinstance(spec, dict) else (None, [spec])
+    missing = sorted(set(workbook_rows) - set(workbook_inputs.index))
+    if missing:
+        raise KeyError(f"{path}: the workbook has no row {missing}")
+    rows = workbook_inputs.loc[workbook_rows]
+    if rows["value"].isna().any() or rows["unit"].nunique() > 1:
+        raise ValueError(f"{path}: workbook rows need a value each and one unit\n{rows}")
+    unit = rows["unit"].iloc[0]
+    is_eur_key = "eur" in path.rsplit(".", 1)[-1].split("_")
+    if "USD" in unit or is_eur_key != ("EUR" in unit):
+        raise ValueError(f"{path}: workbook unit '{unit}' does not match the key's currency (the model is in EUR)")
+    value = float(COMBINATIONS[combination](rows["value"]) if combination else rows["value"].iloc[0])
+    return value
 
 
 def read_overrides(cell) -> dict:
@@ -132,14 +143,15 @@ def read_overrides(cell) -> dict:
     return overrides
 
 
-def build_scenarios(scenario_rows: pd.DataFrame, alternatives_by_path: dict,
+def build_scenarios(scenario_rows: pd.DataFrame, named_inputs: dict,
                     assumptions: dict, areas: dict) -> tuple[pd.DataFrame, dict[str, dict]]:
     """The scenario table, one row per input series of a run, and each scenario's overlay.
 
-    A scenario is one workbook row, and the term tables above say what its terms mean.
-    It has one run, or one per market zone when it draws on the grid of an area that
-    trades through zones. Its overlay holds the values of its locations' regions,
-    then its overrides.
+    A scenario is one workbook row, and the tables above say what the words in its
+    columns mean. It has one run, or one per market zone when it draws on the grid of
+    an area that trades through zones. Its overlay holds the values of its locations'
+    regions, then its overrides. `named_inputs` holds the workbook values a key can
+    take by name: per sensitivity level and per region.
     """
     base_values = flatten(assumptions)
     duplicated_ids = scenario_rows["scenario_id"].duplicated(keep=False)
@@ -206,7 +218,7 @@ def build_scenarios(scenario_rows: pd.DataFrame, alternatives_by_path: dict,
 
         region_by_path = {path: AREA_REGIONS[getattr(row, location)][kind]
                           for path, (location, kind, _) in REGIONAL_SOURCES.items()}
-        settings = {path: alternatives_by_path[path][region] for path, region in region_by_path.items()}
+        settings = {path: named_inputs[path][region] for path, region in region_by_path.items()}
         try:
             overrides = read_overrides(row.sensitivity_overrides_JSON)
         except json.JSONDecodeError as error:
@@ -215,9 +227,9 @@ def build_scenarios(scenario_rows: pd.DataFrame, alternatives_by_path: dict,
         for key, workbook_value in overrides.items():
             # A regional row reaches only the keys this scenario takes from that row.
             translated = [(path, value) for path, value
-                          in translate_override(key, workbook_value, WORKBOOK_SOURCES | REGIONAL_ALTERNATIVES)
-                          if key not in REGIONAL_ALTERNATIVES.get(path, {}).values()
-                          or key == REGIONAL_ALTERNATIVES[path][region_by_path[path]]]
+                          in translate_override(key, workbook_value, WORKBOOK_SOURCES, SENSITIVITY_ROWS, REGIONAL_ROWS)
+                          if key not in REGIONAL_ROWS.get(path, {}).values()
+                          or key == REGIONAL_ROWS[path][region_by_path[path]]]
             if not translated:
                 flag(f"override key {key!r} is a row of a region this scenario does not take")
             for path, value in translated:
@@ -226,10 +238,11 @@ def build_scenarios(scenario_rows: pd.DataFrame, alternatives_by_path: dict,
                     flag(f"override key {key!r} is not a model key")
                 elif relative:
                     settings[path] = settings.get(path, base_values[path]) * (1 + float(relative.group(1)) / 100)
-                elif isinstance(value, str) and value not in alternatives_by_path.get(path, {}):
-                    flag(f"{path} has no alternative {value!r} (it has {sorted(alternatives_by_path.get(path, {}))})")
+                elif isinstance(value, str) and value not in named_inputs.get(path, {}):
+                    flag(f"{path} has no sensitivity level or region {value!r} "
+                         f"(it has {sorted(named_inputs.get(path, {}))})")
                 else:
-                    settings[path] = alternatives_by_path[path][value] if isinstance(value, str) else value
+                    settings[path] = named_inputs[path][value] if isinstance(value, str) else value
 
         # On the grid, an area without a market of its own is run once per zone it
         # trades through, and a market whose series ended before the window drops out.
@@ -306,19 +319,28 @@ def main() -> None:
     template = yaml.safe_load(TEMPLATE_PATH.read_text())
     areas = yaml.safe_load((CONFIG_DIR / "config.yaml").read_text())["areas"]
 
-    alternatives_by_path = resolve_sources(workbook_inputs, WORKBOOK_SOURCES)
-    # Picked per scenario by its locations, never written into the base.
-    regional_values = resolve_sources(workbook_inputs, REGIONAL_ALTERNATIVES)
+    workbook_values = {path: read_workbook_value(workbook_inputs, path, spec) for path, spec in WORKBOOK_SOURCES.items()}
+    # Picked per scenario, by its locations or its overrides; never written into the base.
+    read_named = lambda rows_by_path: {path: {name: read_workbook_value(workbook_inputs, path, row)
+                                              for name, row in rows.items()}
+                                       for path, rows in rows_by_path.items()}
+    named_sensitivity_inputs, named_regional_inputs = read_named(SENSITIVITY_ROWS), read_named(REGIONAL_ROWS)
+    named_rows = SENSITIVITY_ROWS | REGIONAL_ROWS
+    rows_of_key = lambda path: [*named_rows[path].values(), *([WORKBOOK_SOURCES[path]] if path in WORKBOOK_SOURCES else [])]
+    mixed_units = sorted(path for path in named_rows if workbook_inputs.loc[rows_of_key(path), "unit"].nunique() > 1)
+    if mixed_units:
+        raise ValueError(f"the base, sensitivity and regional rows of {mixed_units} come in different units")
     template_values = flatten(template)
-    unknown_paths = sorted((set(alternatives_by_path) | set(regional_values)) - set(template_values))
+    unknown_paths = sorted((set(workbook_values) | set(named_rows)) - set(template_values))
     if unknown_paths:
         raise KeyError(f"the workbook sets keys {TEMPLATE_PATH.name} does not have: {unknown_paths}")
     assumptions = copy.deepcopy(template)
-    for path, alternatives in alternatives_by_path.items():
-        set_nested(assumptions, path, next(iter(alternatives.values())))
-    scenarios, overlays = build_scenarios(scenario_rows, alternatives_by_path | regional_values, assumptions, areas)
+    for path, value in workbook_values.items():
+        set_nested(assumptions, path, value)
+    scenarios, overlays = build_scenarios(scenario_rows, named_sensitivity_inputs | named_regional_inputs,
+                                          assumptions, areas)
     set_by_every_scenario = set.intersection(*(set(flatten(overlay)) for overlay in overlays.values()))
-    backstop_paths = sorted(set(template_values) - set(alternatives_by_path) - set_by_every_scenario)
+    backstop_paths = sorted(set(template_values) - set(workbook_values) - set_by_every_scenario)
     if arguments.include_template:
         template_scenarios = pd.read_csv(TEMPLATE_SCENARIOS_PATH, comment="#", dtype=str)
         clashing = sorted(set(template_scenarios["scenario"]) & set(overlays))
@@ -349,8 +371,8 @@ def main() -> None:
 
     keys_of = lambda spec: ([spec] if isinstance(spec, str)
                             else [k for entry in (spec.values() if isinstance(spec, dict) else spec) for k in keys_of(entry)])
-    used_workbook_keys = {k for spec in [*WORKBOOK_SOURCES.values(), *REGIONAL_ALTERNATIVES.values()] for k in keys_of(spec)}
-    log.info(f"{len(alternatives_by_path)} values from {arguments.workbook.name}, {len(backstop_paths)} backstop "
+    used_workbook_keys = {k for spec in [*WORKBOOK_SOURCES.values(), *named_rows.values()] for k in keys_of(spec)}
+    log.info(f"{len(workbook_values)} values from {arguments.workbook.name}, {len(backstop_paths)} backstop "
              f"values from {TEMPLATE_PATH.name}; {scenarios['scenario'].nunique()} scenarios, "
              f"{len(scenarios)} scenario rows, {sum(map(bool, overlays.values()))} overlays; "
              f"{len(changed)} files written, {len(stale_overlays)} stale overlays removed")
