@@ -252,6 +252,12 @@ else is gitignored):
   (served as XLSX despite the extension) and drop it into `data/nem_cache/` as
   `.xls` or `.xlsx`.
 
+The downloads — the `data/` caches and shapes, `cutouts/` and `.atlite-cache` —
+live in the main checkout, and every git worktree of it reads and writes that one
+copy. To keep them elsewhere, such as on a larger disk, add
+`LCOX_STORE=/path/to/store` to the main checkout's `.env` (see 4.); an exported
+`LCOX_STORE` takes precedence.
+
 ### 4. API keys
 
 **ENTSO-E** — email transparency@entsoe.eu with "Restful API access" in the
