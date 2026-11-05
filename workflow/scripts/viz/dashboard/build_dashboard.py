@@ -29,6 +29,9 @@ import pandas as pd
 import yaml
 from plotly.utils import PlotlyJSONEncoder
 
+from common._constants import H2_LHV_KWH_PER_KG
+from scripts.viz.dashboard import cost_taxonomy
+
 REPO = Path(__file__).resolve().parents[4]  # workflow/scripts/viz/dashboard/ -> repo root
 RESULTS = REPO / "results"
 # The built pages live together, away from the reports and the plot outputs.
@@ -126,12 +129,13 @@ H2_MIN = 0.02
 # Cost-group stack order (bottom → top), label and colour — mirrors COST_GROUPS in
 # plot_lcos_bars.py. Keys match the cost_{group}_meur columns in the report.
 COST_GROUPS = [
-    ["process",         "Process plant (capex+opex)", "#33434D"],
-    ["ore_consumables", "Ore & consumables",          "#E2B681"],
+    ["total_plant",     "Process plant (capex+opex)", "#33434D"],
+    ["ore",             "Iron ore",                   "#E2B681"],
+    ["eaf_consumables", "EAF consumables",            "#C99A5E"],
     ["gas",             "Natural gas (fuel + CO₂)",   "#525F6A"],
-    ["iron_store",      "Iron stockpile",             "#B7C1C8"],
+    ["iron_or_hbi_store", "Iron / HBI stockpile",     "#B7C1C8"],
     ["transport",       "Freight",                    "#BDCCD9"],
-    ["destination_power", "Destination power",        "#0293D2"],
+    ["destination_electricity", "Destination electricity", "#0293D2"],
     ["steel_store",     "Steel inventory",            "#8CA5B7"],
     ["electrolyser",    "Electrolyser",               "#91C096"],
     ["h2_buffer",       "H₂ buffer",                  "#70D2F0"],
@@ -154,16 +158,13 @@ CAP_PANELS = [
         ["grid_mw",          "Grid connection",      "#71828F"],
     ]],
     ["Process capacity (t/h output)", "t/h", [
-        ["dri_h2_t_per_h", "H2-DRI shaft",   "#8CA5B7"],
-        ["dri_ng_t_per_h", "NG-DRI shaft",   "#BDCCD9"],
-        ["eaf_t_per_h",    "EAF",            "#525F6A"],
-        ["moe_t_per_h",    "MOE",            "#0293D2"],
-        ["ew_t_per_h",     "Electrowinning", "#83D1DD"],
+        ["ironmaking_t_per_h", "Ironmaking", "#8CA5B7"],
+        ["steelmaking_t_per_h", "Steelmaking (EAF)", "#525F6A"],
     ]],
     ["Storage (hours of demand)", "h", [
-        ["h2_buffer_hours_dri",     "H₂ buffer",       "#70D2F0"],
-        ["iron_store_hours_steel",  "Iron store",      "#B7C1C8"],
-        ["steel_store_hours_steel", "Steel inventory", "#8CA5B7"],
+        ["h2_buffer_duration_hours", "H₂ buffer",      "#70D2F0"],
+        ["iron_or_hbi_store_duration_hours_steel", "Iron / HBI store", "#B7C1C8"],
+        ["steel_store_duration_hours_steel", "Steel inventory", "#8CA5B7"],
     ]],
 ]
 _CAP_KEYS = [b[0] for _, _, bars in CAP_PANELS for b in bars]
@@ -207,11 +208,11 @@ def _axes(row):
         for col in row.index
         if col.endswith("_variant") and pd.notna(row[col])
     }
-    cf_methods = sorted({v for tech, v in variants.items() if tech != "grid"})
+    cf_methods = sorted(variants.values())
     return {
-        "geo": row["area"],
+        "geo": row["origin"],
         "year": str(row["start_date"])[:4],
-        "grid": "grid" if "grid" in variants else "nogrid",
+        "grid": "grid" if pd.notna(row.get("grid_variant_origin")) else "nogrid",
         "route": row["route"],
         "variant": DASHBOARD_SCENARIOS[row["scenario"]],
         # A run whose techs were solved with different methods is named by all of
@@ -296,7 +297,7 @@ def _record(row, lcos_row, cap_row):
         ("lcoe_grid_connection_eur_per_mwh", "grid_connection"),
         ("lcoe_grid_energy_eur_per_mwh", "grid_energy"),
         ("lcoe_transmission_eur_per_mwh", "transmission"),
-        ("lcoe_destination_power_eur_per_mwh", "destination_power"),
+        ("lcoe_destination_electricity_eur_per_mwh", "destination_electricity"),
     ):
         v = _opt(row[col])
         if v is not None:
@@ -305,41 +306,45 @@ def _record(row, lcos_row, cap_row):
     # renewable itself), distinct from the lcoe_parts contribution above.
     lcoe_own = {}
     for col, key in (
-        ("lcoe_renewables_own_eur_per_mwh", "renewables"),
-        ("lcoe_solar_own_eur_per_mwh", "solar"),
-        ("lcoe_wind_onshore_own_eur_per_mwh", "wind_onshore"),
-        ("lcoe_wind_offshore_own_eur_per_mwh", "wind_offshore"),
+        ("lcoe_renewables_eur_per_mwh_renewables", "renewables"),
+        ("lcoe_solar_eur_per_mwh_solar", "solar"),
+        ("lcoe_wind_onshore_eur_per_mwh_wind_onshore", "wind_onshore"),
+        ("lcoe_wind_offshore_eur_per_mwh_wind_offshore", "wind_offshore"),
     ):
         v = _opt(row[col])
         if v is not None:
             lcoe_own[key] = v
-    # LCOH breakdown in €/MWh LHV (parts sum to LCOH); absent parts stay absent.
+    # LCOH breakdown (parts sum to LCOH); absent parts stay absent. The report
+    # gives it per kg; the page works in €/MWh LHV and converts to kg itself.
     lcoh_parts = {}
     for col, key in (
-        ("lcoh_electrolyser_eur_per_mwh_lhv", "electrolyser"),
-        ("lcoh_electricity_eur_per_mwh_lhv", "electricity"),
-        ("lcoh_h2_storage_eur_per_mwh_lhv", "storage"),
+        ("lcoh_electrolyser_eur_per_kg", "electrolyser"),
+        ("lcoh_electricity_eur_per_kg", "electricity"),
+        ("lcoh_h2_storage_eur_per_kg", "storage"),
     ):
         v = _opt(row[col])
         if v is not None:
-            lcoh_parts[key] = v
-    # €/t-steel cost detail: per-plant capex (sums to the "process" group) plus the
-    # ore/consumables split (sums to "ore_consumables"). For the segment hovers.
+            lcoh_parts[key] = v * 1000.0 / H2_LHV_KWH_PER_KG
+    # €/t-steel cost detail: per-plant cost, capital and upkeep together (sums to
+    # the "total_plant" group), plus the ore/consumables split (sums to
+    # the "ore" and "eaf_consumables" groups). For the segment hovers, read off the cost leaves. The
+    # blended shaft and the press are here too, or on a blended or an export
+    # route the per-plant lines would come to less than the group they add up to.
     cost_detail = {}
-    for col, key in (
-        ("plant_dri_h2_eur_per_t", "dri"),
-        ("plant_dri_ng_eur_per_t", "dri_ng"),
-        # The blended shaft and the briquetting press were absent, so on a
-        # blended or an export route the per-plant lines came to well under the
-        # process group they are meant to add up to.
-        ("plant_dri_mix_eur_per_t", "dri_mix"),
-        ("plant_briquetting_eur_per_t", "briquetting"),
-        ("plant_eaf_eur_per_t", "eaf"),
-        ("plant_moe_eur_per_t", "moe"),
-        ("plant_ew_eur_per_t", "electrowinning"),
-        ("ore_eur_per_t_steel", "ore"),
-        ("consumables_eur_per_t_steel", "consumables"),
-    ):
+    # The ironmaking plant is one pair of leaves whatever the route; the hover
+    # names it after the step the run built, under the key that step always had.
+    built = cost_taxonomy.built_ironmaking(row)
+    plant = _opt(row["cost_ironmaking_plant_eur_per_t_steel"])
+    if built is not None and plant is not None:
+        key = {"dri-h2": "dri", "dri-ng": "dri_ng", "dri-mix": "dri_mix",
+               "moe": "moe", "ew": "electrowinning"}[built[0]]
+        cost_detail[key] = plant
+    for key, plant in (("briquetting", "briquetting_plant"), ("eaf", "steelmaking_plant")):
+        total = _opt(row[f"cost_{plant}_eur_per_t_steel"])
+        if total is not None:
+            cost_detail[key] = total
+    for col, key in (("cost_ore_eur_per_t_steel", "ore"),
+                     ("cost_eaf_consumables_eur_per_t_steel", "consumables")):
         v = _opt(row[col])
         if v is not None:
             cost_detail[key] = v
@@ -352,17 +357,14 @@ def _record(row, lcos_row, cap_row):
         ("wind_offshore_mw", "cf_wind_offshore"),
         ("grid_mw", "cf_grid_connection"),
         ("electrolyser_mw", "electrolyser_utilization"),
-        ("dri_h2_t_per_h", "dri_h2_utilization"),
-        ("dri_ng_t_per_h", "dri_ng_utilization"),
-        ("eaf_t_per_h", "eaf_utilization"),
-        ("moe_t_per_h", "moe_utilization"),
-        ("ew_t_per_h", "ew_utilization"),
+        ("ironmaking_t_per_h", "ironmaking_utilization"),
+        ("steelmaking_t_per_h", "steelmaking_utilization"),
     ):
         raw = row[col]
         if pd.notna(raw):
             cf[capkey] = round(float(raw) * 100)
     return {
-        "lcos": round(_num(row["lcos_eur_per_t"]), 0),
+        "lcos": round(_num(row["lcos_eur_per_t_steel"]), 0),
         "lcoe": _opt(row["lcoe_eur_per_mwh"]),
         "lcoh": _opt(row["lcoh_eur_per_mwh_lhv"]),
         # The same cost per kg, which the report carries on every route that
@@ -370,13 +372,14 @@ def _record(row, lcos_row, cap_row):
         "lcoh_kg": round(_num(row["lcoh_eur_per_kg"]), 3) or None,
         # Blank wherever the area publishes prices but no generation mix, which is
         # most of the grid side; the page says so rather than printing a zero.
-        "emissions": _opt(row["emissions_kg_co2e_per_t_steel"]),
+        # In kg, as the page shows it: the report gives t per t of steel.
+        "emissions": _opt(row["emissions_energy_t_co2_per_t_steel"] * 1e3),
         "steel_mt": round(_num(row["steel_produced_mt"]), 4),
-        "ng_gwh": round(_num(row["ng_gwh_lhv"]), 1),
+        "ng_gwh": round(_num(row["gas_consumed_gwh_lhv"]), 1),
         # Optional, not zero-filled: a blended run that took no H2 has a share of
         # 0, and a route with no blend at all has none, which the card reads as
         # two different things.
-        "h2_share": _opt(row["iron_from_h2_share"], 3),
+        "h2_share": _opt(row["reductant_h2_share"], 3),
         "costs": costs,
         "caps": caps,
         "lcoe_parts": lcoe_parts,

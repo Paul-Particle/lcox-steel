@@ -331,7 +331,7 @@ def main() -> None:
     # ---- geographies ----------------------------------------------------
     solved_areas = set()
     for report in sorted(RESULTS.glob("*/.report_*_diag.csv")):
-        solved_areas |= set(pd.read_csv(report, index_col="field").T["area"])
+        solved_areas |= set(pd.read_csv(report, index_col="field").T["origin"])
     rows = []
     for area, spec in config["areas"].items():
         if area not in solved_areas:

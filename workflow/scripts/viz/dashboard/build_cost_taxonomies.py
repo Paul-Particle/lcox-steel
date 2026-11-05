@@ -32,7 +32,7 @@ import yaml
 from scripts.viz.dashboard import cost_taxonomy
 from scripts.viz.dashboard.build_dashboard import HTML_DIR, _axes, build_html, scenario_files
 from common._constants import H2_LHV_KWH_PER_KG
-from common._report_schema import field_stem, read_report
+from common._report_schema import field_stem, plant_stem, read_report
 from scripts.solve._helpers_solve import deep_merge
 
 REPO = Path(__file__).resolve().parents[4]        # workflow/scripts/viz/dashboard/ -> repo root
@@ -59,8 +59,8 @@ PURPOSE_BANDS = [
     ["fixed_om",        "O&M (process plant)",              C_OM],
     ["hydrogen",        "Hydrogen (all-in)",                C_HYDROGEN],
     ["reduction",       "Electricity — making the iron",    C_ELEC],
-    ["melt",            "Electricity — EAF melt",           C_ELEC_EAF],
-    ["handling",        "Electricity — handling",           C_GRID_NRG],
+    ["eaf",             "Electricity — EAF melt",           C_ELEC_EAF],
+    ["briquetting",     "Electricity — briquetting",        C_GRID_NRG],
     ["losses",          "Electricity — round trip & lines",  C_GRID_CONN],
     ["gas",             "Gas + CO₂ (fossil routes)",        C_GAS],
     ["store",           "Storage (iron/steel)",             C_STORE],
@@ -74,7 +74,7 @@ LCOE_SPLIT_BANDS = [
     ["grid_energy",       "Grid energy",              C_GRID_NRG],
     ["transmission",      "Transmission (HVDC)",      C_TRANSM],
     # Only an export route has one; on every other it is zero and draws nothing.
-    ["destination_power", "Destination power",        "#0293D2"],
+    ["destination_electricity", "Destination electricity", "#0293D2"],
 ]
 LCOE_GROUP_BANDS = [
     ["renewables",        "Renewables (capex+opex)",  C_ELEC],
@@ -82,7 +82,7 @@ LCOE_GROUP_BANDS = [
     ["grid_connection",   "Grid connection",          C_GRID_CONN],
     ["grid_energy",       "Grid energy",              C_GRID_NRG],
     ["transmission",      "Transmission (HVDC)",      C_TRANSM],
-    ["destination_power", "Destination power",        "#0293D2"],
+    ["destination_electricity", "Destination electricity", "#0293D2"],
 ]
 LCOH_SPLIT_BANDS = [
     ["electrolyser_capex", "Electrolyser — capital",   C_CAPEX],
@@ -132,7 +132,7 @@ def attach(payload: dict, cases: dict) -> None:
     # The plants, by the stem their leaves are keyed on, so a hover over the
     # capital or the upkeep band can name each one and reach its own half of
     # that plant's annual cost.
-    payload["process_plants"] = [[field_stem(link), label]
+    payload["process_plants"] = [[plant_stem(link), label]
                                  for link, label in cost_taxonomy.PROCESS_PLANTS]
     payload["purpose_bands"] = PURPOSE_BANDS
     payload["lcoe_split_bands"] = LCOE_SPLIT_BANDS
@@ -173,7 +173,7 @@ def attach(payload: dict, cases: dict) -> None:
         # The split lives in the report, so a report without the cost-leaf
         # columns has nothing for this page to plot. Say that, rather than
         # failing on a missing column three frames further in.
-        probe = f"cost_{cost_taxonomy.LEAF_COSTS[0]}_eur_per_t"
+        probe = f"cost_{cost_taxonomy.LEAF_COSTS[0]}_eur_per_t_steel"
         if probe not in runs.columns:
             raise SystemExit(
                 f"{report.name} carries no cost leaves ({probe} is not in it), so "
