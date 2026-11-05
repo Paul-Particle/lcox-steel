@@ -103,6 +103,8 @@ UNREAD_ROWS = {
 # Keys the model needs and the workbook has no row for; the template's value stands in,
 # and the generator warns until the workbook gives one:
 #   "anchor.min_capacity_mw"  (the anchor floor: https://github.com/Paul-Particle/lcox-steel/issues/47)
+#   "battery.opex_per_mw_per_year_eur"   (fixed O&M; the template's is eyeballed)
+#   "battery.opex_per_mwh_per_year_eur"
 #   "briquetting.capex_per_t_per_year_eur"
 #   "briquetting.opex_per_t_per_year_eur"
 #   "briquetting.lifetime_years"

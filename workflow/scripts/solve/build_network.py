@@ -515,7 +515,7 @@ def _add_battery(
         carrier="battery",
         e_nom_extendable=True,
         e_cyclic=True,
-        capital_cost=annuity * bat_cfg["capex_per_mwh_eur"],
+        capital_cost=annuity * bat_cfg["capex_per_mwh_eur"] + bat_cfg["opex_per_mwh_per_year_eur"],
         marginal_cost=0.0,
     )
     n.add(
@@ -526,7 +526,7 @@ def _add_battery(
         carrier="battery",
         p_nom_extendable=True,
         efficiency=eta,
-        capital_cost=annuity * bat_cfg["capex_per_mw_eur"],
+        capital_cost=annuity * bat_cfg["capex_per_mw_eur"] + bat_cfg["opex_per_mw_per_year_eur"],
     )
     n.add(
         "Link",

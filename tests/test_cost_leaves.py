@@ -216,6 +216,18 @@ def test_the_hydrogen_buffer_pays_its_fixed_om_on_top_of_its_annuitised_capex(as
     assert buffer["capital_cost"] == pytest.approx(annuitised_capex + buffer_cfg["opex_per_mwh_per_year_eur"])
 
 
+def test_the_battery_pays_fixed_om_on_its_energy_and_its_inverter(assumptions):
+    """Each capacity carries its own fixed O&M on top of its annuitised capex."""
+    n = _solved("h2-dri-eaf", assumptions)
+    battery_cfg = assumptions["battery"]
+    annuity = annuity_factor(assumptions["finance"]["origin_wacc"], battery_cfg["lifetime_years"])
+
+    assert n.stores.at["battery", "capital_cost"] == pytest.approx(
+        annuity * battery_cfg["capex_per_mwh_eur"] + battery_cfg["opex_per_mwh_per_year_eur"])
+    assert n.links.at["battery_charger", "capital_cost"] == pytest.approx(
+        annuity * battery_cfg["capex_per_mw_eur"] + battery_cfg["opex_per_mw_per_year_eur"])
+
+
 @pytest.mark.parametrize("route", ["h2-dri-eaf", "moe-eaf", "ew-eaf",
                                    "h2-dri-eaf-export", "moe-eaf-export", "ew-eaf-export"])
 def test_the_workbooks_routes_build_and_cost_without_the_keys_its_scenarios_do_not_require(route, assumptions):

@@ -62,6 +62,10 @@ battery:
   # buys one bidirectional inverter, charging and discharging at that rating.
   capex_per_mw_eur: 138_433   # power capacity cost
   capex_per_mwh_eur: 89_684   # energy capacity cost
+  # Fixed O&M per unit of each capacity per year, eyeballed at 2.5 % of its capex
+  # until the workbook gives a value.
+  opex_per_mw_per_year_eur: 3_461
+  opex_per_mwh_per_year_eur: 2_242
   lifetime_years: 20
   efficiency_roundtrip: 0.85
 
