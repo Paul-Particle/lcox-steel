@@ -69,6 +69,8 @@ MODEL_NAMED_SOURCES = {
     "eaf.charge.plates.el_mwh_per_t": "eaf_ewin.el_mwh_per_t",
     "eaf.charge.hot.el_mwh_per_t": "eaf_dri.el_mwh_per_t",
     "eaf.charge.liquid.el_mwh_per_t": "eaf_moe.el_mwh_per_t",
+    "ew.iron_t_per_t_steel": "eaf_ewin.iron_t_per_t_steel",
+    "moe.iron_t_per_t_steel": "eaf_moe.iron_t_per_t_steel",
     "dri-h2.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
     "dri-mix.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
 }
