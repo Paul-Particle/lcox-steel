@@ -22,7 +22,7 @@ WINDOW = ("20250101", "20251231")
 
 # (scenario prefix, overlay dict template, routes, values, areas)
 SWEEPS = [
-    ("ew-capex", "ew", "capex_per_t_per_year_eur", "ew-eaf|moe-eaf",
+    ("ew-capex", "ew", "capex_eur_per_t", "ew-eaf|moe-eaf",
      [500, 900, 1200, 1800, 3000],
      # break-even predicted at ESP 852, DEU 966, SA1 1110 — one below, one inside,
      # one above the value the model used before this run.

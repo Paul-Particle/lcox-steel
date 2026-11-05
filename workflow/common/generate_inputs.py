@@ -82,8 +82,8 @@ REGIONAL_SOURCES = {
     "moe.fom_eur_per_t_capacity_per_year": ("iron_location", "fom", "iron.fom_eur_per_t_capacity_per_year_{region}"),
     "ew.fom_eur_per_t_capacity_per_year": ("iron_location", "fom", "iron.fom_eur_per_t_capacity_per_year_{region}"),
     "eaf.fom_eur_per_t_capacity_per_year": ("steel_location", "fom", "eaf.fom_eur_per_t_capacity_per_year_{region}"),
-    "battery.capex_per_mw_eur": ("iron_location", "battery", "battery.capex_eur_per_mw_{region}"),
-    "battery.capex_per_mwh_eur": ("iron_location", "battery", "battery.capex_eur_per_mwh_{region}"),
+    "battery.capex_eur_per_mw": ("iron_location", "battery", "battery.capex_eur_per_mw_{region}"),
+    "battery.capex_eur_per_mwh": ("iron_location", "battery", "battery.capex_eur_per_mwh_{region}"),
 }
 # Each regional key's workbook row by region, for the pick and for an override naming a region.
 REGIONAL_ROWS = {path: {regions[kind]: row.format(region=regions[kind]) for regions in AREA_REGIONS.values()}
@@ -92,15 +92,15 @@ REGIONAL_ROWS = {path: {regions[kind]: row.format(region=regions[kind]) for regi
 # The base value comes from the translation, or from the template where the
 # workbook gives none (the gas price).
 SENSITIVITY_ROWS = {
-    "res.wind-onshore.capex_per_mw_eur": {"low": "res.wind-onshore.capex_eur_per_mw_low",
+    "res.wind-onshore.capex_eur_per_mw": {"low": "res.wind-onshore.capex_eur_per_mw_low",
                                           "high": "res.wind-onshore.capex_eur_per_mw_high"},
     "res.wind-onshore.fom_eur_per_mw_per_year": {"low": "res.wind-onshore.opex_eur_per_mw_per_year_low",
                                                   "high": "res.wind-onshore.opex_eur_per_mw_per_year_high"},
-    "res.solar.capex_per_mw_eur": {"low": "res.solar.capex_eur_per_mw_low",
+    "res.solar.capex_eur_per_mw": {"low": "res.solar.capex_eur_per_mw_low",
                                    "high": "res.solar.capex_eur_per_mw_high"},
     "res.solar.fom_eur_per_mw_per_year": {"low": "res.solar.opex_eur_per_mw_per_year_low",
                                            "high": "res.solar.opex_eur_per_mw_per_year_high"},
-    "res.wind-offshore.capex_per_mw_eur": {"low": "res.wind-offshore.capex_eur_per_mw_low",
+    "res.wind-offshore.capex_eur_per_mw": {"low": "res.wind-offshore.capex_eur_per_mw_low",
                                            "high": "res.wind-offshore.capex_eur_per_mw_high"},
     "res.wind-offshore.fom_eur_per_mw_per_year": {"low": "res.wind-offshore.opex_eur_per_mw_per_year_low",
                                                    "high": "res.wind-offshore.opex_eur_per_mw_per_year_high"},

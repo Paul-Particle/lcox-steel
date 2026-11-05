@@ -422,7 +422,7 @@ reads the workbook's `assumptions_inputs` and `scenarios_clean` tabs and writes:
 - a scenario's overlay carries the values of its locations' regions (WACCs, plant
   fixed O&M, battery costs), then the overrides the row names. An override names a
   model key and gives it a number, a `±n%` change, or a sensitivity level or region
-  by name (`{"finance.origin_wacc": "+30%", "res.solar.capex_per_mw_eur": "low"}`).
+  by name (`{"finance.origin_wacc": "+30%", "res.solar.capex_eur_per_mw": "low"}`).
 
 It stops before writing anything if a row cannot be translated, listing each
 problem with the workbook rows that have it. How the workbook names keys, as

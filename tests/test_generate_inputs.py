@@ -92,7 +92,7 @@ def test_an_import_takes_iron_side_values_from_its_iron_location_and_the_furnace
         "wacc-up": {"sensitivity_overrides_JSON": json.dumps({"finance.origin_wacc": "+30%",
                                                               "finance.destination_wacc": "+30%"})},
         "rows-overridden": {"sensitivity_overrides_JSON": json.dumps({
-            "battery.capex_per_mw_eur": "eu", "moe.fom_eur_per_t_capacity_per_year": "+10%"})},
+            "battery.capex_eur_per_mw": "eu", "moe.fom_eur_per_t_capacity_per_year": "+10%"})},
         "destination-wacc-set": {"sensitivity_overrides_JSON": json.dumps({"finance.destination_wacc": 0.09})},
     })
 
@@ -101,11 +101,11 @@ def test_an_import_takes_iron_side_values_from_its_iron_location_and_the_furnace
     assert wacc_up["finance.origin_wacc"] == pytest.approx(1.3)
     assert wacc_up["finance.destination_wacc"] == pytest.approx(2.6)
     assert wacc_up["moe.fom_eur_per_t_capacity_per_year"] == 1.0
-    assert wacc_up["battery.capex_per_mw_eur"] == 1.0
+    assert wacc_up["battery.capex_eur_per_mw"] == 1.0
     assert wacc_up["eaf.fom_eur_per_t_capacity_per_year"] == 2.0
     assert rows_overridden["moe.fom_eur_per_t_capacity_per_year"] == pytest.approx(1.1)
-    assert rows_overridden["battery.capex_per_mw_eur"] == 2.0
-    assert rows_overridden["battery.capex_per_mwh_eur"] == 1.0
+    assert rows_overridden["battery.capex_eur_per_mw"] == 2.0
+    assert rows_overridden["battery.capex_eur_per_mwh"] == 1.0
     assert destination_wacc_set["finance.origin_wacc"] == 1.0
     assert destination_wacc_set["finance.destination_wacc"] == 0.09
 
@@ -225,7 +225,7 @@ def test_every_workbook_row_is_read_or_listed_with_why_it_is_not(outputs_in_tmp,
 
 def test_an_override_naming_a_sensitivity_row_takes_that_level():
     _, overlays = build_from_rows({"solar-low-gas-high": {"sensitivity_overrides_JSON": json.dumps({
-        "res.solar.capex_per_mw_eur": "low", "natural_gas.price_eur_per_mwh": "high"})}})
+        "res.solar.capex_eur_per_mw": "low", "natural_gas.price_eur_per_mwh": "high"})}})
 
-    assert overlays["solar-low-gas-high"]["res.solar.capex_per_mw_eur"] == 5.0
+    assert overlays["solar-low-gas-high"]["res.solar.capex_eur_per_mw"] == 5.0
     assert overlays["solar-low-gas-high"]["natural_gas.price_eur_per_mwh"] == 7.0

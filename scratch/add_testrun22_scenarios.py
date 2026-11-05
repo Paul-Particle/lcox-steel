@@ -24,7 +24,7 @@ WINDOW = ("20250101", "20251231")
 TANK_EUR_PER_MWH = 60050
 
 ramp = lambda rate: {"ramp_limit_up": rate, "ramp_limit_down": rate}
-tank = {"h2_buffer": {"capex_per_mwh_eur": TANK_EUR_PER_MWH}}
+tank = {"h2_buffer": {"capex_eur_per_mwh": TANK_EUR_PER_MWH}}
 
 # (scenario, route, overlay, one-line description); None means no overlay file.
 SCENARIOS = [

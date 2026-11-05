@@ -472,7 +472,7 @@ def _add_generators(
             raise KeyError(f"No assumptions found for tech '{tech}' — add it to the assumptions' `res` block")
 
         cap_cost = (
-            annuity_factor(wacc, cfg["financing_period"]) * cfg["capex_per_mw_eur"]
+            annuity_factor(wacc, cfg["financing_period"]) * cfg["capex_eur_per_mw"]
             + cfg["fom_eur_per_mw_per_year"]
         )
         # The anchor cell is the plant site, so a scenario that asks what a
@@ -515,7 +515,7 @@ def _add_battery(
         carrier="battery",
         e_nom_extendable=True,
         e_cyclic=True,
-        capital_cost=annuity * bat_cfg["capex_per_mwh_eur"] + bat_cfg["fom_eur_per_mwh_per_year"],
+        capital_cost=annuity * bat_cfg["capex_eur_per_mwh"] + bat_cfg["fom_eur_per_mwh_per_year"],
         marginal_cost=0.0,
     )
     n.add(
@@ -526,7 +526,7 @@ def _add_battery(
         carrier="battery",
         p_nom_extendable=True,
         efficiency=eta,
-        capital_cost=annuity * bat_cfg["capex_per_mw_eur"] + bat_cfg["fom_eur_per_mw_per_year"],
+        capital_cost=annuity * bat_cfg["capex_eur_per_mw"] + bat_cfg["fom_eur_per_mw_per_year"],
     )
     n.add(
         "Link",
@@ -548,7 +548,7 @@ def _add_electrolyser(
 ) -> None:
     """Add the extendable electrolyser link (electricity → hydrogen), sized by the optimiser."""
     cap_cost = (
-        annuity_factor(wacc, el_cfg["financing_period"]) * el_cfg["capex_per_mw_eur"]
+        annuity_factor(wacc, el_cfg["financing_period"]) * el_cfg["capex_eur_per_mw"]
         + el_cfg["fom_eur_per_mw_per_year"]
     )
     n.add(
@@ -571,7 +571,7 @@ def _add_h2_buffer(n: pypsa.Network, buf_cfg: dict, wacc: float) -> None:
     """Add the extendable, cyclic H2 storage buffer (a Store on the hydrogen bus)."""
     # Store capital_cost is per MWh of e_nom (H2 LHV energy capacity)
     cap_cost = (
-        annuity_factor(wacc, buf_cfg["financing_period"]) * buf_cfg["capex_per_mwh_eur"]
+        annuity_factor(wacc, buf_cfg["financing_period"]) * buf_cfg["capex_eur_per_mwh"]
         + buf_cfg["fom_eur_per_mwh"]
     )
     n.add(
@@ -613,7 +613,7 @@ def _process_capital_cost(cfg: dict, wacc: float, output_t_per_p0_unit: float) -
     quotes is noise.
     """
     per_t_per_year = (
-        annuity_factor(wacc, cfg["financing_period"]) * cfg["capex_per_t_per_year_eur"]
+        annuity_factor(wacc, cfg["financing_period"]) * cfg["capex_eur_per_t"]
         + cfg["fom_eur_per_t_capacity_per_year"]
     )
     return per_t_per_year * output_t_per_p0_unit * HOURS_PER_YEAR
@@ -856,7 +856,7 @@ def _add_iron_store(
     Deliberately cheap-but-not-free (see assumptions) so the optimal stockpile
     size is unique and meaningful in reports.
     """
-    cap_cost = annuity_factor(wacc, store_cfg["financing_period"]) * store_cfg["capex_per_t_eur"]
+    cap_cost = annuity_factor(wacc, store_cfg["financing_period"]) * store_cfg["capex_eur_per_t"]
     n.add(
         "Store",
         "iron_store",
@@ -876,7 +876,7 @@ def _freight_eur_per_t(transport_cfg: dict, legs: dict, commodity: str) -> float
     so a short haul stays dear per km the way real freight is.
     """
     rates = {mode: transport_cfg[mode][commodity] for mode in legs}
-    return sum(rates[mode]["eur_per_t"] + km * rates[mode]["eur_per_t_km"]
+    return sum(rates[mode]["cost_eur_per_t"] + km * rates[mode]["cost_eur_per_t_per_km"]
                for mode, km in legs.items())
 
 
@@ -936,7 +936,7 @@ def _add_steel_store(
     the flexibility can't degenerate into whole-year arbitrage; the annuitised
     per-tonne capex keeps the built size unique and reportable.
     """
-    cap_cost = annuity_factor(wacc, store_cfg["financing_period"]) * store_cfg["capex_per_t_eur"]
+    cap_cost = annuity_factor(wacc, store_cfg["financing_period"]) * store_cfg["capex_eur_per_t"]
     e_nom_max = steel_t_per_h * store_cfg["max_weeks"] * 7 * 24
     n.add(
         "Store",

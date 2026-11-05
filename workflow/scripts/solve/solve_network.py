@@ -134,7 +134,7 @@ def _tie_battery_inverter(n: pypsa.Network, snapshots) -> None:
     """Charge and discharge share one inverter rating, so its capex is paid once.
 
     A grid battery's power electronics are bidirectional and rated in MW at the
-    grid terminals, which is what `battery.capex_per_mw_eur` prices. A Link's
+    grid terminals, which is what `battery.capex_eur_per_mw` prices. A Link's
     p_nom is measured at its bus0, the grid for the charger but the battery for
     the discharger, so the discharger's rating is scaled by its efficiency to
     put both on the grid side (as PyPSA-Eur's `add_battery_constraints` does).
