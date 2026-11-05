@@ -1,10 +1,8 @@
-"""The input workbook's keys and scenario vocabulary, translated into the model's.
+"""The input workbook's field names, translated into the model's keys.
 
-Everything that depends on how data/assumptions/Assumptions_yaml_inputs.xlsx
-names things lives here, so generate_inputs.py only ever sees the model's names.
+What the scenario tab's terms mean for a scenario is the generator's business
+(generate_inputs.py); this file only says which row feeds which key.
 """
-
-import pandas as pd
 
 RES_TECHS = ("wind-onshore", "solar", "wind-offshore")
 CARRIERS = ("biomass", "brown_coal", "coal_gas", "energy_storage", "gas", "geothermal", "hard_coal",
@@ -106,27 +104,6 @@ WORKBOOK_SOURCES = (RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL
 
 # Workbook override keys that stand for several model keys.
 OVERRIDE_KEYS = {"finance.default_wacc": ("finance.origin_wacc", "finance.destination_wacc")}
-
-# The scenario tab's vocabulary, where it differs from the model's ids.
-ROUTES = {"ewin-eaf": "ew-eaf"}
-POWER_SUPPLIES = {"islanded_res": "islanded", "res_grid": "grid"}
-AREAS = {"GER": "DEU"}
-SITE_VARIANTS = {"national-average": "area-average"}
-# A route whose steel is made somewhere else than its iron is the
-# model's `-export` twin of the route the workbook names.
-EXPORT_SUFFIX = "-export"
-
-
-def translate_scenario_rows(scenario_rows: pd.DataFrame) -> pd.DataFrame:
-    """The scenario tab's rows with areas, routes, site variants and power supply in the model's ids."""
-    translated_rows = scenario_rows.assign(
-        iron_location=lambda df: df["iron_location"].replace(AREAS),
-        steel_location=lambda df: df["steel_location"].replace(AREAS),
-        route=lambda df: df["route"].replace(ROUTES),
-        site_variant=lambda df: df["site_variant"].replace(SITE_VARIANTS),
-        power_supply=lambda df: df["power_supply"].replace(POWER_SUPPLIES),
-    )
-    return translated_rows
 
 
 def translate_override(key: str, value, sources: dict) -> list[tuple[str, object]]:
