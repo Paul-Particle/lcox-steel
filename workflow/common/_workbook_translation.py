@@ -24,8 +24,8 @@ RENAMED_SOURCES = {
     "battery.efficiency_roundtrip": "battery.efficiency_roundtrip",
     "h2_buffer.capex_eur_per_mwh": "h2_buffer.capex_eur_per_mwh",
     "h2_buffer.fom_eur_per_mwh": "h2_buffer.fom_eur_per_mwh",
-    "dri-ng.gas_mwh_per_t": "dri_ng.gas_mwh_per_t",
-    "dri-ng.el_mwh_per_t": "dri_ng.el_mwh_per_t",
+    "ng-dri.gas_mwh_per_t": "dri_ng.gas_mwh_per_t",
+    "ng-dri.el_mwh_per_t": "dri_ng.el_mwh_per_t",
     "eaf.capex_eur_per_t": "eaf.capex_eur_per_t",
     "moe.capex_eur_per_t": "moe.capex_eur_per_t",
     "moe.el_mwh_per_t": "moe.el_mwh_per_t",
@@ -38,7 +38,7 @@ RENAMED_SOURCES = {
     "electrolyser.financing_period": "electrolyser.financing_period",
     "battery.financing_period": "battery.financing_period",
     "h2_buffer.financing_period": "h2_buffer.financing_period",
-    **{f"{plant}.financing_period": "IS.financing_period" for plant in ("dri-h2", "dri-mix", "dri-ng", "eaf", "moe", "ew")},
+    **{f"{plant}.financing_period": "IS.financing_period" for plant in ("h2-dri", "mix-dri", "ng-dri", "eaf", "moe", "ew")},
     **{f"emissions.electricity_t_co2e_per_mwh.{carrier}.combustion":
        f"emissions.electricity_t_co2e_per_mwh.{carrier}.combustion" for carrier in CARRIERS},
 }
@@ -48,17 +48,17 @@ CONVERTED_SOURCES = {
        for origin in ("AUS", "BRA") for destination in ("ESP", "DEU", "FRA")},
 }
 SHARED_SOURCES = {
-    "dri-h2.capex_eur_per_t": "dri.capex_eur_per_t",
-    "dri-mix.capex_eur_per_t": "dri.capex_eur_per_t",
-    "dri-ng.capex_eur_per_t": "dri.capex_eur_per_t",
-    "dri-h2.ore_eur_per_t": "dri.ore_eur_per_t",
-    "dri-mix.ore_eur_per_t": "dri.ore_eur_per_t",
-    "dri-ng.ore_eur_per_t": "dri.ore_eur_per_t",
-    "dri-h2.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
-    "dri-mix.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
-    "dri-ng.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
-    "dri-h2.el_mwh_per_t": "dri_ng.el_mwh_per_t",
-    "dri-mix.el_mwh_per_t": "dri_ng.el_mwh_per_t",
+    "h2-dri.capex_eur_per_t": "dri.capex_eur_per_t",
+    "mix-dri.capex_eur_per_t": "dri.capex_eur_per_t",
+    "ng-dri.capex_eur_per_t": "dri.capex_eur_per_t",
+    "h2-dri.ore_eur_per_t": "dri.ore_eur_per_t",
+    "mix-dri.ore_eur_per_t": "dri.ore_eur_per_t",
+    "ng-dri.ore_eur_per_t": "dri.ore_eur_per_t",
+    "h2-dri.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
+    "mix-dri.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
+    "ng-dri.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
+    "h2-dri.el_mwh_per_t": "dri_ng.el_mwh_per_t",
+    "mix-dri.el_mwh_per_t": "dri_ng.el_mwh_per_t",
     "iron_store.capex_eur_per_t": "iron_steel_store.capex_eur_per_t",
     "steel_store.capex_eur_per_t": "iron_steel_store.capex_eur_per_t",
     "iron_store.financing_period": "iron_steel_store.financing_period",
@@ -75,8 +75,8 @@ MODEL_NAMED_SOURCES = {
     "eaf.charge.liquid.el_mwh_per_t": "eaf_moe.el_mwh_per_t",
     "ew.iron_t_per_t_steel": "eaf_ewin.iron_t_per_t_steel",
     "moe.iron_t_per_t_steel": "eaf_moe.iron_t_per_t_steel",
-    "dri-h2.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
-    "dri-mix.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
+    "h2-dri.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
+    "mix-dri.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
 }
 WORKBOOK_SOURCES = RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_NAMED_SOURCES
 # Workbook row -> why the generator does not read it. A row the generator neither reads
@@ -91,7 +91,7 @@ UNREAD_ROWS = {
         "transmission.cost_per_mw_per_km_eur", "transmission.lifetime_years",
         "transmission.losses_pct_per_1000km", "transmission.indirect_route_factor")},
     # Held at 0 in both value and unit; the template's minimum loads stand in where the
-    # model has one (dri-h2, dri-mix, dri-ng, moe).
+    # model has one (h2-dri, mix-dri, ng-dri, moe).
     **{row: "to be discussed: is a minimum load the right approach?"
        for row in ("dri.p_min_pu", "moe.p_min_pu", "eaf.p_min_pu", "ewin.p_min_pu")},
     "finance.res.eu_wacc": "to be discussed: a WACC of its own for the renewables",
@@ -126,6 +126,6 @@ VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION = {
     "emissions.freight_kg_co2e_per_t_km.rail": float("nan"),
     "emissions.natural_gas_reductant_t_co2e_per_mwh.process": float("nan"),
     "emissions.natural_gas_reductant_t_co2e_per_mwh.upstream": float("nan"),
-    "dri-mix.reductant_store_hours": float("nan"),
+    "mix-dri.reductant_store_hours": float("nan"),
     "emissions.co2_price_eur_per_t": 0.0,
 }

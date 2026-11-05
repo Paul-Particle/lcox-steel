@@ -149,17 +149,17 @@ def test_a_gas_shaft_s_step_is_its_electricity_and_its_gas_is_scope_1():
     n = _network()
     n.add("Bus", "gas", carrier="gas")
     n.add("Generator", "grid_import", bus="electricity", carrier="AC")
-    n.add("Link", "dri-ng", bus0="gas", bus1="iron", bus2="electricity")
+    n.add("Link", "ng-dri", bus0="gas", bus1="iron", bus2="electricity")
     _dispatch(n, "generators", "p", {"grid_import": [2.0] * 4})
-    _dispatch(n, "links", "p0", {"dri-ng": [10.0] * 4})
-    _dispatch(n, "links", "p2", {"dri-ng": [2.0] * 4})
+    _dispatch(n, "links", "p0", {"ng-dri": [10.0] * 4})
+    _dispatch(n, "links", "p2", {"ng-dri": [2.0] * 4})
 
     emitted = _breakdown(n, grid_mix=_grid_mix(n))
 
     gas_t = 10.0 * 4 * SCALE * (0.2 + 0.1)
     power_t = 2.0 * 4 * SCALE * 0.8
-    assert emitted["by_step"]["dri-ng"] == pytest.approx(power_t)
-    assert emitted["electricity_t"]["dri-ng"] == pytest.approx(power_t)
+    assert emitted["by_step"]["ng-dri"] == pytest.approx(power_t)
+    assert emitted["electricity_t"]["ng-dri"] == pytest.approx(power_t)
     assert emitted["sources"]["gas"] == pytest.approx(gas_t)
 
 
@@ -168,15 +168,15 @@ def test_an_h2_shafts_preheat_is_charged_in_the_preheat_row_and_its_auxiliaries_
     n = _network()
     n.add("Bus", "hydrogen", carrier="hydrogen")
     n.add("Generator", "grid_import", bus="electricity", carrier="AC")
-    n.add("Link", "dri-h2", bus0="hydrogen", bus1="iron", bus2="electricity", bus3="electricity")
+    n.add("Link", "h2-dri", bus0="hydrogen", bus1="iron", bus2="electricity", bus3="electricity")
     _dispatch(n, "generators", "p", {"grid_import": [5.0] * 4})
-    _dispatch(n, "links", "p0", {"dri-h2": [20.0] * 4})
-    _dispatch(n, "links", "p2", {"dri-h2": [1.0] * 4})
-    _dispatch(n, "links", "p3", {"dri-h2": [4.0] * 4})
+    _dispatch(n, "links", "p0", {"h2-dri": [20.0] * 4})
+    _dispatch(n, "links", "p2", {"h2-dri": [1.0] * 4})
+    _dispatch(n, "links", "p3", {"h2-dri": [4.0] * 4})
 
     emitted = _breakdown(n, grid_mix=_grid_mix(n))
 
-    assert emitted["electricity_t"]["dri-h2"] == pytest.approx(1.0 * 4 * SCALE * 0.8)
+    assert emitted["electricity_t"]["h2-dri"] == pytest.approx(1.0 * 4 * SCALE * 0.8)
     assert emitted["electricity_t"]["reductant-h2"] == pytest.approx(4.0 * 4 * SCALE * 0.8)
 
 
@@ -547,15 +547,15 @@ def test_the_steps_stack_to_the_total():
     n.add("Bus", "hydrogen", carrier="H2")
     n.add("Generator", "grid_import", bus="electricity", carrier="AC")
     n.add("Link", "electrolyser", bus0="electricity", bus1="hydrogen")
-    n.add("Link", "dri-ng", bus0="gas", bus1="iron", bus2="electricity")
+    n.add("Link", "ng-dri", bus0="gas", bus1="iron", bus2="electricity")
     n.add("Link", "eaf", bus0="iron", bus1="steel", bus2="electricity")
     _battery(n, [-2.0, -2.0, 1.0, 1.0])
     _dispatch(n, "generators", "p", {"grid_import": [40.0] * 4})
     _dispatch(n, "links", "p0", {
-        "electrolyser": [10.0] * 4, "dri-ng": [8.0] * 4, "eaf": [5.0] * 4,
+        "electrolyser": [10.0] * 4, "ng-dri": [8.0] * 4, "eaf": [5.0] * 4,
     })
     _dispatch(n, "links", "p2", {
-        "electrolyser": [0.0] * 4, "dri-ng": [3.0] * 4, "eaf": [12.0] * 4,
+        "electrolyser": [0.0] * 4, "ng-dri": [3.0] * 4, "eaf": [12.0] * 4,
     })
     # Charges twice as hard as it discharges: the difference is the round-trip loss.
 

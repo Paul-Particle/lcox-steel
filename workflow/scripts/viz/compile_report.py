@@ -70,7 +70,7 @@ EMISSION_FACTORS_NAME = "emissions_agorameter"
 # A link's second electricity draw (on bus3), and the user it is reported under.
 # The H2 shaft preheats its own feed; the blend shaft's preheat is a link of its
 # own, `reductant-h2`, and both land in the same row.
-SECOND_DRAWS = {"dri-h2": "reductant-h2"}
+SECOND_DRAWS = {"h2-dri": "reductant-h2"}
 
 
 def _carrier_key(carrier: str) -> str:
@@ -803,7 +803,7 @@ def _leaf_breakdown(
     home_rate = home_cost / home_mwh if home_mwh > 0 else 0.0
     # The furnace melts on whichever system it stands in; everything else is at
     # home whatever the route. `draws` is keyed by link id as the network spells
-    # it — `dri-h2`, not `dri_h2` — which is what REDUCTION_LINKS names too.
+    # it — `h2-dri`, not `h2_dri` — which is what REDUCTION_LINKS names too.
     melts_abroad = destination_mwh > 0
     home_draws = {link: mwh for link, mwh in draws.items()
                   if not (melts_abroad and link == "eaf")}
@@ -1323,7 +1323,7 @@ def extract_summary(
     # On mix-dri-eaf the split happens on the reductant bus, one shaft
     # upstream; on the single-fuel routes it is the shafts themselves.
     h2_link, ng_link = (("reductant-h2", "reductant-ng")
-                        if "dri-mix" in n.links.index else ("dri-h2", "dri-ng"))
+                        if "mix-dri" in n.links.index else ("h2-dri", "ng-dri"))
     if h2_link in n.links.index or ng_link in n.links.index:
         from_h2 = -float(n.links_t.p1[h2_link].sum()) if h2_link in n.links.index else 0.0
         from_ng = -float(n.links_t.p1[ng_link].sum()) if ng_link in n.links.index else 0.0
@@ -1409,7 +1409,7 @@ def extract_summary(
         # Additionally as hours of the shaft's mean H₂ draw: what the H2 shaft
         # takes, or on the blend shaft what its hydrogen feed takes.
         h2_demand_mw = sum(float(n.links_t.p0[link].mean())
-                           for link in ("dri-h2", "reductant-h2") if link in n.links.index)
+                           for link in ("h2-dri", "reductant-h2") if link in n.links.index)
         summary["h2_buffer_duration_hours"] = (
             buffer_mwh / h2_demand_mw if buffer_mwh > 0 and h2_demand_mw > 0 else float("nan")
         )

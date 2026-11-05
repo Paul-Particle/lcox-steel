@@ -76,9 +76,9 @@ AREA_REGIONS = {
 REGIONAL_SOURCES = {
     "finance.origin_wacc": ("iron_location", "wacc", "finance.other.{region}_wacc"),
     "finance.destination_wacc": ("steel_location", "wacc", "finance.other.{region}_wacc"),
-    "dri-h2.fom_eur_per_t_capacity_per_year": ("iron_location", "fom", "iron.fom_eur_per_t_capacity_per_year_{region}"),
-    "dri-mix.fom_eur_per_t_capacity_per_year": ("iron_location", "fom", "iron.fom_eur_per_t_capacity_per_year_{region}"),
-    "dri-ng.fom_eur_per_t_capacity_per_year": ("iron_location", "fom", "iron.fom_eur_per_t_capacity_per_year_{region}"),
+    "h2-dri.fom_eur_per_t_capacity_per_year": ("iron_location", "fom", "iron.fom_eur_per_t_capacity_per_year_{region}"),
+    "mix-dri.fom_eur_per_t_capacity_per_year": ("iron_location", "fom", "iron.fom_eur_per_t_capacity_per_year_{region}"),
+    "ng-dri.fom_eur_per_t_capacity_per_year": ("iron_location", "fom", "iron.fom_eur_per_t_capacity_per_year_{region}"),
     "moe.fom_eur_per_t_capacity_per_year": ("iron_location", "fom", "iron.fom_eur_per_t_capacity_per_year_{region}"),
     "ew.fom_eur_per_t_capacity_per_year": ("iron_location", "fom", "iron.fom_eur_per_t_capacity_per_year_{region}"),
     "eaf.fom_eur_per_t_capacity_per_year": ("steel_location", "fom", "eaf.fom_eur_per_t_capacity_per_year_{region}"),

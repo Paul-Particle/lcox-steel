@@ -114,8 +114,8 @@ SECTIONS = [
 
 # The process steps, as a matrix: a column per step, a row per field. Blank where
 # a step has no such field — a press has no ore bill, a furnace burns no gas.
-PROCESS_STEPS = [("dri-h2", "H2 shaft"), ("dri-mix", "Blend shaft"),
-                 ("dri-ng", "NG shaft"), ("eaf", "EAF"), ("moe", "MOE cell"),
+PROCESS_STEPS = [("h2-dri", "H2 shaft"), ("mix-dri", "Blend shaft"),
+                 ("ng-dri", "NG shaft"), ("eaf", "EAF"), ("moe", "MOE cell"),
                  ("ew", "Electrowinning"), ("briquetting", "Briquetting")]
 PROCESS_FIELDS = [
     ("capex_eur_per_t", "Capex", "€/(t/yr)"),

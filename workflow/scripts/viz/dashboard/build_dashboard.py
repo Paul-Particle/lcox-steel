@@ -336,7 +336,7 @@ def _record(row, lcos_row, cap_row):
     built = cost_taxonomy.built_ironmaking(row)
     plant = _opt(row["cost_ironmaking_plant_eur_per_t_steel"])
     if built is not None and plant is not None:
-        key = {"dri-h2": "dri", "dri-ng": "dri_ng", "dri-mix": "dri_mix",
+        key = {"h2-dri": "dri", "ng-dri": "dri_ng", "mix-dri": "dri_mix",
                "moe": "moe", "ew": "electrowinning"}[built[0]]
         cost_detail[key] = plant
     for key, plant in (("briquetting", "briquetting_plant"), ("eaf", "steelmaking_plant")):

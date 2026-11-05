@@ -62,9 +62,9 @@ GROUPS = [
 # whichever it built as the one `ironmaking_plant` pair of leaves, and these
 # say which it was and what it was quoted at.
 IRONMAKING_PLANTS = [
-    ("dri-h2", "H2-DRI shaft"),
-    ("dri-ng", "NG-DRI shaft"),
-    ("dri-mix", "Blended-reductant shaft"),
+    ("h2-dri", "H2-DRI shaft"),
+    ("ng-dri", "NG-DRI shaft"),
+    ("mix-dri", "Blended-reductant shaft"),
     ("moe",    "MOE cell"),
     ("ew",     "Electrowinning"),
 ]

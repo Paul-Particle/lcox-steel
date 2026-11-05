@@ -1,9 +1,15 @@
 # A complete assumptions file: every key the model reads. Running
 #   python -m common.generate_inputs [WORKBOOK]
-# writes config/assumptions.yaml from it, with each value the input workbook
-# (data/assumptions/Assumptions_yaml_inputs.xlsx) holds replaced by the
-# workbook's, converted from USD to EUR. The keys the workbook does not hold
-# (the backstop values) are copied over as they stand.
+# writes config/generated/assumptions.yaml from it, with each value the input
+# workbook (data/assumptions/Assumptions_yaml_inputs.xlsx) holds replaced by the
+# workbook's, in EUR. The keys the workbook does not hold (the backstop values)
+# are copied over as they stand.
+#
+# Names: hyphens where a name is a Snakemake id (a route, tech, site variant or
+# area) or a part the code builds such ids from, so a route's ironmaking section
+# is the route less `-eaf` (`h2-dri-eaf` → `h2-dri`); underscores everywhere
+# else (`h2_buffer`, `natural_gas`). Leaves are written as the workbook writes
+# them, metric then currency then unit (`capex_eur_per_mw`), fixed O&M as `fom`.
 
 finance:
   # The origin is where the iron is made: renewables, storage, electrolyser,
@@ -88,7 +94,7 @@ h2_buffer:
 # reviewed — sources noted per section.
 # ---------------------------------------------------------------------------
 
-dri-h2:
+h2-dri:
   # H2 DRI shaft furnace, per tonne of annual DRI output. A greenfield,
   # equipment-level figure: taken with the EAF's it puts the whole DR-EAF route
   # near 780 €/(t steel/yr), which is the range built and announced projects sit
@@ -110,14 +116,14 @@ dri-h2:
   iron_t_per_t_steel: 1.17            # DR pellets: gangue plus metallisation loss
   p_min_pu: 0.5
 
-dri-mix:
+mix-dri:
   # One shaft reducing with whatever blend of H2 and natural gas it is fed —
   # not two furnaces side by side. A Midrex-type shaft takes a blended
   # reductant gas, so the route buys one furnace and the optimiser picks the
   # mix, instead of paying capex twice for the option to switch.
   #
   # Both single-fuel shafts sit at the same 295 €2022/(t DRI/yr), so a
-  # dual-capable one is taken at that level too. See dri-h2 for where the
+  # dual-capable one is taken at that level too. See h2-dri for where the
   # figure comes from and why it is not the familiar 230.
   capex_eur_per_t: 566.4
   fom_eur_per_t_capacity_per_year: 70.32
@@ -231,9 +237,9 @@ natural_gas:
   price_eur_per_mwh: 21.89       # midpoint of the register's low/high benchmark
   # Its emissions and the optional carbon price on them are under `emissions`.
 
-dri-ng:
+ng-dri:
   # Natural-gas DRI shaft (Midrex/HYL type) — the mature fossil benchmark.
-  # Same shaft capex level as the H2 shaft (see dri-h2 for the source); gas use
+  # Same shaft capex level as the H2 shaft (see h2-dri for the source); gas use
   # ~10 GJ/t DRI. Electricity is lower than the H2 shaft (no H2 preheat).
   capex_eur_per_t: 566.4
   fom_eur_per_t_capacity_per_year: 70.32

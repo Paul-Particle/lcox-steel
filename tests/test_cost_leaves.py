@@ -89,7 +89,7 @@ def _fields(n, assumptions: dict) -> tuple[dict, dict, float]:
     # The drawing links and the generation, as extract_summary hands them over.
     annual = 8760.0 / len(n.snapshots)
     # Keyed by link id, exactly as `_emissions_breakdown` hands them over: the
-    # network spells a shaft `dri-h2`, and a stemmed key here would let a
+    # network spells a shaft `h2-dri`, and a stemmed key here would let a
     # mis-keyed lookup in the split pass the test and fail on a real report.
     drawn = {link: float(n.links_t.p0[link].sum()) * annual
              for link in ELECTRICITY_USERS if link in n.links.index}

@@ -397,7 +397,7 @@
       body:"Generator on gas bus · extendable, 0 capex\nmarginal = €35/MWh + CO2 (0.20 t/MWh × price)\nkept separate so gas lands in its own cost group" },
     { id:"gas",         kind:"bus",  color:"gas", name:"gas",         unit:"MW CH4 LHV", x:544, y:482, routes:GAS,
       body:"Bus · carrier gas\nFlat-priced natural gas for the fossil routes." },
-    { id:"dri_ng",      kind:"link", color:"iron",name:"dri_ng",      x:694, y:482, routes:GAS,
+    { id:"ng_dri",      kind:"link", color:"iron",name:"ng_dri",      x:694, y:482, routes:GAS,
       body:"Link  gas -> iron  (+ elec draw, bus2)\neff = 1 / 2.75 t/MWh gas · el 0.1 MWh/t\nore €200/t · p_min 0.5 · capex €230/(t·yr)" },
 
     { id:"electrowinning",kind:"link",color:"iron",name:"electrowinning",x:694,y:372, routes:["ew-eaf"],
@@ -442,8 +442,8 @@
     { from:"dri",         to:"iron",         carrier:"iron", kind:"flow", routes:DRI, sa:"r", ea:"l" },
 
     { from:"gas_supply",  to:"gas",          carrier:"gas", kind:"flow", routes:GAS, sa:"r", ea:"l" },
-    { from:"gas",         to:"dri_ng",       carrier:"gas", kind:"flow", routes:GAS, sa:"r", ea:"l" },
-    { from:"dri_ng",      to:"iron",         carrier:"iron", kind:"flow", routes:GAS, sa:"r", ea:"l" },
+    { from:"gas",         to:"ng_dri",       carrier:"gas", kind:"flow", routes:GAS, sa:"r", ea:"l" },
+    { from:"ng_dri",      to:"iron",         carrier:"iron", kind:"flow", routes:GAS, sa:"r", ea:"l" },
 
     { from:"electricity", to:"electrowinning", carrier:"ac", kind:"flow", routes:["ew-eaf"], sa:"r", ea:"l" },
     { from:"electrowinning", to:"iron",       carrier:"iron", kind:"flow", routes:["ew-eaf"], sa:"r", ea:"l" },
@@ -473,7 +473,7 @@
 
     // electricity draws (bus2)
     { from:"electricity", to:"dri",    carrier:"draw", kind:"draw", routes:DRI, sa:"t", ea:"b" },
-    { from:"electricity", to:"dri_ng", carrier:"draw", kind:"draw", routes:GAS, sa:"b", ea:"t" },
+    { from:"electricity", to:"ng_dri", carrier:"draw", kind:"draw", routes:GAS, sa:"b", ea:"t" },
     { from:"electricity", to:"eaf",    carrier:"draw", kind:"draw", routes:IRON, sa:"t", ea:"t" },
   ];
 

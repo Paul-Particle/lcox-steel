@@ -121,11 +121,7 @@ def route_stem(route: str) -> str:
 # briquetted to survive the voyage and brings the gangue the shaft could not take
 # out, while electrowon plates and cast MOE iron already keep and are nearly pure
 # iron. The furnace charges them differently, so they are different states.
-_IRON_SOURCE = {
-    "h2-dri-eaf": "dri-h2", "ng-dri-eaf": "dri-ng",
-    "mix-dri-eaf": "dri-mix",
-    "moe-eaf": "moe", "ew-eaf": "ew",
-}
+# Which step made the iron is the route's name before `-eaf`.
 _CHARGE_STATE = {"h2-dri-eaf": "hot", "ng-dri-eaf": "hot", "mix-dri-eaf": "hot",
                  "moe-eaf": "liquid", "ew-eaf": "plates"}
 _EXPORT_CHARGE_STATE = {"h2-dri-eaf": "briquettes", "ng-dri-eaf": "briquettes",
@@ -134,7 +130,7 @@ _EXPORT_CHARGE_STATE = {"h2-dri-eaf": "briquettes", "ng-dri-eaf": "briquettes",
 EAF_CHARGE = {
     route: ((_EXPORT_CHARGE_STATE if route.endswith(EXPORT_SUFFIX) else _CHARGE_STATE)
             [route_stem(route)],
-            _IRON_SOURCE[route_stem(route)])
+            route_stem(route).removesuffix("-eaf"))
     for route in ROUTES
 }
 
@@ -261,14 +257,14 @@ def build_network(
                     bus=DELIVERED_STEEL_BUS if deliver_steel else "steel")
     _add_steel_store(n, assumptions["steel_store"], furnace_wacc, steel_t_per_h)
     if stem in _H2_DRI_ROUTES:
-        _add_dri_link(n, plant, assumptions["dri-h2"], origin_wacc, elec_bus)
+        _add_dri_link(n, plant, assumptions["h2-dri"], origin_wacc, elec_bus)
     if stem in _GAS_ROUTES:
         _add_gas_supply(n, assumptions["natural_gas"], assumptions["emissions"])
     if stem == "ng-dri-eaf":
-        _add_ng_dri_link(n, assumptions["dri-ng"], origin_wacc, elec_bus)
+        _add_ng_dri_link(n, assumptions["ng-dri"], origin_wacc, elec_bus)
     if stem in _MIX_ROUTES:
         _add_mix_dri_links(
-            n, plant, assumptions["dri-mix"], assumptions["dri-ng"], origin_wacc, elec_bus,
+            n, plant, assumptions["mix-dri"], assumptions["ng-dri"], origin_wacc, elec_bus,
             steel_t_per_h=steel_t_per_h,
         )
     if stem == "moe-eaf":
@@ -371,14 +367,14 @@ def _add_carriers(
     if stem in _H2_ROUTES:
         base += ["H2", "electrolyser"]
     if stem in _GAS_ROUTES:
-        base += ["gas", "dri-ng"]
+        base += ["gas", "ng-dri"]
     if stem in _IRON_ROUTES:
         base += ["iron", "eaf"]
     base += ["steel"]
     if stem in _H2_DRI_ROUTES:
-        base += ["dri-h2"]
+        base += ["h2-dri"]
     if stem in _MIX_ROUTES:
-        base += ["reductant", "dri-mix"]
+        base += ["reductant", "mix-dri"]
     if stem == "ew-eaf":
         base += ["ew"]
     if stem == "moe-eaf":
@@ -637,12 +633,12 @@ def _add_dri_link(
     )
     n.add(
         "Link",
-        "dri-h2",
+        "h2-dri",
         bus0="hydrogen",
         bus1="iron",
         bus2=elec_bus,
         bus3=elec_bus,
-        carrier="dri-h2",
+        carrier="h2-dri",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh_h2,
         efficiency2=-dri_cfg["el_mwh_per_t"] * t_iron_per_mwh_h2,
@@ -655,7 +651,7 @@ def _add_dri_link(
 
 
 def _add_mix_dri_links(
-    n: pypsa.Network, plant: dict, mix_cfg: dict, dri_ng_cfg: dict,
+    n: pypsa.Network, plant: dict, mix_cfg: dict, ng_dri_cfg: dict,
     wacc: float, elec_bus: str, steel_t_per_h: float,
 ) -> None:
     """One shaft on a blended reductant: H2 and gas both feed it, it makes iron.
@@ -685,12 +681,12 @@ def _add_mix_dri_links(
         bus0="gas", bus1="reductant",
         carrier="reductant",
         p_nom_extendable=True,
-        efficiency=reductant_mwh_per_t / dri_ng_cfg["gas_mwh_per_t"],
+        efficiency=reductant_mwh_per_t / ng_dri_cfg["gas_mwh_per_t"],
     )
     n.add(
-        "Link", "dri-mix",
+        "Link", "mix-dri",
         bus0="reductant", bus1="iron", bus2=elec_bus,
-        carrier="dri-mix",
+        carrier="mix-dri",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh,
         efficiency2=-mix_cfg["el_mwh_per_t"] * t_iron_per_mwh,
@@ -733,7 +729,7 @@ def _add_gas_supply(n: pypsa.Network, ng_cfg: dict, emissions_cfg: dict) -> None
 
 
 def _add_ng_dri_link(
-    n: pypsa.Network, dri_ng_cfg: dict, wacc: float, elec_bus: str
+    n: pypsa.Network, ng_dri_cfg: dict, wacc: float, elec_bus: str
 ) -> None:
     """NG-DRI shaft: natural gas (MW LHV) → sponge iron (t/h), drawing shaft electricity.
 
@@ -741,20 +737,20 @@ def _add_ng_dri_link(
     gas itself is priced on the gas_supply generator, so only ore enters here
     as marginal cost.
     """
-    t_iron_per_mwh_gas = 1.0 / dri_ng_cfg["gas_mwh_per_t"]
+    t_iron_per_mwh_gas = 1.0 / ng_dri_cfg["gas_mwh_per_t"]
     n.add(
         "Link",
-        "dri-ng",
+        "ng-dri",
         bus0="gas",
         bus1="iron",
         bus2=elec_bus,
-        carrier="dri-ng",
+        carrier="ng-dri",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh_gas,
-        efficiency2=-dri_ng_cfg["el_mwh_per_t"] * t_iron_per_mwh_gas,
-        p_min_pu=dri_ng_cfg["p_min_pu"],
-        capital_cost=_process_capital_cost(dri_ng_cfg, wacc, t_iron_per_mwh_gas),
-        marginal_cost=dri_ng_cfg["ore_eur_per_t"] * t_iron_per_mwh_gas,
+        efficiency2=-ng_dri_cfg["el_mwh_per_t"] * t_iron_per_mwh_gas,
+        p_min_pu=ng_dri_cfg["p_min_pu"],
+        capital_cost=_process_capital_cost(ng_dri_cfg, wacc, t_iron_per_mwh_gas),
+        marginal_cost=ng_dri_cfg["ore_eur_per_t"] * t_iron_per_mwh_gas,
     )
 
 

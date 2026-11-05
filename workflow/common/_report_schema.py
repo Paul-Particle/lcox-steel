@@ -24,7 +24,7 @@ route without a MOE cell reads `0` there.
 
 Field names separate words with `_` throughout, including the parts that name a
 tech or a link. The network and the scenario tables hyphenate those ids —
-`wind-onshore`, `dri-h2` — so every field built from one goes through
+`wind-onshore`, `h2-dri` — so every field built from one goes through
 `field_stem`, so every field name separates words with `_` whatever spelling the
 id behind it uses.
 
@@ -82,7 +82,7 @@ def variant_field(tech: str) -> str:
 RES_TECHS = ("solar", "wind-onshore", "wind-offshore")
 
 # The steel chain's links, by the id `build_network` gives them.
-PROCESS_LINKS = ("dri-h2", "dri-ng", "dri-mix", "eaf", "moe", "ew", "briquetting")
+PROCESS_LINKS = ("h2-dri", "ng-dri", "mix-dri", "eaf", "moe", "ew", "briquetting")
 
 # Annualised cost groups, in the order `compile_report._cost_breakdown` builds
 # them. Together they are the total annual cost.
@@ -124,7 +124,7 @@ def emission_step(element_id: str) -> str:
 # The links that buy ore, by the id `build_network` gives them: each carries an
 # `ore_eur_per_t` quote on its marginal cost. The furnace buys consumables
 # instead and the briquetting press buys nothing, so neither is here.
-ORE_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew")
+ORE_LINKS = ("h2-dri", "ng-dri", "mix-dri", "moe", "ew")
 
 
 def plant_stem(link: str) -> str:
@@ -141,7 +141,7 @@ def plant_stem(link: str) -> str:
 # cells, and the preheat on the blended shaft's hydrogen feed. What separates
 # them from the rest of the drawing links is what their power was for, which is
 # how ELECTRICITY_JOBS below divides the electricity bill.
-REDUCTION_LINKS = ("dri-h2", "dri-ng", "dri-mix", "moe", "ew", "reductant-h2")
+REDUCTION_LINKS = ("h2-dri", "ng-dri", "mix-dri", "moe", "ew", "reductant-h2")
 
 # The finest split of the levelised cost of steel the report carries: one leaf
 # per priced thing, each €/t steel, together the whole of it. The `cost_*_meur`
