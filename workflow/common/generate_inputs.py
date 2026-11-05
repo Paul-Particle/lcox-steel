@@ -295,7 +295,7 @@ def main() -> None:
     parser.add_argument("workbook", nargs="?", type=Path, default=DEFAULT_WORKBOOK)
     parser.add_argument("--include-template", action="store_true",
                         help=f"also run the scenarios of {TEMPLATE_SCENARIOS_PATH.name}")
-    parser.add_argument("--verbose", "-v", action="store_true", help="also list the backstop values")
+    parser.add_argument("--verbose", "-v", action="store_true", help="also list the workbook rows not used")
     arguments = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     log.setLevel(logging.DEBUG if arguments.verbose else logging.INFO)
@@ -334,8 +334,15 @@ def main() -> None:
         set_nested(assumptions, path, value)
     scenarios, overlays = build_scenarios(scenario_rows, named_sensitivity_inputs | named_regional_inputs,
                                           assumptions, areas)
-    set_by_every_scenario = set.intersection(*(set(flatten(overlay)) for overlay in overlays.values()))
-    backstop_paths = sorted(set(template_values) - set(workbook_values) - set_by_every_scenario)
+    # Template key -> how many scenarios run on its value, as neither the workbook nor their overlay sets it.
+    flat_overlays = [flatten(overlay) for overlay in overlays.values()]
+    backstop_counts = {path: sum(path not in overlay for overlay in flat_overlays)
+                       for path in sorted(set(template_values) - set(workbook_values))}
+    backstop_counts = {path: count for path, count in backstop_counts.items() if count}
+    if backstop_counts:
+        log.warning(f"{len(backstop_counts)} values come from {TEMPLATE_PATH.name}, as the workbook gives none; "
+                    f"the scenarios (of {len(overlays)}) that run on each:\n  "
+                    + "\n  ".join(f"{path}: {count}" for path, count in backstop_counts.items()))
     if arguments.include_template:
         template_scenarios = pd.read_csv(TEMPLATE_SCENARIOS_PATH, comment="#", dtype=str)
         clashing = sorted(set(template_scenarios["scenario"]) & set(overlays))
@@ -365,11 +372,10 @@ def main() -> None:
         stale_overlay.unlink()
 
     used_workbook_keys = {*WORKBOOK_SOURCES.values(), *(row for rows in named_rows.values() for row in rows.values())}
-    log.info(f"{len(workbook_values)} values from {arguments.workbook.name}, {len(backstop_paths)} backstop "
+    log.info(f"{len(workbook_values)} values from {arguments.workbook.name}, {len(backstop_counts)} backstop "
              f"values from {TEMPLATE_PATH.name}; {scenarios['scenario'].nunique()} scenarios, "
              f"{len(scenarios)} scenario rows, {sum(map(bool, overlays.values()))} overlays; "
              f"{len(changed)} files written, {len(stale_overlays)} stale overlays removed")
-    log.debug("backstop values:\n  " + "\n  ".join(backstop_paths))
     log.debug("workbook rows not used:\n  " + "\n  ".join(sorted(set(workbook_inputs.index) - used_workbook_keys)))
 
 

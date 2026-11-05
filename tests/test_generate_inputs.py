@@ -5,6 +5,7 @@ data/assumptions/Assumptions_yaml_inputs.xlsx, indexed by its YAML key column.
 """
 
 import json
+import re
 import sys
 
 import pandas as pd
@@ -172,20 +173,36 @@ def test_unknown_or_contradicting_terms_stop_the_build():
     assert "national-average on the grid of an area that runs per zone" in message
 
 
-def test_an_overlay_kept_by_hand_under_a_generated_scenario_name_stops_the_build(tmp_path, monkeypatch):
-    """Whatever the generated overlay holds, the solve would otherwise read the hand-kept one."""
+@pytest.fixture
+def outputs_in_tmp(tmp_path, monkeypatch):
+    """Run the generator on the real workbook, writing into tmp_path instead of config/."""
     overlays_dir, generated_dir = tmp_path / "overlays", tmp_path / "generated"
     overlays_dir.mkdir()
-    (overlays_dir / "domestic-ESP-moe-eaf-solar-p95.yaml").write_text("finance:\n  origin_wacc: 0.05\n")
     monkeypatch.setattr(generate_inputs, "OVERLAYS_DIR", overlays_dir)
     monkeypatch.setattr(generate_inputs, "GENERATED_DIR", generated_dir)
     monkeypatch.setattr(generate_inputs, "ASSUMPTIONS_PATH", generated_dir / "assumptions.yaml")
     monkeypatch.setattr(generate_inputs, "SCENARIOS_PATH", generated_dir / "scenarios.csv")
     monkeypatch.setattr(sys, "argv", ["generate_inputs"])
+    return tmp_path
+
+
+def test_an_overlay_kept_by_hand_under_a_generated_scenario_name_stops_the_build(outputs_in_tmp):
+    """Whatever the generated overlay holds, the solve would otherwise read the hand-kept one."""
+    (outputs_in_tmp / "overlays" / "domestic-ESP-moe-eaf-solar-p95.yaml").write_text("finance:\n  origin_wacc: 0.05\n")
 
     with pytest.raises(ValueError, match=r"\['domestic-ESP-moe-eaf-solar-p95'\] .* are kept by hand"):
         generate_inputs.main()
-    assert not generated_dir.exists()
+    assert not (outputs_in_tmp / "generated").exists()
+
+
+def test_the_template_values_standing_in_for_the_workbook_are_named_with_the_scenarios_they_reach(
+        outputs_in_tmp, caplog):
+    """A key every scenario's overlay sets (a regional one) is no stand-in, so no special case is needed."""
+    generate_inputs.main()
+
+    warning = next(record.message for record in caplog.records if "as the workbook gives none" in record.message)
+    assert re.search(r"briquetting\.yield_t_per_t: \d+", warning)
+    assert "finance.origin_wacc" not in warning
 
 
 def test_an_override_naming_a_sensitivity_row_takes_that_level():

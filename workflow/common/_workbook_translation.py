@@ -78,13 +78,13 @@ MODEL_NAMED_SOURCES = {
     "dri-mix.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
 }
 WORKBOOK_SOURCES = RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_NAMED_SOURCES
-# Rows the workbook still holds at 0, value and unit:
+# Keys the model needs and the workbook gives no value for; the template's value
+# stands in, and the generator warns until the workbook gives one. Where the workbook
+# has a row, it holds 0 in both value and unit and is left unread.
 #   "dri-h2.p_min_pu": "dri.p_min_pu",
 #   "dri-mix.p_min_pu": "dri.p_min_pu",
 #   "dri-ng.p_min_pu": "dri.p_min_pu",
-#   "eaf.p_min_pu": "eaf.p_min_pu",
 #   "moe.p_min_pu": "moe.p_min_pu",
-#   "ew.p_min_pu": "ewin.p_min_pu",
 #   "steel_store.max_weeks": "steel_store.max_weeks",
 #   "grid.connection_capex_eur_per_mw": "grid.connection_capex_eur_per_mw",
 #   "grid.connection_lifetime_years": "grid.connection_lifetime_years",
@@ -94,6 +94,17 @@ WORKBOOK_SOURCES = RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_
 #   "transmission.lifetime_years": "transmission.lifetime_years",
 #   "transmission.losses_pct_per_1000km": "transmission.losses_pct_per_1000km",
 #   "transmission.indirect_route_factor": "transmission.indirect_route_factor",
+#   "anchor.min_capacity_mw"  (the anchor floor: https://github.com/Paul-Particle/lcox-steel/issues/47)
+#   "briquetting.capex_per_t_per_year_eur"
+#   "briquetting.opex_per_t_per_year_eur"
+#   "briquetting.lifetime_years"
+#   "briquetting.yield_t_per_t"
+#   "eaf.consumables_eur_per_t"
+#   "plant.steel_mt_per_year"
+#   "natural_gas.price_eur_per_mwh"  (the workbook gives only its low and high)
+#   "electrolyser.varopex_eur_per_mwh_el"  (the workbook gives it per MWh of H2: a model change)
+# Rows held at 0 for keys the model does not have (a minimum load: to be discussed):
+#   "eaf.p_min_pu", "ewin.p_min_pu"
 
 # Workbook override keys that stand for several model keys.
 OVERRIDE_KEYS = {"finance.default_wacc": ("finance.origin_wacc", "finance.destination_wacc")}
