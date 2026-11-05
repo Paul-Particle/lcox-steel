@@ -106,6 +106,23 @@ WORKBOOK_SOURCES = RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_
 # Rows held at 0 for keys the model does not have (a minimum load: to be discussed):
 #   "eaf.p_min_pu", "ewin.p_min_pu"
 
+# Model key -> its value where no scenario the workbook configures requires the key. NaN
+# stops any run that reads it; the carbon price is zero because no scenario prices carbon.
+VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION = {
+    **{f"transport.distance_km.{origin}.ESP.rail": float("nan") for origin in ("DEU", "FRA", "ESP", "AB", "ONT")},
+    **{f"transport.distance_km.{origin}.ESP.sea": float("nan") for origin in ("AB", "ONT")},
+    "transport.distance_km.DEMO.ES_SYN.sea": float("nan"),
+    **{f"transport.rail.{cargo}.{price}": float("nan")
+       for cargo in ("iron", "steel") for price in ("eur_per_t", "eur_per_t_km")},
+    # Diagnostic only: no total counts freight emissions.
+    "emissions.freight_kg_co2e_per_t_km.sea": float("nan"),
+    "emissions.freight_kg_co2e_per_t_km.rail": float("nan"),
+    "emissions.natural_gas_reductant_t_co2e_per_mwh.process": float("nan"),
+    "emissions.natural_gas_reductant_t_co2e_per_mwh.upstream": float("nan"),
+    "dri-mix.reductant_store_hours": float("nan"),
+    "emissions.co2_price_eur_per_t": 0.0,
+}
+
 # Workbook override keys that stand for several model keys.
 OVERRIDE_KEYS = {"finance.default_wacc": ("finance.origin_wacc", "finance.destination_wacc")}
 

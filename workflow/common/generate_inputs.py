@@ -19,7 +19,8 @@ import pandas as pd
 import yaml
 
 from common._paths import REPO_ROOT
-from common._workbook_translation import RES_TECHS, WORKBOOK_SOURCES, translate_override
+from common._workbook_translation import (RES_TECHS, VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION,
+                                          WORKBOOK_SOURCES, translate_override)
 
 log = logging.getLogger(__name__)
 
@@ -328,18 +329,19 @@ def main() -> None:
     if mixed_units:
         raise ValueError(f"the base, sensitivity and regional rows of {mixed_units} come in different units")
     template_values = flatten(template)
-    unknown_paths = sorted((set(workbook_values) | set(named_rows)) - set(template_values))
+    base_values = workbook_values | VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION
+    unknown_paths = sorted((set(base_values) | set(named_rows)) - set(template_values))
     if unknown_paths:
         raise KeyError(f"the workbook sets keys {TEMPLATE_PATH.name} does not have: {unknown_paths}")
     assumptions = copy.deepcopy(template)
-    for path, value in workbook_values.items():
+    for path, value in base_values.items():
         set_nested(assumptions, path, value)
     scenarios, overlays = build_scenarios(scenario_rows, named_sensitivity_inputs | named_regional_inputs,
                                           assumptions, areas)
     # Template key -> how many scenarios run on its value, as neither the workbook nor their overlay sets it.
     flat_overlays = [flatten(overlay) for overlay in overlays.values()]
     backstop_counts = {path: sum(path not in overlay for overlay in flat_overlays)
-                       for path in sorted(set(template_values) - set(workbook_values))}
+                       for path in sorted(set(template_values) - set(base_values))}
     backstop_counts = {path: count for path, count in backstop_counts.items() if count}
     if backstop_counts:
         log.warning(f"{len(backstop_counts)} values come from {TEMPLATE_PATH.name}, as the workbook gives none; "
@@ -374,7 +376,8 @@ def main() -> None:
         stale_overlay.unlink()
 
     used_workbook_keys = {*WORKBOOK_SOURCES.values(), *(row for rows in named_rows.values() for row in rows.values())}
-    log.info(f"{len(workbook_values)} values from {arguments.workbook.name}, {len(backstop_counts)} backstop "
+    log.info(f"{len(workbook_values)} values from {arguments.workbook.name}, "
+             f"{len(VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION)} for keys its scenarios do not require, {len(backstop_counts)} backstop "
              f"values from {TEMPLATE_PATH.name}; {scenarios['scenario'].nunique()} scenarios, "
              f"{len(scenarios)} scenario rows, {sum(map(bool, overlays.values()))} overlays; "
              f"{len(changed)} files written, {len(stale_overlays)} stale overlays removed")

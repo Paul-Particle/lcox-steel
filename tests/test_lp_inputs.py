@@ -42,5 +42,5 @@ def test_an_inf_stops_the_build_once_the_network_stands():
 
 
 def test_a_nan_the_route_does_not_read_is_no_problem():
-    """What the workbook does not want is NaN, and only the runs that read it stop."""
+    """A key no workbook scenario requires is NaN, and only the runs that read it stop."""
     build_with("moe-eaf", "dri-h2", "h2_preheat_el_mwh_per_t", np.nan)

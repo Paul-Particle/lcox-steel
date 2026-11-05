@@ -632,9 +632,10 @@ def _leaf_breakdown(
     emissions_cfg = assumptions["emissions"]
     gas_mwh = (float(n.generators_t.p["gas_supply"].sum()) * annual_scale
                if "gas_supply" in n.generators.index else 0.0)
-    carbon_per_mwh = (emissions_cfg["co2_price_eur_per_t"]
-                      * emissions_cfg["natural_gas_reductant_t_co2e_per_mwh"]["process"])
-    leaves["gas_carbon"] = gas_mwh * carbon_per_mwh
+    # Read only by a run that burns gas, as the solve reads it.
+    leaves["gas_carbon"] = (gas_mwh * emissions_cfg["co2_price_eur_per_t"]
+                            * emissions_cfg["natural_gas_reductant_t_co2e_per_mwh"]["process"]
+                            if gas_mwh else 0.0)
     leaves["gas_fuel"] = breakdown["gas"] - leaves["gas_carbon"]
 
     # -- hydrogen: the electrolyser's water and consumables are its marginal

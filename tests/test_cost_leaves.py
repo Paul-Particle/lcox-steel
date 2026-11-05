@@ -11,11 +11,15 @@ than optimised: closure is arithmetic and holds whatever the optimiser would
 have picked, so the tests need no solver and no cutouts.
 """
 
+import copy
+
 import numpy as np
 import pandas as pd
 import pytest
 import yaml
 
+from common._workbook_translation import VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION
+from common.generate_inputs import set_nested
 from scripts.viz import compile_report
 from scripts.solve.build_network import build_network
 from common._report_schema import (
@@ -199,6 +203,21 @@ def test_the_electrolyser_pays_its_water_per_mwh_of_hydrogen_out(assumptions):
 
     assert electrolyser["marginal_cost"] / electrolyser["efficiency"] == pytest.approx(
         assumptions["electrolyser"]["varopex_eur_per_mwh_h2"])
+
+
+@pytest.mark.parametrize("route", ["h2-dri-eaf", "moe-eaf", "ew-eaf",
+                                   "h2-dri-eaf-export", "moe-eaf-export", "ew-eaf-export"])
+def test_the_workbooks_routes_build_and_cost_without_the_keys_its_scenarios_do_not_require(route, assumptions):
+    """NaN where no workbook scenario requires a value stops only the runs that read it, and none of its routes do."""
+    without_unrequired = copy.deepcopy(assumptions)
+    for path, value in VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION.items():
+        set_nested(without_unrequired, path, value)
+    n = _solved(route, without_unrequired)
+    fields, breakdown, steel_t = _fields(n, without_unrequired)
+
+    assert all(np.isfinite(value) for value in fields.values())
+    leaves = sum(fields[f"cost_{leaf}_eur_per_t"] for leaf in LEAF_COSTS)
+    assert leaves == pytest.approx(sum(breakdown.values()) / steel_t, rel=1e-9)
 
 
 @pytest.mark.parametrize("group", ["ladle_metallurgy", "process"])

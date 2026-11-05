@@ -331,8 +331,8 @@ def build_network(
         _add_grid_import(n, price_series, assumptions["grid"], origin_wacc, bus=elec_bus)
 
     # A NaN that `add` could not see (one in an hourly series) or an inf, which leaves
-    # the solver nothing to report, stops the build too: a key set to NaN because the
-    # workbook does not want it must never reach a run that uses it.
+    # the solver nothing to report, stops the build too: a key set to NaN because no
+    # scenario of the workbook requires it must never reach a run that uses it.
     # Each input as a table with one row per component.
     lp_inputs = {}
     for component, attributes in LP_INPUT_ATTRIBUTES.items():
