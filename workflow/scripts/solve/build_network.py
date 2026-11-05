@@ -570,7 +570,10 @@ def _add_electrolyser(
 def _add_h2_buffer(n: pypsa.Network, buf_cfg: dict, wacc: float) -> None:
     """Add the extendable, cyclic H2 storage buffer (a Store on the hydrogen bus)."""
     # Store capital_cost is per MWh of e_nom (H2 LHV energy capacity)
-    cap_cost = annuity_factor(wacc, buf_cfg["lifetime_years"]) * buf_cfg["capex_per_mwh_eur"]
+    cap_cost = (
+        annuity_factor(wacc, buf_cfg["lifetime_years"]) * buf_cfg["capex_per_mwh_eur"]
+        + buf_cfg["opex_per_mwh_per_year_eur"]
+    )
     n.add(
         "Store",
         "h2_buffer",

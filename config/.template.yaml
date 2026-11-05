@@ -69,6 +69,8 @@ h2_buffer:
   # Tank with compressor. A salt cavern, at about 350 EUR/MWh, is the low-cost
   # sensitivity case.
   capex_per_mwh_eur: 60_050
+  # Fixed O&M per MWh of storage capacity per year: about 1.1 % of the capex.
+  opex_per_mwh_per_year_eur: 668.54
   lifetime_years: 30
   # e_nom_extendable always True — PyPSA finds optimal buffer size
 

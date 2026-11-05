@@ -21,6 +21,7 @@ import yaml
 from common._workbook_translation import VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION
 from common.generate_inputs import set_nested
 from scripts.viz import compile_report
+from scripts.solve._helpers_solve import annuity_factor
 from scripts.solve.build_network import build_network
 from common._report_schema import (
     ELECTRICITY_USERS,
@@ -203,6 +204,16 @@ def test_the_electrolyser_pays_its_water_per_mwh_of_hydrogen_out(assumptions):
 
     assert electrolyser["marginal_cost"] / electrolyser["efficiency"] == pytest.approx(
         assumptions["electrolyser"]["varopex_eur_per_mwh_h2"])
+
+
+def test_the_hydrogen_buffer_pays_its_fixed_om_on_top_of_its_annuitised_capex(assumptions):
+    """Per MWh of storage a year, as every other element's capital cost carries its fixed O&M."""
+    buffer = _solved("h2-dri-eaf", assumptions).stores.loc["h2_buffer"]
+    buffer_cfg = assumptions["h2_buffer"]
+    annuitised_capex = (annuity_factor(assumptions["finance"]["origin_wacc"], buffer_cfg["lifetime_years"])
+                        * buffer_cfg["capex_per_mwh_eur"])
+
+    assert buffer["capital_cost"] == pytest.approx(annuitised_capex + buffer_cfg["opex_per_mwh_per_year_eur"])
 
 
 @pytest.mark.parametrize("route", ["h2-dri-eaf", "moe-eaf", "ew-eaf",

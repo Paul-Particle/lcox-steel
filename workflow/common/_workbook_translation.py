@@ -23,6 +23,7 @@ RENAMED_SOURCES = {
     "electrolyser.efficiency_kwh_per_kg": "electrolyser.efficiency_kwh_per_kg",
     "battery.efficiency_roundtrip": "battery.efficiency_roundtrip",
     "h2_buffer.capex_per_mwh_eur": "h2_buffer.capex_eur_per_mwh",
+    "h2_buffer.opex_per_mwh_per_year_eur": "h2_buffer.fom_eur_per_mwh",
     "dri-ng.gas_mwh_per_t": "dri_ng.gas_mwh_per_t",
     "dri-ng.el_mwh_per_t": "dri_ng.el_mwh_per_t",
     "eaf.capex_per_t_per_year_eur": "eaf.capex_eur_per_t",
@@ -97,7 +98,6 @@ UNREAD_ROWS = {
     "finance.res.noneu_wacc": "to be discussed: a WACC of its own for the renewables",
     "dri_h2.ng_mwh_per_t": "to be discussed: natural gas into the H2 shaft?",
     "eaf_hbi.iron_t_per_t_steel": "to be discussed: the iron ratio of the HBI charge, which repeats the DRI's",
-    "h2_buffer.fom_eur_per_mwh": "model change to make: fixed O&M on the hydrogen buffer, as on every other element",
     "battery.max_hours": "the model does not use it: the optimiser sizes the battery's power and energy apart",
 }
 # Keys the model needs and the workbook has no row for; the template's value stands in,
