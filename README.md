@@ -446,6 +446,18 @@ it to `ES_SYN`, sit on the shipped Victoria cutout, so they run after a fresh
 clone with no CDS download. Each overlay moves one value its route reads — a
 salt-cavern H2 store for the H2 routes, a lower MOE turndown for the MOE ones.
 
+Beside them, ten scenarios are the workbook's in miniature: what the generator
+writes for a workbook row with its iron in AUS and its steel in ESP, moved onto
+`DEMO` and `ES_SYN`. They take every route at home and abroad, every power
+supply (`islanded_res`, `res_grid`, `grid`), each renewable at both site
+variants, a grid-only scenario run once per zone, and one row with an override
+of each form, and their overlays carry the regional values the generator picks.
+`DEMO`'s grid is the same made-up market as `ES_SYN`'s. So
+`snakemake --configfile config/demo.yaml` checks, in minutes and with no
+download or key, that every kind of scenario the generator builds from the
+workbook solves and reports (a mix, which it does not build yet, is not among
+them).
+
 ### A scenario with several runs
 
 An area on the grid that trades through market zones is run once per zone.

@@ -16,3 +16,29 @@ demo-moe-eaf-export,DEMO-ES_SYN,moe-eaf-export,grid,emissions,ES_SYN,20250101,20
 demo-moe-eaf-ship,DEMO-ES_SYN,moe-eaf,wind-onshore,bestsite-p95,DEMO,20250101,20251231
 demo-moe-eaf-ship,DEMO-ES_SYN,moe-eaf,solar,bestsite-p95,DEMO,20250101,20251231
 demo-moe-eaf-ship,DEMO-ES_SYN,moe-eaf,grid,emissions,ES_SYN,20250101,20251231
+# The workbook's scenarios in miniature: each row below is what
+# `common.generate_inputs` writes for a workbook row with its iron in AUS and its
+# steel in ESP, moved onto DEMO and ES_SYN. Between them they take every route
+# home and abroad, every power supply (islanded_res, res_grid, grid), each
+# renewable at both site variants, a grid-only scenario run once per zone (both
+# made-up markets), and one row with an override of each form (a `±n%` change, a
+# sensitivity level, a region and a number). Their overlays carry the regional
+# values the generator picks for those locations.
+demo-h2-dri-eaf-islanded-solar-p95,DEMO,h2-dri-eaf,solar,bestsite-p95,DEMO,20250101,20251231
+demo-moe-eaf-islanded-wind-onshore-average,DEMO,moe-eaf,wind-onshore,area-average,DEMO,20250101,20251231
+demo-ewin-eaf-islanded-wind-offshore-average,DEMO,ewin-eaf,wind-offshore,area-average,DEMO,20250101,20251231
+demo-ewin-eaf-res-grid-wind-offshore-p95,DEMO,ewin-eaf,wind-offshore,bestsite-p95,DEMO,20250101,20251231
+demo-ewin-eaf-res-grid-wind-offshore-p95,DEMO,ewin-eaf,grid,emissions,DEMO,20250101,20251231
+demo-moe-eaf-export-islanded-solar-average,DEMO-ES_SYN,moe-eaf-export,solar,area-average,DEMO,20250101,20251231
+demo-moe-eaf-export-islanded-solar-average,DEMO-ES_SYN,moe-eaf-export,grid,emissions,ES_SYN,20250101,20251231
+demo-h2-dri-eaf-export-res-grid-wind-onshore-p95,DEMO-ES_SYN,h2-dri-eaf-export,wind-onshore,bestsite-p95,DEMO,20250101,20251231
+demo-h2-dri-eaf-export-res-grid-wind-onshore-p95,DEMO-ES_SYN,h2-dri-eaf-export,grid,emissions,DEMO,20250101,20251231
+demo-h2-dri-eaf-export-res-grid-wind-onshore-p95,DEMO-ES_SYN,h2-dri-eaf-export,grid,emissions,ES_SYN,20250101,20251231
+demo-ewin-eaf-export-res-grid-solar-p95,DEMO-ES_SYN,ewin-eaf-export,solar,bestsite-p95,DEMO,20250101,20251231
+demo-ewin-eaf-export-res-grid-solar-p95,DEMO-ES_SYN,ewin-eaf-export,grid,emissions,DEMO,20250101,20251231
+demo-ewin-eaf-export-res-grid-solar-p95,DEMO-ES_SYN,ewin-eaf-export,grid,emissions,ES_SYN,20250101,20251231
+demo-moe-eaf-export-grid,DEMO-ES_SYN,moe-eaf-export,grid,emissions,DEMO,20250101,20251231
+demo-moe-eaf-export-grid,DEMO-ES_SYN,moe-eaf-export,grid,emissions,ES_SYN,20250101,20251231
+demo-h2-dri-eaf-islanded-solar-p95-sensitivity,DEMO,h2-dri-eaf,solar,bestsite-p95,DEMO,20250101,20251231
+demo-h2-dri-eaf-grid-per-zone,DEMO,h2-dri-eaf,grid,emissions,DEMO,20250101,20251231
+demo-h2-dri-eaf-grid-per-zone,ES_SYN,h2-dri-eaf,grid,emissions,ES_SYN,20250101,20251231
