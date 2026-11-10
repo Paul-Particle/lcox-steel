@@ -11,6 +11,7 @@ import sys
 import openpyxl
 import pandas as pd
 import pytest
+import yaml
 
 from common import generate_inputs
 from common._workbook_translation import TEMPLATE_BACKSTOPPED_KEYS, UNREAD_ROWS
@@ -217,11 +218,26 @@ def test_every_workbook_row_is_read_or_listed_with_why_it_is_not(outputs_in_tmp,
     with pytest.raises(ValueError, match=r"\['battery.max_hours'\] are neither read nor listed"):
         generate_inputs.main()
 
-    with_read_and_absent_rows = UNREAD_ROWS | {"moe.el_mwh_per_t": "", "moe.no_such_row": ""}
+    with_read_and_absent_rows = UNREAD_ROWS | {"dri.capex_eur_per_t": "", "moe.no_such_row": ""}
     monkeypatch.setattr(generate_inputs, "UNREAD_ROWS", with_read_and_absent_rows)
-    with pytest.raises(ValueError, match=r"lists \['moe.el_mwh_per_t', 'moe.no_such_row'\]"):
+    with pytest.raises(ValueError, match=r"lists \['dri.capex_eur_per_t', 'moe.no_such_row'\]"):
         generate_inputs.main()
     assert not (outputs_in_tmp / "generated").exists()
+
+
+def test_a_row_named_as_a_model_key_is_read_as_it_and_a_sensitivity_takes_its_base_row(
+        outputs_in_tmp, monkeypatch):
+    """Listing such a row in UNREAD_ROWS keeps it unread, and its key then stands in from the template."""
+    workbook_inputs = (pd.read_excel(generate_inputs.DEFAULT_WORKBOOK, sheet_name=generate_inputs.INPUTS_SHEET)
+                       .set_index("YAML key")["Value"])
+    generate_inputs.main()
+    base = flatten(yaml.safe_load(generate_inputs.ASSUMPTIONS_PATH.read_text()))
+    assert base["moe.el_mwh_per_t"] == workbook_inputs["moe.el_mwh_per_t"]
+    assert base["res.solar.capex_eur_per_mw"] == workbook_inputs["res.solar.capex_eur_per_mw_base"]
+
+    monkeypatch.setattr(generate_inputs, "UNREAD_ROWS", UNREAD_ROWS | {"moe.el_mwh_per_t": ""})
+    with pytest.raises(ValueError, match=r"take \['moe.el_mwh_per_t'\] from"):
+        generate_inputs.main()
 
 
 def test_a_placeholder_row_the_workbook_fills_in_stops_the_build(outputs_in_tmp, monkeypatch):

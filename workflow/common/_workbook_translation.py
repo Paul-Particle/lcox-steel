@@ -1,74 +1,20 @@
 """The input workbook's field names, translated into the model's keys.
 
-What the scenario tab's terms mean for a scenario is the generator's business
-(generate_inputs.py); this file only says which row feeds which key.
+A workbook row named as a model key is read as that key and is not listed here;
+this file says which row feeds which key where the names differ. What the scenario
+tab's terms mean for a scenario, and which rows give a key its sensitivity levels
+and regional values, is the generator's business (generate_inputs.py).
 """
 
-CARRIERS = ("biomass", "brown_coal", "coal_gas", "energy_storage", "gas", "geothermal", "hard_coal",
-            "hydro", "hydro_reservoir", "hydro_river", "marine", "nuclear", "oil", "oil_shale", "other",
-            "other_re", "peat", "pumped_storage", "solar", "waste", "wind_offshore", "wind_onshore")
-
-# Model key -> the workbook row it is taken from.
+# Model key -> the workbook row it is taken from, where the row names the same thing
+# in other words.
 RENAMED_SOURCES = {
-    "res.wind-onshore.capex_eur_per_mw": "res.wind-onshore.capex_eur_per_mw_base",
-    "res.wind-onshore.fom_eur_per_mw_per_year": "res.wind-onshore.opex_eur_per_mw_per_year_base",
-    "res.solar.capex_eur_per_mw": "res.solar.capex_eur_per_mw_base",
-    "res.solar.fom_eur_per_mw_per_year": "res.solar.opex_eur_per_mw_per_year_base",
-    "res.wind-offshore.capex_eur_per_mw": "res.wind-offshore.capex_eur_per_mw_base",
-    "res.wind-offshore.fom_eur_per_mw_per_year": "res.wind-offshore.opex_eur_per_mw_per_year_base",
-    "electrolyser.capex_eur_per_mw": "electrolyser.capex_eur_per_mw_base",
-    "electrolyser.fom_eur_per_mw_per_year": "electrolyser.opex_eur_per_mw_per_year_base",
-    "electrolyser.varopex_eur_per_mwh_h2": "electrolyser.varopex_eur_per_mwh_h2_base",
-    "electrolyser.efficiency_kwh_per_kg": "electrolyser.efficiency_kwh_per_kg",
-    "battery.efficiency_roundtrip": "battery.efficiency_roundtrip",
-    "h2_buffer.capex_eur_per_mwh": "h2_buffer.capex_eur_per_mwh",
-    "h2_buffer.fom_eur_per_mwh": "h2_buffer.fom_eur_per_mwh",
+    "h2-dri.kg_h2_per_t_dri": "dri_h2.kg_h2_per_t_dri",
     "ng-dri.gas_mwh_per_t": "dri_ng.gas_mwh_per_t",
     "ng-dri.el_mwh_per_t": "dri_ng.el_mwh_per_t",
-    "eaf.capex_eur_per_t": "eaf.capex_eur_per_t",
-    "moe.capex_eur_per_t": "moe.capex_eur_per_t",
-    "moe.el_mwh_per_t": "moe.el_mwh_per_t",
-    "moe.ore_eur_per_t_liquid_iron": "moe.ore_eur_per_t_liquid_iron",
-    "ewin.capex_eur_per_t": "ewin.capex_eur_per_t",
-    "ewin.el_mwh_per_t": "ewin.el_mwh_per_t",
-    "ewin.ore_eur_per_t_electrolytic_iron": "ewin.ore_eur_per_t_electrolytic_iron",
-    "briquetting.el_mwh_per_t_hbi": "briquetting.el_mwh_per_t_hbi",
-    **{f"res.{tech}.financing_period": "res.financing_period" for tech in ("wind-onshore", "solar", "wind-offshore")},
-    "electrolyser.financing_period": "electrolyser.financing_period",
-    "battery.financing_period": "battery.financing_period",
-    "h2_buffer.financing_period": "h2_buffer.financing_period",
-    **{f"{plant}.financing_period": "IS.financing_period" for plant in ("h2-dri", "mix-dri", "ng-dri", "eaf", "moe", "ewin")},
-    **{f"emissions.electricity_t_co2e_per_mwh.{carrier}.combustion":
-       f"emissions.electricity_t_co2e_per_mwh.{carrier}.combustion" for carrier in CARRIERS},
 }
-CONVERTED_SOURCES = {
-    **{f"transport.distance_km.{origin}.{destination}.sea":
-       f"shipping.distance_km_{origin.lower()}_{destination.lower()}"
-       for origin in ("AUS", "BRA") for destination in ("ESP", "DEU", "FRA")},
-}
-SHARED_SOURCES = {
-    "h2-dri.kg_h2_per_t_dri": "dri_h2.kg_h2_per_t_dri",
-    "mix-dri.kg_h2_per_t_dri": "dri_h2.kg_h2_per_t_dri",
-    "h2-dri.capex_eur_per_t": "dri.capex_eur_per_t",
-    "mix-dri.capex_eur_per_t": "dri.capex_eur_per_t",
-    "ng-dri.capex_eur_per_t": "dri.capex_eur_per_t",
-    "h2-dri.ore_eur_per_t_dri": "dri.ore_eur_per_t",
-    "mix-dri.ore_eur_per_t_dri": "dri.ore_eur_per_t",
-    "ng-dri.ore_eur_per_t_dri": "dri.ore_eur_per_t",
-    "h2-dri.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
-    "mix-dri.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
-    "ng-dri.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel",
-    "h2-dri.el_mwh_per_t": "dri_ng.el_mwh_per_t",
-    "mix-dri.el_mwh_per_t": "dri_ng.el_mwh_per_t",
-    "iron_store.capex_eur_per_t": "iron_steel_store.capex_eur_per_t",
-    "steel_store.capex_eur_per_t": "iron_steel_store.capex_eur_per_t",
-    "iron_store.financing_period": "iron_steel_store.financing_period",
-    "steel_store.financing_period": "iron_steel_store.financing_period",
-    "transport.sea.iron.cost_eur_per_t": "shipping.cost_eur_per_t",
-    "transport.sea.steel.cost_eur_per_t": "shipping.cost_eur_per_t",
-    "transport.sea.iron.cost_eur_per_t_per_km": "shipping.cost_eur_per_t_per_km",
-    "transport.sea.steel.cost_eur_per_t_per_km": "shipping.cost_eur_per_t_per_km",
-}
+# Model key -> the workbook row it is taken from, where the model names it for what it
+# is in the model.
 MODEL_NAMED_SOURCES = {
     "eaf.charge.briquettes.el_mwh_per_t": "eaf_hbi.el_mwh_per_t",
     "eaf.charge.plates.el_mwh_per_t": "eaf_ewin.el_mwh_per_t",
@@ -77,9 +23,34 @@ MODEL_NAMED_SOURCES = {
     "ewin.iron_t_per_t_steel": "eaf_ewin.iron_t_per_t_steel",
     "moe.iron_t_per_t_steel": "eaf_moe.iron_t_per_t_steel",
     "h2-dri.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
-    "mix-dri.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
 }
-WORKBOOK_SOURCES = RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_NAMED_SOURCES
+# Model key -> the workbook row it is converted from.
+CONVERTED_SOURCES = {
+    **{f"transport.distance_km.{origin}.{destination}.sea":
+       f"shipping.distance_km_{origin.lower()}_{destination.lower()}"
+       for origin in ("AUS", "BRA") for destination in ("ESP", "DEU", "FRA")},
+}
+# Model key -> the workbook row it is taken from, where one row feeds several keys. A
+# row renamed or model-named above feeds its own key there and the other keys here.
+SHARED_SOURCES = {
+    # Renamed above, shared here.
+    "mix-dri.kg_h2_per_t_dri": "dri_h2.kg_h2_per_t_dri",
+    "h2-dri.el_mwh_per_t": "dri_ng.el_mwh_per_t",
+    "mix-dri.el_mwh_per_t": "dri_ng.el_mwh_per_t",
+    # Model-named above, shared here.
+    "mix-dri.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
+    # No one key of the model is the row's own.
+    **{f"res.{tech}.financing_period": "res.financing_period" for tech in ("wind-onshore", "solar", "wind-offshore")},
+    **{f"{plant}.financing_period": "IS.financing_period" for plant in ("h2-dri", "mix-dri", "ng-dri", "eaf", "moe", "ewin")},
+    **{f"{shaft}.capex_eur_per_t": "dri.capex_eur_per_t" for shaft in ("h2-dri", "mix-dri", "ng-dri")},
+    **{f"{shaft}.ore_eur_per_t_dri": "dri.ore_eur_per_t" for shaft in ("h2-dri", "mix-dri", "ng-dri")},
+    **{f"{shaft}.iron_t_per_t_steel": "eaf_dri.iron_t_per_t_steel" for shaft in ("h2-dri", "mix-dri", "ng-dri")},
+    **{f"{store}.{key}": f"iron_steel_store.{key}"
+       for store in ("iron_store", "steel_store") for key in ("capex_eur_per_t", "financing_period")},
+    **{f"transport.sea.{cargo}.{key}": f"shipping.{key}"
+       for cargo in ("iron", "steel") for key in ("cost_eur_per_t", "cost_eur_per_t_per_km")},
+}
+WORKBOOK_SOURCES = RENAMED_SOURCES | MODEL_NAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES
 # Held at 0 in both value and unit: not provided yet, so the template's value stands in.
 # Each row already carries the model key it will be read under once given.
 ROWS_NOT_PROVIDED_YET = (
@@ -89,8 +60,8 @@ ROWS_NOT_PROVIDED_YET = (
     "transmission.capex_eur_per_mw_per_km", "transmission.financing_period",
     "transmission.losses_pct_per_1000km", "transmission.indirect_route_factor",
 )
-# Workbook row -> why the generator does not read it. A row the generator neither reads
-# nor finds here stops it.
+# Workbook row -> why the generator does not read it, a row named as a model key
+# included. A row the generator neither reads nor finds here stops it.
 UNREAD_ROWS = {
     **{row: "not provided yet" for row in ROWS_NOT_PROVIDED_YET},
     # Held at 0 in both value and unit; the template's minimum loads stand in where the

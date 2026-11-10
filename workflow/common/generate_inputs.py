@@ -88,26 +88,22 @@ REGIONAL_SOURCES = {
 # Each regional key's workbook row by region, for the pick and for an override naming a region.
 REGIONAL_ROWS = {path: {regions[kind]: row.format(region=regions[kind]) for regions in AREA_REGIONS.values()}
                  for path, (_, kind, row) in REGIONAL_SOURCES.items()}
-# Model key -> the workbook row an override switches it to, by sensitivity level.
-# The base value comes from the translation, or from the template where the
-# workbook gives none (the gas price).
+# Model key -> its workbook row by sensitivity level. The base row is the key's
+# value; an override names a level to switch to it. Where the workbook gives no base
+# (the gas price), the template's value stands in.
+LEVELS = ("base", "low", "high")
+workbook_rows_by_level = lambda row_stem, levels=LEVELS: {level: f"{row_stem}_{level}" for level in levels}
 SENSITIVITY_ROWS = {
-    "res.wind-onshore.capex_eur_per_mw": {"low": "res.wind-onshore.capex_eur_per_mw_low",
-                                          "high": "res.wind-onshore.capex_eur_per_mw_high"},
-    "res.wind-onshore.fom_eur_per_mw_per_year": {"low": "res.wind-onshore.opex_eur_per_mw_per_year_low",
-                                                  "high": "res.wind-onshore.opex_eur_per_mw_per_year_high"},
-    "res.solar.capex_eur_per_mw": {"low": "res.solar.capex_eur_per_mw_low",
-                                   "high": "res.solar.capex_eur_per_mw_high"},
-    "res.solar.fom_eur_per_mw_per_year": {"low": "res.solar.opex_eur_per_mw_per_year_low",
-                                           "high": "res.solar.opex_eur_per_mw_per_year_high"},
-    "res.wind-offshore.capex_eur_per_mw": {"low": "res.wind-offshore.capex_eur_per_mw_low",
-                                           "high": "res.wind-offshore.capex_eur_per_mw_high"},
-    "res.wind-offshore.fom_eur_per_mw_per_year": {"low": "res.wind-offshore.opex_eur_per_mw_per_year_low",
-                                                   "high": "res.wind-offshore.opex_eur_per_mw_per_year_high"},
-    "natural_gas.price_eur_per_mwh": {"low": "natural_gas.price_eur_per_mwh_low",
-                                      "high": "natural_gas.price_eur_per_mwh_high"},
-    "electrolyser.varopex_eur_per_mwh_h2": {"low": "electrolyser.varopex_eur_per_mwh_h2_low",
-                                            "high": "electrolyser.varopex_eur_per_mwh_h2_high"},
+    "res.wind-onshore.capex_eur_per_mw": workbook_rows_by_level("res.wind-onshore.capex_eur_per_mw"),
+    "res.wind-onshore.fom_eur_per_mw_per_year": workbook_rows_by_level("res.wind-onshore.opex_eur_per_mw_per_year"),
+    "res.solar.capex_eur_per_mw": workbook_rows_by_level("res.solar.capex_eur_per_mw"),
+    "res.solar.fom_eur_per_mw_per_year": workbook_rows_by_level("res.solar.opex_eur_per_mw_per_year"),
+    "res.wind-offshore.capex_eur_per_mw": workbook_rows_by_level("res.wind-offshore.capex_eur_per_mw"),
+    "res.wind-offshore.fom_eur_per_mw_per_year": workbook_rows_by_level("res.wind-offshore.opex_eur_per_mw_per_year"),
+    "electrolyser.capex_eur_per_mw": workbook_rows_by_level("electrolyser.capex_eur_per_mw", ("base",)),
+    "electrolyser.fom_eur_per_mw_per_year": workbook_rows_by_level("electrolyser.opex_eur_per_mw_per_year", ("base",)),
+    "electrolyser.varopex_eur_per_mwh_h2": workbook_rows_by_level("electrolyser.varopex_eur_per_mwh_h2"),
+    "natural_gas.price_eur_per_mwh": workbook_rows_by_level("natural_gas.price_eur_per_mwh", ("low", "high")),
 }
 
 
@@ -320,20 +316,27 @@ def main() -> None:
         log.warning(f"{writes_ger.sum()} scenario rows write GER for Germany; reading it as DEU")
         scenario_rows = scenario_rows.replace({"iron_location": {"GER": "DEU"}, "steel_location": {"GER": "DEU"}})
     template = yaml.safe_load(TEMPLATE_PATH.read_text())
+    template_values = flatten(template)
     areas = yaml.safe_load((CONFIG_DIR / "config.yaml").read_text())["areas"]
 
-    workbook_values = {path: read_workbook_value(workbook_inputs, path, spec) for path, spec in WORKBOOK_SOURCES.items()}
-    # Picked per scenario, by its locations or its overrides; never written into the base.
+    # A row named as a model key is read as that key, unless UNREAD_ROWS keeps it unread.
+    rows_named_as_model_keys = (set(workbook_inputs.index) & set(template_values)) - set(UNREAD_ROWS)
+    workbook_sources = WORKBOOK_SOURCES | {row: row for row in sorted(rows_named_as_model_keys)}
+    workbook_values = {path: read_workbook_value(workbook_inputs, path, row) for path, row in workbook_sources.items()}
+    # Picked per scenario, by its locations or its overrides; only a sensitivity's base
+    # level is written into the base.
     read_named = lambda rows_by_path: {path: {name: read_workbook_value(workbook_inputs, path, row)
                                               for name, row in rows.items()}
                                        for path, rows in rows_by_path.items()}
     named_sensitivity_inputs, named_regional_inputs = read_named(SENSITIVITY_ROWS), read_named(REGIONAL_ROWS)
+    workbook_values |= {path: values_by_level["base"] for path, values_by_level in named_sensitivity_inputs.items()
+                        if "base" in values_by_level}
     named_rows = SENSITIVITY_ROWS | REGIONAL_ROWS
-    rows_of_key = lambda path: [*named_rows[path].values(), *([WORKBOOK_SOURCES[path]] if path in WORKBOOK_SOURCES else [])]
+    rows_of_key = lambda path: [*named_rows[path].values(), *([workbook_sources[path]] if path in workbook_sources else [])]
     mixed_units = sorted(path for path in named_rows if workbook_inputs.loc[rows_of_key(path), "unit"].nunique() > 1)
     if mixed_units:
         raise ValueError(f"the base, sensitivity and regional rows of {mixed_units} come in different units")
-    used_workbook_keys = {*WORKBOOK_SOURCES.values(), *(row for rows in named_rows.values() for row in rows.values())}
+    used_workbook_keys = {*workbook_sources.values(), *(row for rows in named_rows.values() for row in rows.values())}
     unaccounted_rows = sorted(set(workbook_inputs.index) - used_workbook_keys - set(UNREAD_ROWS))
     if unaccounted_rows:
         raise ValueError(f"the workbook rows {unaccounted_rows} are neither read nor listed in UNREAD_ROWS")
@@ -345,7 +348,6 @@ def main() -> None:
     if filled_placeholder_rows:
         raise ValueError(f"the workbook now gives {filled_placeholder_rows}, which ROWS_NOT_PROVIDED_YET holds "
                          f"unread; read each, or keep it unread in UNREAD_ROWS with why")
-    template_values = flatten(template)
     base_values = workbook_values | VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION
     unknown_paths = sorted((set(base_values) | set(named_rows)) - set(template_values))
     if unknown_paths:

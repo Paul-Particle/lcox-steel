@@ -425,10 +425,12 @@ reads the workbook's `assumptions_inputs` and `scenarios_clean` tabs and writes:
   by name (`{"finance.origin_wacc": "+30%", "res.solar.capex_eur_per_mw": "low"}`).
 
 It stops before writing anything if a row cannot be translated, listing each
-problem with the workbook rows that have it. How the workbook names keys, as
-against the model, is in `workflow/common/_workbook_translation.py`; what the
-scenario tab's words mean is in the term tables of `generate_inputs.py`. Every workbook row is read or listed
-there in `UNREAD_ROWS` with the reason it is not; any other row stops the generator.
+problem with the workbook rows that have it. A workbook row named as a model key
+is read as that key. Where the names differ, `workflow/common/_workbook_translation.py`
+says which row feeds which key; what the scenario tab's words mean, and which rows
+give a key its sensitivity levels and regional values, is in the tables of
+`generate_inputs.py`. Every workbook row is read or listed in `UNREAD_ROWS` with
+the reason it is not; any other row stops the generator.
 `--verbose` lists the unread rows and their reasons.
 
 The workbook it reads is the one as received less its scenario rows with
