@@ -178,9 +178,10 @@ areas:
   # ships in cutouts/DEMO_20250101_20251231_backup.nc, so the default `snakemake`
   # run needs no CDS download and no EEZ/NE zips. Its geometries are VIC1's,
   # committed as resources/shapes/DEMO_geo.parquet and DEMO_offshore_geo.parquet;
-  # being a demo area, the geometry rules never rebuild them.
+  # being a demo area, the geometry rules never rebuild them. Its grid is the same
+  # made-up market as ES_SYN's, so the demo's grid runs need no NEM download.
   DEMO:  { iso3: AUS, region: VIC, coarse: true, cutout_bbox: [141.0, 149.5, -39.0, -34.0],
-           demo: true }
+           market: synthetic, demo: true }
   # Where the demo's export twins melt their iron: a Spain-like market that
   # grid/_synthetic.py makes up, so the demo needs no ENTSO-E key.
   ES_SYN: { iso3: ESP, market: synthetic, demo: true }

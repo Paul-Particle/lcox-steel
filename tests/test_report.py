@@ -388,18 +388,18 @@ def test_the_h2_shaft_reports_its_preheat_where_the_blend_shaft_does():
 
     # The shaft as it was before the split: one draw carrying both.
     lumped = copy.deepcopy(assumptions)
-    shaft = lumped["dri-h2"]
+    shaft = lumped["h2-dri"]
     shaft["el_mwh_per_t"] += shaft["h2_preheat_el_mwh_per_t"]
     shaft["h2_preheat_el_mwh_per_t"] = 0.0
     before, after = solved(lumped), solved(assumptions)
 
     assert after["lcos_eur_per_t_steel"] == pytest.approx(before["lcos_eur_per_t_steel"])
     assert after["el_users_gwh"] == pytest.approx(before["el_users_gwh"])
-    assert after["el_dri_h2_gwh"] + after["el_h2_preheat_gwh"] == pytest.approx(before["el_dri_h2_gwh"])
-    preheat_share = (assumptions["dri-h2"]["h2_preheat_el_mwh_per_t"]
-                     / (assumptions["dri-h2"]["el_mwh_per_t"]
-                        + assumptions["dri-h2"]["h2_preheat_el_mwh_per_t"]))
-    assert after["el_h2_preheat_gwh"] == pytest.approx(preheat_share * before["el_dri_h2_gwh"])
+    assert after["el_h2_dri_gwh"] + after["el_h2_preheat_gwh"] == pytest.approx(before["el_h2_dri_gwh"])
+    preheat_share = (assumptions["h2-dri"]["h2_preheat_el_mwh_per_t"]
+                     / (assumptions["h2-dri"]["el_mwh_per_t"]
+                        + assumptions["h2-dri"]["h2_preheat_el_mwh_per_t"]))
+    assert after["el_h2_preheat_gwh"] == pytest.approx(preheat_share * before["el_h2_dri_gwh"])
 
 
 
@@ -484,9 +484,9 @@ def test_the_ironmaking_capacity_is_the_shaft_at_full_load_for_a_year():
     s = extract_summary(n, "s", {"origin": "X", "destination": "X", "route": "h2-dri-eaf",
                                  "start_date": "20250101", "end_date": "20250102"}, assumptions)
 
-    shaft_t_per_h = n.links.at["dri-h2", "p_nom_opt"] * n.links.at["dri-h2", "efficiency"]
+    shaft_t_per_h = n.links.at["h2-dri", "p_nom_opt"] * n.links.at["h2-dri", "efficiency"]
     assert s["ironmaking_capacity_mt_opt"] == pytest.approx(shaft_t_per_h * 8760 / 1e6)
-    assert "dri_h2_t_per_h_opt" not in s, "one ironmaking row, not one per shaft"
+    assert "h2_dri_t_per_h_opt" not in s, "one ironmaking row, not one per shaft"
     # The furnace's nameplate likewise: never below the steel it made.
     furnace_t_per_h = n.links.at["eaf", "p_nom_opt"] * n.links.at["eaf", "efficiency"]
     assert s["steelmaking_capacity_mt_opt"] == pytest.approx(furnace_t_per_h * 8760 / 1e6)
@@ -497,7 +497,7 @@ def test_the_ironmaking_capacity_is_the_shaft_at_full_load_for_a_year():
     assert s["ironmaking_capacity_mt_opt"] * s["ironmaking_utilization"] == pytest.approx(made_mt)
     # The feedstock is quoted per tonne of iron out, so what was spent on it over
     # the iron made is the quote itself: the reason the report no longer repeats it.
-    assert s["cost_ore_eur_per_t_iron"] == pytest.approx(assumptions["dri-h2"]["ore_eur_per_t"])
+    assert s["cost_ore_eur_per_t_iron"] == pytest.approx(assumptions["h2-dri"]["ore_eur_per_t_dri"])
 
 
 def test_iron_is_counted_at_the_shaft_and_the_briquettes_beside_it():
@@ -622,7 +622,7 @@ def test_the_gas_side_reports_its_peak_draw_not_a_free_rating():
     # Every shaft and cell is one reduction step, and ironmaking is it plus the
     # electrolyser and its share of the losses: no less than its own steps, no
     # more than the whole of scope 2.
-    assert "emissions_scope2_dri_ng_t_co2_per_t_steel" not in s
+    assert "emissions_scope2_ng_dri_t_co2_per_t_steel" not in s
     iron_steps = (s["emissions_scope2_reduction_t_co2_per_t_steel"]
                   + s["emissions_scope2_electrolyser_t_co2_per_t_steel"])
     assert iron_steps - 1e-12 <= s["emissions_scope2_ironmaking_t_co2_per_t_steel"]
@@ -649,7 +649,7 @@ def test_ironmaking_s_emissions_take_their_share_of_the_losses_by_the_mwh_drawn(
     losses = (s["emissions_scope2_battery_losses_t_co2_per_t_steel"]
               + s["emissions_scope2_transmission_losses_t_co2_per_t_steel"])
     assert losses > 0, "the test needs a run that lost electricity"
-    iron_gwh = s["el_dri_h2_gwh"] + s["el_h2_preheat_gwh"] + s["el_electrolyser_gwh"]
+    iron_gwh = s["el_h2_dri_gwh"] + s["el_h2_preheat_gwh"] + s["el_electrolyser_gwh"]
     share = iron_gwh / s["el_users_gwh"]
     assert s["emissions_scope2_ironmaking_t_co2_per_t_steel"] == pytest.approx(
         s["emissions_scope2_reduction_t_co2_per_t_steel"]
@@ -665,7 +665,7 @@ def test_ironmaking_s_emissions_take_their_share_of_the_losses_by_the_mwh_drawn(
         + losses * s["el_electrolyser_gwh"] / s["el_users_gwh"])
     # A step's intensity is its CO2 over the MWh it drew, shaft and preheat
     # together for the reduction.
-    assert "emissions_dri_h2_kg_co2_per_mwh_el" not in s
+    assert "emissions_h2_dri_kg_co2_per_mwh_el" not in s
     reduction_mwh_per_t = s["el_reduction_mwh_per_t_steel"]
     assert s["emissions_scope2_reduction_kg_co2_per_mwh_el"] == pytest.approx(
         s["emissions_scope2_reduction_t_co2_per_t_steel"] * 1e3 / reduction_mwh_per_t)

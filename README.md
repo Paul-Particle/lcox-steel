@@ -15,7 +15,7 @@ optimisation model into one Snakemake workflow:
   - `ng-dri-eaf` — fossil benchmark: natural-gas DRI (flat gas price, optional CO2 price) → EAF → steel
   - `mix-dri-eaf` — H2 and NG DRI shafts side by side; the optimiser picks the split
   - `moe-eaf` — molten oxide electrolysis → liquid iron → EAF → steel
-  - `ew-eaf` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
+  - `ewin-eaf` — low-temperature iron electrowinning → iron plates (storable) → EAF → steel
 
   Every route also has an `-export` twin that makes its iron at the run's
   origin and melts it at its destination. A route without the suffix makes its
@@ -370,7 +370,7 @@ each, set in the scenario tables, and every layer below spells them the same:
 the assumptions blocks, the Snakemake wildcards and rule names, the script
 filenames, and the PyPSA component names.
 
-Name scenarios with **dashes** between words (`VIC-2025-solar-ew`,
+Name scenarios with **dashes** between words (`VIC-2025-solar-ewin`,
 `DE-2023-grid-p95`), not underscores. The underscore is the field separator in
 the names these compose into (a run's folder is `<scenario>_<run>`), so reserving
 it keeps the boundaries legible at a glance. Route, tech and variant follow the
@@ -422,13 +422,15 @@ reads the workbook's `assumptions_inputs` and `scenarios_clean` tabs and writes:
 - a scenario's overlay carries the values of its locations' regions (WACCs, plant
   fixed O&M, battery costs), then the overrides the row names. An override names a
   model key and gives it a number, a `±n%` change, or a sensitivity level or region
-  by name (`{"finance.origin_wacc": "+30%", "res.solar.capex_per_mw_eur": "low"}`).
+  by name (`{"finance.origin_wacc": "+30%", "res.solar.capex_eur_per_mw": "low"}`).
 
 It stops before writing anything if a row cannot be translated, listing each
-problem with the workbook rows that have it. How the workbook names keys, as
-against the model, is in `workflow/common/_workbook_translation.py`; what the
-scenario tab's words mean is in the term tables of `generate_inputs.py`. Every workbook row is read or listed
-there in `UNREAD_ROWS` with the reason it is not; any other row stops the generator.
+problem with the workbook rows that have it. A workbook row named as a model key
+is read as that key. Where the names differ, `workflow/common/_workbook_translation.py`
+says which row feeds which key; what the scenario tab's words mean, and which rows
+give a key its sensitivity levels and regional values, is in the tables of
+`generate_inputs.py`. Every workbook row is read or listed in `UNREAD_ROWS` with
+the reason it is not; any other row stops the generator.
 `--verbose` lists the unread rows and their reasons.
 
 The workbook it reads is the one as received less its scenario rows with
@@ -436,7 +438,9 @@ The workbook it reads is the one as received less its scenario rows with
 which technologies partner the anchor, with what weights, or at how many sites.
 A note on `scenarios_clean!A1` says the same. The workbook as received, with
 those rows, is kept in `data/assumptions/as_received/`, which the generator does
-not read.
+not read. In both copies, three unfilled rows carry the model's names:
+`grid.connection_financing_period`, `transmission.financing_period` and
+`transmission.capex_eur_per_mw_per_km`.
 
 ### The demo
 
@@ -445,6 +449,18 @@ The template's five scenarios, `demo-h2-dri-eaf`, `demo-moe-eaf`, their
 it to `ES_SYN`, sit on the shipped Victoria cutout, so they run after a fresh
 clone with no CDS download. Each overlay moves one value its route reads — a
 salt-cavern H2 store for the H2 routes, a lower MOE turndown for the MOE ones.
+
+Beside them, ten scenarios are the workbook's in miniature: what the generator
+writes for a workbook row with its iron in AUS and its steel in ESP, moved onto
+`DEMO` and `ES_SYN`. They take every route at home and abroad, every power
+supply (`islanded_res`, `res_grid`, `grid`), each renewable at both site
+variants, a grid-only scenario run once per zone, and one row with an override
+of each form, and their overlays carry the regional values the generator picks.
+`DEMO`'s grid is the same made-up market as `ES_SYN`'s. So
+`snakemake --configfile config/demo.yaml` checks, in minutes and with no
+download or key, that every kind of scenario the generator builds from the
+workbook solves and reports (a mix, which it does not build yet, is not among
+them).
 
 ### A scenario with several runs
 
@@ -470,7 +486,7 @@ runs and says which one was picked. A scenario with one run has one entry, so
 | `config/config.yaml` | Pipeline knobs: `logging`, `inputs` (the base assumptions and scenario table to run), `entsoe` (data types), `nem` (`eur_per_aud` FX), `report` (`best_run_by`), `res_cf` (turbines, CF flags, cutout settings), `areas` (the area registry). |
 | `config/demo.yaml` | Runs the template instead: `snakemake --configfile config/demo.yaml`. |
 | `config/.template.yaml` | A complete assumptions file, every key the model reads: the demo runs on it as it stands, and `python -m common.generate_inputs [WORKBOOK]` writes `config/generated/assumptions.yaml` from it, replacing each value the input workbook, `data/assumptions/Assumptions_yaml_inputs.xlsx`, holds with the workbook's (in EUR); the rest are backstop values, copied over as they stand. |
-| `config/generated/assumptions.yaml` | Generated from the input workbook and `config/.template.yaml`; edit those instead. Base techno-economics: CAPEX/OPEX, lifetimes, the WACC (`finance.origin_wacc` for everything up to the iron, `finance.destination_wacc` for an export route's EAF, steel store and the furnace's grid connection), electrolyser efficiency, plant sizing, the steel process steps (`dri-h2`, `dri-ng`, `eaf`, `moe`, `ew`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and what freight costs (`transport`), with the legs from each origin country to each destination in `transport.distance_km` — a run looks up its own, a market zone shipping as its country, and a pair not listed stops the run. Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the scenario table, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the scenario table's `tech`. |
+| `config/generated/assumptions.yaml` | Generated from the input workbook and `config/.template.yaml`; edit those instead. Base techno-economics: CAPEX/OPEX, financing periods, the WACC (`finance.origin_wacc` for everything up to the iron, `finance.destination_wacc` for an export route's EAF, steel store and the furnace's grid connection), electrolyser efficiency, plant sizing, the steel process steps (`h2-dri`, `ng-dri`, `eaf`, `moe`, `ewin`, `briquetting`, `iron_store`), natural-gas price/CO2 (`natural_gas`), grid connection charges, and what freight costs (`transport`), with the legs from each origin country to each destination in `transport.distance_km` — a run looks up its own, a market zone shipping as its country, and a pair not listed stops the run. Also the emission factors the report levelises (`emissions`) — accounting only, never priced into a solve. Numbers only — the route is chosen by the scenario table, never here. Loaded by `solve_network` as an **input file**, not a global `configfile:`. Tech keys (`res.wind-onshore`, `res.solar`, …) match the scenario table's `tech`. |
 | `config/overlays/{scenario}.yaml` | *Optional* per-scenario overlay, deep-merged onto the base so it carries only the keys it moves. **File presence is the toggle**: the `optional()` shim resolves it at job-evaluation time, and a scenario without one runs on the base as it stands. It never selects a route. The generator writes and removes its own (marked `# GENERATED`); the rest are kept by hand. |
 | `config/generated/scenarios.csv`, `config/.template.csv` | The scenario tables: one row per input series of a run. Columns: `scenario, run, route, tech, variant, area, start_date, end_date`. A run's rows name the origin's series first; its first area is its origin and its second its destination, and a third is an error. Route and dates are the same on every row of a run. `#` lines are comments. |
 
@@ -686,7 +702,7 @@ losses, `cost_electricity_eur_per_t_iron` gives back
 `h2_produced_kg_per_t_steel` is the hydrogen the electrolyser produced over the
 year, per tonne of steel produced (`h2_produced_kt` over `steel_produced_mt`).
 It is a model result, but on `h2-dri-eaf` it always comes back to the inputs,
-the shaft's hydrogen per tonne of iron (`h2_intensity_kg_per_t_dri`) times the
+the shaft's hydrogen per tonne of iron (`h2-dri.kg_h2_per_t_dri`) times the
 iron per tonne of steel, because the hydrogen buffer is lossless and ends the
 year where it began. On `mix-dri-eaf` it is the model's own choice of how much
 of the reductant is hydrogen, and on the gas, MOE and EW routes it is 0.
@@ -695,7 +711,7 @@ of the reductant is hydrogen, and on the gas, MOE and EW routes it is 0.
 GWh of energy content (LHV). Only the gas and blended DRI shafts burn gas, as
 their reducing agent. It is a model result, but on `ng-dri-eaf` it always comes
 back to the inputs: the gas shaft's gas per tonne of iron
-(`dri-ng.gas_mwh_per_t`) times the iron produced, since that shaft has no
+(`ng-dri.gas_mwh_per_t`) times the iron produced, since that shaft has no
 choice of reductant. On `mix-dri-eaf` it is the model's own choice of how much
 of the reductant is gas. On the hydrogen, MOE and EW routes it is 0. Per tonne
 of steel it is `gas_mwh_per_t_steel`.
@@ -707,7 +723,7 @@ routes that burn no gas.
 `gas_mwh_per_t_steel` is the natural gas burnt over the year, in MWh LHV, per
 tonne of steel produced (`gas_consumed_gwh_lhv` over `steel_produced_mt`). It is a model
 result, but on `ng-dri-eaf` it always comes back to the inputs, the gas shaft's
-gas per tonne of iron (`dri-ng.gas_mwh_per_t`) times the iron per tonne of
+gas per tonne of iron (`ng-dri.gas_mwh_per_t`) times the iron per tonne of
 steel, since that shaft has no choice of reductant. On `mix-dri-eaf` it is the
 model's own choice, the gas side of the blend whose hydrogen side is
 `h2_produced_kg_per_t_steel`. On the hydrogen, MOE and EW routes it is 0.
@@ -716,7 +732,7 @@ model's own choice, the gas side of the blend whose hydrogen side is
 tonne of iron produced (`iron_produced_mt`: the DRI, liquid iron or plates the
 shaft or cells put out). Its numerator is every yearly cost inside a line drawn
 round the ironmaking asset, with capital annualised at its own WACC and
-lifetime: a) the ore, the ironmaking plant's (shaft's or cells') annualised
+financing period: a) the ore, the ironmaking plant's (shaft's or cells') annualised
 capex and fixed O&M, the natural gas, and separately the carbon price on the
 gas's CO2 (`emissions.co2_price_eur_per_t`, 0 in the template), b) the
 hydrogen's electrolyser (annualised capex, fixed O&M and water) and buffer, and
@@ -971,8 +987,8 @@ that drew nothing is blank.
 **Field names use `_` throughout**, including the part that names a tech or a
 link. The network and the scenario tables hyphenate those ids, so the report
 puts every one through `field_stem`: the tech `wind-onshore` reports as
-`wind_onshore_gw_opt` and `cf_wind_onshore`, the link `dri-h2` as
-`annuity_factor_dri_h2` and `el_dri_h2_gwh`. Only the *values* keep the
+`wind_onshore_gw_opt` and `cf_wind_onshore`, the link `h2-dri` as
+`annuity_factor_h2_dri` and `el_h2_dri_gwh`. Only the *values* keep the
 hyphens (`route: moe-eaf`, `solar_variant: bestsite-p95`) — those are ids, and
 they still name files and config keys.
 

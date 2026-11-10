@@ -8,11 +8,13 @@ import json
 import re
 import sys
 
+import openpyxl
 import pandas as pd
 import pytest
+import yaml
 
 from common import generate_inputs
-from common._workbook_translation import UNREAD_ROWS
+from common._workbook_translation import TEMPLATE_BACKSTOPPED_KEYS, UNREAD_ROWS
 from common.generate_inputs import (
     REGIONAL_SOURCES,
     SENSITIVITY_ROWS,
@@ -37,7 +39,7 @@ read_with = lambda path, spec: read_workbook_value(WORKBOOK_ROWS, path, spec)
 
 
 def test_a_key_takes_its_row():
-    assert read_with("plant.lifetime_years", "plant.lifetime") == 20
+    assert read_with("plant.financing_period", "plant.lifetime") == 20
     assert read_with("plant.capex_eur_per_t", "plant.capex_eur_high") == 2000
 
 
@@ -53,7 +55,7 @@ def test_a_currency_the_key_does_not_name_stops_the_build():
     with pytest.raises(ValueError, match="currency"):
         read_with("plant.capex_eur_per_t", "plant.capex_usd_base")
     with pytest.raises(ValueError, match="currency"):
-        read_with("plant.lifetime_years", "plant.capex_eur_base")
+        read_with("plant.financing_period", "plant.capex_eur_base")
     with pytest.raises(ValueError, match="currency"):
         read_with("plant.capex_eur_per_t", "plant.lifetime")
 
@@ -92,7 +94,7 @@ def test_an_import_takes_iron_side_values_from_its_iron_location_and_the_furnace
         "wacc-up": {"sensitivity_overrides_JSON": json.dumps({"finance.origin_wacc": "+30%",
                                                               "finance.destination_wacc": "+30%"})},
         "rows-overridden": {"sensitivity_overrides_JSON": json.dumps({
-            "battery.capex_per_mw_eur": "eu", "moe.opex_per_t_per_year_eur": "+10%"})},
+            "battery.capex_eur_per_mw": "eu", "moe.fom_eur_per_t_capacity_per_year": "+10%"})},
         "destination-wacc-set": {"sensitivity_overrides_JSON": json.dumps({"finance.destination_wacc": 0.09})},
     })
 
@@ -100,12 +102,12 @@ def test_an_import_takes_iron_side_values_from_its_iron_location_and_the_furnace
         overlays["wacc-up"], overlays["rows-overridden"], overlays["destination-wacc-set"])
     assert wacc_up["finance.origin_wacc"] == pytest.approx(1.3)
     assert wacc_up["finance.destination_wacc"] == pytest.approx(2.6)
-    assert wacc_up["moe.opex_per_t_per_year_eur"] == 1.0
-    assert wacc_up["battery.capex_per_mw_eur"] == 1.0
-    assert wacc_up["eaf.opex_per_t_per_year_eur"] == 2.0
-    assert rows_overridden["moe.opex_per_t_per_year_eur"] == pytest.approx(1.1)
-    assert rows_overridden["battery.capex_per_mw_eur"] == 2.0
-    assert rows_overridden["battery.capex_per_mwh_eur"] == 1.0
+    assert wacc_up["moe.fom_eur_per_t_capacity_per_year"] == 1.0
+    assert wacc_up["battery.capex_eur_per_mw"] == 1.0
+    assert wacc_up["eaf.fom_eur_per_t_capacity_per_year"] == 2.0
+    assert rows_overridden["moe.fom_eur_per_t_capacity_per_year"] == pytest.approx(1.1)
+    assert rows_overridden["battery.capex_eur_per_mw"] == 2.0
+    assert rows_overridden["battery.capex_eur_per_mwh"] == 1.0
     assert destination_wacc_set["finance.origin_wacc"] == 1.0
     assert destination_wacc_set["finance.destination_wacc"] == 0.09
 
@@ -115,9 +117,9 @@ def test_an_override_naming_a_workbook_row_or_an_unknown_region_stops_the_build(
         build_from_rows({
             "workbook-row": {"sensitivity_overrides_JSON": json.dumps({
                 "iron.fom_eur_per_t_capacity_per_year_bra": 80})},
-            "unknown-region": {"sensitivity_overrides_JSON": json.dumps({"moe.opex_per_t_per_year_eur": "brazil"})}})
+            "unknown-region": {"sensitivity_overrides_JSON": json.dumps({"moe.fom_eur_per_t_capacity_per_year": "brazil"})}})
     assert "override key 'iron.fom_eur_per_t_capacity_per_year_bra' is not a model key" in str(error.value)
-    assert "moe.opex_per_t_per_year_eur has no sensitivity level or region 'brazil'" in str(error.value)
+    assert "moe.fom_eur_per_t_capacity_per_year has no sensitivity level or region 'brazil'" in str(error.value)
 
 
 def test_the_terms_decide_the_route_and_the_series_each_run_draws_on():
@@ -130,8 +132,8 @@ def test_the_terms_decide_the_route_and_the_series_each_run_draws_on():
 
     lines = lambda scenario: list(scenarios.query("scenario == @scenario")[["run", "route", "tech", "variant", "area"]]
                                   .itertuples(index=False, name=None))
-    assert lines("islanded-import") == [("AUS-ESP", "ew-eaf-export", "solar", "area-average", "AUS"),
-                                        ("AUS-ESP", "ew-eaf-export", "grid", "emissions", "ESP")]
+    assert lines("islanded-import") == [("AUS-ESP", "ewin-eaf-export", "solar", "area-average", "AUS"),
+                                        ("AUS-ESP", "ewin-eaf-export", "grid", "emissions", "ESP")]
     assert lines("grid-domestic") == [("NSW1", "moe-eaf", "solar", "bestsite-p95", "NSW1"),
                                       ("NSW1", "moe-eaf", "grid", "emissions", "NSW1"),
                                       ("QLD1", "moe-eaf", "solar", "bestsite-p95", "QLD1"),
@@ -216,16 +218,61 @@ def test_every_workbook_row_is_read_or_listed_with_why_it_is_not(outputs_in_tmp,
     with pytest.raises(ValueError, match=r"\['battery.max_hours'\] are neither read nor listed"):
         generate_inputs.main()
 
-    with_read_and_absent_rows = UNREAD_ROWS | {"moe.el_mwh_per_t": "", "moe.no_such_row": ""}
+    with_read_and_absent_rows = UNREAD_ROWS | {"dri.capex_eur_per_t": "", "moe.no_such_row": ""}
     monkeypatch.setattr(generate_inputs, "UNREAD_ROWS", with_read_and_absent_rows)
-    with pytest.raises(ValueError, match=r"lists \['moe.el_mwh_per_t', 'moe.no_such_row'\]"):
+    with pytest.raises(ValueError, match=r"lists \['dri.capex_eur_per_t', 'moe.no_such_row'\]"):
+        generate_inputs.main()
+    assert not (outputs_in_tmp / "generated").exists()
+
+
+def test_a_row_named_as_a_model_key_is_read_as_it_and_a_sensitivity_takes_its_base_row(
+        outputs_in_tmp, monkeypatch):
+    """Listing such a row in UNREAD_ROWS keeps it unread, and its key then stands in from the template."""
+    workbook_inputs = (pd.read_excel(generate_inputs.DEFAULT_WORKBOOK, sheet_name=generate_inputs.INPUTS_SHEET)
+                       .set_index("YAML key")["Value"])
+    generate_inputs.main()
+    base = flatten(yaml.safe_load(generate_inputs.ASSUMPTIONS_PATH.read_text()))
+    assert base["moe.el_mwh_per_t"] == workbook_inputs["moe.el_mwh_per_t"]
+    assert base["res.solar.capex_eur_per_mw"] == workbook_inputs["res.solar.capex_eur_per_mw_base"]
+
+    monkeypatch.setattr(generate_inputs, "UNREAD_ROWS", UNREAD_ROWS | {"moe.el_mwh_per_t": ""})
+    with pytest.raises(ValueError, match=r"take \['moe.el_mwh_per_t'\] from"):
+        generate_inputs.main()
+
+
+def test_a_placeholder_row_the_workbook_fills_in_stops_the_build(outputs_in_tmp, monkeypatch):
+    """Its value would otherwise go unread while the template's stands in under the same warning."""
+    workbook = openpyxl.load_workbook(generate_inputs.DEFAULT_WORKBOOK)
+    fee_row = next(row for row in workbook[generate_inputs.INPUTS_SHEET].iter_rows(min_row=2)
+                   if row[0].value == "grid.fee_eur_per_mwh")
+    fee_row[1].value = 4.5
+    filled_workbook_path = outputs_in_tmp / "filled.xlsx"
+    workbook.save(filled_workbook_path)
+    monkeypatch.setattr(sys, "argv", ["generate_inputs", str(filled_workbook_path)])
+
+    with pytest.raises(ValueError, match=r"now gives \['grid.fee_eur_per_mwh'\]"):
+        generate_inputs.main()
+    assert not (outputs_in_tmp / "generated").exists()
+
+
+def test_every_key_taken_from_the_template_is_listed_with_why(outputs_in_tmp, monkeypatch):
+    """An unlisted stand-in stops the build, as does a listed one the workbook or the overlays now set."""
+    without_gas_price = {key: reason for key, reason in TEMPLATE_BACKSTOPPED_KEYS.items()
+                         if key != "natural_gas.price_eur_per_mwh"}
+    monkeypatch.setattr(generate_inputs, "TEMPLATE_BACKSTOPPED_KEYS", without_gas_price)
+    with pytest.raises(ValueError, match=r"take \['natural_gas.price_eur_per_mwh'\] from"):
+        generate_inputs.main()
+
+    with_read_and_regional_keys = TEMPLATE_BACKSTOPPED_KEYS | {"moe.el_mwh_per_t": "", "finance.origin_wacc": ""}
+    monkeypatch.setattr(generate_inputs, "TEMPLATE_BACKSTOPPED_KEYS", with_read_and_regional_keys)
+    with pytest.raises(ValueError, match=r"lists \['finance.origin_wacc', 'moe.el_mwh_per_t'\]"):
         generate_inputs.main()
     assert not (outputs_in_tmp / "generated").exists()
 
 
 def test_an_override_naming_a_sensitivity_row_takes_that_level():
     _, overlays = build_from_rows({"solar-low-gas-high": {"sensitivity_overrides_JSON": json.dumps({
-        "res.solar.capex_per_mw_eur": "low", "natural_gas.price_eur_per_mwh": "high"})}})
+        "res.solar.capex_eur_per_mw": "low", "natural_gas.price_eur_per_mwh": "high"})}})
 
-    assert overlays["solar-low-gas-high"]["res.solar.capex_per_mw_eur"] == 5.0
+    assert overlays["solar-low-gas-high"]["res.solar.capex_eur_per_mw"] == 5.0
     assert overlays["solar-low-gas-high"]["natural_gas.price_eur_per_mwh"] == 7.0

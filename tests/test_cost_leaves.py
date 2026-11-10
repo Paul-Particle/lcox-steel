@@ -43,8 +43,8 @@ from conftest import REPO_ROOT
 HOURS = 24
 # Every route that makes steel and can be built without a multi-site overlay.
 # The blended shaft and the export twins are the ones the split has to reach.
-ROUTES = ["h2-dri-eaf", "mix-dri-eaf", "ng-dri-eaf", "moe-eaf", "ew-eaf",
-          "h2-dri-eaf-export", "moe-eaf-export", "ew-eaf-export",
+ROUTES = ["h2-dri-eaf", "mix-dri-eaf", "ng-dri-eaf", "moe-eaf", "ewin-eaf",
+          "h2-dri-eaf-export", "moe-eaf-export", "ewin-eaf-export",
           "mix-dri-eaf-export", "ng-dri-eaf-export"]
 
 
@@ -89,7 +89,7 @@ def _fields(n, assumptions: dict) -> tuple[dict, dict, float]:
     # The drawing links and the generation, as extract_summary hands them over.
     annual = 8760.0 / len(n.snapshots)
     # Keyed by link id, exactly as `_emissions_breakdown` hands them over: the
-    # network spells a shaft `dri-h2`, and a stemmed key here would let a
+    # network spells a shaft `h2-dri`, and a stemmed key here would let a
     # mis-keyed lookup in the split pass the test and fail on a real report.
     drawn = {link: float(n.links_t.p0[link].sum()) * annual
              for link in ELECTRICITY_USERS if link in n.links.index}
@@ -166,12 +166,12 @@ def test_a_plants_two_halves_are_its_whole_annual_cost(route, assumptions):
         halves = (fields[f"cost_{stem}_capex_eur_per_t_steel"]
                   + fields[f"cost_{stem}_fom_eur_per_t_steel"])
         assert halves == pytest.approx(whole, rel=1e-9)
-        # And neither half is the whole of it: a fixed-opex quote of about an
+        # And neither half is the whole of it: a fixed O&M quote of about an
         # eighth of capex puts the upkeep well inside these bounds.
         assert 0.0 < fields[f"cost_{stem}_fom_eur_per_t_steel"] < whole
 
 
-@pytest.mark.parametrize("route", ["h2-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf"])
+@pytest.mark.parametrize("route", ["h2-dri-eaf", "mix-dri-eaf", "moe-eaf", "ewin-eaf"])
 def test_the_power_that_made_the_iron_is_its_own_band(route, assumptions):
     """The reduction step is named rather than swept in with the leftovers.
 
@@ -218,26 +218,26 @@ def test_the_hydrogen_buffer_pays_its_fixed_om_on_top_of_its_annuitised_capex(as
     """Per MWh of storage a year, as every other element's capital cost carries its fixed O&M."""
     buffer = _solved("h2-dri-eaf", assumptions).stores.loc["h2_buffer"]
     buffer_cfg = assumptions["h2_buffer"]
-    annuitised_capex = (annuity_factor(assumptions["finance"]["origin_wacc"], buffer_cfg["lifetime_years"])
-                        * buffer_cfg["capex_per_mwh_eur"])
+    annuitised_capex = (annuity_factor(assumptions["finance"]["origin_wacc"], buffer_cfg["financing_period"])
+                        * buffer_cfg["capex_eur_per_mwh"])
 
-    assert buffer["capital_cost"] == pytest.approx(annuitised_capex + buffer_cfg["opex_per_mwh_per_year_eur"])
+    assert buffer["capital_cost"] == pytest.approx(annuitised_capex + buffer_cfg["fom_eur_per_mwh"])
 
 
 def test_the_battery_pays_fixed_om_on_its_energy_and_its_inverter(assumptions):
     """Each capacity carries its own fixed O&M on top of its annuitised capex."""
     n = _solved("h2-dri-eaf", assumptions)
     battery_cfg = assumptions["battery"]
-    annuity = annuity_factor(assumptions["finance"]["origin_wacc"], battery_cfg["lifetime_years"])
+    annuity = annuity_factor(assumptions["finance"]["origin_wacc"], battery_cfg["financing_period"])
 
     assert n.stores.at["battery", "capital_cost"] == pytest.approx(
-        annuity * battery_cfg["capex_per_mwh_eur"] + battery_cfg["opex_per_mwh_per_year_eur"])
+        annuity * battery_cfg["capex_eur_per_mwh"] + battery_cfg["fom_eur_per_mwh_per_year"])
     assert n.links.at["battery_charger", "capital_cost"] == pytest.approx(
-        annuity * battery_cfg["capex_per_mw_eur"] + battery_cfg["opex_per_mw_per_year_eur"])
+        annuity * battery_cfg["capex_eur_per_mw"] + battery_cfg["fom_eur_per_mw_per_year"])
 
 
-@pytest.mark.parametrize("route", ["h2-dri-eaf", "moe-eaf", "ew-eaf",
-                                   "h2-dri-eaf-export", "moe-eaf-export", "ew-eaf-export"])
+@pytest.mark.parametrize("route", ["h2-dri-eaf", "moe-eaf", "ewin-eaf",
+                                   "h2-dri-eaf-export", "moe-eaf-export", "ewin-eaf-export"])
 def test_the_workbooks_routes_build_and_cost_without_the_keys_its_scenarios_do_not_require(route, assumptions):
     """NaN where no workbook scenario requires a value stops only the runs that read it, and none of its routes do."""
     without_unrequired = copy.deepcopy(assumptions)

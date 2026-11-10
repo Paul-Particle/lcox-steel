@@ -24,41 +24,41 @@ WINDOW = ("20250101", "20251231")
 TANK_EUR_PER_MWH = 60050
 
 ramp = lambda rate: {"ramp_limit_up": rate, "ramp_limit_down": rate}
-tank = {"h2_buffer": {"capex_per_mwh_eur": TANK_EUR_PER_MWH}}
+tank = {"h2_buffer": {"capex_eur_per_mwh": TANK_EUR_PER_MWH}}
 
 # (scenario, route, overlay, one-line description); None means no overlay file.
 SCENARIOS = [
     ("esp-base", "h2-dri-eaf", None, ""),
     ("esp-ramp-20", "h2-dri-eaf",
-     {"electrolyser": ramp(0.20), "dri-h2": ramp(0.20)},
+     {"electrolyser": ramp(0.20), "h2-dri": ramp(0.20)},
      "Electrolyser and H2 shaft each held to 0.20 of nameplate per hour."),
     ("esp-ramp-05", "h2-dri-eaf",
-     {"electrolyser": ramp(0.05), "dri-h2": ramp(0.05)},
+     {"electrolyser": ramp(0.05), "h2-dri": ramp(0.05)},
      "Electrolyser and H2 shaft each held to 0.05 of nameplate per hour."),
     ("esp-ramp-05-elyzr", "h2-dri-eaf", {"electrolyser": ramp(0.05)},
      "Electrolyser alone held to 0.05 of nameplate per hour."),
-    ("esp-ramp-05-dri", "h2-dri-eaf", {"dri-h2": ramp(0.05)},
+    ("esp-ramp-05-dri", "h2-dri-eaf", {"h2-dri": ramp(0.05)},
      "H2 shaft alone held to 0.05 of nameplate per hour."),
     ("esp-tank", "h2-dri-eaf", tank,
      "Hydrogen storage priced as tank with compressor, no ramp limit."),
     ("esp-tank-ramp-20", "h2-dri-eaf",
-     {**tank, "electrolyser": ramp(0.20), "dri-h2": ramp(0.20)},
+     {**tank, "electrolyser": ramp(0.20), "h2-dri": ramp(0.20)},
      "Tank storage; electrolyser and H2 shaft each held to 0.20 of nameplate per hour."),
     ("esp-tank-ramp-05", "h2-dri-eaf",
-     {**tank, "electrolyser": ramp(0.05), "dri-h2": ramp(0.05)},
+     {**tank, "electrolyser": ramp(0.05), "h2-dri": ramp(0.05)},
      "Tank storage; electrolyser and H2 shaft each held to 0.05 of nameplate per hour."),
     ("esp-tank-ramp-05-elyzr", "h2-dri-eaf", {**tank, "electrolyser": ramp(0.05)},
      "Tank storage; electrolyser alone held to 0.05 of nameplate per hour."),
-    ("esp-tank-ramp-05-dri", "h2-dri-eaf", {**tank, "dri-h2": ramp(0.05)},
+    ("esp-tank-ramp-05-dri", "h2-dri-eaf", {**tank, "h2-dri": ramp(0.05)},
      "Tank storage; H2 shaft alone held to 0.05 of nameplate per hour."),
-    ("esp-dri-pmin-0", "h2-dri-eaf", {"dri-h2": {"p_min_pu": 0.0}},
+    ("esp-dri-pmin-0", "h2-dri-eaf", {"h2-dri": {"p_min_pu": 0.0}},
      "H2 shaft with no minimum load and no ramp limit."),
-    ("esp-dri-pmin-0-ramp-05", "h2-dri-eaf", {"dri-h2": {"p_min_pu": 0.0, **ramp(0.05)}},
+    ("esp-dri-pmin-0-ramp-05", "h2-dri-eaf", {"h2-dri": {"p_min_pu": 0.0, **ramp(0.05)}},
      "H2 shaft with no minimum load, held to 0.05 of nameplate per hour."),
-    ("esp-tank-dri-pmin-0", "h2-dri-eaf", {**tank, "dri-h2": {"p_min_pu": 0.0}},
+    ("esp-tank-dri-pmin-0", "h2-dri-eaf", {**tank, "h2-dri": {"p_min_pu": 0.0}},
      "Tank storage; H2 shaft with no minimum load and no ramp limit."),
     ("esp-tank-dri-pmin-0-ramp-05", "h2-dri-eaf",
-     {**tank, "dri-h2": {"p_min_pu": 0.0, **ramp(0.05)}},
+     {**tank, "h2-dri": {"p_min_pu": 0.0, **ramp(0.05)}},
      "Tank storage; H2 shaft with no minimum load, held to 0.05 of nameplate per hour."),
 ]
 for pmin in (0.7, 0.0):

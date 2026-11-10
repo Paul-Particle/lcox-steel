@@ -609,8 +609,8 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
   // the lines come to the plant total they sit under. The MOE route's ladle
   // metallurgy is the shared EAF, priced down by an overlay, so it is not a
   // plant of its own.
-  const PLANT_LABELS = [["dri","H2-DRI shaft"],["dri_mix","Blended shaft"],
-    ["dri_ng","NG-DRI shaft"],["moe","MOE"],["electrowinning","Electrowinning"],
+  const PLANT_LABELS = [["dri","H2-DRI shaft"],["mix_dri","Blended shaft"],
+    ["ng_dri","NG-DRI shaft"],["moe","MOE"],["electrowinning","Electrowinning"],
     ["briquetting","Briquetting press"],["eaf","EAF"]];
   function plantLines(rec){
     return PLANT_LABELS.filter(([k])=>cd(rec,k)!=null)

@@ -95,31 +95,31 @@ CF_NAMES = {
 # Route ids as the scenario tables spell them.
 CLEAN_ROUTES = ["h2-dri-eaf", "h2-dri-eaf-export",
                 "moe-eaf", "moe-eaf-export",
-                "ew-eaf", "ew-eaf-export"]
+                "ewin-eaf", "ewin-eaf-export"]
 # Each `-export` twin sits beside the route it is built from: the comparison that
 # earns its place is a route against its own twin — make the iron here and melt it
 # here, or make it here and melt it at the destination.
 ROUTE_ORDER = ["h2-dri-eaf", "h2-dri-eaf-export",
                "moe-eaf", "moe-eaf-export",
-               "ew-eaf", "ew-eaf-export",
+               "ewin-eaf", "ewin-eaf-export",
                "mix-dri-eaf", "mix-dri-eaf-export",
                "ng-dri-eaf", "ng-dri-eaf-export"]
 # Every route melts in an EAF, so naming it distinguishes nothing and only makes
 # the label longer — which costs most on the capacity panels, where the labels sit
 # tilted. What the name has to carry is the reduction step the routes differ on.
-ROUTE_LABEL = {"h2-dri-eaf": "H2-DRI", "moe-eaf": "MOE", "ew-eaf": "Electrowinning",
+ROUTE_LABEL = {"h2-dri-eaf": "H2-DRI", "moe-eaf": "MOE", "ewin-eaf": "Electrowinning",
                "mix-dri-eaf": "NG-H2-DRI", "ng-dri-eaf": "NG-DRI",
                "h2-dri-eaf-export": "H2-DRI · export",
                "moe-eaf-export": "MOE · export",
-               "ew-eaf-export": "Electrowinning · export",
+               "ewin-eaf-export": "Electrowinning · export",
                "mix-dri-eaf-export": "NG-H2-DRI · export",
                "ng-dri-eaf-export": "NG-DRI · export"}
 # Blues = clean; sand = transitional (partial gas); red = fossil. An export twin
 # takes its domestic route's hue, lightened, so a pair reads as a pair.
-ROUTE_COLOR = {"h2-dri-eaf": "#0A5680", "moe-eaf": "#0293D2", "ew-eaf": "#83D1DD",
+ROUTE_COLOR = {"h2-dri-eaf": "#0A5680", "moe-eaf": "#0293D2", "ewin-eaf": "#83D1DD",
                "mix-dri-eaf": "#E2B681", "ng-dri-eaf": "#D75674",
                "h2-dri-eaf-export": "#5E90AE", "moe-eaf-export": "#6FC0E6",
-               "ew-eaf-export": "#B6E4EB", "mix-dri-eaf-export": "#EFD5B6",
+               "ewin-eaf-export": "#B6E4EB", "mix-dri-eaf-export": "#EFD5B6",
                "ng-dri-eaf-export": "#E79AAB"}
 CO2_T_PER_MWH = 0.20
 # Below this iron-from-H2 share the "MIX" route has effectively rejected hydrogen
@@ -336,8 +336,8 @@ def _record(row, lcos_row, cap_row):
     built = cost_taxonomy.built_ironmaking(row)
     plant = _opt(row["cost_ironmaking_plant_eur_per_t_steel"])
     if built is not None and plant is not None:
-        key = {"dri-h2": "dri", "dri-ng": "dri_ng", "dri-mix": "dri_mix",
-               "moe": "moe", "ew": "electrowinning"}[built[0]]
+        key = {"h2-dri": "dri", "ng-dri": "dri_ng", "mix-dri": "dri_mix",
+               "moe": "moe", "ewin": "electrowinning"}[built[0]]
         cost_detail[key] = plant
     for key, plant in (("briquetting", "briquetting_plant"), ("eaf", "steelmaking_plant")):
         total = _opt(row[f"cost_{plant}_eur_per_t_steel"])

@@ -51,7 +51,7 @@ C_GRID_CONN, C_GRID_NRG, C_TRANSM = "#71828F", "#B7C1C8", "#83D1DD"
 # The electricity is five bands rather than two and a remainder: making the
 # hydrogen, making the iron, melting it, moving it about, and the losses around
 # all of that. Making the iron is a band of its own because on moe-eaf and
-# ew-eaf it is the cell that draws most of the route's electricity, which a
+# ewin-eaf it is the cell that draws most of the route's electricity, which a
 # `rest of plant` remainder would bury.
 PURPOSE_BANDS = [
     ["ore",             "Ore & consumables",                C_ORE],

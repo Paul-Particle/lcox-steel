@@ -2,4 +2,4 @@
 # reads, so a demo run shows an overlay reaching the solve. Here the H2 buffer
 # is priced as a salt cavern.
 h2_buffer:
-  capex_per_mwh_eur: 350
+  capex_eur_per_mwh: 350

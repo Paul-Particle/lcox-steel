@@ -70,7 +70,7 @@ EMISSION_FACTORS_NAME = "emissions_agorameter"
 # A link's second electricity draw (on bus3), and the user it is reported under.
 # The H2 shaft preheats its own feed; the blend shaft's preheat is a link of its
 # own, `reductant-h2`, and both land in the same row.
-SECOND_DRAWS = {"dri-h2": "reductant-h2"}
+SECOND_DRAWS = {"h2-dri": "reductant-h2"}
 
 
 def _carrier_key(carrier: str) -> str:
@@ -581,11 +581,11 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
 def _fixed_om_share(wacc: float, cfg: dict, capex_key: str, opex_key: str) -> float:
     """Fixed O&M's share of one component's annual cost, as build_network priced it.
 
-    A `capital_cost` in the network is `annuity x capex + fixed opex` per unit of
+    A `capital_cost` in the network is `annuity x capex + fixed O&M` per unit of
     capacity, so the share carries over unchanged to the annual cost of whatever
     the solve went on to build.
     """
-    annual_capex = annuity_factor(wacc, cfg["lifetime_years"]) * cfg[capex_key]
+    annual_capex = annuity_factor(wacc, cfg["financing_period"]) * cfg[capex_key]
     total = annual_capex + cfg[opex_key]
     return cfg[opex_key] / total if total else 0.0
 
@@ -664,7 +664,7 @@ def _leaf_breakdown(
         if not annual:
             continue
         share = _fixed_om_share(wacc_of(link), assumptions[link],
-                                "capex_per_t_per_year_eur", "opex_per_t_per_year_eur")
+                                "capex_eur_per_t", "fom_eur_per_t_capacity_per_year")
         # Each split on its own quotes; the ironmaking steps land in one pair.
         stem = plant_stem(link)
         leaves[f"{stem}_fom"] += annual * share
@@ -690,7 +690,7 @@ def _leaf_breakdown(
     electrolyser_capital = link_capital("electrolyser")
     if electrolyser_capital:
         share = _fixed_om_share(origin_wacc, assumptions["electrolyser"],
-                                "capex_per_mw_eur", "opex_per_mw_per_year_eur")
+                                "capex_eur_per_mw", "fom_eur_per_mw_per_year")
         leaves["electrolyser_fom"] = electrolyser_capital * share
         leaves["electrolyser_capex"] = electrolyser_capital * (1.0 - share)
     leaves["h2_buffer"] = breakdown["h2_buffer"]
@@ -715,7 +715,7 @@ def _leaf_breakdown(
         if not annual:
             continue
         share = _fixed_om_share(origin_wacc, assumptions["res"][tech],
-                                "capex_per_mw_eur", "opex_per_mw_per_year_eur")
+                                "capex_eur_per_mw", "fom_eur_per_mw_per_year")
         leaves[f"res_{field_stem(tech)}_fom"] = annual * share
         leaves[f"res_{field_stem(tech)}_capex"] = annual * (1.0 - share)
     # A generator none of the three techs names has no capex and O&M split to
@@ -745,7 +745,7 @@ def _leaf_breakdown(
     def split_connection(generator: str, wacc: float, group_total: float, prefix: str) -> None:
         connection = generator_capital(generator)
         if connection:
-            annual_capex = (annuity_factor(wacc, grid_cfg["connection_lifetime_years"])
+            annual_capex = (annuity_factor(wacc, grid_cfg["connection_financing_period"])
                             * grid_cfg["connection_capex_eur_per_mw"])
             yearly_fee = grid_cfg["fee_eur_per_mw_per_year"]
             fee_share = yearly_fee / (annual_capex + yearly_fee) if (annual_capex + yearly_fee) else 0.0
@@ -803,7 +803,7 @@ def _leaf_breakdown(
     home_rate = home_cost / home_mwh if home_mwh > 0 else 0.0
     # The furnace melts on whichever system it stands in; everything else is at
     # home whatever the route. `draws` is keyed by link id as the network spells
-    # it — `dri-h2`, not `dri_h2` — which is what REDUCTION_LINKS names too.
+    # it — `h2-dri`, not `h2_dri` — which is what REDUCTION_LINKS names too.
     melts_abroad = destination_mwh > 0
     home_draws = {link: mwh for link, mwh in draws.items()
                   if not (melts_abroad and link == "eaf")}
@@ -903,7 +903,7 @@ def _leaf_breakdown(
 
         # -- the levelised cost of the iron at the plant gate: every yearly euro
         # inside a line round the ironmaking asset, capital already annualised at
-        # its own WACC and lifetime, over the iron the shaft or cells made. The
+        # its own WACC and financing period, over the iron the shaft or cells made. The
         # electricity is the iron's share above, so the electrolyser's power is
         # counted there and not again with the hydrogen. A store goes with what
         # it holds: the iron's into the iron, the briquettes' into the briquettes.
@@ -1011,7 +1011,7 @@ def _leaf_breakdown(
     # -- the inputs behind the split, so a cost can be checked against them
     for link in PROCESS_LINKS:
         fields[f"annuity_factor_{field_stem(link)}"] = annuity_factor(
-            wacc_of(link), assumptions[link]["lifetime_years"]
+            wacc_of(link), assumptions[link]["financing_period"]
         )
     return fields
 
@@ -1059,7 +1059,7 @@ def _capacity_fee_share(grid_cfg: dict, wacc: float) -> float:
     A connection's `capital_cost` is its annuitised capex plus the fee per MW and
     year, so the share carries over to whatever size the solve built.
     """
-    annual_capex = annuity_factor(wacc, grid_cfg["connection_lifetime_years"]) * grid_cfg["connection_capex_eur_per_mw"]
+    annual_capex = annuity_factor(wacc, grid_cfg["connection_financing_period"]) * grid_cfg["connection_capex_eur_per_mw"]
     yearly_fee = grid_cfg["fee_eur_per_mw_per_year"]
     return yearly_fee / (annual_capex + yearly_fee) if (annual_capex + yearly_fee) else 0.0
 
@@ -1323,7 +1323,7 @@ def extract_summary(
     # On mix-dri-eaf the split happens on the reductant bus, one shaft
     # upstream; on the single-fuel routes it is the shafts themselves.
     h2_link, ng_link = (("reductant-h2", "reductant-ng")
-                        if "dri-mix" in n.links.index else ("dri-h2", "dri-ng"))
+                        if "mix-dri" in n.links.index else ("h2-dri", "ng-dri"))
     if h2_link in n.links.index or ng_link in n.links.index:
         from_h2 = -float(n.links_t.p1[h2_link].sum()) if h2_link in n.links.index else 0.0
         from_ng = -float(n.links_t.p1[ng_link].sum()) if ng_link in n.links.index else 0.0
@@ -1409,7 +1409,7 @@ def extract_summary(
         # Additionally as hours of the shaft's mean H₂ draw: what the H2 shaft
         # takes, or on the blend shaft what its hydrogen feed takes.
         h2_demand_mw = sum(float(n.links_t.p0[link].mean())
-                           for link in ("dri-h2", "reductant-h2") if link in n.links.index)
+                           for link in ("h2-dri", "reductant-h2") if link in n.links.index)
         summary["h2_buffer_duration_hours"] = (
             buffer_mwh / h2_demand_mw if buffer_mwh > 0 and h2_demand_mw > 0 else float("nan")
         )

@@ -75,14 +75,14 @@ def deep_merge(base: dict, overlay: dict) -> dict:
     return out
 
 
-def annuity_factor(wacc: float, lifetime_years: float) -> float:
+def annuity_factor(wacc: float, financing_period: float) -> float:
     """Capital recovery factor: annualises a lump-sum capex over a project life."""
-    if lifetime_years <= 0:
-        raise ValueError("lifetime_years must be > 0")
+    if financing_period <= 0:
+        raise ValueError("financing_period must be > 0")
     if wacc == 0:
-        return 1.0 / lifetime_years
-    return (wacc * (1.0 + wacc) ** lifetime_years) / (
-        (1.0 + wacc) ** lifetime_years - 1.0
+        return 1.0 / financing_period
+    return (wacc * (1.0 + wacc) ** financing_period) / (
+        (1.0 + wacc) ** financing_period - 1.0
     )
 
 

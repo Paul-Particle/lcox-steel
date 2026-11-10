@@ -1,0 +1,21 @@
+# Kept by hand: what `common.generate_inputs` writes for this scenario's workbook
+# row with its iron in AUS and its steel in ESP (the workbook's noneu, aus and
+# global rows at the origin, its eu rows at the destination), on the demo's areas.
+finance:
+  origin_wacc: 0.111
+  destination_wacc: 0.071
+h2-dri:
+  fom_eur_per_t_capacity_per_year: 77.14841012211379
+mix-dri:
+  fom_eur_per_t_capacity_per_year: 77.14841012211379
+ng-dri:
+  fom_eur_per_t_capacity_per_year: 77.14841012211379
+moe:
+  fom_eur_per_t_capacity_per_year: 77.14841012211379
+ewin:
+  fom_eur_per_t_capacity_per_year: 77.14841012211379
+eaf:
+  fom_eur_per_t_capacity_per_year: 92.03616865347789
+battery:
+  capex_eur_per_mw: 138433.0454135976
+  capex_eur_per_mwh: 89683.77404483067

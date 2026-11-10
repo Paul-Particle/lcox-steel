@@ -13,14 +13,14 @@ assumptions, which only carry the numbers):
                reductant bus and the optimiser picks the mix, paying for one
                furnace rather than two (see `_add_mix_dri_links`)
   moe-eaf:     electricity → molten oxide electrolysis → iron → EAF → steel
-  ew-eaf:      electricity → iron electrowinning → iron → EAF → steel
+  ewin-eaf:      electricity → iron electrowinning → iron → EAF → steel
 
 Every route also has an `-export` twin, which makes iron at the run's
 origin and melts it at its destination: the same chain up to the iron,
 then a stockpile, a freight leg, and an EAF at the destination running on
 destination electricity. What survives a ship is cold solid iron, so the DRI
 routes press their sponge iron into briquettes first, while moe-eaf-export and
-ew-eaf-export need no such step — the MOE cell simply lets its iron go cold
+ewin-eaf-export need no such step — the MOE cell simply lets its iron go cold
 instead of pouring it into the furnace. Either way the iron arrives cold and
 the export route pays the full melt, which is what the domestic twin saves.
 
@@ -31,7 +31,7 @@ Bus unit convention:
   reductant bus:     MW LHV on an H2-equivalent basis, for mix-dri-eaf — gas
                      enters derated by what reforming costs (see below)
   iron bus:          t/h  (sponge iron for the DRI routes, hot metal for
-                     moe-eaf, electrolytic iron plates for ew-eaf)
+                     moe-eaf, electrolytic iron plates for ewin-eaf)
   hbi bus:           t/h  (briquettes, on a DRI export route only)
   destination buses: the far side of the freight leg — iron, and its own AC
   steel bus:         t/h  (liquid steel)
@@ -76,7 +76,7 @@ from common._constants import H2_LHV_KWH_PER_KG, HOURS_PER_YEAR
 # as the route it is named after and then ships the iron to a furnace somewhere
 # else.
 EXPORT_SUFFIX = "-export"
-_DOMESTIC_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ew-eaf")
+_DOMESTIC_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf", "moe-eaf", "ewin-eaf")
 ROUTES = (*_DOMESTIC_ROUTES, *(f"{route}{EXPORT_SUFFIX}" for route in _DOMESTIC_ROUTES))
 
 
@@ -121,20 +121,16 @@ def route_stem(route: str) -> str:
 # briquetted to survive the voyage and brings the gangue the shaft could not take
 # out, while electrowon plates and cast MOE iron already keep and are nearly pure
 # iron. The furnace charges them differently, so they are different states.
-_IRON_SOURCE = {
-    "h2-dri-eaf": "dri-h2", "ng-dri-eaf": "dri-ng",
-    "mix-dri-eaf": "dri-mix",
-    "moe-eaf": "moe", "ew-eaf": "ew",
-}
+# Which step made the iron is the route's name before `-eaf`.
 _CHARGE_STATE = {"h2-dri-eaf": "hot", "ng-dri-eaf": "hot", "mix-dri-eaf": "hot",
-                 "moe-eaf": "liquid", "ew-eaf": "plates"}
+                 "moe-eaf": "liquid", "ewin-eaf": "plates"}
 _EXPORT_CHARGE_STATE = {"h2-dri-eaf": "briquettes", "ng-dri-eaf": "briquettes",
                         "mix-dri-eaf": "briquettes",
-                        "moe-eaf": "plates", "ew-eaf": "plates"}
+                        "moe-eaf": "plates", "ewin-eaf": "plates"}
 EAF_CHARGE = {
     route: ((_EXPORT_CHARGE_STATE if route.endswith(EXPORT_SUFFIX) else _CHARGE_STATE)
             [route_stem(route)],
-            _IRON_SOURCE[route_stem(route)])
+            route_stem(route).removesuffix("-eaf"))
     for route in ROUTES
 }
 
@@ -149,7 +145,7 @@ _GAS_ROUTES = ("ng-dri-eaf", "mix-dri-eaf")              # gas bus + NG-DRI shaf
 _H2_DRI_ROUTES = ("h2-dri-eaf",)                         # single-fuel H2 shaft
 _MIX_ROUTES = ("mix-dri-eaf",)                           # one shaft, blended feed
 _DRI_ROUTES = ("h2-dri-eaf", "ng-dri-eaf", "mix-dri-eaf")
-_IRON_ROUTES = (*_DRI_ROUTES, "moe-eaf", "ew-eaf")
+_IRON_ROUTES = (*_DRI_ROUTES, "moe-eaf", "ewin-eaf")
 
 # Bus names for iron that has been made storable, and for the far side of the sea.
 HBI_BUS = "hbi"
@@ -261,27 +257,27 @@ def build_network(
                     bus=DELIVERED_STEEL_BUS if deliver_steel else "steel")
     _add_steel_store(n, assumptions["steel_store"], furnace_wacc, steel_t_per_h)
     if stem in _H2_DRI_ROUTES:
-        _add_dri_link(n, plant, assumptions["dri-h2"], origin_wacc, elec_bus)
+        _add_dri_link(n, assumptions["h2-dri"], origin_wacc, elec_bus)
     if stem in _GAS_ROUTES:
         _add_gas_supply(n, assumptions["natural_gas"], assumptions["emissions"])
     if stem == "ng-dri-eaf":
-        _add_ng_dri_link(n, assumptions["dri-ng"], origin_wacc, elec_bus)
+        _add_ng_dri_link(n, assumptions["ng-dri"], origin_wacc, elec_bus)
     if stem in _MIX_ROUTES:
         _add_mix_dri_links(
-            n, plant, assumptions["dri-mix"], assumptions["dri-ng"], origin_wacc, elec_bus,
+            n, assumptions["mix-dri"], assumptions["ng-dri"], origin_wacc, elec_bus,
             steel_t_per_h=steel_t_per_h,
         )
     if stem == "moe-eaf":
         _add_moe_link(n, assumptions["moe"], origin_wacc, elec_bus)
-    if stem == "ew-eaf":
-        _add_ew_link(n, assumptions["ew"], origin_wacc, elec_bus)
+    if stem == "ewin-eaf":
+        _add_ewin_link(n, assumptions["ewin"], origin_wacc, elec_bus)
 
     # Where this route's iron waits, if it is in a state that can wait at
     # all. Sponge iron has to be briquetted first; hot metal never can.
     if is_export and stem in _DRI_ROUTES:
         _add_briquetting_link(n, assumptions["briquetting"], origin_wacc, elec_bus)
         cold_iron_bus = HBI_BUS
-    elif is_export or stem == "ew-eaf":
+    elif is_export or stem == "ewin-eaf":
         cold_iron_bus = "iron"
     else:
         cold_iron_bus = None
@@ -371,16 +367,16 @@ def _add_carriers(
     if stem in _H2_ROUTES:
         base += ["H2", "electrolyser"]
     if stem in _GAS_ROUTES:
-        base += ["gas", "dri-ng"]
+        base += ["gas", "ng-dri"]
     if stem in _IRON_ROUTES:
         base += ["iron", "eaf"]
     base += ["steel"]
     if stem in _H2_DRI_ROUTES:
-        base += ["dri-h2"]
+        base += ["h2-dri"]
     if stem in _MIX_ROUTES:
-        base += ["reductant", "dri-mix"]
-    if stem == "ew-eaf":
-        base += ["ew"]
+        base += ["reductant", "mix-dri"]
+    if stem == "ewin-eaf":
+        base += ["ewin"]
     if stem == "moe-eaf":
         base += ["moe"]
     if is_export and stem in _DRI_ROUTES:
@@ -452,7 +448,7 @@ def _add_generators(
     MultiIndex; each generator is named `{tech}_{site}` and sits on its site's bus.
     Either way the tech key is looked up in `res_cfg`; orientation-suffixed keys
     (e.g. `solar_az180`, `..._east_30`) fall back to their base tech. Capital cost
-    is annuitised CAPEX + fixed OPEX; the CF profile enters as p_max_pu.
+    is annuitised CAPEX + fixed O&M; the CF profile enters as p_max_pu.
     """
     for col in cf_timeseries.columns:
         if multisite:
@@ -472,8 +468,8 @@ def _add_generators(
             raise KeyError(f"No assumptions found for tech '{tech}' — add it to the assumptions' `res` block")
 
         cap_cost = (
-            annuity_factor(wacc, cfg["lifetime_years"]) * cfg["capex_per_mw_eur"]
-            + cfg["opex_per_mw_per_year_eur"]
+            annuity_factor(wacc, cfg["financing_period"]) * cfg["capex_eur_per_mw"]
+            + cfg["fom_eur_per_mw_per_year"]
         )
         # The anchor cell is the plant site, so a scenario that asks what a
         # project *here* costs can require that something is built here. Every
@@ -503,7 +499,7 @@ def _add_battery(
     and solve_network ties the two ratings together so it cannot be bought twice.
     """
     eta = bat_cfg["efficiency_roundtrip"] ** 0.5
-    annuity = annuity_factor(wacc, bat_cfg["lifetime_years"])
+    annuity = annuity_factor(wacc, bat_cfg["financing_period"])
     store_bus = f"{bus}_battery"
     n.add("Bus", store_bus, carrier="battery")
     # No C-rate limit ties power to energy, as in PyPSA-Eur: the optimiser picks
@@ -515,7 +511,7 @@ def _add_battery(
         carrier="battery",
         e_nom_extendable=True,
         e_cyclic=True,
-        capital_cost=annuity * bat_cfg["capex_per_mwh_eur"] + bat_cfg["opex_per_mwh_per_year_eur"],
+        capital_cost=annuity * bat_cfg["capex_eur_per_mwh"] + bat_cfg["fom_eur_per_mwh_per_year"],
         marginal_cost=0.0,
     )
     n.add(
@@ -526,7 +522,7 @@ def _add_battery(
         carrier="battery",
         p_nom_extendable=True,
         efficiency=eta,
-        capital_cost=annuity * bat_cfg["capex_per_mw_eur"] + bat_cfg["opex_per_mw_per_year_eur"],
+        capital_cost=annuity * bat_cfg["capex_eur_per_mw"] + bat_cfg["fom_eur_per_mw_per_year"],
     )
     n.add(
         "Link",
@@ -548,8 +544,8 @@ def _add_electrolyser(
 ) -> None:
     """Add the extendable electrolyser link (electricity → hydrogen), sized by the optimiser."""
     cap_cost = (
-        annuity_factor(wacc, el_cfg["lifetime_years"]) * el_cfg["capex_per_mw_eur"]
-        + el_cfg["opex_per_mw_per_year_eur"]
+        annuity_factor(wacc, el_cfg["financing_period"]) * el_cfg["capex_eur_per_mw"]
+        + el_cfg["fom_eur_per_mw_per_year"]
     )
     n.add(
         "Link",
@@ -571,8 +567,8 @@ def _add_h2_buffer(n: pypsa.Network, buf_cfg: dict, wacc: float) -> None:
     """Add the extendable, cyclic H2 storage buffer (a Store on the hydrogen bus)."""
     # Store capital_cost is per MWh of e_nom (H2 LHV energy capacity)
     cap_cost = (
-        annuity_factor(wacc, buf_cfg["lifetime_years"]) * buf_cfg["capex_per_mwh_eur"]
-        + buf_cfg["opex_per_mwh_per_year_eur"]
+        annuity_factor(wacc, buf_cfg["financing_period"]) * buf_cfg["capex_eur_per_mwh"]
+        + buf_cfg["fom_eur_per_mwh"]
     )
     n.add(
         "Store",
@@ -613,18 +609,18 @@ def _process_capital_cost(cfg: dict, wacc: float, output_t_per_p0_unit: float) -
     quotes is noise.
     """
     per_t_per_year = (
-        annuity_factor(wacc, cfg["lifetime_years"]) * cfg["capex_per_t_per_year_eur"]
-        + cfg["opex_per_t_per_year_eur"]
+        annuity_factor(wacc, cfg["financing_period"]) * cfg["capex_eur_per_t"]
+        + cfg["fom_eur_per_t_capacity_per_year"]
     )
     return per_t_per_year * output_t_per_p0_unit * HOURS_PER_YEAR
 
 
 def _add_dri_link(
-    n: pypsa.Network, plant: dict, dri_cfg: dict, wacc: float, elec_bus: str
+    n: pypsa.Network, dri_cfg: dict, wacc: float, elec_bus: str
 ) -> None:
     """DRI shaft: hydrogen (MW LHV) → sponge iron (t/h), drawing shaft electricity.
 
-    `efficiency` converts MWh H2 into t iron via the plant's H2 intensity;
+    `efficiency` converts MWh H2 into t iron via the shaft's H2 intensity;
     `efficiency2` (negative) withdraws the shaft's own electricity in fixed
     proportion, and `efficiency3` the electricity that preheats its H2 feed — the
     same draw the blend shaft takes on `reductant-h2`, on a port of its own so the
@@ -632,30 +628,28 @@ def _add_dri_link(
     one draw. Ore cost enters as marginal_cost, converted from €/t iron to
     per-MWh-H2 (p0).
     """
-    t_iron_per_mwh_h2 = 1000.0 / (
-        plant["h2_intensity_kg_per_t_dri"] * H2_LHV_KWH_PER_KG
-    )
+    t_iron_per_mwh_h2 = 1000.0 / (dri_cfg["kg_h2_per_t_dri"] * H2_LHV_KWH_PER_KG)
     n.add(
         "Link",
-        "dri-h2",
+        "h2-dri",
         bus0="hydrogen",
         bus1="iron",
         bus2=elec_bus,
         bus3=elec_bus,
-        carrier="dri-h2",
+        carrier="h2-dri",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh_h2,
         efficiency2=-dri_cfg["el_mwh_per_t"] * t_iron_per_mwh_h2,
         efficiency3=-dri_cfg["h2_preheat_el_mwh_per_t"] * t_iron_per_mwh_h2,
         p_min_pu=dri_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(dri_cfg, wacc, t_iron_per_mwh_h2),
-        marginal_cost=dri_cfg["ore_eur_per_t"] * t_iron_per_mwh_h2,
+        marginal_cost=dri_cfg["ore_eur_per_t_dri"] * t_iron_per_mwh_h2,
         **_ramp_limits(dri_cfg),
     )
 
 
 def _add_mix_dri_links(
-    n: pypsa.Network, plant: dict, mix_cfg: dict, dri_ng_cfg: dict,
+    n: pypsa.Network, mix_cfg: dict, ng_dri_cfg: dict,
     wacc: float, elec_bus: str, steel_t_per_h: float,
 ) -> None:
     """One shaft on a blended reductant: H2 and gas both feed it, it makes iron.
@@ -669,7 +663,7 @@ def _add_mix_dri_links(
     What makes the blend worth having is that there is one furnace to pay for,
     not two. The small fixed store is a smoothing buffer on top of that.
     """
-    reductant_mwh_per_t = plant["h2_intensity_kg_per_t_dri"] * H2_LHV_KWH_PER_KG / 1000.0
+    reductant_mwh_per_t = mix_cfg["kg_h2_per_t_dri"] * H2_LHV_KWH_PER_KG / 1000.0
     t_iron_per_mwh = 1.0 / reductant_mwh_per_t
 
     n.add(
@@ -685,18 +679,18 @@ def _add_mix_dri_links(
         bus0="gas", bus1="reductant",
         carrier="reductant",
         p_nom_extendable=True,
-        efficiency=reductant_mwh_per_t / dri_ng_cfg["gas_mwh_per_t"],
+        efficiency=reductant_mwh_per_t / ng_dri_cfg["gas_mwh_per_t"],
     )
     n.add(
-        "Link", "dri-mix",
+        "Link", "mix-dri",
         bus0="reductant", bus1="iron", bus2=elec_bus,
-        carrier="dri-mix",
+        carrier="mix-dri",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh,
         efficiency2=-mix_cfg["el_mwh_per_t"] * t_iron_per_mwh,
         p_min_pu=mix_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(mix_cfg, wacc, t_iron_per_mwh),
-        marginal_cost=mix_cfg["ore_eur_per_t"] * t_iron_per_mwh,
+        marginal_cost=mix_cfg["ore_eur_per_t_dri"] * t_iron_per_mwh,
     )
     nominal_mwh_per_h = (
         steel_t_per_h * mix_cfg["iron_t_per_t_steel"] * reductant_mwh_per_t
@@ -733,7 +727,7 @@ def _add_gas_supply(n: pypsa.Network, ng_cfg: dict, emissions_cfg: dict) -> None
 
 
 def _add_ng_dri_link(
-    n: pypsa.Network, dri_ng_cfg: dict, wacc: float, elec_bus: str
+    n: pypsa.Network, ng_dri_cfg: dict, wacc: float, elec_bus: str
 ) -> None:
     """NG-DRI shaft: natural gas (MW LHV) → sponge iron (t/h), drawing shaft electricity.
 
@@ -741,20 +735,20 @@ def _add_ng_dri_link(
     gas itself is priced on the gas_supply generator, so only ore enters here
     as marginal cost.
     """
-    t_iron_per_mwh_gas = 1.0 / dri_ng_cfg["gas_mwh_per_t"]
+    t_iron_per_mwh_gas = 1.0 / ng_dri_cfg["gas_mwh_per_t"]
     n.add(
         "Link",
-        "dri-ng",
+        "ng-dri",
         bus0="gas",
         bus1="iron",
         bus2=elec_bus,
-        carrier="dri-ng",
+        carrier="ng-dri",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh_gas,
-        efficiency2=-dri_ng_cfg["el_mwh_per_t"] * t_iron_per_mwh_gas,
-        p_min_pu=dri_ng_cfg["p_min_pu"],
-        capital_cost=_process_capital_cost(dri_ng_cfg, wacc, t_iron_per_mwh_gas),
-        marginal_cost=dri_ng_cfg["ore_eur_per_t"] * t_iron_per_mwh_gas,
+        efficiency2=-ng_dri_cfg["el_mwh_per_t"] * t_iron_per_mwh_gas,
+        p_min_pu=ng_dri_cfg["p_min_pu"],
+        capital_cost=_process_capital_cost(ng_dri_cfg, wacc, t_iron_per_mwh_gas),
+        marginal_cost=ng_dri_cfg["ore_eur_per_t_dri"] * t_iron_per_mwh_gas,
     )
 
 
@@ -801,25 +795,25 @@ def _add_moe_link(n: pypsa.Network, moe_cfg: dict, wacc: float, elec_bus: str) -
         efficiency=t_iron_per_mwh,
         p_min_pu=moe_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(moe_cfg, wacc, t_iron_per_mwh),
-        marginal_cost=moe_cfg["ore_eur_per_t"] * t_iron_per_mwh,
+        marginal_cost=moe_cfg["ore_eur_per_t_liquid_iron"] * t_iron_per_mwh,
         **_ramp_limits(moe_cfg),
     )
 
 
-def _add_ew_link(n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str) -> None:
+def _add_ewin_link(n: pypsa.Network, ewin_cfg: dict, wacc: float, elec_bus: str) -> None:
     """Iron electrowinning: electricity (MW) → electrolytic iron plates (t/h)."""
-    t_iron_per_mwh = 1.0 / ew_cfg["el_mwh_per_t"]
+    t_iron_per_mwh = 1.0 / ewin_cfg["el_mwh_per_t"]
     n.add(
         "Link",
-        "ew",
+        "ewin",
         bus0=elec_bus,
         bus1="iron",
-        carrier="ew",
+        carrier="ewin",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh,
-        capital_cost=_process_capital_cost(ew_cfg, wacc, t_iron_per_mwh),
-        marginal_cost=ew_cfg["ore_eur_per_t"] * t_iron_per_mwh,
-        **_ramp_limits(ew_cfg),
+        capital_cost=_process_capital_cost(ewin_cfg, wacc, t_iron_per_mwh),
+        marginal_cost=ewin_cfg["ore_eur_per_t_electrolytic_iron"] * t_iron_per_mwh,
+        **_ramp_limits(ewin_cfg),
     )
 
 
@@ -842,7 +836,7 @@ def _add_briquetting_link(
         carrier="briquetting",
         p_nom_extendable=True,
         efficiency=briq_cfg["yield_t_per_t"],
-        efficiency2=-briq_cfg["el_mwh_per_t"] * briq_cfg["yield_t_per_t"],
+        efficiency2=-briq_cfg["el_mwh_per_t_hbi"] * briq_cfg["yield_t_per_t"],
         capital_cost=_process_capital_cost(briq_cfg, wacc, briq_cfg["yield_t_per_t"]),
     )
 
@@ -856,7 +850,7 @@ def _add_iron_store(
     Deliberately cheap-but-not-free (see assumptions) so the optimal stockpile
     size is unique and meaningful in reports.
     """
-    cap_cost = annuity_factor(wacc, store_cfg["lifetime_years"]) * store_cfg["capex_per_t_eur"]
+    cap_cost = annuity_factor(wacc, store_cfg["financing_period"]) * store_cfg["capex_eur_per_t"]
     n.add(
         "Store",
         "iron_store",
@@ -876,7 +870,7 @@ def _freight_eur_per_t(transport_cfg: dict, legs: dict, commodity: str) -> float
     so a short haul stays dear per km the way real freight is.
     """
     rates = {mode: transport_cfg[mode][commodity] for mode in legs}
-    return sum(rates[mode]["eur_per_t"] + km * rates[mode]["eur_per_t_km"]
+    return sum(rates[mode]["cost_eur_per_t"] + km * rates[mode]["cost_eur_per_t_per_km"]
                for mode, km in legs.items())
 
 
@@ -936,7 +930,7 @@ def _add_steel_store(
     the flexibility can't degenerate into whole-year arbitrage; the annuitised
     per-tonne capex keeps the built size unique and reportable.
     """
-    cap_cost = annuity_factor(wacc, store_cfg["lifetime_years"]) * store_cfg["capex_per_t_eur"]
+    cap_cost = annuity_factor(wacc, store_cfg["financing_period"]) * store_cfg["capex_eur_per_t"]
     e_nom_max = steel_t_per_h * store_cfg["max_weeks"] * 7 * 24
     n.add(
         "Store",
@@ -967,7 +961,7 @@ def _add_grid_import(
     deliberately out of scope for now.
     """
     cap_cost = (
-        annuity_factor(wacc, grid_cfg["connection_lifetime_years"])
+        annuity_factor(wacc, grid_cfg["connection_financing_period"])
         * grid_cfg["connection_capex_eur_per_mw"]
         + grid_cfg["fee_eur_per_mw_per_year"]
     )
@@ -998,8 +992,8 @@ def _add_transmission(
     """
     dem = sites.loc[demand_site]
     cap_per_km = (
-        annuity_factor(wacc, trans_cfg["lifetime_years"])
-        * trans_cfg["cost_per_mw_per_km_eur"]
+        annuity_factor(wacc, trans_cfg["financing_period"])
+        * trans_cfg["capex_eur_per_mw_per_km"]
     )
     loss_per_km = trans_cfg["losses_pct_per_1000km"] / 100.0 / 1000.0
     route = trans_cfg["indirect_route_factor"]
