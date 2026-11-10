@@ -20,13 +20,17 @@ demo-moe-eaf-ship,DEMO-ES_SYN,moe-eaf,grid,emissions,ES_SYN,20250101,20251231
 # `common.generate_inputs` writes for a workbook row with its iron in AUS and its
 # steel in ESP, moved onto DEMO and ES_SYN. Between them they take every route
 # home and abroad, every power supply (islanded_res, res_grid, grid), each
-# renewable at both site variants, a grid-only scenario run once per zone (both
-# made-up markets), and one row with an override of each form (a `±n%` change, a
+# renewable at both site variants, a mix around an onshore and an offshore
+# anchor, a grid-only scenario run once per zone (both made-up markets), and one
+# row with an override of each form (a `±n%` change, a
 # sensitivity level, a region and a number). Their overlays carry the regional
 # values the generator picks for those locations.
 demo-h2-dri-eaf-islanded-solar-p95,DEMO,h2-dri-eaf,solar,bestsite-p95,DEMO,20250101,20251231
 demo-moe-eaf-islanded-wind-onshore-average,DEMO,moe-eaf,wind-onshore,area-average,DEMO,20250101,20251231
 demo-ewin-eaf-islanded-wind-offshore-average,DEMO,ewin-eaf,wind-offshore,area-average,DEMO,20250101,20251231
+demo-h2-dri-eaf-islanded-mix-solar-p95,DEMO,h2-dri-eaf,solar,anchor-colo-n3,DEMO,20250101,20251231
+demo-moe-eaf-export-islanded-mix-wind-offshore-p95,DEMO-ES_SYN,moe-eaf-export,wind-offshore,anchor-colo-n3,DEMO,20250101,20251231
+demo-moe-eaf-export-islanded-mix-wind-offshore-p95,DEMO-ES_SYN,moe-eaf-export,grid,emissions,ES_SYN,20250101,20251231
 demo-ewin-eaf-res-grid-wind-offshore-p95,DEMO,ewin-eaf,wind-offshore,bestsite-p95,DEMO,20250101,20251231
 demo-ewin-eaf-res-grid-wind-offshore-p95,DEMO,ewin-eaf,grid,emissions,DEMO,20250101,20251231
 demo-moe-eaf-export-islanded-solar-average,DEMO-ES_SYN,moe-eaf-export,solar,area-average,DEMO,20250101,20251231

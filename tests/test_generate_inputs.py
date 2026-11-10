@@ -82,7 +82,7 @@ def build_from_rows(changes_by_scenario: dict) -> tuple[pd.DataFrame, dict]:
     assumptions = {}
     for path in NAMED_INPUTS:
         set_nested(assumptions, path, 0.0)
-    scenarios, overlays = build_scenarios(scenario_rows, NAMED_INPUTS, assumptions, AREAS)
+    scenarios, overlays = build_scenarios(scenario_rows, NAMED_INPUTS, assumptions, AREAS, default_partner_cells=4)
     flat_overlays = {scenario: flatten(overlay) for scenario, overlay in overlays.items()}
     return scenarios, flat_overlays
 
@@ -155,14 +155,17 @@ def test_a_grid_only_run_draws_on_its_grids_alone_and_names_no_renewables():
         build_from_rows({"grid-with-solar": {**no_renewables, "res_technology": "solar"}})
 
 
-def test_a_mix_is_built_around_its_anchor_with_the_partner_cells_it_names_and_skipped_without():
+def test_a_mix_is_built_around_its_anchor_with_the_partner_cells_it_names_or_the_configs_without():
     mix = {"res_configuration": "mix", "res_technology": None, "res_anchor": "wind-onshore"}
     scenarios, _ = build_from_rows({"named": {**mix, "res_partner_cells": 3},
                                     "unnamed": {**mix, "res_partner_cells": None}})
 
-    assert set(scenarios["scenario"]) == {"named"}
-    renewables = scenarios.query("tech != 'grid'")
-    assert renewables[["tech", "variant"]].values.tolist() == [["wind-onshore", "anchor-colo-n3"]]
+    variant_by_scenario = (scenarios.query("tech != 'grid'")
+                           .set_index("scenario")[["tech", "variant"]]
+                           .apply(tuple, axis=1)
+                           .to_dict())
+    assert variant_by_scenario == {"named": ("wind-onshore", "anchor-colo-n3"),
+                                   "unnamed": ("wind-onshore", "anchor-colo-n4")}
 
 
 def test_unknown_or_contradicting_terms_stop_the_build():
