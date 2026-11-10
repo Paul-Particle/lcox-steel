@@ -122,7 +122,7 @@ def emission_step(element_id: str) -> str:
     return "reduction" if element_id in REDUCTION_LINKS else element_id
 
 # The links that buy ore, by the id `build_network` gives them: each carries an
-# `ore_eur_per_t` quote on its marginal cost. The furnace buys consumables
+# ore quote on its marginal cost. The furnace buys consumables
 # instead and the briquetting press buys nothing, so neither is here.
 ORE_LINKS = ("h2-dri", "ng-dri", "mix-dri", "moe", "ewin")
 

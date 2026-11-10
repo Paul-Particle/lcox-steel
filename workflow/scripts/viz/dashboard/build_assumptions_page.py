@@ -85,7 +85,7 @@ SECTIONS = [
       ("steel_store.max_weeks", "Steel inventory cap", "weeks of output")]),
 
     ("Transmission",
-     [("transmission.cost_per_mw_per_km_eur", "HVDC capex", "€/MW/km"),
+     [("transmission.capex_eur_per_mw_per_km", "HVDC capex", "€/MW/km"),
       ("transmission.financing_period", "HVDC financing period", "years"),
       ("transmission.losses_pct_per_1000km", "HVDC losses", "% per 1000 km"),
       ("transmission.indirect_route_factor", "Route factor", "")]),

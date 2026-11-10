@@ -112,7 +112,7 @@ h2-dri:
   el_mwh_per_t: 0.1768
   h2_preheat_el_mwh_per_t: 0.8282
   kg_h2_per_t_dri: 50.23
-  ore_eur_per_t: 238.2                  # DR-grade pellets, per t of DRI
+  ore_eur_per_t_dri: 238.2              # DR-grade pellets, per t of DRI
   iron_t_per_t_steel: 1.17            # DR pellets: gangue plus metallisation loss
   p_min_pu: 0.5
 
@@ -138,7 +138,7 @@ mix-dri:
   # Its reductant need, in the hydrogen an all-H2 feed would take: the H2
   # shaft's figure, so the all-H2 corner is that route.
   kg_h2_per_t_dri: 50.23
-  ore_eur_per_t: 238.2                  # DR-grade pellets, as the other shafts
+  ore_eur_per_t_dri: 238.2              # DR-grade pellets, as the other shafts
   iron_t_per_t_steel: 1.17
   p_min_pu: 0.5
   # A small buffer on the reductant bus, fixed rather than sized by the
@@ -200,14 +200,14 @@ moe:
   # Concentrate rather than DR-grade pellets, which is most of why it is cheaper
   # per tonne of iron than the shaft's: 1.54 t at the register's iron-ore fines
   # price, against 1.38 t of pellets carrying a DR premium.
-  ore_eur_per_t: 159.4
+  ore_eur_per_t_liquid_iron: 159.4
   # The cell is its own slag channel: gangue stays ionic in the electrolyte and
   # leaves as a bleed, so what reaches the furnace is carbon-free, silicon-free
   # iron. That is the whole difference from hot metal, which takes about 1.08 a
   # tonne because 4 % carbon and a point of silicon burn out of it. Here the only
   # losses are transfer and ladle skull and a little refining oxidation.
   #
-  # Ore grade therefore does not move this number — it moves `ore_eur_per_t` and
+  # Ore grade therefore does not move this number — it moves `ore_eur_per_t_liquid_iron` and
   # the cell's throughput. Phosphorus is the one impurity that could reach the
   # furnace and force a dephosphorising slag, which would cost about two points.
   iron_t_per_t_steel: 1.03
@@ -222,7 +222,7 @@ ewin:
   financing_period: 20
   el_mwh_per_t: 3.739                 # per t iron plate, excluding ore prep
   # The same concentrate the MOE cell takes, at the same price.
-  ore_eur_per_t: 159.7
+  ore_eur_per_t_electrolytic_iron: 159.7
   # Plates are above 99 % iron — the gangue is refined out of the leach liquor
   # rather than slagged off downstream — so there is almost none to lose to slag.
   # A point above the MOE cell's because the plate arrives cold and solid and
@@ -249,7 +249,7 @@ ng-dri:
   financing_period: 20
   gas_mwh_per_t: 3.469                # LHV, per t DRI: reductant plus heat
   el_mwh_per_t: 0.1768                 # machine drive and auxiliaries
-  ore_eur_per_t: 238.2                  # DR-grade pellets, same as H2 DRI
+  ore_eur_per_t_dri: 238.2              # DR-grade pellets, same as H2 DRI
   iron_t_per_t_steel: 1.17            # same pellets as the H2 shaft, same yield
   p_min_pu: 0.5
 
@@ -262,7 +262,7 @@ briquetting:
   capex_eur_per_t: 40
   fom_eur_per_t_capacity_per_year: 1.2        # ≈3 % of capex
   financing_period: 20
-  el_mwh_per_t: 0.01                  # press, screening and handling
+  el_mwh_per_t_hbi: 0.01              # press, screening and handling
   # Iron reaching the furnace per tonne leaving the shaft, over the whole HBI chain:
   # fines at the press (1–3 %, Lohmeier et al. 2020, steel research int.), reoxidation
   # in stock and at sea (about 1 % a month at first, IIMA HBI guide 2025) and breakage
@@ -365,7 +365,7 @@ transmission:
   # Only used by multi-site scenarios (those with a config/sites_{project}_{scenario}.yaml
   # overlay, or anchor-colo-n* CF inputs where the anchor cell is the demand
   # site); single-site scenarios never add a transmission link.
-  cost_per_mw_per_km_eur: 400   # HVDC overhead, order-of-magnitude (PyPSA-Eur-ish)
+  capex_eur_per_mw_per_km: 400  # HVDC overhead, order-of-magnitude (PyPSA-Eur-ish)
   financing_period: 40
   losses_pct_per_1000km: 3.0    # ~3% / 1000 km, applied as link efficiency
   indirect_route_factor: 1.25   # great-circle distance → routed cable length

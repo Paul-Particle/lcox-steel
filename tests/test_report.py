@@ -497,7 +497,7 @@ def test_the_ironmaking_capacity_is_the_shaft_at_full_load_for_a_year():
     assert s["ironmaking_capacity_mt_opt"] * s["ironmaking_utilization"] == pytest.approx(made_mt)
     # The feedstock is quoted per tonne of iron out, so what was spent on it over
     # the iron made is the quote itself: the reason the report no longer repeats it.
-    assert s["cost_ore_eur_per_t_iron"] == pytest.approx(assumptions["h2-dri"]["ore_eur_per_t"])
+    assert s["cost_ore_eur_per_t_iron"] == pytest.approx(assumptions["h2-dri"]["ore_eur_per_t_dri"])
 
 
 def test_iron_is_counted_at_the_shaft_and_the_briquettes_beside_it():

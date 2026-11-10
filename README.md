@@ -434,9 +434,11 @@ there in `UNREAD_ROWS` with the reason it is not; any other row stops the genera
 The workbook it reads is the one as received less its scenario rows with
 `res_configuration` `mix`, which the model cannot build yet: they do not say
 which technologies partner the anchor, with what weights, or at how many sites.
-A note on `scenarios_clean!A1` says the same. The workbook as received, with
-those rows, is kept in `data/assumptions/as_received/`, which the generator does
-not read.
+A note on `scenarios_clean!A1` says the same. Three of its unfilled rows also
+carry the model's names: `grid.connection_financing_period`,
+`transmission.financing_period` and `transmission.capex_eur_per_mw_per_km`. The
+workbook as received, with the mix rows and the old row names, is kept in
+`data/assumptions/as_received/`, which the generator does not read.
 
 ### The demo
 

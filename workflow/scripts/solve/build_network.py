@@ -643,7 +643,7 @@ def _add_dri_link(
         efficiency3=-dri_cfg["h2_preheat_el_mwh_per_t"] * t_iron_per_mwh_h2,
         p_min_pu=dri_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(dri_cfg, wacc, t_iron_per_mwh_h2),
-        marginal_cost=dri_cfg["ore_eur_per_t"] * t_iron_per_mwh_h2,
+        marginal_cost=dri_cfg["ore_eur_per_t_dri"] * t_iron_per_mwh_h2,
         **_ramp_limits(dri_cfg),
     )
 
@@ -690,7 +690,7 @@ def _add_mix_dri_links(
         efficiency2=-mix_cfg["el_mwh_per_t"] * t_iron_per_mwh,
         p_min_pu=mix_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(mix_cfg, wacc, t_iron_per_mwh),
-        marginal_cost=mix_cfg["ore_eur_per_t"] * t_iron_per_mwh,
+        marginal_cost=mix_cfg["ore_eur_per_t_dri"] * t_iron_per_mwh,
     )
     nominal_mwh_per_h = (
         steel_t_per_h * mix_cfg["iron_t_per_t_steel"] * reductant_mwh_per_t
@@ -748,7 +748,7 @@ def _add_ng_dri_link(
         efficiency2=-ng_dri_cfg["el_mwh_per_t"] * t_iron_per_mwh_gas,
         p_min_pu=ng_dri_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(ng_dri_cfg, wacc, t_iron_per_mwh_gas),
-        marginal_cost=ng_dri_cfg["ore_eur_per_t"] * t_iron_per_mwh_gas,
+        marginal_cost=ng_dri_cfg["ore_eur_per_t_dri"] * t_iron_per_mwh_gas,
     )
 
 
@@ -795,14 +795,14 @@ def _add_moe_link(n: pypsa.Network, moe_cfg: dict, wacc: float, elec_bus: str) -
         efficiency=t_iron_per_mwh,
         p_min_pu=moe_cfg["p_min_pu"],
         capital_cost=_process_capital_cost(moe_cfg, wacc, t_iron_per_mwh),
-        marginal_cost=moe_cfg["ore_eur_per_t"] * t_iron_per_mwh,
+        marginal_cost=moe_cfg["ore_eur_per_t_liquid_iron"] * t_iron_per_mwh,
         **_ramp_limits(moe_cfg),
     )
 
 
-def _add_ewin_link(n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str) -> None:
+def _add_ewin_link(n: pypsa.Network, ewin_cfg: dict, wacc: float, elec_bus: str) -> None:
     """Iron electrowinning: electricity (MW) → electrolytic iron plates (t/h)."""
-    t_iron_per_mwh = 1.0 / ew_cfg["el_mwh_per_t"]
+    t_iron_per_mwh = 1.0 / ewin_cfg["el_mwh_per_t"]
     n.add(
         "Link",
         "ewin",
@@ -811,9 +811,9 @@ def _add_ewin_link(n: pypsa.Network, ew_cfg: dict, wacc: float, elec_bus: str) -
         carrier="ewin",
         p_nom_extendable=True,
         efficiency=t_iron_per_mwh,
-        capital_cost=_process_capital_cost(ew_cfg, wacc, t_iron_per_mwh),
-        marginal_cost=ew_cfg["ore_eur_per_t"] * t_iron_per_mwh,
-        **_ramp_limits(ew_cfg),
+        capital_cost=_process_capital_cost(ewin_cfg, wacc, t_iron_per_mwh),
+        marginal_cost=ewin_cfg["ore_eur_per_t_electrolytic_iron"] * t_iron_per_mwh,
+        **_ramp_limits(ewin_cfg),
     )
 
 
@@ -836,7 +836,7 @@ def _add_briquetting_link(
         carrier="briquetting",
         p_nom_extendable=True,
         efficiency=briq_cfg["yield_t_per_t"],
-        efficiency2=-briq_cfg["el_mwh_per_t"] * briq_cfg["yield_t_per_t"],
+        efficiency2=-briq_cfg["el_mwh_per_t_hbi"] * briq_cfg["yield_t_per_t"],
         capital_cost=_process_capital_cost(briq_cfg, wacc, briq_cfg["yield_t_per_t"]),
     )
 
@@ -993,7 +993,7 @@ def _add_transmission(
     dem = sites.loc[demand_site]
     cap_per_km = (
         annuity_factor(wacc, trans_cfg["financing_period"])
-        * trans_cfg["cost_per_mw_per_km_eur"]
+        * trans_cfg["capex_eur_per_mw_per_km"]
     )
     loss_per_km = trans_cfg["losses_pct_per_1000km"] / 100.0 / 1000.0
     route = trans_cfg["indirect_route_factor"]
