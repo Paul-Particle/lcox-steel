@@ -436,11 +436,12 @@ give a key its sensitivity levels and regional values, is in the tables of
 the reason it is not; any other row stops the generator.
 `--verbose` lists the unread rows and their reasons.
 
-The workbook it reads is the one as received less its scenario rows with
-`res_configuration` `mix`, which were left out while they gave no number of
-partner sites; the generator now takes the config's for that, so they can go
-back in. A note on `scenarios_clean!A1` says why they were left out. The
-workbook as received, with those rows, is kept in `data/assumptions/as_received/`, which the generator does
+The workbook it reads is the one as received less two example rows,
+`SENS_EXAMPLE_wacc-plus30pct` and `SENS_EXAMPLE_multi-override`, whose overrides
+name keys the model does not have (`finance.default_wacc`, and
+`electrolyser.capex_usd_per_mw` switched to a `_low` row the workbook lacks). A
+note on `scenarios_clean!A1` says the same. The workbook as received, with
+those rows, is kept in `data/assumptions/as_received/`, which the generator does
 not read. In both copies, three unfilled rows carry the model's names:
 `grid.connection_financing_period`, `transmission.financing_period` and
 `transmission.capex_eur_per_mw_per_km`.
