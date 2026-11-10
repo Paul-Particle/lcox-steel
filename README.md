@@ -418,7 +418,10 @@ reads the workbook's `assumptions_inputs` and `scenarios_clean` tabs and writes:
 - the base assumptions are `config/.template.yaml` with every value the workbook
   holds replaced by the workbook's (in EUR; a USD row stops the generator);
 - every row of `scenarios_clean` becomes a scenario named by its `scenario_id`,
-  run once per market zone where the row puts such an area on the grid;
+  run once per market zone where the row puts such an area on the grid. A mix
+  row runs on its anchor's `anchor-colo-n{N}` series, with N from the row's
+  `res_partner_cells`, or `res_cf.anchor_colocation.n_candidates` in the config
+  (3) where the row gives none;
 - a scenario's overlay carries the values of its locations' regions (WACCs, plant
   fixed O&M, battery costs), then the overrides the row names. An override names a
   model key and gives it a number, a `±n%` change, or a sensitivity level or region
@@ -434,10 +437,10 @@ the reason it is not; any other row stops the generator.
 `--verbose` lists the unread rows and their reasons.
 
 The workbook it reads is the one as received less its scenario rows with
-`res_configuration` `mix`, which the model cannot build yet: they do not say
-which technologies partner the anchor, with what weights, or at how many sites.
-A note on `scenarios_clean!A1` says the same. The workbook as received, with
-those rows, is kept in `data/assumptions/as_received/`, which the generator does
+`res_configuration` `mix`, which were left out while they gave no number of
+partner sites; the generator now takes the config's for that, so they can go
+back in. A note on `scenarios_clean!A1` says why they were left out. The
+workbook as received, with those rows, is kept in `data/assumptions/as_received/`, which the generator does
 not read. In both copies, three unfilled rows carry the model's names:
 `grid.connection_financing_period`, `transmission.financing_period` and
 `transmission.capex_eur_per_mw_per_km`.
@@ -450,17 +453,18 @@ it to `ES_SYN`, sit on the shipped Victoria cutout, so they run after a fresh
 clone with no CDS download. Each overlay moves one value its route reads — a
 salt-cavern H2 store for the H2 routes, a lower MOE turndown for the MOE ones.
 
-Beside them, ten scenarios are the workbook's in miniature: what the generator
+Beside them, twelve scenarios are the workbook's in miniature: what the generator
 writes for a workbook row with its iron in AUS and its steel in ESP, moved onto
 `DEMO` and `ES_SYN`. They take every route at home and abroad, every power
 supply (`islanded_res`, `res_grid`, `grid`), each renewable at both site
-variants, a grid-only scenario run once per zone, and one row with an override
-of each form, and their overlays carry the regional values the generator picks.
-`DEMO`'s grid is the same made-up market as `ES_SYN`'s. So
-`snakemake --configfile config/demo.yaml` checks, in minutes and with no
-download or key, that every kind of scenario the generator builds from the
-workbook solves and reports (a mix, which it does not build yet, is not among
-them).
+variants, a mix around an onshore and an offshore anchor, a grid-only scenario
+run once per zone, and one row with an override of each form, and their
+overlays carry the regional values the generator picks. `DEMO`'s grid is the
+same made-up market as `ES_SYN`'s. So `snakemake --configfile config/demo.yaml`
+checks, in minutes and with no download or key, that every kind of scenario the
+generator builds from the workbook solves and reports. `DEMO`'s offshore anchor
+lies more than `max_radius_km` (100 km) from any land cell, so that mix finds no
+partners and runs on its anchor alone.
 
 ### A scenario with several runs
 

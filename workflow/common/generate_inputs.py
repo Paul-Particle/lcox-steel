@@ -139,15 +139,16 @@ def read_overrides(cell) -> dict:
     return overrides
 
 
-def build_scenarios(scenario_rows: pd.DataFrame, named_inputs: dict,
-                    assumptions: dict, areas: dict) -> tuple[pd.DataFrame, dict[str, dict]]:
+def build_scenarios(scenario_rows: pd.DataFrame, named_inputs: dict, assumptions: dict, areas: dict,
+                    default_partner_cells: int) -> tuple[pd.DataFrame, dict[str, dict]]:
     """The scenario table, one row per input series of a run, and each scenario's overlay.
 
     A scenario is one workbook row, and the tables above say what the words in its
     columns mean. It has one run, or one per market zone when it draws on the grid of
     an area that trades through zones. Its overlay holds the values of its locations'
     regions, then its overrides. `named_inputs` holds the workbook values a key can
-    take by name: per sensitivity level and per region.
+    take by name: per sensitivity level and per region. A mix that names no
+    res_partner_cells takes `default_partner_cells`.
     """
     base_values = flatten(assumptions)
     duplicated_ids = scenario_rows["scenario_id"].duplicated(keep=False)
@@ -155,7 +156,7 @@ def build_scenarios(scenario_rows: pd.DataFrame, named_inputs: dict,
         f"{run[0]}-{run[-1]}" if len(run) > 1 else str(run[0])
         for run in ([n for _, n in group] for _, group in groupby(enumerate(numbers), lambda pair: pair[1] - pair[0])))
     # Problem -> the workbook rows (as Excel numbers them) that have it.
-    rows_by_problem, csv_rows, settings_by_scenario, mixes_without_partner_cells = {}, [], {}, []
+    rows_by_problem, csv_rows, settings_by_scenario = {}, [], {}
     for row in scenario_rows.itertuples():
         flag = lambda problem: rows_by_problem.setdefault(problem, []).append(row.Index + 2)
         if duplicated_ids[row.Index]:
@@ -207,11 +208,7 @@ def build_scenarios(scenario_rows: pd.DataFrame, named_inputs: dict,
                 continue
             partner_cells = getattr(row, "res_partner_cells", np.nan)
             if pd.isna(partner_cells):
-                # Skipped rather than given a number. The number might also come from the
-                # config (res_cf.anchor_colocation.n_candidates): how many partner cells a
-                # mix weighs is arguably a model setting and might be at home there.
-                mixes_without_partner_cells.append(row.Index + 2)
-                continue
+                partner_cells = default_partner_cells
             if partner_cells < 1 or partner_cells != int(partner_cells):
                 flag(f"res_partner_cells {partner_cells!r} is not a positive whole number")
                 continue
@@ -273,9 +270,7 @@ def build_scenarios(scenario_rows: pd.DataFrame, named_inputs: dict,
             for name in series:
                 csv_rows.append((row.scenario_id, run, route, *series_lines[name], *dates))
 
-    if mixes_without_partner_cells:
-        log.warning(f"skipped the mix rows that give no res_partner_cells: rows {row_ranges(mixes_without_partner_cells)}")
-    problems = [f"{problem}: rows {row_ranges(numbers)}" for problem, numbers in rows_by_problem.items()]
+    problems =[f"{problem}: rows {row_ranges(numbers)}" for problem, numbers in rows_by_problem.items()]
     if problems:
         raise ValueError(f"{len(problems)} problem(s) in the scenario rows:\n  " + "\n  ".join(problems))
 
@@ -317,7 +312,10 @@ def main() -> None:
         scenario_rows = scenario_rows.replace({"iron_location": {"GER": "DEU"}, "steel_location": {"GER": "DEU"}})
     template = yaml.safe_load(TEMPLATE_PATH.read_text())
     template_values = flatten(template)
-    areas = yaml.safe_load((CONFIG_DIR / "config.yaml").read_text())["areas"]
+    config = yaml.safe_load((CONFIG_DIR / "config.yaml").read_text())
+    areas = config["areas"]
+    # How many candidate cells of each partner technology a mix shortlists around its anchor.
+    default_partner_cells = config["res_cf"]["anchor_colocation"]["n_candidates"]
 
     # A row named as a model key is read as that key, unless UNREAD_ROWS keeps it unread.
     rows_named_as_model_keys = (set(workbook_inputs.index) & set(template_values)) - set(UNREAD_ROWS)
@@ -356,7 +354,7 @@ def main() -> None:
     for path, value in base_values.items():
         set_nested(assumptions, path, value)
     scenarios, overlays = build_scenarios(scenario_rows, named_sensitivity_inputs | named_regional_inputs,
-                                          assumptions, areas)
+                                          assumptions, areas, default_partner_cells)
     # Template key -> how many scenarios run on its value, as neither the workbook nor their overlay sets it.
     flat_overlays = [flatten(overlay) for overlay in overlays.values()]
     backstop_counts = {path: sum(path not in overlay for overlay in flat_overlays)
