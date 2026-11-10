@@ -19,7 +19,7 @@ import pandas as pd
 import yaml
 
 from common._paths import REPO_ROOT
-from common._workbook_translation import (TEMPLATE_BACKSTOPPED_KEYS, UNREAD_ROWS,
+from common._workbook_translation import (ROWS_NOT_PROVIDED_YET, TEMPLATE_BACKSTOPPED_KEYS, UNREAD_ROWS,
                                           VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION,
                                           WORKBOOK_SOURCES)
 
@@ -340,6 +340,11 @@ def main() -> None:
     stale_unread_rows = sorted((set(UNREAD_ROWS) & used_workbook_keys) | (set(UNREAD_ROWS) - set(workbook_inputs.index)))
     if stale_unread_rows:
         raise ValueError(f"UNREAD_ROWS lists {stale_unread_rows}, which the generator reads or the workbook lacks")
+    placeholder_values = workbook_inputs.loc[list(ROWS_NOT_PROVIDED_YET), "value"]
+    filled_placeholder_rows = sorted(placeholder_values.index[placeholder_values.ne(0)])
+    if filled_placeholder_rows:
+        raise ValueError(f"the workbook now gives {filled_placeholder_rows}, which ROWS_NOT_PROVIDED_YET holds "
+                         f"unread; read each, or keep it unread in UNREAD_ROWS with why")
     template_values = flatten(template)
     base_values = workbook_values | VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION
     unknown_paths = sorted((set(base_values) | set(named_rows)) - set(template_values))

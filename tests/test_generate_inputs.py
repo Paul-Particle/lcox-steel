@@ -8,6 +8,7 @@ import json
 import re
 import sys
 
+import openpyxl
 import pandas as pd
 import pytest
 
@@ -219,6 +220,21 @@ def test_every_workbook_row_is_read_or_listed_with_why_it_is_not(outputs_in_tmp,
     with_read_and_absent_rows = UNREAD_ROWS | {"moe.el_mwh_per_t": "", "moe.no_such_row": ""}
     monkeypatch.setattr(generate_inputs, "UNREAD_ROWS", with_read_and_absent_rows)
     with pytest.raises(ValueError, match=r"lists \['moe.el_mwh_per_t', 'moe.no_such_row'\]"):
+        generate_inputs.main()
+    assert not (outputs_in_tmp / "generated").exists()
+
+
+def test_a_placeholder_row_the_workbook_fills_in_stops_the_build(outputs_in_tmp, monkeypatch):
+    """Its value would otherwise go unread while the template's stands in under the same warning."""
+    workbook = openpyxl.load_workbook(generate_inputs.DEFAULT_WORKBOOK)
+    fee_row = next(row for row in workbook[generate_inputs.INPUTS_SHEET].iter_rows(min_row=2)
+                   if row[0].value == "grid.fee_eur_per_mwh")
+    fee_row[1].value = 4.5
+    filled_workbook_path = outputs_in_tmp / "filled.xlsx"
+    workbook.save(filled_workbook_path)
+    monkeypatch.setattr(sys, "argv", ["generate_inputs", str(filled_workbook_path)])
+
+    with pytest.raises(ValueError, match=r"now gives \['grid.fee_eur_per_mwh'\]"):
         generate_inputs.main()
     assert not (outputs_in_tmp / "generated").exists()
 
