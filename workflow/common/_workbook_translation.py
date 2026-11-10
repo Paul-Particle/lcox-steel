@@ -80,17 +80,19 @@ MODEL_NAMED_SOURCES = {
     "mix-dri.h2_preheat_el_mwh_per_t": "dri_h2.el_mwh_per_t",
 }
 WORKBOOK_SOURCES = RENAMED_SOURCES | CONVERTED_SOURCES | SHARED_SOURCES | MODEL_NAMED_SOURCES
+# Held at 0 in both value and unit: not provided yet, so the template's value stands in.
+# Each row already carries the model key it will be read under once given.
+ROWS_NOT_PROVIDED_YET = (
+    "steel_store.max_weeks",
+    "grid.connection_capex_eur_per_mw", "grid.connection_financing_period",
+    "grid.fee_eur_per_mw_per_year", "grid.fee_eur_per_mwh",
+    "transmission.capex_eur_per_mw_per_km", "transmission.financing_period",
+    "transmission.losses_pct_per_1000km", "transmission.indirect_route_factor",
+)
 # Workbook row -> why the generator does not read it. A row the generator neither reads
 # nor finds here stops it.
 UNREAD_ROWS = {
-    # Held at 0 in both value and unit: not provided yet, so the template's value stands
-    # in and the generator warns. Once given, each is read under the model key named.
-    **{row: f"not provided: {row}" for row in (
-        "steel_store.max_weeks",
-        "grid.connection_capex_eur_per_mw", "grid.connection_financing_period",
-        "grid.fee_eur_per_mw_per_year", "grid.fee_eur_per_mwh",
-        "transmission.capex_eur_per_mw_per_km", "transmission.financing_period",
-        "transmission.losses_pct_per_1000km", "transmission.indirect_route_factor")},
+    **{row: "not provided yet" for row in ROWS_NOT_PROVIDED_YET},
     # Held at 0 in both value and unit; the template's minimum loads stand in where the
     # model has one (h2-dri, mix-dri, ng-dri, moe).
     **{row: "to be discussed: is a minimum load the right approach?"
@@ -101,18 +103,24 @@ UNREAD_ROWS = {
     "eaf_hbi.iron_t_per_t_steel": "to be discussed: the iron ratio of the HBI charge, which repeats the DRI's",
     "battery.max_hours": "the model does not use it: the optimiser sizes the battery's power and energy apart",
 }
-# Keys the model needs and the workbook has no row for; the template's value stands in,
-# and the generator warns until the workbook gives one:
-#   "anchor.min_capacity_mw"  (the anchor floor: https://github.com/Paul-Particle/lcox-steel/issues/47)
-#   "battery.fom_eur_per_mw_per_year"   (fixed O&M; the template's is eyeballed)
-#   "battery.fom_eur_per_mwh_per_year"
-#   "briquetting.capex_eur_per_t"
-#   "briquetting.fom_eur_per_t_capacity_per_year"
-#   "briquetting.financing_period"
-#   "briquetting.yield_t_per_t"
-#   "eaf.consumables_eur_per_t"
-#   "plant.steel_mt_per_year"
-#   "natural_gas.price_eur_per_mwh"  (the workbook gives only its low and high)
+# Model key -> why the template's value stands in for the workbook's scenarios. The
+# generator warns with these reasons, and stops on a key it takes from the template that
+# is not listed here, or one listed that the workbook or the scenarios' overlays now set.
+TEMPLATE_BACKSTOPPED_KEYS = {
+    "anchor.min_capacity_mw": "no workbook row: the anchor floor, https://github.com/Paul-Particle/lcox-steel/issues/47",
+    "battery.fom_eur_per_mw_per_year": "no workbook row; the template's is eyeballed",
+    "battery.fom_eur_per_mwh_per_year": "no workbook row; the template's is eyeballed",
+    "briquetting.capex_eur_per_t": "no workbook row",
+    "briquetting.fom_eur_per_t_capacity_per_year": "no workbook row",
+    "briquetting.financing_period": "no workbook row",
+    "briquetting.yield_t_per_t": "no workbook row",
+    "eaf.consumables_eur_per_t": "no workbook row",
+    "plant.steel_mt_per_year": "no workbook row",
+    "natural_gas.price_eur_per_mwh": "the workbook gives only its low and high",
+    **{key: "its workbook row is not provided yet" for key in ROWS_NOT_PROVIDED_YET},
+    **{f"{plant}.p_min_pu": "to be discussed: is a minimum load the right approach?"
+       for plant in ("h2-dri", "mix-dri", "ng-dri", "moe")},
+}
 
 # Model key -> its value where no scenario the workbook configures requires the key. NaN
 # stops any run that reads it; the carbon price is zero because no scenario prices carbon.

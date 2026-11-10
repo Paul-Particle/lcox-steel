@@ -19,7 +19,7 @@ import pandas as pd
 import yaml
 
 from common._paths import REPO_ROOT
-from common._workbook_translation import (UNREAD_ROWS,
+from common._workbook_translation import (TEMPLATE_BACKSTOPPED_KEYS, UNREAD_ROWS,
                                           VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION,
                                           WORKBOOK_SOURCES)
 
@@ -355,10 +355,19 @@ def main() -> None:
     backstop_counts = {path: sum(path not in overlay for overlay in flat_overlays)
                        for path in sorted(set(template_values) - set(base_values))}
     backstop_counts = {path: count for path, count in backstop_counts.items() if count}
+    unlisted_backstops = sorted(set(backstop_counts) - set(TEMPLATE_BACKSTOPPED_KEYS))
+    if unlisted_backstops:
+        raise ValueError(f"the workbook's scenarios take {unlisted_backstops} from {TEMPLATE_PATH.name}, "
+                         f"which TEMPLATE_BACKSTOPPED_KEYS does not list")
+    stale_backstops = sorted(set(TEMPLATE_BACKSTOPPED_KEYS) - set(backstop_counts))
+    if stale_backstops:
+        raise ValueError(f"TEMPLATE_BACKSTOPPED_KEYS lists {stale_backstops}, "
+                         f"which the workbook or every scenario's overlay now sets")
     if backstop_counts:
         log.warning(f"{len(backstop_counts)} values come from {TEMPLATE_PATH.name}, as the workbook gives none; "
-                    f"the scenarios (of {len(overlays)}) that run on each:\n  "
-                    + "\n  ".join(f"{path}: {count}" for path, count in backstop_counts.items()))
+                    f"the scenarios (of {len(overlays)}) that run on each, and why:\n  "
+                    + "\n  ".join(f"{path}: {count} ({TEMPLATE_BACKSTOPPED_KEYS[path]})"
+                                  for path, count in backstop_counts.items()))
     if arguments.include_template:
         template_scenarios = pd.read_csv(TEMPLATE_SCENARIOS_PATH, comment="#", dtype=str)
         clashing = sorted(set(template_scenarios["scenario"]) & set(overlays))

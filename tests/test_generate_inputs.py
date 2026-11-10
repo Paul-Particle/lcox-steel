@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 from common import generate_inputs
-from common._workbook_translation import UNREAD_ROWS
+from common._workbook_translation import TEMPLATE_BACKSTOPPED_KEYS, UNREAD_ROWS
 from common.generate_inputs import (
     REGIONAL_SOURCES,
     SENSITIVITY_ROWS,
@@ -219,6 +219,21 @@ def test_every_workbook_row_is_read_or_listed_with_why_it_is_not(outputs_in_tmp,
     with_read_and_absent_rows = UNREAD_ROWS | {"moe.el_mwh_per_t": "", "moe.no_such_row": ""}
     monkeypatch.setattr(generate_inputs, "UNREAD_ROWS", with_read_and_absent_rows)
     with pytest.raises(ValueError, match=r"lists \['moe.el_mwh_per_t', 'moe.no_such_row'\]"):
+        generate_inputs.main()
+    assert not (outputs_in_tmp / "generated").exists()
+
+
+def test_every_key_taken_from_the_template_is_listed_with_why(outputs_in_tmp, monkeypatch):
+    """An unlisted stand-in stops the build, as does a listed one the workbook or the overlays now set."""
+    without_gas_price = {key: reason for key, reason in TEMPLATE_BACKSTOPPED_KEYS.items()
+                         if key != "natural_gas.price_eur_per_mwh"}
+    monkeypatch.setattr(generate_inputs, "TEMPLATE_BACKSTOPPED_KEYS", without_gas_price)
+    with pytest.raises(ValueError, match=r"take \['natural_gas.price_eur_per_mwh'\] from"):
+        generate_inputs.main()
+
+    with_read_and_regional_keys = TEMPLATE_BACKSTOPPED_KEYS | {"moe.el_mwh_per_t": "", "finance.origin_wacc": ""}
+    monkeypatch.setattr(generate_inputs, "TEMPLATE_BACKSTOPPED_KEYS", with_read_and_regional_keys)
+    with pytest.raises(ValueError, match=r"lists \['finance.origin_wacc', 'moe.el_mwh_per_t'\]"):
         generate_inputs.main()
     assert not (outputs_in_tmp / "generated").exists()
 
