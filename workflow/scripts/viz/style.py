@@ -182,11 +182,11 @@ def fca_logo():
 
 
 # ---- Continuous colormap -------------------------------------------------
-# A blue-grey → teal → sand gradient. The rgb() components are 0-1 floats, NOT
-# 0-255. This is intentional and renders correctly: plotly.js / kaleido scale
-# sub-1 rgb() values up to 0-255, so e.g. "rgb(0.193,0.264,0.303)" is the same
-# colour as "rgb(49,67,77)". Do NOT "fix" this by multiplying by 255 — that would
-# change the emitted colorscale strings and so the rendered pixels.
+# A blue-grey → teal → sand gradient, defined as 0-1 floats. The plotly colorscale
+# below is emitted as 0-255 rgb() strings: plotly.js reads rgb() components as 0-255,
+# so 0-1 strings render near-black (always on plotly 7; on plotly 6 for markers that
+# take the layout default). Where 0-1 strings did render (plotly 6 heatmaps, contours,
+# explicit marker colorscales), the 0-255 form gives pixel-identical output.
 cm_data = [
     [0.19336174, 0.26378673, 0.3025569],
     [0.19364304, 0.26610583, 0.30703146],
@@ -446,10 +446,9 @@ cm_data = [
     [0.99391604, 0.8069879, 0.51279565],
 ]
 
-# Convert to plotly: list of [position 0-1, "rgb(r,g,b)"] pairs (see note above
-# on the deliberate 0-1 rgb() format).
+# Convert to plotly: list of [position 0-1, "rgb(r,g,b)"] pairs, components 0-255.
 cm_data_plotly = [
-    [frac, f"rgb({cm[0]},{cm[1]},{cm[2]})"]
+    [frac, "rgb({},{},{})".format(*(round(c * 255) for c in cm))]
     for frac, cm in zip(np.linspace(0, 1, len(cm_data)), cm_data)
 ]
 fca_colormap = cm_data_plotly
