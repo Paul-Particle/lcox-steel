@@ -53,6 +53,8 @@ CARRIER_NAMES = {
     "Geothermal": "geothermal",
     "Hydro Pumped Storage": "pumped_storage",
     "Hydro Run-of-river and poundage": "hydro_river",
+    # entsoe-py 0.8.1 corrected ENTSO-E's misspelling; accept both.
+    "Hydro Run-of-river and pondage": "hydro_river",
     "Hydro Water Reservoir": "hydro_reservoir",
     "Marine": "marine",
     "Nuclear": "nuclear",
