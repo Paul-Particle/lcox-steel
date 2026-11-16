@@ -78,10 +78,9 @@ TEMPLATE_BACKSTOPPED_KEYS = {
     "anchor.min_capacity_mw": "no workbook row: the anchor floor, https://github.com/Paul-Particle/lcox-steel/issues/47",
     "battery.fom_eur_per_mw_per_year": "its regional rows are not read yet; the template's is eyeballed",
     "battery.fom_eur_per_mwh_per_year": "its regional rows are not read yet; the template's is eyeballed",
-    "briquetting.capex_eur_per_t": "no workbook row",
-    "briquetting.fom_eur_per_t_capacity_per_year": "no workbook row",
-    "briquetting.financing_period": "no workbook row",
-    "briquetting.yield_t_per_t": "no workbook row",
+    **{f"briquetting.{key}": "an unsourced token cost, kept in the template by design"
+       for key in ("capex_eur_per_t", "fom_eur_per_t_capacity_per_year", "financing_period")},
+    "briquetting.yield_t_per_t": "no workbook row: the HBI chain's iron losses, sourced in the template",
     "eaf.consumables_eur_per_t": "its workbook row is not read yet: its scope is to be discussed",
     "plant.steel_mt_per_year": "no workbook row",
     "natural_gas.price_eur_per_mwh": "the workbook gives only its low and high",

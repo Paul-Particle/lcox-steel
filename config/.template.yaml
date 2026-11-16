@@ -259,8 +259,10 @@ briquetting:
   # travel, which is why only the export routes build one. The press itself is
   # mechanical and cheap to run; what the route really pays for this step is
   # downstream, where the briquettes reach the furnace cold.
-  capex_eur_per_t: 40
-  fom_eur_per_t_capacity_per_year: 1.2        # ≈3 % of capex
+  # Capex and fixed cost are an unsourced token, kept here rather than in the
+  # workbook: the press is cheap next to the chain's iron losses (`yield_t_per_t`).
+  capex_eur_per_t: 1
+  fom_eur_per_t_capacity_per_year: 0.03       # ≈3 % of capex
   financing_period: 20
   el_mwh_per_t_hbi: 0.01              # press, screening and handling
   # Iron reaching the furnace per tonne leaving the shaft, over the whole HBI chain:
@@ -288,7 +290,8 @@ steel_store:
   # itself stays fixed. Capped to a realistic inventory horizon (`max_weeks`)
   # so the flexibility can't degenerate into whole-year arbitrage. Covered
   # yard + handling for solid product (slabs/billets), a bit above the iron
-  # stockpile; the cap, not the cost, is the binding limit.
+  # stockpile. The cost sizes the store; the cap is a guard that has not bound
+  # in the runs so far, whose largest store held about 500 h of flat production.
   capex_eur_per_t: 30
   financing_period: 25
   max_weeks: 8   # inventory cap = 8 weeks of flat production
