@@ -216,9 +216,9 @@ def test_the_template_values_standing_in_for_the_workbook_are_named_with_the_sce
 
 def test_every_workbook_row_is_read_or_listed_with_why_it_is_not(outputs_in_tmp, monkeypatch):
     """A row nobody accounted for stops the build, as does a listing the workbook or the reading has outgrown."""
-    without_battery_hours = {row: reason for row, reason in UNREAD_ROWS.items() if row != "battery.max_hours"}
-    monkeypatch.setattr(generate_inputs, "UNREAD_ROWS", without_battery_hours)
-    with pytest.raises(ValueError, match=r"\['battery.max_hours'\] are neither read nor listed"):
+    without_h2_shaft_gas = {row: reason for row, reason in UNREAD_ROWS.items() if row != "dri_h2.ng_mwh_per_t"}
+    monkeypatch.setattr(generate_inputs, "UNREAD_ROWS", without_h2_shaft_gas)
+    with pytest.raises(ValueError, match=r"\['dri_h2.ng_mwh_per_t'\] are neither read nor listed"):
         generate_inputs.main()
 
     with_read_and_absent_rows = UNREAD_ROWS | {"dri.capex_eur_per_t": "", "moe.no_such_row": ""}
