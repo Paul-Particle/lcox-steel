@@ -102,7 +102,7 @@ SENSITIVITY_ROWS = {
     "res.wind-offshore.fom_eur_per_mw_per_year": workbook_rows_by_level("res.wind-offshore.opex_eur_per_mw_per_year"),
     "electrolyser.capex_eur_per_mw": workbook_rows_by_level("electrolyser.capex_eur_per_mw", ("base",)),
     "electrolyser.fom_eur_per_mw_per_year": workbook_rows_by_level("electrolyser.opex_eur_per_mw_per_year", ("base",)),
-    "electrolyser.varopex_eur_per_mwh_h2": workbook_rows_by_level("electrolyser.varopex_eur_per_mwh_h2"),
+    "electrolyser.varopex_eur_per_mwh_h2": workbook_rows_by_level("electrolyser.varopex_eur_per_mwh_h2", ("base",)),
     "natural_gas.price_eur_per_mwh": workbook_rows_by_level("natural_gas.price_eur_per_mwh", ("low", "high")),
 }
 

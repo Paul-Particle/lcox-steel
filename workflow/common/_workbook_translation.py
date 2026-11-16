@@ -64,28 +64,25 @@ ROWS_NOT_PROVIDED_YET = (
 # included. A row the generator neither reads nor finds here stops it.
 UNREAD_ROWS = {
     **{row: "not provided yet" for row in ROWS_NOT_PROVIDED_YET},
-    # Held at 0 in both value and unit; the template's minimum loads stand in where the
-    # model has one (h2-dri, mix-dri, ng-dri, moe).
-    **{row: "to be discussed: is a minimum load the right approach?"
-       for row in ("dri.p_min_pu", "moe.p_min_pu", "eaf.p_min_pu", "ewin.p_min_pu")},
     "finance.res.eu_wacc": "to be discussed: a WACC of its own for the renewables",
     "finance.res.noneu_wacc": "to be discussed: a WACC of its own for the renewables",
     "dri_h2.ng_mwh_per_t": "to be discussed: natural gas into the H2 shaft?",
-    "eaf_hbi.iron_t_per_t_steel": "to be discussed: the iron ratio of the HBI charge, which repeats the DRI's",
-    "battery.max_hours": "the model does not use it: the optimiser sizes the battery's power and energy apart",
+    **{f"battery.fom_eur_per_{unit}_per_year_{region}": "to be wired with finer origin and destination inputs"
+       for unit in ("mw", "mwh") for region in ("eu", "global")},
+    "eaf.consumables_eur_per_t": "to be discussed: which consumables it covers, and on which tonne of steel",
 }
 # Model key -> why the template's value stands in for the workbook's scenarios. The
 # generator warns with these reasons, and stops on a key it takes from the template that
 # is not listed here, or one listed that the workbook or the scenarios' overlays now set.
 TEMPLATE_BACKSTOPPED_KEYS = {
     "anchor.min_capacity_mw": "no workbook row: the anchor floor, https://github.com/Paul-Particle/lcox-steel/issues/47",
-    "battery.fom_eur_per_mw_per_year": "no workbook row; the template's is eyeballed",
-    "battery.fom_eur_per_mwh_per_year": "no workbook row; the template's is eyeballed",
+    "battery.fom_eur_per_mw_per_year": "its regional rows are not read yet; the template's is eyeballed",
+    "battery.fom_eur_per_mwh_per_year": "its regional rows are not read yet; the template's is eyeballed",
     "briquetting.capex_eur_per_t": "no workbook row",
     "briquetting.fom_eur_per_t_capacity_per_year": "no workbook row",
     "briquetting.financing_period": "no workbook row",
     "briquetting.yield_t_per_t": "no workbook row",
-    "eaf.consumables_eur_per_t": "no workbook row",
+    "eaf.consumables_eur_per_t": "its workbook row is not read yet: its scope is to be discussed",
     "plant.steel_mt_per_year": "no workbook row",
     "natural_gas.price_eur_per_mwh": "the workbook gives only its low and high",
     **{key: "its workbook row is not provided yet" for key in ROWS_NOT_PROVIDED_YET},
