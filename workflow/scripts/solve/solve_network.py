@@ -359,8 +359,9 @@ def main() -> None:
 
     # Each grid area's tariff, by the meter it bills: the origin's import and,
     # on an export, the destination's supply.
+    # Each file is the area's whole electricity charges; the solve uses its grid part.
     tariff_by_area = {}
-    for raw in snakemake.input.tariffs:
+    for raw in snakemake.input.charges:
         tariff = yaml.safe_load(Path(raw).read_text(encoding="utf-8"))
         tariff_by_area[tariff["area"]] = tariff
     tariffs = {_grid_tariff.GRID_IMPORT: tariff_by_area.get(run_inputs["origin"]),

@@ -1,6 +1,6 @@
 """Price a run's grid imports by tariff regime and pick the cheapest.
 
-`build_grid_tariff` writes each area's tariff as regimes: within one, the bill
+`build_electricity_charges` writes each area's grid tariff as regimes: within one, the bill
 is linear in the connection's peak (p_nom) and its annual energy E, and holds
 only inside an (h, E) box, h = E / p_nom. The solve runs once per regime, with
 that box as linear constraints, and keeps the solve whose objective plus the
@@ -13,8 +13,10 @@ assumptions with no box, which is what the model priced before tariffs.
 E is annualised with the objective weightings, which build_network sets so the
 window's hours count as one average year — the tariffs' bands are per year.
 
-The subsidy rate of a tariff stays out of the LP (see scripts/grid/_tariff.py)
-and is reported per meter after the solve.
+Only the `grid` part of an area's charges is read here. What the workbook
+charges on consumption (the Industriestrompreis, the Strompreiskompensation)
+is the report's business: it applies to every run in the area, with a grid or
+without, and moves no decision the LP takes (see scripts/grid/_tariff.py).
 """
 
 from __future__ import annotations
@@ -39,23 +41,53 @@ def config_regime(grid_cfg: dict) -> dict:
         "capacity_eur_per_mw_per_year": grid_cfg["fee_eur_per_mw_per_year"],
         "energy_eur_per_mwh": grid_cfg["fee_eur_per_mwh"],
         "fixed_eur_per_year": 0.0,
-        "components": {},
+        # Named so the report's list of charges has the config's two fees as lines.
+        "components": {
+            "config_capacity_fee": {"capacity_eur_per_mw_per_year": grid_cfg["fee_eur_per_mw_per_year"]},
+            "config_volumetric_fee": {"energy_eur_per_mwh": grid_cfg["fee_eur_per_mwh"]},
+        },
     }
 
 
-def regimes_of(tariff: dict | None, grid_cfg: dict) -> list[dict]:
-    """An area's regimes: its workbook's, or the config's one."""
-    if tariff is None or tariff.get("regimes") is None:
+def _from_workbook(charges: dict | None) -> bool:
+    return bool(charges) and (charges.get("grid") or {}).get("regimes") is not None
+
+
+def regimes_of(charges: dict | None, grid_cfg: dict) -> list[dict]:
+    """An area's grid regimes: its workbook's, or the config's one."""
+    if not _from_workbook(charges):
         return [config_regime(grid_cfg)]
-    return tariff["regimes"]
+    return charges["grid"]["regimes"]
 
 
-def subsidy_of(tariff: dict | None) -> tuple[float, list[str]]:
-    """The €/MWh paid back after the solve, and what it is made of."""
-    if tariff is None or tariff.get("regimes") is None:
-        return 0.0, []
-    post = tariff.get("post_solve") or {}
-    return float(post.get("subsidy_eur_per_mwh") or 0.0), list(post.get("subsidy_components") or [])
+def _fits(regime: dict, hours: float, energy: float) -> bool:
+    """Whether a profile with these utilisation hours and annual energy is in the regime's box."""
+    tol = 1e-6
+    lo_h, hi_h = _bound(regime["h_min"], 0.0), _bound(regime["h_max"], math.inf)
+    lo_e, hi_e = _bound(regime["e_min_mwh"], 0.0), _bound(regime["e_max_mwh"], math.inf)
+    return (lo_h * (1 - tol) - tol <= hours <= hi_h * (1 + tol) + tol
+            and lo_e * (1 - tol) - tol <= energy <= hi_e * (1 + tol) + tol)
+
+
+def regime_bill(regime: dict, p_nom: float, energy: float) -> float:
+    """What a regime charges a connection of p_nom MW that imports `energy` MWh a year."""
+    return (regime["capacity_eur_per_mw_per_year"] * p_nom
+            + regime["energy_eur_per_mwh"] * energy + regime["fixed_eur_per_year"])
+
+
+def bill_as(regimes: list[dict], p_nom: float, energy: float) -> tuple[str | None, float | None]:
+    """A solved profile billed on another consumer's grid regimes, as its operator would be.
+
+    The cheapest of those regimes whose box holds the profile: the same rule the
+    solve picks by, applied to a plant that is not optimised again. None when no
+    regime holds the profile.
+    """
+    hours = energy / p_nom if p_nom > 0 else 0.0
+    fitting = [regime for regime in regimes if _fits(regime, hours, energy)]
+    if not fitting:
+        return None, None
+    best = min(fitting, key=lambda regime: regime_bill(regime, p_nom, energy))
+    return best["name"], regime_bill(best, p_nom, energy)
 
 
 def meters(n: pypsa.Network) -> list[str]:
@@ -121,15 +153,38 @@ def annual_energy_mwh(n: pypsa.Network, meter: str) -> float:
     return float((n.generators_t.p[meter] * n.snapshot_weightings["objective"]).sum())
 
 
-def outcome(n: pypsa.Network, meter: str, regime: dict, tariff: dict | None) -> dict:
-    """What the meter's bill came to under its regime, for n.meta and the report."""
+def outcome(n: pypsa.Network, meter: str, regime: dict, charges: dict | None) -> dict:
+    """What the meter's grid bill came to under its regime, for n.meta and the report."""
     energy = annual_energy_mwh(n, meter)
     p_nom = float(n.generators.at[meter, "p_nom_opt"])
     peak = float(n.generators_t.p[meter].max())
-    subsidy, subsidy_components = subsidy_of(tariff)
+    from_workbook = _from_workbook(charges)
+    groups = (charges or {}).get("component_groups") or {}
+
+    # The bill line by line, each component at its own rates: a tiered
+    # surcharge's fixed offset stays with that surcharge. The lines add up to
+    # the regime's bill.
+    lines = []
+    for component, parts in regime["components"].items():
+        amount = (parts.get("capacity_eur_per_mw_per_year", 0.0) * p_nom
+                  + parts.get("energy_eur_per_mwh", 0.0) * energy
+                  + parts.get("fixed_eur_per_year", 0.0))
+        lines.append({"component": component,
+                      "group": groups.get(component) if from_workbook else "config",
+                      "eur_per_year": amount})
+    bill = regime_bill(regime, p_nom, energy)
+
+    # The same profile billed as the workbook's reference consumer, if it names one.
+    reference = None
+    if from_workbook and charges["grid"].get("reference"):
+        reference_regime, reference_bill = bill_as(charges["grid"]["reference"], p_nom, energy)
+        reference = {"consumer": charges.get("reference_consumer"), "regime": reference_regime,
+                     "bill_eur_per_year": reference_bill}
+
     return {
-        "area": tariff["area"] if tariff else None,
-        "source": tariff["source"] if tariff else "config",
+        "area": charges["area"] if charges else None,
+        "source": charges["source"] if charges else "config",
+        "consumer": charges.get("consumer") if charges else None,
         "regime": regime["name"],
         "h_min": regime["h_min"], "h_max": regime["h_max"],
         "e_min_mwh": regime["e_min_mwh"], "e_max_mwh": regime["e_max_mwh"],
@@ -141,7 +196,7 @@ def outcome(n: pypsa.Network, meter: str, regime: dict, tariff: dict | None) -> 
         "peak_mw": peak,
         "energy_mwh_per_year": energy,
         "utilisation_hours": energy / p_nom if p_nom > 0 else None,
-        "subsidy_eur_per_mwh": subsidy,
-        "subsidy_components": subsidy_components,
-        "subsidy_eur_per_year": subsidy * energy,
+        "charges": lines,
+        "bill_eur_per_year": bill,
+        "reference": reference,
     }

@@ -28,14 +28,14 @@ rule retrieve_grid_data:
         "../scripts/grid/retrieve_grid_data.py"
 
 
-rule build_grid_tariff:
+rule build_electricity_charges:
     input:
-        # One workbook per country. An area without one gets a marker that
-        # leaves its grid import on the config's `grid` fees.
-        workbook=optional("data/grid_tariffs/{area}.xlsx"),
+        # One workbook per country. An area without one gets a file that leaves
+        # its grid on the config's `grid` fees and charges nothing on consumption.
+        workbook=optional("data/electricity_charges/{area}.xlsx"),
     output:
-        tariff="resources/grid_tariffs/{area}.yaml",
+        charges="resources/electricity_charges/{area}.yaml",
     log:
-        "logs/build_grid_tariff/{area}.log",
+        "logs/build_electricity_charges/{area}.log",
     script:
-        "../scripts/grid/build_grid_tariff.py"
+        "../scripts/grid/build_electricity_charges.py"

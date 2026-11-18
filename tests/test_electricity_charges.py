@@ -30,8 +30,8 @@ def _sheet(*rows):
 
 
 GERMAN = _sheet(
-    _row("industriestrompreis", "subsidy_eur_per_mwh", -18.72, consumer="steel", params="one_of=ets_or_isp"),
-    _row("strompreiskompensation", "subsidy_eur_per_mwh", -30.79, consumer="steel", params="one_of=ets_or_isp"),
+    _row("industriestrompreis", "consumption_eur_per_mwh", -18.72, consumer="steel", params="one_of=ets_or_isp"),
+    _row("strompreiskompensation", "consumption_eur_per_mwh", -30.79, consumer="steel", params="one_of=ets_or_isp"),
     _row("baukostenzuschuss", "connection_capex_eur_per_mw", 0.0),
     _row("leistungspreis", "fee_eur_per_mw_per_year", 11390, h=(0, 2500)),
     _row("leistungspreis", "fee_eur_per_mw_per_year", 53060, h=(2500, NA)),
@@ -102,9 +102,9 @@ def test_the_regimes_are_the_bands_the_tiers_and_the_discounts():
     ]
 
 
-def test_the_larger_of_two_exclusive_subsidies_is_kept():
+def test_the_cheaper_of_two_exclusive_consumption_charges_is_kept():
     rows = _tariff._select_rows(GERMAN, "steel", "test")
-    assert _tariff._subsidy(rows) == (-30.79, ["strompreiskompensation"])
+    assert _tariff._consumption(rows) == (-30.79, {"strompreiskompensation": -30.79})
 
 
 def test_only_the_consumers_rows_are_billed():

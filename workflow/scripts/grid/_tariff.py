@@ -1,4 +1,19 @@
-"""Turn one country's tariff workbook into LP coefficients per regime.
+"""Turn one country's electricity-charges workbook into what the model prices.
+
+The workbook (data/electricity_charges/{area}.xlsx) lists every charge on top
+of the wholesale price, and its `model_variable` says what each is charged on:
+
+* **the grid connection** — `fee_eur_per_mw_per_year`, `fee_eur_per_mwh`,
+  `fee_eur_per_year` and `multiplier` rows. They exist only where the run buys
+  grid power, and they become the regimes below, which the solve tries.
+* **consumption** — `consumption_eur_per_mwh` rows, on every MWh the plant's
+  processes draw, own renewables included (the Industriestrompreis, the
+  Strompreiskompensation; negative is a subsidy, positive a levy). The report
+  applies them to every run in the area, with a grid or without, after the
+  solve: the consumption is set by the steel the plant makes, so they move no
+  decision, and as a negative €/MWh on the grid import in the LP they would
+  pay the plant to import energy and burn it in storage losses. Rows sharing a
+  `one_of` param exclude each other; the cheaper for the plant is kept.
 
 A grid bill depends on the plant's utilisation hours h = E / p_nom and its
 annual energy E. Tariffs define h as annual import over peak import; p_nom of
@@ -30,10 +45,6 @@ Where the regimes come from, in the tariff sheet's terms:
 
 What stays out of the regimes:
 
-* **subsidies** (`subsidy_eur_per_mwh`) are applied after the solve, to the
-  imported MWh. As a negative €/MWh in the LP they would pay the plant to
-  import energy and burn it in storage losses. Rows sharing a `one_of` param
-  exclude each other; the larger discount is kept.
 * **connection costs** (`connection_capex_eur`, `connection_capex_eur_per_mw`)
   are not read yet. The config's `grid.connection_*` still prices the connection.
 
@@ -53,7 +64,7 @@ CAPACITY = "fee_eur_per_mw_per_year"
 ENERGY = "fee_eur_per_mwh"
 FIXED = "fee_eur_per_year"
 MULTIPLIER = "multiplier"
-SUBSIDY = "subsidy_eur_per_mwh"
+CONSUMPTION = "consumption_eur_per_mwh"
 CONNECTION = ("connection_capex_eur", "connection_capex_eur_per_mw")
 
 UNITS = {
@@ -61,7 +72,7 @@ UNITS = {
     ENERGY: "EUR/MWh",
     FIXED: "EUR/yr",
     MULTIPLIER: "factor",
-    SUBSIDY: "EUR/MWh",
+    CONSUMPTION: "EUR/MWh",
     "connection_capex_eur": "EUR",
     "connection_capex_eur_per_mw": "EUR/MW",
 }
@@ -189,25 +200,23 @@ def _select_rows(tariff: pd.DataFrame, consumer: str, source: str) -> pd.DataFra
     return rows
 
 
-def _subsidy(rows: pd.DataFrame) -> tuple[float, list[str]]:
-    """The €/MWh paid back after the solve, and the components it came from."""
-    subsidies = rows[rows["model_variable"] == SUBSIDY]
-    total, used = 0.0, []
+def _consumption(rows: pd.DataFrame) -> tuple[float, dict[str, float]]:
+    """The €/MWh charged on consumption, and the rate of each component it came from."""
+    charged = rows[rows["model_variable"] == CONSUMPTION]
+    used = {}
     exclusive = {}
-    for row in subsidies.itertuples():
+    for row in charged.itertuples():
         group = row.params.get("one_of")
         if group is None:
-            total += row.value
-            used.append(row.component)
+            used[row.component] = used.get(row.component, 0.0) + row.value
         else:
             exclusive.setdefault(group, []).append(row)
     for group_rows in exclusive.values():
         # The rows exclude each other and apply to the same MWh: the plant takes
-        # whichever pays it more, the most negative.
+        # whichever is cheaper for it, the most negative.
         best = min(group_rows, key=lambda row: row.value)
-        total += best.value
-        used.append(best.component)
-    return total, used
+        used[best.component] = used.get(best.component, 0.0) + best.value
+    return sum(used.values()), used
 
 
 def _covers(row, lo: float, hi: float, lo_col: str, hi_col: str) -> bool:
@@ -337,34 +346,69 @@ def build_regimes(rows: pd.DataFrame, source: str) -> list[Regime]:
     return regimes
 
 
-def build_tariff(path: Path, area: str) -> dict:
-    """The tariff of one area as the dict written to resources/grid_tariffs/{area}.yaml."""
+def _consumer_charges(tariff: pd.DataFrame, consumer: str, source: str) -> tuple[list, dict]:
+    """One consumer's grid regimes and consumption charge."""
+    rows = _select_rows(tariff, consumer, source)
+    rate, components = _consumption(rows)
+    consumption = {"eur_per_mwh": _num(rate),
+                   "components": {name: _num(value) for name, value in components.items()}}
+    return [piece.to_dict() for piece in build_regimes(rows, source)], consumption
+
+
+def build_charges(path: Path, area: str) -> dict:
+    """One area's charges as the dict written to resources/electricity_charges/{area}.yaml.
+
+    `grid` holds the regimes the solve tries where the run buys grid power;
+    `consumption` the charge the report puts on every MWh the plant consumes.
+    Both are the settings sheet's `consumer`'s. Each also carries `reference`,
+    the same for the sheet's `reference_consumer` if it names one: the report
+    bills the plant's solved profile on it too, to show what the plant's
+    privileges are worth against a consumer without them.
+    """
     source = str(path)
     tariff, settings = read_workbook(path)
     consumer = settings.get("consumer")
     if not consumer:
         raise ValueError(f"{source}: the settings sheet names no consumer")
-    rows = _select_rows(tariff, consumer, source)
+    regimes, consumption = _consumer_charges(tariff, consumer, source)
 
-    subsidy, subsidy_components = _subsidy(rows)
-    regimes = build_regimes(rows, source)
+    reference_consumer = settings.get("reference_consumer")
+    if pd.isna(reference_consumer) or not str(reference_consumer).strip():
+        reference_consumer, reference_regimes, reference_consumption = None, None, None
+    else:
+        reference_consumer = str(reference_consumer).strip()
+        reference_regimes, reference_consumption = _consumer_charges(tariff, reference_consumer, source)
+
+    rows = tariff[tariff["model_variable"].isin(UNITS)]
     ignored = sorted(set(rows.loc[rows["model_variable"].isin(CONNECTION), "component"]))
     years = rows["year"].dropna().unique()
+    # What each component is, for the report's list of charges: the workbook's
+    # own `group` column, carried through unread by the regimes.
+    groups = {
+        row.component: (None if pd.isna(row.group) else row.group)
+        for row in rows.itertuples() if row.model_variable not in CONNECTION
+    }
 
     return {
         "area": area,
         "source": source.replace("\\", "/"),
         "year": int(years[0]) if len(years) else None,
         "consumer": consumer,
-        "regimes": [piece.to_dict() for piece in regimes],
-        "post_solve": {
-            "subsidy_eur_per_mwh": _num(subsidy),
-            "subsidy_components": subsidy_components,
-        },
+        "reference_consumer": reference_consumer,
+        "component_groups": groups,
+        "grid": {"regimes": regimes, "reference": reference_regimes},
+        "consumption": {**consumption, "reference": reference_consumption},
         "not_read_yet": ignored,
     }
 
 
-def default_tariff(area: str) -> dict:
-    """An area without a workbook: the solve prices it from the config's `grid` block."""
-    return {"area": area, "source": "config", "regimes": None}
+def default_charges(area: str) -> dict:
+    """An area without a workbook: its grid is priced from the config's `grid`
+    block, and nothing is charged on consumption."""
+    return {
+        "area": area, "source": "config", "year": None,
+        "consumer": None, "reference_consumer": None, "component_groups": {},
+        "grid": {"regimes": None, "reference": None},
+        "consumption": {"eur_per_mwh": 0, "components": {}, "reference": None},
+        "not_read_yet": [],
+    }

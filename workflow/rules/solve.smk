@@ -20,10 +20,11 @@ rule solve_network:
                 within=scenarios_df,
             ),
         ),
-        # The grid tariff of every area the run buys power in: the origin's and,
-        # on an export, the destination's. The script matches them by area.
-        tariffs=collect(
-            "resources/grid_tariffs/{item.area}.yaml",
+        # The electricity charges of every area the run buys grid power in: the
+        # origin's and, on an export, the destination's. The solve reads their
+        # grid regimes; the script matches them by area.
+        charges=collect(
+            "resources/electricity_charges/{item.area}.yaml",
             item=lookup(
                 query="scenario == '{scenario}' and run == '{run}' and tech == 'grid'",
                 within=scenarios_df,
