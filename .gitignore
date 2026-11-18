@@ -1,6 +1,8 @@
 # Operating System Files
 .DS_Store
 .ipynb_checkpoints/
+# Office lock files, present while a workbook is open
+~$*
 
 # Python
 __pycache__/

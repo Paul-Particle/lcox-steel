@@ -20,6 +20,15 @@ rule solve_network:
                 within=scenarios_df,
             ),
         ),
+        # The grid tariff of every area the run buys power in: the origin's and,
+        # on an export, the destination's. The script matches them by area.
+        tariffs=collect(
+            "resources/grid_tariffs/{item.area}.yaml",
+            item=lookup(
+                query="scenario == '{scenario}' and run == '{run}' and tech == 'grid'",
+                within=scenarios_df,
+            ),
+        ),
         # Every input series of the run, in the order its rows list them.
         timeseries=collect(
             "resources/timeseries/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}.parquet",
