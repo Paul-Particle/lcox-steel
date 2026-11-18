@@ -39,6 +39,7 @@ data/canada_cache/*
 # repo does not ship, and the demo has to run after a fresh clone.
 resources/*.parquet
 resources/timeseries/
+resources/grid_tariffs/
 resources/shapes/
 !resources/shapes/*.parquet
 

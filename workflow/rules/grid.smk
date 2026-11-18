@@ -26,3 +26,16 @@ rule retrieve_grid_data:
         entsoe_api=2,
     script:
         "../scripts/grid/retrieve_grid_data.py"
+
+
+rule build_grid_tariff:
+    input:
+        # One workbook per country. An area without one gets a marker that
+        # leaves its grid import on the config's `grid` fees.
+        workbook=optional("data/grid_tariffs/{area}.xlsx"),
+    output:
+        tariff="resources/grid_tariffs/{area}.yaml",
+    log:
+        "logs/build_grid_tariff/{area}.log",
+    script:
+        "../scripts/grid/build_grid_tariff.py"
