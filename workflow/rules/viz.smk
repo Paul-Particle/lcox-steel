@@ -20,10 +20,22 @@ rule compile_report:
                 within=scenarios_df,
             ),
         ),
+        # The electricity charges of every area the run names, grid or not: what
+        # an area charges on consumption applies to a plant on its own
+        # renewables too. The script matches them by area.
+        charges=collect(
+            "resources/electricity_charges/{item.area}.yaml",
+            item=lookup(
+                query="scenario == '{scenario}' and run == '{run}'",
+                within=scenarios_df,
+            ),
+        ),
     output:
         report="results/{scenario}/.runs/{scenario}_{run}/report_{scenario}_{run}.csv",
         # Every field, including the ones the report holds back.
         diagnostic="results/{scenario}/.runs/{scenario}_{run}/.report_{scenario}_{run}_diag.csv",
+        # Every charge on the run's electricity, one row per component.
+        electricity_charges="results/{scenario}/.runs/{scenario}_{run}/electricity_charges_{scenario}_{run}.csv",
         # What priced the run, beside the run.
         overlay="results/{scenario}/.runs/{scenario}_{run}/assumptions_{scenario}_{run}.overlay.yaml",
         base_assumptions="results/{scenario}/.runs/{scenario}_{run}/config/assumptions_base.yaml",
@@ -55,6 +67,10 @@ rule pick_best_run:
             "results/{item.scenario}/.runs/{item.scenario}_{item.run}/outputs/{item.scenario}_{item.run}.nc",
             item=lookup(query="scenario == '{scenario}'", within=runs_df),
         ),
+        electricity_charges=collect(
+            "results/{item.scenario}/.runs/{item.scenario}_{item.run}/electricity_charges_{item.scenario}_{item.run}.csv",
+            item=lookup(query="scenario == '{scenario}'", within=runs_df),
+        ),
         overlay=collect(
             "results/{item.scenario}/.runs/{item.scenario}_{item.run}/assumptions_{item.scenario}_{item.run}.overlay.yaml",
             item=lookup(query="scenario == '{scenario}'", within=runs_df),
@@ -71,6 +87,7 @@ rule pick_best_run:
         report="results/{scenario}/report_{scenario}.csv",
         diagnostic="results/{scenario}/.report_{scenario}_diag.csv",
         network="results/{scenario}/outputs/{scenario}.nc",
+        electricity_charges="results/{scenario}/electricity_charges_{scenario}.csv",
         overlay="results/{scenario}/assumptions_{scenario}.overlay.yaml",
         base_assumptions="results/{scenario}/config/assumptions_base.yaml",
         merged_assumptions="results/{scenario}/config/assumptions_{scenario}_merged.yaml",

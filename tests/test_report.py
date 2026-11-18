@@ -40,7 +40,8 @@ from common._report_schema import (
 )
 
 # The files pick_best_run copies up, each an input and an output of the same name.
-RUN_FILES = ("report", "diagnostic", "network", "overlay", "base_assumptions", "merged_assumptions")
+RUN_FILES = ("report", "diagnostic", "network", "electricity_charges", "overlay", "base_assumptions",
+             "merged_assumptions")
 
 
 def _report(rows):
