@@ -142,7 +142,7 @@ Land–sea eligibility cutoff + a selectable finer-coastline source:
 
 No capacity-cap work here — that is #31, sketched in [Future work](#future-work--capacity-cap-31).
 
-## Open decisions (for Hannah / Peter)
+## Open decisions
 
 1. `min_land_fraction` default: **0.98** (reproduces the notebook cutoff). Lower it if
    you want to keep more partial-land cells.
