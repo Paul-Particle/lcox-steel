@@ -19,9 +19,10 @@ A grid bill depends on the plant's utilisation hours h = E / p_nom and its
 annual energy E. Tariffs define h as annual import over peak import; p_nom of
 the grid import stands in for the peak because every MW of it is charged, so
 the optimum builds no more than its highest hourly import. Billing peaks are
-15-minute averages, so the hourly model reads h slightly high. Neither is known before the solve, and h is a ratio of two
-decision variables, so the LP cannot price it directly. Instead the tariff is
-cut into regimes: within each, the bill is linear,
+15-minute averages, so the hourly model reads h slightly high. Neither h nor E
+is known before the solve, and h is a ratio of two decision variables, so the
+LP cannot price it directly. Instead the tariff is cut into regimes: within
+each, the bill is linear,
 
     bill = capacity · p_nom + energy · E + fixed,
 
@@ -262,6 +263,19 @@ def _component_terms(rows: pd.DataFrame, band, segment, source: str) -> dict:
         if edge != INF:
             raise ValueError(f"{source}: {component}'s last tier must be open-ended")
 
+        # The LP can price one €/MWh per regime, but a tiered charge has several:
+        # the first MWh pay one rate, the ones above it another. Within the
+        # segment, every MWh falls in the same tier, so the bill can be written
+        # as that tier's rate on all the MWh plus a constant, which corrects for
+        # the MWh below the tier having been priced at the wrong rate:
+        #
+        #     bill = rate · E + (what the earlier tiers cost in full − rate · start)
+        #
+        # KWKG above 1 GWh: 4.46 €/MWh on the first 1000 MWh, 0.669 above, so
+        # 0.669 · E + (4.46 · 1000 − 0.669 · 1000) = 0.669 · E + 3,791 €/yr,
+        # which at E = 5000 MWh is 7,136 €, as 4.46 · 1000 + 0.669 · 4000 is.
+        # `current` is the tier the segment lies in, `start` where it begins, and
+        # `below` what every tier before it charges in full.
         current = next(row for row in tiers if _covers(row, *segment, "tier_from_mwh", "tier_to_mwh"))
         start = _bound(current.tier_from_mwh, 0.0)
         below = sum(
