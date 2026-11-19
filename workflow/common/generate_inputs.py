@@ -402,7 +402,7 @@ def main() -> None:
         stale_overlay.unlink()
 
     log.info(f"{len(workbook_values)} values from {arguments.workbook.name}, "
-             f"{len(VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION)} for keys its scenarios do not require, {len(backstop_counts)} backstop "
+             f"{len(VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION)} set by the translation, {len(backstop_counts)} backstop "
              f"values from {TEMPLATE_PATH.name}; {scenarios['scenario'].nunique()} scenarios, "
              f"{len(scenarios)} scenario rows, {sum(map(bool, overlays.values()))} overlays; "
              f"{len(changed)} files written, {len(stale_overlays)} stale overlays removed")

@@ -54,7 +54,6 @@ WORKBOOK_SOURCES = RENAMED_SOURCES | MODEL_NAMED_SOURCES | CONVERTED_SOURCES | S
 # Held at 0 in both value and unit: not provided yet, so the template's value stands in.
 # Each row already carries the model key it will be read under once given.
 ROWS_NOT_PROVIDED_YET = (
-    "steel_store.max_weeks",
     "grid.connection_capex_eur_per_mw", "grid.connection_financing_period",
     "grid.fee_eur_per_mw_per_year", "grid.fee_eur_per_mwh",
     "transmission.capex_eur_per_mw_per_km", "transmission.financing_period",
@@ -64,6 +63,7 @@ ROWS_NOT_PROVIDED_YET = (
 # included. A row the generator neither reads nor finds here stops it.
 UNREAD_ROWS = {
     **{row: "not provided yet" for row in ROWS_NOT_PROVIDED_YET},
+    "steel_store.max_weeks": "set below, in VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION",
     "finance.res.eu_wacc": "to be discussed: a WACC of its own for the renewables",
     "finance.res.noneu_wacc": "to be discussed: a WACC of its own for the renewables",
     "dri_h2.ng_mwh_per_t": "to be discussed: natural gas into the H2 shaft?",
@@ -76,19 +76,27 @@ UNREAD_ROWS = {
 TEMPLATE_BACKSTOPPED_KEYS = {
     "battery.fom_eur_per_mw_per_year": "its regional rows are not read yet; the template's is eyeballed",
     "battery.fom_eur_per_mwh_per_year": "its regional rows are not read yet; the template's is eyeballed",
-    **{f"briquetting.{key}": "an unsourced token cost, kept in the template by design"
-       for key in ("capex_eur_per_t", "fom_eur_per_t_capacity_per_year", "financing_period")},
     "briquetting.yield_t_per_t": "no workbook row: the HBI chain's iron losses, sourced in the template",
-    "steel.final_demand_mt_per_year": "no workbook row",
+    "steel.final_demand_mt_per_year": "its workbook row is to be added",
     "natural_gas.price_eur_per_mwh": "the workbook gives only its low and high",
     **{key: "its workbook row is not provided yet" for key in ROWS_NOT_PROVIDED_YET},
     **{f"{plant}.p_min_pu": "to be discussed: is a minimum load the right approach?"
        for plant in ("h2-dri", "mix-dri", "ng-dri", "moe")},
 }
 
-# Model key -> its value where no scenario the workbook configures requires the key. NaN
-# stops any run that reads it; the carbon price is zero because no scenario prices carbon.
+# Model key -> a value every workbook scenario gets so the model has what it needs to
+# build and solve, chosen so that it does not affect the outcome. No workbook row is read
+# for these keys.
 VALUES_OF_KEYS_NOT_REQUIRED_BY_THE_WORKBOOK_SCENARIO_CONFIGURATION = {
+    # A cap above a year of output only bounds the store; its cost sizes it.
+    "steel_store.max_weeks": 104,
+    # Effectively zero, but not exactly, so that the press's size carries a cost and the
+    # optimiser's solution space is less degenerate.
+    "briquetting.capex_eur_per_t": 1,
+    "briquetting.fom_eur_per_t_capacity_per_year": 0.03,
+    "briquetting.financing_period": 20,
+    # Keys no workbook scenario reads: NaN stops any run that does, and the carbon price is
+    # zero because no scenario prices carbon.
     **{f"transport.distance_km.{origin}.ESP.rail": float("nan") for origin in ("DEU", "FRA", "ESP", "AB", "ONT")},
     **{f"transport.distance_km.{origin}.ESP.sea": float("nan") for origin in ("AB", "ONT")},
     "transport.distance_km.DEMO.ES_SYN.sea": float("nan"),

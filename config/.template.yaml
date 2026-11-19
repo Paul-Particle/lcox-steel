@@ -2,8 +2,9 @@
 #   python -m common.generate_inputs [WORKBOOK]
 # writes config/generated/assumptions.yaml from it, with each value the input
 # workbook (data/assumptions/Assumptions_yaml_inputs.xlsx) holds replaced by the
-# workbook's, in EUR. The keys the workbook does not hold (the backstop values)
-# are copied over as they stand.
+# workbook's, in EUR, and each value workflow/common/_workbook_translation.py
+# sets for every workbook scenario replaced by that. The rest (the backstop
+# values) are copied over as they stand.
 #
 # Names: hyphens where a name is a Snakemake id (a route, tech, site variant or
 # area) or a part the code builds such ids from, so a route's ironmaking section
@@ -260,8 +261,10 @@ briquetting:
   # travel, which is why only the export routes build one. The press itself is
   # mechanical and cheap to run; what the route really pays for this step is
   # downstream, where the briquettes reach the furnace cold.
-  # Capex and fixed cost are an unsourced token, kept here rather than in the
-  # workbook: the press is cheap next to the chain's iron losses (`yield_t_per_t`).
+  # Capex and fixed cost are an unsourced token, effectively zero but not exactly,
+  # so the press's size carries a cost: the press is cheap next to the chain's
+  # iron losses (`yield_t_per_t`). The workbook's scenarios get the same values
+  # from the translation.
   capex_eur_per_t: 1
   fom_eur_per_t_capacity_per_year: 0.03       # ≈3 % of capex
   financing_period: 20
