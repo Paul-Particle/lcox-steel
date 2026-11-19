@@ -79,7 +79,7 @@ TEMPLATE_BACKSTOPPED_KEYS = {
     **{f"briquetting.{key}": "an unsourced token cost, kept in the template by design"
        for key in ("capex_eur_per_t", "fom_eur_per_t_capacity_per_year", "financing_period")},
     "briquetting.yield_t_per_t": "no workbook row: the HBI chain's iron losses, sourced in the template",
-    "plant.steel_mt_per_year": "no workbook row",
+    "steel.final_demand_mt_per_year": "no workbook row",
     "natural_gas.price_eur_per_mwh": "the workbook gives only its low and high",
     **{key: "its workbook row is not provided yet" for key in ROWS_NOT_PROVIDED_YET},
     **{f"{plant}.p_min_pu": "to be discussed: is a minimum load the right approach?"

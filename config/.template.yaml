@@ -29,10 +29,11 @@ finance:
 # the `route` column of its scenario table. The implemented route ids live in
 # workflow/scripts/solve/build_network.py.
 
-plant:
-  # Demand anchor: a flat t/h load on the steel bus
-  # (supply-side model; steel demand itself is not flexible).
-  steel_mt_per_year: 1.0
+steel:
+  # The imposed final demand: a flat t/h load on the steel bus (supply-side
+  # model; steel demand itself is not flexible). Every cost scales linearly with
+  # it, so it sets the absolute sizes and leaves the cost per tonne unchanged.
+  final_demand_mt_per_year: 2.0
 
 # The register's global IRENA 2025 figures. One set for every geography, as with
 # the other cross-country inputs in this file.

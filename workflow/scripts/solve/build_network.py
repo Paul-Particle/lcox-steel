@@ -206,7 +206,6 @@ def build_network(
     """
     if route not in ROUTES:
         raise ValueError(f"unknown route '{route}' — expected one of {ROUTES}")
-    plant = assumptions["plant"]
     transport_cfg = assumptions["transport"]
     stem = route_stem(route)
     is_export = route != stem
@@ -250,7 +249,7 @@ def build_network(
         _add_electrolyser(n, el_efficiency, el_cfg, origin_wacc, bus0=elec_bus)
         _add_h2_buffer(n, assumptions["h2_buffer"], origin_wacc)
 
-    steel_t_per_h = plant["steel_mt_per_year"] * 1e6 / HOURS_PER_YEAR
+    steel_t_per_h = assumptions["steel"]["final_demand_mt_per_year"] * 1e6 / HOURS_PER_YEAR
     _add_steel_load(n, steel_t_per_h,
                     bus=DELIVERED_STEEL_BUS if deliver_steel else "steel")
     _add_steel_store(n, assumptions["steel_store"], furnace_wacc, steel_t_per_h)

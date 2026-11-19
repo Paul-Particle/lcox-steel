@@ -49,7 +49,7 @@ SKIPPED = {
 SECTIONS = [
     ("Finance and plant",
      [("finance.default_wacc", "Discount rate (WACC)", ""),
-      ("plant.steel_mt_per_year", "Steel output", "Mt/yr"),
+      ("steel.final_demand_mt_per_year", "Final steel demand", "Mt/yr"),
       ("h2-dri.kg_h2_per_t_dri", "Hydrogen per tonne of DRI", "kg/t")]),
 
     ("Renewables, electrolyser, battery, hydrogen storage",
