@@ -154,11 +154,8 @@ REDUCTION_LINKS = ("h2-dri", "ng-dri", "mix-dri", "moe", "ewin", "reductant-h2")
 # reader comparing routes wants them apart. The network carries only their sum,
 # so the share is taken from the quotes that priced it.
 #
-# Each leaf with the parent group it rolls up into, in the stack order the
-# cost-breakdown page draws them. One list, so a leaf cannot be in the report
-# without a group to belong to. What a group is called and what colour it is
-# drawn in stays viz/dashboard/cost_taxonomy.GROUPS' business; which group a leaf is in is
-# structural and lives here.
+# Each leaf with the parent group it rolls up into, in stack order. One list, so a
+# leaf cannot be in the report without a group to belong to.
 LEAF_COSTS_BY_GROUP = (
     ("ore", "feedstock"),
     ("eaf_consumables", "feedstock"),
@@ -827,7 +824,7 @@ def read_report(path) -> pd.DataFrame:
     """A report file back as one row per run, numbers as numbers.
 
     The one place that undoes the on-disk layout: everything that reads a report
-    — dashboards, taxonomies, plots — goes through here and works in runs-as-rows
+    — plots and any later analysis — goes through here and works in runs-as-rows
     from then on, so how the file is laid out is this module's business alone.
     """
     stored = pd.read_csv(path, index_col="field")

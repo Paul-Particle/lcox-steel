@@ -33,8 +33,7 @@ These tests use synthetic frames, so they need no raw cache and run anywhere.
 `test_entsoe_vs_energycharts.py` cross-checks the ENTSO-E grid pipeline against
 [energy-charts.info](https://energy-charts.info) (Fraunhofer ISE), which
 publishes the same German day-ahead price, generation-by-type, and load. Both
-ultimately draw on ENTSO-E, so they should agree closely — this turns the
-"eyeball the dashboard" check into something automatic.
+ultimately draw on ENTSO-E, so they should agree closely.
 
 **What it does**
 

@@ -303,7 +303,7 @@ def test_an_export_reports_its_own_grid_not_its_furnaces():
 
 
 def test_an_islanded_export_reports_no_grid():
-    """A blank grid_variant_origin is what tells the dashboard the plant was islanded."""
+    """A blank grid_variant_origin is what tells a reader of the report the plant was islanded."""
     rows = _rows(("solar", "bestsite-p95", "AUS"), ("grid", "emissions", "DEU"))
     assert "grid_variant_origin" not in input_variants(rows, "AUS")
 

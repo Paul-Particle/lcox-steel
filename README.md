@@ -98,9 +98,6 @@ lcox-steel/
 │   │       ├── pick_best_run.py    # copies the run that stands for a scenario up into it
 │   │       ├── outputs/            # result plots: capacity bars, LCOS breakdown, per-site capacity
 │   │       ├── diagnostics/        # checks: CF heatmap, siting map, DE price vs residual demand
-│   │       ├── dashboard/          # HTML dashboard builders + cost taxonomy
-│   │       │   ├── templates/      # the pages' HTML templates
-│   │       │   └── hub_pages/      # static hub pages (network schematic, workflow DAG)
 │   │       ├── _run_display.py     # run labels, shared by the plots
 │   │       └── style.py            # FCA Plotly template + colormap
 │   └── common/                     # shared, cross-pipeline Python
@@ -1020,7 +1017,7 @@ are not declared in advance and follow the fixed ones.
 
 **Reading one back**: `common._report_schema.read_report(path)` returns a frame
 of one row per run with the numbers as numbers. It is the only thing that undoes
-the layout — every dashboard, taxonomy and plot goes through it — so how the file
+the layout — every plot and every reader goes through it — so how the file
 is written stays that module's business alone.
 
 ### Tying a result to its inputs

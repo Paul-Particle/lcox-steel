@@ -2,8 +2,7 @@
 
 energy-charts.info (Fraunhofer ISE) publishes the same German day-ahead price,
 generation-by-type, and load that our pipeline derives from ENTSO-E, so it is an
-independent cross-check for what had until now only been eyeballed on the
-dashboard (issue #20). Both draw on ENTSO-E, so we expect very close agreement:
+independent cross-check (issue #20). Both draw on ENTSO-E, so we expect very close agreement:
 the thresholds below carry roughly 2x headroom over the agreement measured on
 2023 data.
 
