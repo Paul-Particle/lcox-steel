@@ -917,9 +917,8 @@ def _add_steel_store(
     The supply-side representation of periodic demand: production flexes to fill
     inventory while the flat steel load draws it down, so the plant decouples
     hourly production from steady delivery by carrying stock — demand itself
-    stays fixed. `max_weeks` caps the buffer at a realistic inventory horizon so
-    the flexibility can't degenerate into whole-year arbitrage; the annuitised
-    per-tonne capex keeps the built size unique and reportable.
+    stays fixed. The annuitised per-tonne capex sizes the buffer and keeps its
+    size unique and reportable; `max_weeks`, above a year of output, only bounds it.
     """
     cap_cost = annuity_factor(wacc, store_cfg["financing_period"]) * store_cfg["capex_eur_per_t"]
     e_nom_max = steel_t_per_h * store_cfg["max_weeks"] * 7 * 24

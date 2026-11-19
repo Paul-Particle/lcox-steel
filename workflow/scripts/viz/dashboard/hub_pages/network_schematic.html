@@ -339,7 +339,7 @@
   <div class="notes">
     <p><b>Front-end, every route:</b> extendable RES generators (solar, wind on/offshore) and a battery feed the <code>electricity</code> bus; their <code>p_max_pu</code> is the hourly capacity-factor profile. A <code>grid_import</code> generator is added only in grid scenarios (a day-ahead price series + connection charges).</p>
     <p><b>Electricity draw (dashed):</b> the DRI, NG-DRI and EAF steps are PyPSA multi-links — <code>bus2 = electricity</code> with a negative <code>efficiency2</code>, so they pull auxiliary power alongside their main feed.</p>
-    <p><b>Stores decouple time:</b> the H2 buffer, iron stockpile and finished-steel inventory are all cyclic and extendable; the steel store is capped at 8 weeks of production so flexibility can't degenerate into whole-year arbitrage.</p>
+    <p><b>Stores decouple time:</b> the H2 buffer, iron stockpile and finished-steel inventory are all cyclic and extendable, and their cost sizes them; the steel store's cap, two years of production, only bounds it.</p>
     <p><b>Multi-site (not drawn):</b> in multi-site mode each candidate site gets its own <code>electricity_{site}</code> bus and an extendable HVDC link to the demand site; capex and losses scale with routed distance, so siting emerges from the LP.</p>
     <p><b>MOE + EAF:</b> <code>_add_moe_link</code> takes electricity to <b>liquid iron</b> on the shared iron bus, and the shared EAF finishes it. Hot metal cannot wait, so the domestic route builds no iron store and the cell feeds the furnace hour for hour; a scenario that wants cheaper ladle metallurgy prices the shared EAF down through an overlay rather than adding a component.</p>
     <p><b>Planned imported-iron path (dashed, off by default):</b> a second <code>imported_iron</code> bus (no store — buy-as-needed merchant sponge iron / HBI) reaches the shared iron bus via a <code>bulk_shipping_iron</code> freight link, and can also feed the EAF directly. Not implemented in <code>build_network.py</code> yet.</p>
@@ -412,7 +412,7 @@
     { id:"steel",       kind:"bus",  color:"steel",name:"steel",      unit:"t/h", x:1132, y:340, routes:STEEL,
       body:"Bus · carrier steel\nLiquid steel." },
     { id:"steel_store", kind:"store",color:"steel",name:"steel_store",x:1132, y:248, routes:STEEL,
-      body:"Store · extendable, cyclic\n€30/t · 25 yr · capped at 8 weeks of production" },
+      body:"Store · extendable, cyclic\n€30/t · 25 yr · capped at two years of production" },
     { id:"steel_load",  kind:"load", color:"steel",name:"steel_load", x:1132, y:436, routes:STEEL,
       body:"Load · flat steel demand\n1.0 Mt/yr ÷ 8760 h = 114.2 t/h" },
 
