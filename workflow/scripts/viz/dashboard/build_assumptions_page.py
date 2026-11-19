@@ -39,9 +39,6 @@ OUT = HTML_DIR / "assumptions.html"
 # page copy. Patterns are fnmatch over the dotted path. Every entry was checked
 # against the run rather than assumed.
 SKIPPED = {
-    "anchor.min_capacity_mw":
-        "A floor on what the anchor cell must build, and it binds only on a "
-        "multi-site run. Every run here is single-site best-site P95.",
     "natural_gas.co2_price_eur_per_t":
         "Zero in every scenario here, so no route pays anything for its carbon "
         "and no cost on any chart comes from it.",

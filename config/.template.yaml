@@ -355,14 +355,6 @@ transport:
     # The demo's Victoria ships to its made-up Spain as Australia ships to Spain.
     DEMO: { ES_SYN: { sea: 17_965 } }
 
-anchor:
-  # Anchor-colocation scenarios only (the `anchor-colo-n*` CF variants). The
-  # anchor cell is the plant site, and every site is an extendable generator, so
-  # without a floor the optimiser may build nothing there — leaving the anchor as
-  # the thing that shortlisted the candidates rather than a place anything
-  # stands. 0 leaves that freedom, which is what every run before this had.
-  min_capacity_mw: 0
-
 transmission:
   # HVDC link connecting a candidate RES site to the electrolyser/demand site.
   # Only used by multi-site scenarios (those with a config/sites_{project}_{scenario}.yaml

@@ -241,9 +241,7 @@ def build_network(
     else:
         _add_buses(n, route, deliver_steel)
 
-    _add_generators(n, cf_timeseries, assumptions["res"], origin_wacc, multisite=multisite,
-                    demand_site=demand_site,
-                    anchor_min_mw=assumptions["anchor"]["min_capacity_mw"])
+    _add_generators(n, cf_timeseries, assumptions["res"], origin_wacc, multisite=multisite)
     _add_battery(n, assumptions["battery"], origin_wacc, bus=elec_bus)
 
     if stem in _H2_ROUTES:
@@ -438,8 +436,6 @@ def _add_generators(
     res_cfg: dict,
     wacc: float,
     multisite: bool = False,
-    demand_site: str | None = None,
-    anchor_min_mw: float = 0.0,
 ) -> None:
     """Add one extendable RES generator per CF column, costed from assumptions.
 
@@ -471,17 +467,12 @@ def _add_generators(
             annuity_factor(wacc, cfg["financing_period"]) * cfg["capex_eur_per_mw"]
             + cfg["fom_eur_per_mw_per_year"]
         )
-        # The anchor cell is the plant site, so a scenario that asks what a
-        # project *here* costs can require that something is built here. Every
-        # other site stays free to come out at zero.
-        floor = anchor_min_mw if (multisite and name == demand_site) else 0.0
         n.add(
             "Generator",
             name,
             bus=bus,
             carrier=tech,
             p_nom_extendable=True,
-            p_nom_min=floor,
             capital_cost=cap_cost,
             marginal_cost=0.0,
             p_max_pu=cf_timeseries[col],

@@ -75,7 +75,6 @@ UNREAD_ROWS = {
 # generator warns with these reasons, and stops on a key it takes from the template that
 # is not listed here, or one listed that the workbook or the scenarios' overlays now set.
 TEMPLATE_BACKSTOPPED_KEYS = {
-    "anchor.min_capacity_mw": "no workbook row: the anchor floor, https://github.com/Paul-Particle/lcox-steel/issues/47",
     "battery.fom_eur_per_mw_per_year": "its regional rows are not read yet; the template's is eyeballed",
     "battery.fom_eur_per_mwh_per_year": "its regional rows are not read yet; the template's is eyeballed",
     **{f"briquetting.{key}": "an unsourced token cost, kept in the template by design"
