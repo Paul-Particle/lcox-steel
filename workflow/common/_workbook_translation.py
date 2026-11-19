@@ -69,7 +69,6 @@ UNREAD_ROWS = {
     "dri_h2.ng_mwh_per_t": "to be discussed: natural gas into the H2 shaft?",
     **{f"battery.fom_eur_per_{unit}_per_year_{region}": "to be wired with finer origin and destination inputs"
        for unit in ("mw", "mwh") for region in ("eu", "global")},
-    "eaf.consumables_eur_per_t": "to be discussed: which consumables it covers, and on which tonne of steel",
 }
 # Model key -> why the template's value stands in for the workbook's scenarios. The
 # generator warns with these reasons, and stops on a key it takes from the template that
@@ -80,7 +79,6 @@ TEMPLATE_BACKSTOPPED_KEYS = {
     **{f"briquetting.{key}": "an unsourced token cost, kept in the template by design"
        for key in ("capex_eur_per_t", "fom_eur_per_t_capacity_per_year", "financing_period")},
     "briquetting.yield_t_per_t": "no workbook row: the HBI chain's iron losses, sourced in the template",
-    "eaf.consumables_eur_per_t": "its workbook row is not read yet: its scope is to be discussed",
     "plant.steel_mt_per_year": "no workbook row",
     "natural_gas.price_eur_per_mwh": "the workbook gives only its low and high",
     **{key: "its workbook row is not provided yet" for key in ROWS_NOT_PROVIDED_YET},
