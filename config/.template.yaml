@@ -290,8 +290,7 @@ steel_store:
   # itself stays fixed. Covered yard + handling for solid product
   # (slabs/billets), a bit above the iron stockpile. The cost sizes the store,
   # not the cap: `max_weeks` sits above a year of flat production only to keep
-  # the store's size bounded, and the largest store in any run so far held about
-  # 1 000 h.
+  # the store's size bounded, and a store that reaches it means the cap is wrong.
   capex_eur_per_t: 30
   financing_period: 25
   max_weeks: 104   # inventory cap = two years of flat production
