@@ -35,7 +35,8 @@ def main() -> None:
     # A run with no value for the metric is never picked over one that has it.
     best = runs[metric].sort_values(na_position="last").index[0]
     # Every output but the run list has an input of the same name, one path per run.
-    for name in ("report", "diagnostic", "network", "overlay", "base_assumptions", "merged_assumptions"):
+    for name in ("report", "diagnostic", "network", "electricity_charges", "overlay", "base_assumptions",
+                 "merged_assumptions"):
         Path(getattr(snakemake.output, name)).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(getattr(snakemake.input, name)[best], getattr(snakemake.output, name))
     (
