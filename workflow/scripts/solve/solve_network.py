@@ -22,7 +22,10 @@ pd.options.mode.string_storage = "python"
 import geopandas as gpd
 import pyarrow.parquet as pq
 import pypsa
+import yaml
 
+from scripts.grid import _tariff
+from scripts.solve import _grid_tariff
 from scripts.solve._helpers_solve import find_transport_legs, read_run_inputs
 from scripts.solve.build_network import build_network, load_assumptions
 
@@ -148,6 +151,128 @@ def _tie_battery_inverter(n: pypsa.Network, snapshots) -> None:
     )
 
 
+def _solve(n: pypsa.Network, run: str, solver_options: dict, regimes: dict[str, dict]) -> str:
+    """Optimise under one regime per meter; the solver's condition.
+
+    Raises unless the solve is optimal or the regimes' bounds leave no feasible
+    plant, which only means this combination of regimes does not apply.
+    """
+    def extra_functionality(n, snapshots):
+        _tie_battery_inverter(n, snapshots)
+        for meter, regime in regimes.items():
+            _grid_tariff.add_regime_constraints(n, meter, regime)
+
+    status, condition = n.optimize(solver_name="highs", solver_options=solver_options,
+                                   extra_functionality=extra_functionality)
+    # A regime's bounds are hard constraints on top of the plant's fixed steel
+    # output. When no plant meets both, the LP has no solution. Such a regime
+    # caps the annual import below what the plant must import: a grid-only
+    # plant draws all its TWh from the grid, so a band that holds only up to,
+    # say, 100 GWh a year cannot be met. That says the tariff band does not
+    # apply, not that the model is broken, so the caller moves on to the next
+    # regime. A regime that is merely expensive is solved and loses on cost;
+    # only an impossible one ends here. DEU's regimes have no upper energy bound,
+    # and their lower ones (1 GWh, and 10 GWh at 7000 h for §19) a plant can
+    # always meet, if dearly, so none of them ends here; a country whose tariff
+    # caps a band's energy can.
+    if condition in ("infeasible", "infeasible_or_unbounded") and regimes:
+        return condition
+    # Anything short of an optimum exports zero capacities that read as the cheapest run.
+    if condition != "optimal":
+        raise RuntimeError(f"{run}: the solver ended with status {status!r}, condition {condition!r}")
+    return condition
+
+
+def _solve_cheapest_regime(n: pypsa.Network, run: str, solver_options: dict, grid_cfg: dict,
+                           tariffs: dict, prices: dict, waccs: dict) -> tuple[pypsa.Network, dict]:
+    """Solve once per combination of the meters' regimes and return the cheapest.
+
+    Cheapest is the objective plus what the LP leaves out: for each connection,
+    its regime's fixed €/yr and its fixed one-off sum per year.
+    Returns the cheapest solved network, which is n itself or a copy of it, and
+    what each meter's bill came to and every combination tried, for n.meta.
+    """
+    meters = _grid_tariff.meters(n)
+    combos = _grid_tariff.candidates(
+        {meter: _grid_tariff.regimes_of(tariffs[meter], grid_cfg) for meter in meters}
+    )
+    # What building each connection costs, the same whichever regime bills it.
+    connections = {meter: _grid_tariff.connection_of(tariffs[meter], grid_cfg) for meter in meters}
+
+    def outside_lp(combo: dict) -> float:
+        return sum(_grid_tariff.outside_lp_eur_per_year(regime, connections[meter], grid_cfg, waccs[meter])
+                   for meter, regime in combo.items())
+
+    tried = []
+    best_n, best = None, None
+    for position, combo in enumerate(combos):
+        for meter, regime in combo.items():
+            _grid_tariff.apply_regime(n, meter, regime, prices[meter], grid_cfg, waccs[meter],
+                                      connections[meter])
+        condition = _solve(n, run, solver_options, combo)
+        label = ", ".join(f"{meter}={regime['name']}" for meter, regime in combo.items()) or "no grid"
+        if condition != "optimal":
+            log.info(f"{run}: {label} leaves no feasible plant ({condition})")
+            tried.append({"regimes": label, "total_eur_per_year": None, "combo": combo})
+            continue
+        # The LP minimises only what varies with its decisions. A regime's fixed
+        # €/yr (metering, the tier offsets) and the connection's fixed one-off
+        # sum are constants: every grid run of a workbook area builds a
+        # connection, as its regimes hold from 1 GWh of import a year. A
+        # constant has no effect inside one solve, as in the objective it would
+        # move no decision, but the fixed €/yr differs between regimes, so both
+        # are added here for the comparison.
+        total = float(n.objective) + outside_lp(combo)
+        log.info(f"{run}: {label} costs {total:,.0f} EUR/yr")
+        entry = {"regimes": label, "total_eur_per_year": total, "combo": combo}
+        tried.append(entry)
+        if best is None or total < best["total_eur_per_year"]:
+            best = entry
+            # Every solve overwrites the results in n, so the cheapest network so
+            # far is kept as a copy, and replaced when a cheaper one comes along:
+            # at most two networks in memory, and no solve repeated to get the
+            # winner back. The last combination needs no copy, as nothing solves
+            # after it. PyPSA copies a solved network only without its solver
+            # model, which the next solve builds anew anyway.
+            if position == len(combos) - 1:
+                best_n = n
+            else:
+                n.model.solver_model = None
+                best_n = n.copy()
+
+    # If no regime fits, something is wrong (a tariff whose bands leave the plant
+    # nowhere to be), and a result that looks normal would hide it.
+    if best is None:
+        raise RuntimeError(f"{run}: no combination of grid tariff regimes leaves a feasible plant")
+    if len(combos) > 1:
+        log.info(f"{run}: cheapest of {len(combos)} regime combinations is {best['regimes']}")
+
+    bills = {}
+    for meter, regime in best["combo"].items():
+        bill = _grid_tariff.outcome(best_n, meter, regime, tariffs[meter], grid_cfg, waccs[meter])
+        # Every MW of p_nom is charged, so the optimum normally builds exactly
+        # the highest hourly import and h = E / p_nom is the real utilisation.
+        # A regime with an upper h bound (E ≤ h_max · p_nom) can instead be met
+        # by building more connection than the plant ever draws: p_nom rises, h
+        # falls on paper, and the cheaper low-h band applies. A real bill uses
+        # the measured peak, so such a result relies on a tariff the plant could
+        # not get. Forbidding it needs a binary variable (a MILP), so it is only
+        # flagged. For DEU it should not occur: the bands nearly meet at
+        # 2500 h and the extra MW also pay connection capex.
+        if bill["p_nom_mw"] > bill["peak_mw"] * (1 + 1e-3) + 1e-3:
+            log.warning(
+                f"{run}: {meter} is built at {bill['p_nom_mw']:.1f} MW but imports at most "
+                f"{bill['peak_mw']:.1f} MW, so regime {regime['name']} rests on a peak "
+                f"the plant never draws"
+            )
+        bills[meter] = bill
+    return best_n, {
+        "meters": bills,
+        "candidates": [{"regimes": entry["regimes"], "total_eur_per_year": entry["total_eur_per_year"]}
+                       for entry in tried],
+    }
+
+
 def main() -> None:
     """Assemble rule inputs, build and solve the network, export it to netCDF.
 
@@ -253,6 +378,23 @@ def main() -> None:
         sites=sites, demand_site=demand_site, transport_legs=transport_legs,
         destination_price=destination_price,
     )
+
+    # Each grid area's tariff, by the meter it bills: the origin's import and,
+    # on an export, the destination's supply. Each file is the area's whole
+    # electricity charges, for every consumer its workbook names; the run is
+    # charged as the config's one, and the solve uses its grid and connection.
+    consumer = snakemake.params.consumer
+    tariff_by_area = {}
+    for raw in snakemake.input.charges:
+        tariff = _tariff.for_consumer(yaml.safe_load(Path(raw).read_text(encoding="utf-8")), consumer)
+        tariff_by_area[tariff["area"]] = tariff
+    tariffs = {_grid_tariff.GRID_IMPORT: tariff_by_area.get(run_inputs["origin"]),
+               _grid_tariff.DESTINATION_SUPPLY: tariff_by_area.get(run_inputs["destination"])}
+    prices = {_grid_tariff.GRID_IMPORT: price_series,
+              _grid_tariff.DESTINATION_SUPPLY: destination_price}
+    waccs = {_grid_tariff.GRID_IMPORT: assumptions["finance"]["origin_wacc"],
+             _grid_tariff.DESTINATION_SUPPLY: assumptions["finance"]["destination_wacc"]}
+
     log.info(f"optimising with HiGHS (snapshots={len(n.snapshots)})")
     # HiGHS parallelises across cores by default (not governed by OMP_NUM_THREADS).
     # When running many independent solves in parallel (batch runs), pin each to a
@@ -273,11 +415,9 @@ def main() -> None:
         solver_options["solver"] = highs_solver
         if highs_solver == "ipm":
             solver_options["run_crossover"] = os.environ.get("HIGHS_CROSSOVER", "off")
-    status, condition = n.optimize(solver_name="highs", solver_options=solver_options,
-                                   extra_functionality=_tie_battery_inverter)
-    # Anything short of an optimum exports zero capacities that read as the cheapest run.
-    if condition != "optimal":
-        raise RuntimeError(f"{run}: the solver ended with status {status!r}, condition {condition!r}")
+    # The cheapest regime's network, which may be a copy: n from here on.
+    n, grid_tariff = _solve_cheapest_regime(n, run, solver_options, assumptions["grid"],
+                                            tariffs, prices, waccs)
 
     battery_energy_mwh = n.stores.at["battery", "e_nom_opt"]
     inverter_mw = n.links.at["battery_charger", "p_nom_opt"]
@@ -293,6 +433,10 @@ def main() -> None:
     # stays tied to what produced it. compile_report lifts `inputs_hash` into a
     # report column; the per-file map stays here.
     n.meta.update(input_manifest([Path(raw) for raw in snakemake.input]))
+    # The regime each meter is billed under and what it came to, with the fixed
+    # €/yr and the connection's fixed sum that the objective leaves out, and
+    # every combination the solve tried. Saved in the .nc; the report reads it.
+    n.meta["grid_tariff"] = grid_tariff
     # And the code that read them. Snakemake runs this file from a copy under
     # .snakemake/scripts/, so it names its own repo path to be counted.
     n.meta.update(code_manifest(

@@ -20,6 +20,17 @@ inputs:
   assumptions: config/generated/assumptions.yaml
   scenarios: config/generated/scenarios.csv
 
+electricity_charges:
+  # Which consumer of an area's electricity-charges workbook
+  # (data/electricity_charges/{area}.xlsx, its tariff sheet's `consumer`
+  # column) every run is charged as: its grid regimes, its charges on
+  # consumption, its connection costs. `iron_steel` is the plant the model is
+  # for, making iron, steel or both (NACE 24.10, basic iron and steel).
+  # To price the same plant as a standard consumer, run in a checkout of its
+  # own, as the results go to the same paths:
+  #   snakemake --config electricity_charges='{consumer: standard}'
+  consumer: iron_steel
+
 entsoe:
   # Per-(area, data_type) downloads are pulled on demand by the scenario tables;
   # the bidding-zone catalog lives in data/entsoe_cache/entsoe_bidding_zones.csv.
