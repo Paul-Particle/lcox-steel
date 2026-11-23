@@ -207,6 +207,77 @@ def _storage_carbon(
     return pd.Series(given_back, index=storage_flow.index), lost + (carbon - opening)
 
 
+def _electricity_draws(n: pypsa.Network) -> list[tuple[str, str, pd.Series]]:
+    """Every electricity draw of the run as (user, bus, hourly MW drawn).
+
+    A user is a process the plant runs on electricity: the electrolyser, a
+    reduction shaft's auxiliaries, the furnace's melt, the H2 preheat. Its draw
+    is what it took from the electricity bus each hour; the bus says which
+    system it drew from, the home plant's or, on an export route, the
+    destination's. Own renewables are counted like grid power: a draw is a
+    draw, wherever the MWh came from.
+
+    The one place that decides what counts as consumption: the emission fields
+    and the `el_*_gwh` rows read it, so neither can count a different amount
+    from the other.
+
+    Which links draw electricity is read off the network — on bus0 as their
+    input (an electrolyser, a MOE cell) or on bus2 alongside the conversion
+    they exist for (a shaft's auxiliaries, the furnace's melt) — and either way
+    PyPSA reads a positive port flow as withdrawn from that bus, so both are
+    positive as they stand. The lines and the battery are no users: a line's
+    loss and what the battery keeps are losses, which the report carries apart.
+    The schema's list is what the report has columns for, so a new drawing link
+    is an error here rather than a silent hole in the total.
+    """
+    # PyPSA's netCDF export drops a time-varying column whose every value is the
+    # default, so a link that never ran comes back missing rather than zero.
+    link_p0 = n.links_t.p0.reindex(columns=n.links.index, fill_value=0.0)
+    # bus2 is optional, so a route whose links all take their electricity on
+    # bus0 has neither the column nor the frame.
+    link_p2 = (n.links_t["p2"].reindex(columns=n.links.index, fill_value=0.0)
+               if "p2" in n.links_t else link_p0 * 0.0)
+    link_bus2 = (n.links["bus2"] if "bus2" in n.links.columns
+                 else pd.Series("", index=n.links.index))
+    # And bus3, which only the H2 shaft uses: the preheat on its H2 feed.
+    link_p3 = (n.links_t["p3"].reindex(columns=n.links.index, fill_value=0.0)
+               if "p3" in n.links_t else link_p0 * 0.0)
+    link_bus3 = (n.links["bus3"] if "bus3" in n.links.columns
+                 else pd.Series("", index=n.links.index))
+
+    draws = []
+    for link in n.links.index:
+        if n.links.at[link, "carrier"] == "HVDC":
+            continue    # a line rather than a user; its loss is a loss
+        if n.links.at[link, "carrier"] == "battery":
+            continue    # storage moves a draw between hours rather than making
+            # one; what it keeps is the battery's loss
+        on_bus0 = n.buses.at[n.links.at[link, "bus0"], "carrier"] == "AC"
+        bus2 = link_bus2[link]
+        if not on_bus0 and not (bus2 and n.buses.at[bus2, "carrier"] == "AC"):
+            continue
+        if link not in ELECTRICITY_USERS:
+            raise ValueError(
+                f"{link} draws electricity but the report has no field for it. Add it "
+                f"to ELECTRICITY_USERS in common/_report_schema.py, or its draw goes "
+                f"missing from the run's total while every share still reads 100 %."
+            )
+        draws.append((link, n.links.at[link, "bus0"], link_p0[link]) if on_bus0
+                     else (link, bus2, link_p2[link]))
+        # A second draw on bus3 is reported under the user it is for, not the
+        # link it is on: the H2 shaft's preheat sits with the blend shaft's, so
+        # the preheat has one row whichever shaft drew it.
+        bus3 = link_bus3[link]
+        if bus3 and n.buses.at[bus3, "carrier"] == "AC":
+            if link not in SECOND_DRAWS:
+                raise ValueError(
+                    f"{link} draws electricity on bus3 but the report does not know "
+                    f"what for. Name the user it belongs to in SECOND_DRAWS."
+                )
+            draws.append((SECOND_DRAWS[link], bus3, link_p3[link]))
+    return draws
+
+
 def _emissions_breakdown(
     n: pypsa.Network, emissions_cfg: dict,
     area: str, transport_legs: dict | None, grid_mix: pd.DataFrame | None,
@@ -262,17 +333,6 @@ def _emissions_breakdown(
     link_p0 = n.links_t.p0.reindex(columns=n.links.index, fill_value=0.0)
     link_p1 = n.links_t.p1.reindex(columns=n.links.index, fill_value=0.0)
     store_e = n.stores_t.e.reindex(columns=n.stores.index, fill_value=0.0)
-    # bus2 is optional, so a route whose links all take their electricity on
-    # bus0 has neither the column nor the frame.
-    link_p2 = (n.links_t["p2"].reindex(columns=n.links.index, fill_value=0.0)
-               if "p2" in n.links_t else link_p0 * 0.0)
-    link_bus2 = (n.links["bus2"] if "bus2" in n.links.columns
-                 else pd.Series("", index=n.links.index))
-    # And bus3, which only the H2 shaft uses: the preheat on its H2 feed.
-    link_p3 = (n.links_t["p3"].reindex(columns=n.links.index, fill_value=0.0)
-               if "p3" in n.links_t else link_p0 * 0.0)
-    link_bus3 = (n.links["bus3"] if "bus3" in n.links.columns
-                 else pd.Series("", index=n.links.index))
 
     # The destination is found by who feeds it rather than by name, so the bus
     # can be renamed in build_network without breaking the report.
@@ -346,51 +406,15 @@ def _emissions_breakdown(
     supplied = generated + discharged
     home_intensity = ((carried + stored_carried) / supplied).where(supplied > 0, 0.0)
 
-    # Which links draw electricity is read off the network — on bus0 as their
-    # input (an electrolyser, a MOE cell) or on bus2 alongside the conversion
-    # they exist for (a shaft's auxiliaries, the furnace's melt) — and either way
-    # PyPSA reads a positive port flow as withdrawn from that bus, so both are
-    # positive as they stand. The schema's list is what the report has columns
-    # for, so a new drawing link is an error here rather than a silent hole in
-    # the total.
+    # Each user's draw (see `_electricity_draws`) at the intensity of the system
+    # it drew from, hour by hour.
     electricity_mwh = {}
     electricity_by_user = {}
-    for link in n.links.index:
-        if n.links.at[link, "carrier"] == "HVDC":
-            continue    # a line rather than a user; its loss is charged below
-        if n.links.at[link, "carrier"] == "battery":
-            continue    # storage moves a draw between hours rather than making
-            # one; what it keeps is charged as battery_losses
-        on_bus0 = n.buses.at[n.links.at[link, "bus0"], "carrier"] == "AC"
-        bus2 = link_bus2[link]
-        if not on_bus0 and not (bus2 and n.buses.at[bus2, "carrier"] == "AC"):
-            continue
-        if link not in ELECTRICITY_USERS:
-            raise ValueError(
-                f"{link} draws electricity but the report has no field for it. Add it "
-                f"to ELECTRICITY_USERS in common/_report_schema.py, or its draw goes "
-                f"missing from the run's total while every share still reads 100 %."
-            )
-        draw, bus = ((link_p0[link], n.links.at[link, "bus0"]) if on_bus0
-                     else (link_p2[link], bus2))
+    for user, bus, draw in _electricity_draws(n):
         intensity = destination_intensity if bus == destination_bus else home_intensity
-        electricity_mwh[link] = float(draw.sum()) * annual
-        electricity_by_user[link] = float((draw * intensity).sum()) * annual
-        # A second draw on bus3 is reported under the user it is for, not the
-        # link it is on: the H2 shaft's preheat sits with the blend shaft's, so
-        # the preheat has one row whichever shaft drew it.
-        bus3 = link_bus3[link]
-        if bus3 and n.buses.at[bus3, "carrier"] == "AC":
-            if link not in SECOND_DRAWS:
-                raise ValueError(
-                    f"{link} draws electricity on bus3 but the report does not know "
-                    f"what for. Name the user it belongs to in SECOND_DRAWS."
-                )
-            user = SECOND_DRAWS[link]
-            intensity = destination_intensity if bus3 == destination_bus else home_intensity
-            electricity_mwh[user] = electricity_mwh.get(user, 0.0) + float(link_p3[link].sum()) * annual
-            electricity_by_user[user] = (electricity_by_user.get(user, 0.0)
-                                         + float((link_p3[link] * intensity).sum()) * annual)
+        electricity_mwh[user] = electricity_mwh.get(user, 0.0) + float(draw.sum()) * annual
+        electricity_by_user[user] = (electricity_by_user.get(user, 0.0)
+                                     + float((draw * intensity).sum()) * annual)
     emissions = dict(electricity_by_user)
     electricity_t = sum(electricity_by_user.values())
 
