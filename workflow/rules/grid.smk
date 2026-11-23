@@ -26,3 +26,23 @@ rule retrieve_grid_data:
         entsoe_api=2,
     script:
         "../scripts/grid/retrieve_grid_data.py"
+
+
+rule build_electricity_charges:
+    """One area's electricity charges, for every consumer its workbook names.
+
+    Runs because solve_network and compile_report ask for an area's YAML, and
+    again whenever the workbook is saved, which reruns every solve and report
+    that reads it.
+    """
+    input:
+        # One workbook per country. An area without one gets a file that leaves
+        # its grid on the config's `grid` fees and charges nothing on consumption.
+        workbook=optional("data/electricity_charges/{area}.xlsx"),
+    output:
+        # Generated and not committed (.gitignore); the workbook is the source.
+        charges="resources/electricity_charges/{area}.yaml",
+    log:
+        "logs/build_electricity_charges/{area}.log",
+    script:
+        "../scripts/grid/build_electricity_charges.py"
