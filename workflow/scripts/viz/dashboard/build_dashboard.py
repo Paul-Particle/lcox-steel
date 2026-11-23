@@ -143,6 +143,10 @@ COST_GROUPS = [
     ["battery",         "Battery",                    "#D75674"],
     ["transmission",    "Transmission (HVDC)",        "#83D1DD"],
     ["grid",            "Grid (connection + energy)", "#71828F"],
+    # Charges on consumption, own renewables included: negative where they are
+    # subsidies, and a negative band is not stacked (see `_record`).
+    ["consumption_charges", "Charges on consumption", "#9BBF85"],
+    ["destination_consumption_charges", "Destination charges on consumption", "#C4DDB5"],
 ]
 
 # Capacity panels: (title, unit, [(key, label, colour), ...]). Keys are columns

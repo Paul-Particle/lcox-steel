@@ -231,9 +231,31 @@ def leaf_inputs(row: pd.Series) -> dict:
         quantity("cf_grid_connection", "utilisation", "{:.0%}"),
     )
     add("grid_connection_capex", *connection_lines)
-    add("grid_capacity_fee", *connection_lines)
+
+    # The tariff the run was billed on, per connection: its regime and the hours
+    # it reached, which decide the rates, and the whole bill. Only for a
+    # connection the run has, which is the one with a regime. Read with .get, as
+    # a report written before tariffs has none of these fields.
+    def tariff_lines(prefix: str) -> tuple:
+        regime = row.get(f"{prefix}_tariff_regime")
+        if pd.isna(regime):
+            return ()
+        return (
+            ("tariff regime", str(regime)),
+            None if pd.isna(row.get(f"{prefix}_utilisation_hours"))
+            else quantity(f"{prefix}_utilisation_hours", "utilisation", "{:,.0f} h"),
+            quantity(f"{prefix}_charges_eur_per_t_steel", "whole tariff bill", "{:,.1f} €/t steel"),
+        )
+
+    add("grid_capacity_fee", *connection_lines, *tariff_lines("grid"))
+    add("grid_fee", quantity("grid_fee_eur_per_mwh", "per MWh imported, all in", "{:,.1f} €/MWh"),
+        *tariff_lines("grid"))
     add("grid_market", quantity("grid_price_eur_per_mwh", "average price paid",
                                 "{:,.1f} €/MWh imported"))
+    add("destination_grid_capacity_fee", *tariff_lines("destination_grid"))
+    add("destination_grid_fee",
+        quantity("destination_grid_fee_eur_per_mwh", "per MWh drawn, all in", "{:,.1f} €/MWh"),
+        *tariff_lines("destination_grid"))
     add("transmission", quantity("lcoe_transmission_eur_per_mwh", "levelised",
                                  "{:,.1f} €/MWh delivered"))
 
@@ -428,29 +450,48 @@ def spec(assumptions: dict) -> list:
          ("round-trip efficiency", f"{battery['efficiency_roundtrip'] * 100:.0f}%")])
 
     grid = assumptions["grid"]
+    # An area with an electricity-charges workbook is billed at its regime's
+    # rates and pays its workbook's connection costs, which the run's hover and
+    # electricity_charges file give; the config's fees and capex quote price
+    # only the areas without one.
+    tariff_note = ("areas with a charges workbook", "billed at their regime, see the run")
+    connection_note = ("areas with a charges workbook", "their workbook's connection costs, see the run")
     add("grid_connection_capex", "Grid connection — capital", "#71828F",
-        [("capex quote", f"{grid['connection_capex_eur_per_mw'] / 1e3:,.0f} k€/MW"),
+        [("capex quote, areas without a charges workbook",
+          f"{grid['connection_capex_eur_per_mw'] / 1e3:,.0f} k€/MW"), connection_note,
          ("financing period", f"{grid['connection_financing_period']:.0f} y"), wacc_line])
     add("grid_capacity_fee", "Grid connection — capacity charge", "#98A5AE",
-        [("capacity charge (Leistungspreis)",
-          f"{grid['fee_eur_per_mw_per_year'] / 1e3:,.0f} k€/MW·yr")])
+        [("capacity charge, areas without a charges workbook",
+          f"{grid['fee_eur_per_mw_per_year'] / 1e3:,.0f} k€/MW·yr"), tariff_note])
     add("grid_market", "Grid energy — market price", "#B7C1C8")
-    add("grid_fee", "Grid energy — volumetric fee", "#D3DAE0",
-        [("volumetric charge (Arbeitspreis)", f"{grid['fee_eur_per_mwh']:,.1f} €/MWh imported")])
+    # Everything else the grid tariff bills is in this band: the per-MWh
+    # charges and the fixed €/yr; the run's electricity_charges file lists them.
+    add("grid_fee", "Grid energy — fees and levies", "#D3DAE0",
+        [("volumetric charge, areas without a charges workbook",
+          f"{grid['fee_eur_per_mwh']:,.1f} €/MWh imported"), tariff_note])
     add("transmission", "Transmission (HVDC)", "#83D1DD")
+    # What the area charges on every MWh the plant consumed, own renewables
+    # included: the subsidies, where it is negative.
+    consumption_note = ("rate", "per area's charges workbook, see the run")
+    add("consumption_charges", "Charges on consumption (subsidies negative)", "#9BBF85",
+        [consumption_note])
     # The destination furnace's connection, on the same grid quotes as the
     # origin's, in the destination blue so the two sides read apart.
     destination = assumptions["destination"]
     add("destination_grid_connection_capex", "Destination grid connection — capital", "#0293D2",
-        [("capex quote", f"{grid['connection_capex_eur_per_mw'] / 1e3:,.0f} k€/MW"),
+        [("capex quote, areas without a charges workbook",
+          f"{grid['connection_capex_eur_per_mw'] / 1e3:,.0f} k€/MW"), connection_note,
          ("financing period", f"{grid['connection_financing_period']:.0f} y")])
     add("destination_grid_capacity_fee", "Destination grid connection — capacity charge", "#3AA9DB",
-        [("capacity charge (Leistungspreis)",
-          f"{grid['fee_eur_per_mw_per_year'] / 1e3:,.0f} k€/MW·yr")])
+        [("capacity charge, areas without a charges workbook",
+          f"{grid['fee_eur_per_mw_per_year'] / 1e3:,.0f} k€/MW·yr"), tariff_note])
     add("destination_grid_market", "Destination grid energy — market price", "#70C0E5",
         [("market", f"{destination['area']}, hourly day-ahead")])
-    add("destination_grid_fee", "Destination grid energy — volumetric fee", "#A6D7EF",
-        [("volumetric charge (Arbeitspreis)", f"{grid['fee_eur_per_mwh']:,.1f} €/MWh imported")])
+    add("destination_grid_fee", "Destination grid energy — fees and levies", "#A6D7EF",
+        [("volumetric charge, areas without a charges workbook",
+          f"{grid['fee_eur_per_mwh']:,.1f} €/MWh imported"), tariff_note])
+    add("destination_consumption_charges", "Destination charges on consumption (subsidies negative)",
+        "#C4DDB5", [consumption_note])
     freight = assumptions["transport"]
     add("transport", "Freight", "#BDCCD9",
         [(f"{mode}, {commodity}",
