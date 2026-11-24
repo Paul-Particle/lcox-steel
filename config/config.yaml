@@ -26,7 +26,8 @@ inputs:
 # Setup). On our multi-year designs stock HiPO mistakes slow progress for
 # stagnation and falls back to IPX; three correctors and a progress test fix that.
 # HiPO's own feasibility target sits a tenth below the tolerance HiGHS checks the
-# final solution against, so the check after postsolve passes.
+# final solution against, so the check after postsolve passes. When HiPO stalls
+# right at the end, it offers its best iterate to that check, not its last.
 solving:
   highs:
     solver: hipo
@@ -34,6 +35,7 @@ solving:
     hipo_correctors: 3
     hipo_stagnation_min_progress: 0.1
     hipo_feasibility_tolerance_factor: 0.1
+    hipo_stagnation_check_best: true
     ipm_iteration_limit: 500
 
 entsoe:

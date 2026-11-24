@@ -193,17 +193,18 @@ single-checkout install, `snakemake` works as it is.
 
 Solves use HiPO, HiGHS's interior-point solver, with options that the released
 HiGHS lacks (`solving.highs` in `config/config.yaml`). They come from a HiGHS
-1.16.0 fork, checked out at `~/projects/modelling/highs-hipo`;
-its `hipo-tuning/README.md` says why they are needed and how they were tested.
+1.16.0 fork, [Paul-Particle/highs-hipo](https://github.com/Paul-Particle/highs-hipo),
+pinned below to the commit whose options the config uses; its
+`hipo-tuning/README.md` says why they are needed and how they were tested.
 Install the fork's highspy over the environment's, together with the released
 extras package (OpenBLAS on Linux, Metis, AMD), in whichever environment Step 2
 installed the package into:
 
 ```bash
-uv pip install --python .venv/bin/python highspy-extras==1.16.0 ~/projects/modelling/highs-hipo
+uv pip install --python .venv/bin/python highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@69a1119cdb9f41a62a4b683776f17af5a2ad60f2"
 ```
 
-Without a venv, use `pip install highspy-extras==1.16.0 ~/projects/modelling/highs-hipo`.
+Without a venv, use `pip install highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@69a1119cdb9f41a62a4b683776f17af5a2ad60f2"`.
 The build compiles HiGHS (a few minutes; CMake comes with the build). A solve
 with a highspy that lacks the options stops at once and names them.
 
