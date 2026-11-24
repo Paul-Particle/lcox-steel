@@ -584,7 +584,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
     const contrib=(lp(rec,"grid_connection")||0)+(lp(rec,"grid_energy")||0);
     const out=[["grid electricity:", amountOf(contrib||null, rec.lcoe, "LCOE", "€/MWh", 1, delivered)]];
     if(price!=null) out.push(["· market price", amount(price,"€/MWh",1)]);
-    if(fee!=null)   out.push(["· volumetric fee", amount(fee,"€/MWh",1)]);
+    if(fee!=null)   out.push(["· fees and levies", amount(fee,"€/MWh",1)]);
     if(conn!=null)  out.push(["· connection", amount(conn,"€/MWh",1)]);
     return out;
   }
@@ -766,7 +766,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
             out.unshift(["· LCOE per MWh of renewables generated", amount(lo(rec,"renewables"),"€/MWh",1)]);
           return out;
         }
-        if(key==="grid_energy") return gridLines(rec).filter(l=>l[0]==="· market price"||l[0]==="· volumetric fee");
+        if(key==="grid_energy") return gridLines(rec).filter(l=>l[0]==="· market price"||l[0]==="· fees and levies");
         if(key==="grid_connection") return gridLines(rec).filter(l=>l[0]==="· connection");
         return [];
       }

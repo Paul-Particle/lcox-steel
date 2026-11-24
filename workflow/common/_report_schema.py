@@ -88,7 +88,8 @@ PROCESS_LINKS = ("h2-dri", "ng-dri", "mix-dri", "eaf", "moe", "ewin", "briquetti
 # them. Together they are the total annual cost.
 COST_GROUPS = ("res", "battery", "grid", "gas", "electrolyser", "h2_buffer",
                "total_plant", "ore", "eaf_consumables", "iron_or_hbi_store", "steel_store",
-               "transmission", "transport", "destination_electricity")
+               "transmission", "transport", "destination_electricity",
+               "consumption_charges", "destination_consumption_charges")
 
 # The links that draw electricity, by the id `build_network` gives them. Each
 # takes it either on bus0 (electricity in, product out) or on bus2 (a by-draw
@@ -189,6 +190,12 @@ LEAF_COSTS_BY_GROUP = (
     ("destination_grid_capacity_fee", "electricity"),
     ("destination_grid_market", "electricity"),
     ("destination_grid_fee", "electricity"),
+    # What the area charges on the electricity the plant's users consumed, own
+    # renewables included, whatever the run's power source (the workbook's
+    # `consumption_eur_per_mwh` rows): negative where it is a subsidy. The
+    # origin's users, and the destination furnace's on an export route.
+    ("consumption_charges", "electricity"),
+    ("destination_consumption_charges", "electricity"),
     # The stockpile between ironmaking and what follows it, whatever it holds:
     # the iron on a route that stores it, the briquettes on one that presses its
     # DRI for export. The whole of the `iron_or_hbi_store` cost group.
@@ -215,6 +222,7 @@ COST_GROUP_PARENT = {
     "electrolyser": "hydrogen", "h2_buffer": "hydrogen",
     "res": "electricity", "battery": "electricity", "grid": "electricity",
     "transmission": "electricity", "destination_electricity": "electricity",
+    "consumption_charges": "electricity", "destination_consumption_charges": "electricity",
     "iron_or_hbi_store": "storage", "steel_store": "storage",
     "transport": "transport",
 }
@@ -265,6 +273,7 @@ IRON_ELECTRICITY_PARTS = (
                    f"res_{field_stem(tech)}_fom")),
     "battery", "battery_power_capex", "battery_energy_capex", "battery_fom",
     "grid", "grid_connection_capex", "grid_capacity_fee", "grid_market", "grid_fee",
+    "consumption_charges",
     "transmission",
 )
 assert set(ORIGIN_ELECTRICITY_LEAVES) <= set(IRON_ELECTRICITY_PARTS)
@@ -312,6 +321,10 @@ REPORT_FIELDS = {
     "start_date": UNDEFINED,
     "end_date": UNDEFINED,
     **{variant_field(tech): UNDEFINED for tech in INPUT_TECHS},
+    # Which consumer of the areas' electricity-charges workbooks the run was
+    # charged as: `iron_steel` unless the run was asked for another
+    # (config `electricity_charges.consumer`).
+    "electricity_consumer": UNDEFINED,
 
     # Annual system cost and the groups it is made of.
     "total_annual_cost_meur": ZERO,
@@ -364,6 +377,9 @@ REPORT_FIELDS = {
     "lcoe_grid_energy_eur_per_mwh": ZERO,
     "lcoe_transmission_eur_per_mwh": ZERO,
     "lcoe_destination_electricity_eur_per_mwh": ZERO,
+    # What both sides' consumption was charged, over the same MWh; negative
+    # where it is a subsidy.
+    "lcoe_consumption_charges_eur_per_mwh": ZERO,
     "lcoe_renewables_eur_per_mwh_renewables": UNDEFINED,
     **{f"lcoe_{field_stem(tech)}_eur_per_mwh_{field_stem(tech)}": UNDEFINED for tech in RES_TECHS},
     # The battery's yearly cost over what it gave back. Not what a stored MWh
@@ -390,6 +406,17 @@ REPORT_FIELDS = {
     "destination_grid_connection_eur_per_mwh_imported": UNDEFINED,
     "destination_grid_connection_capex_eur_per_mwh_imported": UNDEFINED,
     "destination_grid_capacity_fee_eur_per_mwh_imported": UNDEFINED,
+    # The tariff each connection was billed on (n.meta["grid_tariff"]): the
+    # regime the solve picked, `config` for an area without a workbook, and the
+    # utilisation hours its peak and energy came to. Then the whole grid bill
+    # per tonne, `cost_grid_capacity_fee` and `cost_grid_fee` together. The
+    # run's electricity_charges file lists the bill component by component.
+    "grid_tariff_regime": UNDEFINED,
+    "grid_utilisation_hours": UNDEFINED,
+    "grid_charges_eur_per_t_steel": ZERO,
+    "destination_grid_tariff_regime": UNDEFINED,
+    "destination_grid_utilisation_hours": UNDEFINED,
+    "destination_grid_charges_eur_per_t_steel": ZERO,
 
     # Hydrogen: the levelised cost, its parts, and the plant behind them. The
     # parts are per kg, the unit hydrogen is quoted in; they stack to
@@ -746,10 +773,11 @@ MORE_DECIMALS = tuple(field for field in REPORT_FIELDS
 # The fields that say what the run was rather than what it cost. They lead the
 # file, so everything below them is numbers and a reader can skip straight to it.
 IDENTITY_FIELDS = ("scenario", "run", "origin", "destination", "route", "start_date", "end_date",
-                   *(variant_field(tech) for tech in INPUT_TECHS),
+                   *(variant_field(tech) for tech in INPUT_TECHS), "electricity_consumer",
                    # Prose, not a measurement: everything outside this tuple is
                    # coerced to a number when a report is read back.
-                   "emissions_basis", "emissions_unavailable_reason", "inputs_hash",
+                   "emissions_basis", "emissions_unavailable_reason",
+                   "grid_tariff_regime", "destination_grid_tariff_regime", "inputs_hash",
                    "code_hash", "run_timestamp", "model_run_id")
 
 # Fields only the diagnostic carries, for three separate reasons. The run,

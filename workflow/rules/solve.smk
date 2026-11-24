@@ -20,6 +20,16 @@ rule solve_network:
                 within=scenarios_df,
             ),
         ),
+        # The electricity charges of every area the run buys grid power in: the
+        # origin's and, on an export, the destination's. The solve reads their
+        # grid regimes; the script matches them by area.
+        charges=collect(
+            "resources/electricity_charges/{item.area}.yaml",
+            item=lookup(
+                query="scenario == '{scenario}' and run == '{run}' and tech == 'grid'",
+                within=scenarios_df,
+            ),
+        ),
         # Every input series of the run, in the order its rows list them.
         timeseries=collect(
             "resources/timeseries/{item.area}_{item.tech}_{item.variant}_{item.start_date}_{item.end_date}.parquet",
@@ -28,6 +38,9 @@ rule solve_network:
                 within=scenarios_df,
             ),
         ),
+    params:
+        # Which of the workbooks' consumers the run is charged as.
+        consumer=lookup(dpath="electricity_charges/consumer", within=config),
     output:
         network="results/{scenario}/.runs/{scenario}_{run}/outputs/{scenario}_{run}.nc",
     log:

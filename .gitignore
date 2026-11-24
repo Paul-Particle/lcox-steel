@@ -1,6 +1,8 @@
 # Operating System Files
 .DS_Store
 .ipynb_checkpoints/
+# Office lock files, present while a workbook is open
+~$*
 
 # Python
 __pycache__/
@@ -39,6 +41,7 @@ data/canada_cache/*
 # repo does not ship, and the demo has to run after a fresh clone.
 resources/*.parquet
 resources/timeseries/
+resources/electricity_charges/
 resources/shapes/
 !resources/shapes/*.parquet
 

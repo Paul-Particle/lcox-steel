@@ -40,6 +40,7 @@ from common._report_schema import (
     variant_field,
     write_report_file,
 )
+from scripts.grid import _tariff
 from scripts.solve._helpers_solve import (
     annuity_factor, deep_merge, find_transport_legs, mean_year_hours, read_run_inputs,
 )
@@ -207,6 +208,77 @@ def _storage_carbon(
     return pd.Series(given_back, index=storage_flow.index), lost + (carbon - opening)
 
 
+def _electricity_draws(n: pypsa.Network) -> list[tuple[str, str, pd.Series]]:
+    """Every electricity draw of the run as (user, bus, hourly MW drawn).
+
+    A user is a process the plant runs on electricity: the electrolyser, a
+    reduction shaft's auxiliaries, the furnace's melt, the H2 preheat. Its draw
+    is what it took from the electricity bus each hour; the bus says which
+    system it drew from, the home plant's or, on an export route, the
+    destination's. Own renewables are counted like grid power: a draw is a
+    draw, wherever the MWh came from.
+
+    The one place that decides what counts as consumption: the emission fields,
+    the `el_*_gwh` rows and the charges on consumption read it, so none of them
+    can count a different amount from the others.
+
+    Which links draw electricity is read off the network — on bus0 as their
+    input (an electrolyser, a MOE cell) or on bus2 alongside the conversion
+    they exist for (a shaft's auxiliaries, the furnace's melt) — and either way
+    PyPSA reads a positive port flow as withdrawn from that bus, so both are
+    positive as they stand. The lines and the battery are no users: a line's
+    loss and what the battery keeps are losses, which the report carries apart.
+    The schema's list is what the report has columns for, so a new drawing link
+    is an error here rather than a silent hole in the total.
+    """
+    # PyPSA's netCDF export drops a time-varying column whose every value is the
+    # default, so a link that never ran comes back missing rather than zero.
+    link_p0 = n.links_t.p0.reindex(columns=n.links.index, fill_value=0.0)
+    # bus2 is optional, so a route whose links all take their electricity on
+    # bus0 has neither the column nor the frame.
+    link_p2 = (n.links_t["p2"].reindex(columns=n.links.index, fill_value=0.0)
+               if "p2" in n.links_t else link_p0 * 0.0)
+    link_bus2 = (n.links["bus2"] if "bus2" in n.links.columns
+                 else pd.Series("", index=n.links.index))
+    # And bus3, which only the H2 shaft uses: the preheat on its H2 feed.
+    link_p3 = (n.links_t["p3"].reindex(columns=n.links.index, fill_value=0.0)
+               if "p3" in n.links_t else link_p0 * 0.0)
+    link_bus3 = (n.links["bus3"] if "bus3" in n.links.columns
+                 else pd.Series("", index=n.links.index))
+
+    draws = []
+    for link in n.links.index:
+        if n.links.at[link, "carrier"] == "HVDC":
+            continue    # a line rather than a user; its loss is a loss
+        if n.links.at[link, "carrier"] == "battery":
+            continue    # storage moves a draw between hours rather than making
+            # one; what it keeps is the battery's loss
+        on_bus0 = n.buses.at[n.links.at[link, "bus0"], "carrier"] == "AC"
+        bus2 = link_bus2[link]
+        if not on_bus0 and not (bus2 and n.buses.at[bus2, "carrier"] == "AC"):
+            continue
+        if link not in ELECTRICITY_USERS:
+            raise ValueError(
+                f"{link} draws electricity but the report has no field for it. Add it "
+                f"to ELECTRICITY_USERS in common/_report_schema.py, or its draw goes "
+                f"missing from the run's total while every share still reads 100 %."
+            )
+        draws.append((link, n.links.at[link, "bus0"], link_p0[link]) if on_bus0
+                     else (link, bus2, link_p2[link]))
+        # A second draw on bus3 is reported under the user it is for, not the
+        # link it is on: the H2 shaft's preheat sits with the blend shaft's, so
+        # the preheat has one row whichever shaft drew it.
+        bus3 = link_bus3[link]
+        if bus3 and n.buses.at[bus3, "carrier"] == "AC":
+            if link not in SECOND_DRAWS:
+                raise ValueError(
+                    f"{link} draws electricity on bus3 but the report does not know "
+                    f"what for. Name the user it belongs to in SECOND_DRAWS."
+                )
+            draws.append((SECOND_DRAWS[link], bus3, link_p3[link]))
+    return draws
+
+
 def _emissions_breakdown(
     n: pypsa.Network, emissions_cfg: dict,
     area: str, transport_legs: dict | None, grid_mix: pd.DataFrame | None,
@@ -262,17 +334,6 @@ def _emissions_breakdown(
     link_p0 = n.links_t.p0.reindex(columns=n.links.index, fill_value=0.0)
     link_p1 = n.links_t.p1.reindex(columns=n.links.index, fill_value=0.0)
     store_e = n.stores_t.e.reindex(columns=n.stores.index, fill_value=0.0)
-    # bus2 is optional, so a route whose links all take their electricity on
-    # bus0 has neither the column nor the frame.
-    link_p2 = (n.links_t["p2"].reindex(columns=n.links.index, fill_value=0.0)
-               if "p2" in n.links_t else link_p0 * 0.0)
-    link_bus2 = (n.links["bus2"] if "bus2" in n.links.columns
-                 else pd.Series("", index=n.links.index))
-    # And bus3, which only the H2 shaft uses: the preheat on its H2 feed.
-    link_p3 = (n.links_t["p3"].reindex(columns=n.links.index, fill_value=0.0)
-               if "p3" in n.links_t else link_p0 * 0.0)
-    link_bus3 = (n.links["bus3"] if "bus3" in n.links.columns
-                 else pd.Series("", index=n.links.index))
 
     # The destination is found by who feeds it rather than by name, so the bus
     # can be renamed in build_network without breaking the report.
@@ -346,51 +407,15 @@ def _emissions_breakdown(
     supplied = generated + discharged
     home_intensity = ((carried + stored_carried) / supplied).where(supplied > 0, 0.0)
 
-    # Which links draw electricity is read off the network — on bus0 as their
-    # input (an electrolyser, a MOE cell) or on bus2 alongside the conversion
-    # they exist for (a shaft's auxiliaries, the furnace's melt) — and either way
-    # PyPSA reads a positive port flow as withdrawn from that bus, so both are
-    # positive as they stand. The schema's list is what the report has columns
-    # for, so a new drawing link is an error here rather than a silent hole in
-    # the total.
+    # Each user's draw (see `_electricity_draws`) at the intensity of the system
+    # it drew from, hour by hour.
     electricity_mwh = {}
     electricity_by_user = {}
-    for link in n.links.index:
-        if n.links.at[link, "carrier"] == "HVDC":
-            continue    # a line rather than a user; its loss is charged below
-        if n.links.at[link, "carrier"] == "battery":
-            continue    # storage moves a draw between hours rather than making
-            # one; what it keeps is charged as battery_losses
-        on_bus0 = n.buses.at[n.links.at[link, "bus0"], "carrier"] == "AC"
-        bus2 = link_bus2[link]
-        if not on_bus0 and not (bus2 and n.buses.at[bus2, "carrier"] == "AC"):
-            continue
-        if link not in ELECTRICITY_USERS:
-            raise ValueError(
-                f"{link} draws electricity but the report has no field for it. Add it "
-                f"to ELECTRICITY_USERS in common/_report_schema.py, or its draw goes "
-                f"missing from the run's total while every share still reads 100 %."
-            )
-        draw, bus = ((link_p0[link], n.links.at[link, "bus0"]) if on_bus0
-                     else (link_p2[link], bus2))
+    for user, bus, draw in _electricity_draws(n):
         intensity = destination_intensity if bus == destination_bus else home_intensity
-        electricity_mwh[link] = float(draw.sum()) * annual
-        electricity_by_user[link] = float((draw * intensity).sum()) * annual
-        # A second draw on bus3 is reported under the user it is for, not the
-        # link it is on: the H2 shaft's preheat sits with the blend shaft's, so
-        # the preheat has one row whichever shaft drew it.
-        bus3 = link_bus3[link]
-        if bus3 and n.buses.at[bus3, "carrier"] == "AC":
-            if link not in SECOND_DRAWS:
-                raise ValueError(
-                    f"{link} draws electricity on bus3 but the report does not know "
-                    f"what for. Name the user it belongs to in SECOND_DRAWS."
-                )
-            user = SECOND_DRAWS[link]
-            intensity = destination_intensity if bus3 == destination_bus else home_intensity
-            electricity_mwh[user] = electricity_mwh.get(user, 0.0) + float(link_p3[link].sum()) * annual
-            electricity_by_user[user] = (electricity_by_user.get(user, 0.0)
-                                         + float((link_p3[link] * intensity).sum()) * annual)
+        electricity_mwh[user] = electricity_mwh.get(user, 0.0) + float(draw.sum()) * annual
+        electricity_by_user[user] = (electricity_by_user.get(user, 0.0)
+                                     + float((draw * intensity).sum()) * annual)
     emissions = dict(electricity_by_user)
     electricity_t = sum(electricity_by_user.values())
 
@@ -491,8 +516,86 @@ def _marginal_costs(static: pd.DataFrame, flow_t: pd.DataFrame, mc_t: pd.DataFra
     return total
 
 
-def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
+def _tariff_meter(n: pypsa.Network, generator: str) -> dict | None:
+    """The tariff bill the solve recorded for one grid connection, or None.
+
+    solve_network writes it to n.meta["grid_tariff"]: the regime the connection
+    was billed under, its rates and what each component of the bill came to (see
+    scripts/solve/_grid_tariff.py). A network solved before tariffs has none, and
+    its connections read the config's fees.
+    """
+    return ((n.meta.get("grid_tariff") or {}).get("meters") or {}).get(generator)
+
+
+def _grid_rates(n: pypsa.Network, generator: str, grid_cfg: dict) -> tuple[float, float]:
+    """The capacity (€/MW/yr) and energy (€/MWh) rates a connection was billed at."""
+    meter = _tariff_meter(n, generator)
+    if meter is None:
+        return float(grid_cfg["fee_eur_per_mw_per_year"]), float(grid_cfg["fee_eur_per_mwh"])
+    return float(meter["capacity_eur_per_mw_per_year"]), float(meter["energy_eur_per_mwh"])
+
+
+def _consumption_mwh(n: pypsa.Network, at_destination: bool) -> float:
+    """The electricity one side of the run's users drew in a year, MWh.
+
+    What a charge on consumption is paid on: the Industriestrompreis and the
+    Strompreiskompensation cover the plant's consumption, own renewables
+    included, losses not. Counted by `_electricity_draws`, so the two sides are
+    `el_users_gwh` between them. The destination's side is the furnace on the
+    destination's bus, on an export route that melts abroad; the origin's side is
+    every other user.
+    """
+    destination_bus = (n.generators.at["destination_supply", "bus"]
+                       if "destination_supply" in n.generators.index else None)
+    annual = mean_year_hours(n.snapshots) / len(n.snapshots)
+    return sum(float(draw.sum()) for _, bus, draw in _electricity_draws(n)
+               if (bus == destination_bus) == at_destination) * annual
+
+
+def _consumption_rate(charges: dict | None) -> tuple[float, dict]:
+    """An area's €/MWh on consumption and its components, from its electricity
+    charges as the run's consumer pays them (`_tariff.for_consumer`). Nothing
+    for an area without them."""
+    consumption = (charges or {}).get("consumption") or {}
+    return (float(consumption.get("eur_per_mwh") or 0.0),
+            {name: float(rate) for name, rate in (consumption.get("components") or {}).items()})
+
+
+def _consumption_charge(n: pypsa.Network, charges: dict | None, at_destination: bool) -> float:
+    """What one side's consumption is charged in a year, €/yr: its area's rate
+    times what its users drew. Negative where the charge is a subsidy."""
+    rate, _ = _consumption_rate(charges)
+    return rate * _consumption_mwh(n, at_destination) if rate else 0.0
+
+
+def _outside_lp(n: pypsa.Network, generator: str) -> float:
+    """What a connection's tariff bills that the LP never priced, €/yr.
+
+    The regime's fixed €/yr: metering, and the fixed parts of tiered
+    surcharges. It is in none of the network's costs, so the report adds it to
+    the connection's group.
+    """
+    meter = _tariff_meter(n, generator)
+    return float(meter["fixed_eur_per_year"]) if meter else 0.0
+
+
+def _connection_lump_sum(n: pypsa.Network, generator: str) -> float:
+    """A connection's fixed one-off cost per year, €/yr, which the LP never priced.
+
+    A constant, as every grid run of a workbook area builds a connection (see
+    scripts/solve/_grid_tariff.py). Part of the connection's capital, not of
+    the tariff bill, so the report adds it to the connection capex.
+    """
+    meter = _tariff_meter(n, generator)
+    connection = (meter or {}).get("connection") or {}
+    return float(connection.get("lump_sum_eur_per_year") or 0.0)
+
+
+def _cost_breakdown(n: pypsa.Network, charges: dict | None = None) -> dict[str, float]:
     """Annualised cost per system component group, €/yr; sums to the total.
+
+    `charges` is each side's electricity charges, {"origin": …, "destination": …},
+    for what they charge on consumption; a run without them pays none.
 
     Capital costs are already per-year (annualised CAPEX × p_nom_opt); variable
     costs — grid imports, ore, EAF consumables, electrolyser variable opex —
@@ -544,13 +647,17 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         "battery": store_capital("battery") + link_capital(["battery_charger"]),
         # Generator marginal costs are zero except grid imports (energy price
         # + volumetric fee) and gas, which gets its own group below — so the
-        # generic sum minus gas lands in the grid bucket.
+        # generic sum minus gas lands in the grid bucket. Plus what the tariff
+        # bills outside the LP: its fixed €/yr, and the connection's fixed
+        # one-off sum per year.
         "grid": grid_capital
         + _marginal_costs(
             gens.drop(index=["gas_supply", "destination_supply"], errors="ignore"),
             n.generators_t.p,
             n.generators_t.marginal_cost,
-        ) * annual_scale,
+        ) * annual_scale
+        + _outside_lp(n, "grid_import")
+        + _connection_lump_sum(n, "grid_import"),
         # Gas bill incl. any carbon price (both live on the gas_supply
         # generator's marginal cost).
         "gas": gen_marginal("gas_supply"),
@@ -574,7 +681,21 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
         # The destination furnace's own power, kept out of the grid group so an
         # export run shows what it pays at each end.
         "destination_electricity": (gen_capital("destination_supply")
-                              + gen_marginal("destination_supply")),
+                              + gen_marginal("destination_supply")
+                              + _outside_lp(n, "destination_supply")
+                              + _connection_lump_sum(n, "destination_supply")),
+        # What each side's area charges on the electricity its users consumed,
+        # whether it came over the grid or from the plant's own renewables: a
+        # subsidy where negative. In no network cost, so added here, after the
+        # solve: in the LP, a subsidy on the grid import would pay the plant to
+        # charge and discharge its battery at the same time (see
+        # scripts/grid/_tariff.py).
+        # TODO: fix the battery so that it cannot charge and discharge at the
+        # same time, and then include the charges on consumption in the
+        # optimisation.
+        "consumption_charges": _consumption_charge(n, (charges or {}).get("origin"), False),
+        "destination_consumption_charges": _consumption_charge(
+            n, (charges or {}).get("destination"), True),
     }
 
 
@@ -734,34 +855,42 @@ def _leaf_breakdown(
     leaves["battery_power_capex"] = link_capital("battery_charger")
     leaves["battery_energy_capex"] = store_capital("battery")
 
-    # The connection pays annuitised capex plus a yearly charge on the same built
-    # MW; the imported energy pays the market price plus a flat charge on every
-    # MWh. So each divides at the rate it was charged at, and the market price —
-    # the one part that is neither a quote nor a capacity — is the remainder.
-    # The same for both connections: the origin's, and on an export route the
-    # destination furnace's, each financed where it stands.
+    # A connection's group in four leaves, each at the rate it was charged at:
+    # the tariff regime's the solve billed it under, or the config's for an
+    # area without a workbook.
+    # - connection capex: the annualised capex per MW of the connection (the
+    #   workbook's or the config's), plus its fixed one-off sum per year, which
+    #   the LP never priced;
+    # - capacity fee: the regime's charge per MW and year, on the same built MW;
+    # - fee: the regime's charge per MWh imported, plus its fixed €/yr
+    #   (metering, the tier offsets);
+    # - market: the day-ahead price paid, the one part that is neither a quote
+    #   nor a capacity, so the remainder of the group.
+    # The capacity fee and the fee together are the whole grid bill; the run's
+    # electricity_charges file lists what it is made of. The same for both
+    # connections: the origin's, and on an export route the destination
+    # furnace's, each financed where it stands.
     grid_cfg = assumptions["grid"]
 
-    def split_connection(generator: str, wacc: float, group_total: float, prefix: str) -> None:
+    def split_connection(generator: str, group_total: float, prefix: str) -> None:
+        capacity_rate, energy_rate = _grid_rates(n, generator, grid_cfg)
         connection = generator_capital(generator)
+        lump_sum = _connection_lump_sum(n, generator)
         if connection:
-            annual_capex = (annuity_factor(wacc, grid_cfg["connection_financing_period"])
-                            * grid_cfg["connection_capex_eur_per_mw"])
-            yearly_fee = grid_cfg["fee_eur_per_mw_per_year"]
-            fee_share = yearly_fee / (annual_capex + yearly_fee) if (annual_capex + yearly_fee) else 0.0
+            fee_share = _capacity_fee_share(n, generator, capacity_rate)
             leaves[f"{prefix}_capacity_fee"] = connection * fee_share
-            leaves[f"{prefix}_connection_capex"] = connection * (1.0 - fee_share)
+            leaves[f"{prefix}_connection_capex"] = connection * (1.0 - fee_share) + lump_sum
         mwh = (float(n.generators_t.p[generator].sum()) * annual_scale
                if generator in n.generators.index else 0.0)
-        leaves[f"{prefix}_fee"] = mwh * float(grid_cfg["fee_eur_per_mwh"])
-        leaves[f"{prefix}_market"] = group_total - connection - leaves[f"{prefix}_fee"]
+        leaves[f"{prefix}_fee"] = mwh * energy_rate + _outside_lp(n, generator)
+        leaves[f"{prefix}_market"] = group_total - connection - lump_sum - leaves[f"{prefix}_fee"]
 
-    split_connection("grid_import", origin_wacc, breakdown["grid"], "grid")
-    split_connection("destination_supply", assumptions["finance"]["destination_wacc"],
-                     breakdown["destination_electricity"], "destination_grid")
+    split_connection("grid_import", breakdown["grid"], "grid")
+    split_connection("destination_supply", breakdown["destination_electricity"], "destination_grid")
 
     # -- what is already as fine as the model cuts it
-    for group in ("transmission", "iron_or_hbi_store", "steel_store", "transport"):
+    for group in ("transmission", "iron_or_hbi_store", "steel_store", "transport",
+                  "consumption_charges", "destination_consumption_charges"):
         leaves[group] = breakdown[group]
 
     # Every group is either split into leaves or carried into one, so the leaves
@@ -797,8 +926,12 @@ def _leaf_breakdown(
     destination_mwh = (float(n.generators_t.p["destination_supply"].sum())
                        * annual_scale if "destination_supply" in n.generators.index
                        else 0.0)
+    # What is charged on the origin's consumption is part of its system's cost,
+    # and the destination's part of the furnace's.
     home_cost = sum(breakdown[group] for group in
-                    ("res", "grid", "battery", "transmission"))
+                    ("res", "grid", "battery", "transmission", "consumption_charges"))
+    destination_cost = (breakdown["destination_electricity"]
+                        + breakdown["destination_consumption_charges"])
     home_mwh = electricity["generation_mwh"] - destination_mwh
     home_rate = home_cost / home_mwh if home_mwh > 0 else 0.0
     # The furnace melts on whichever system it stands in; everything else is at
@@ -835,7 +968,7 @@ def _leaf_breakdown(
         )
     jobs = {
         "reduction": reduction_mwh * home_rate,
-        "eaf": breakdown["destination_electricity"] if melts_abroad else melt_mwh * home_rate,
+        "eaf": destination_cost if melts_abroad else melt_mwh * home_rate,
         "electrolyser": electrolyser_mwh * home_rate,
         "briquetting": briquetting_mwh * home_rate,
         "losses": losses_mwh * home_rate,
@@ -844,7 +977,7 @@ def _leaf_breakdown(
     # rather than by what was bought, so the two cuts have to land on the same
     # number. A job that swallowed another's megawatt-hours would still close on
     # the bill, which is what the megawatt-hour check above is separately for.
-    electricity_bill = home_cost + breakdown["destination_electricity"]
+    electricity_bill = home_cost + destination_cost
     job_total = sum(jobs.values())
     if abs(job_total - electricity_bill) > max(1.0, 1e-9 * abs(electricity_bill)):
         raise ValueError(
@@ -1053,15 +1186,16 @@ def _iron_produced_t(n: pypsa.Network) -> float:
     return float(sum(-n.links_t.p1[link].sum() for link in ORE_LINKS if link in n.links.index))
 
 
-def _capacity_fee_share(grid_cfg: dict, wacc: float) -> float:
-    """The yearly capacity fee's share of a grid connection's yearly cost.
+def _capacity_fee_share(n: pypsa.Network, generator: str, yearly_fee: float) -> float:
+    """The yearly capacity fee's share of a grid connection's yearly cost per MW.
 
-    A connection's `capital_cost` is its annuitised capex plus the fee per MW and
-    year, so the share carries over to whatever size the solve built.
+    A connection's `capital_cost` is its annuitised capex per MW (the tariff
+    workbook's or the config's) plus the fee per MW and year, so the share
+    carries over to whatever size the solve built. `yearly_fee` is the rate the
+    connection was billed at (`_grid_rates`).
     """
-    annual_capex = annuity_factor(wacc, grid_cfg["connection_financing_period"]) * grid_cfg["connection_capex_eur_per_mw"]
-    yearly_fee = grid_cfg["fee_eur_per_mw_per_year"]
-    return yearly_fee / (annual_capex + yearly_fee) if (annual_capex + yearly_fee) else 0.0
+    capital_cost = float(n.generators.at[generator, "capital_cost"])
+    return yearly_fee / capital_cost if capital_cost else 0.0
 
 
 def _store_discharged(n: pypsa.Network, store: str, hours_per_year: float) -> float:
@@ -1092,9 +1226,14 @@ def _battery_discharged_mwh(n: pypsa.Network, hours_per_year: float) -> float:
 def extract_summary(
     n: pypsa.Network, scenario_name: str, run: dict, assumptions: dict,
     transport_legs: dict | None = None, grid_mix: pd.DataFrame | None = None,
-    destination_mix: pd.DataFrame | None = None,
+    destination_mix: pd.DataFrame | None = None, charges: dict | None = None,
 ) -> dict:
     """Key sizing, cost and emission metrics as a flat dict (one row of the CSV).
+
+    `charges` is the electricity charges of the run's origin and destination,
+    {"origin": …, "destination": …}, as the run's consumer pays them
+    (`_tariff.for_consumer`); a run without them is charged nothing on
+    consumption.
 
     `run` identifies the row — origin, destination, route, date range and the input variants —
     and leads the columns, so what a number describes reads before the number.
@@ -1109,7 +1248,7 @@ def extract_summary(
     for the market an `-export` route melts in, and is absent for every route
     that melts its iron at home.
     """
-    breakdown = _cost_breakdown(n)
+    breakdown = _cost_breakdown(n, charges)
     hours_per_year = mean_year_hours(n.snapshots)
     summary = {
         "scenario": scenario_name,
@@ -1159,7 +1298,8 @@ def extract_summary(
     elec_gens = [g for g in n.generators.index if g != "gas_supply"]
     elec_mwh = (float(n.generators_t.p[elec_gens].sum().sum()) * annual_scale) if elec_gens else 0.0
     elec_cost = sum(breakdown[k]
-                    for k in ("res", "battery", "grid", "transmission", "destination_electricity"))
+                    for k in ("res", "battery", "grid", "transmission", "destination_electricity",
+                              "consumption_charges", "destination_consumption_charges"))
     lcoe = elec_cost / elec_mwh if elec_mwh > 0 and elec_cost > 0 else float("nan")
     if lcoe == lcoe:  # not NaN
         summary["lcoe_eur_per_mwh"] = lcoe
@@ -1180,11 +1320,14 @@ def extract_summary(
             idx = [g for g in res_idx if str(g).startswith(prefix)]
             return float(n.generators_t.p[idx].sum().sum()) * annual_scale if idx else 0.0
 
-        grid_conn = grid_energy = grid_mwh = 0.0
+        grid_conn = grid_energy = grid_mwh = grid_lump_sum = 0.0
         if "grid_import" in n.generators.index:
             gi = n.generators.loc[["grid_import"]]
             if bool(gi.at["grid_import", "p_nom_extendable"]):
                 grid_conn = float(gi.at["grid_import", "capital_cost"] * gi.at["grid_import", "p_nom_opt"])
+            # The connection's fixed one-off sum per year, which the LP never priced.
+            grid_lump_sum = _connection_lump_sum(n, "grid_import")
+            grid_conn += grid_lump_sum
             grid_energy = _marginal_costs(gi, n.generators_t.p, n.generators_t.marginal_cost) * annual_scale
             grid_mwh = float(n.generators_t.p["grid_import"].sum()) * annual_scale
 
@@ -1192,7 +1335,12 @@ def extract_summary(
             **{f"lcoe_{field_stem(tech)}": _res_cost(tech) for tech in RES_TECHS},
             "lcoe_storage": breakdown["battery"],
             "lcoe_grid_connection": grid_conn,
-            "lcoe_grid_energy": grid_energy,
+            # With what the tariff bills outside the LP, so the parts still
+            # close on LCOE: its fixed €/yr.
+            "lcoe_grid_energy": grid_energy + _outside_lp(n, "grid_import"),
+            # What both sides' consumption was charged, a subsidy where negative.
+            "lcoe_consumption_charges": (breakdown["consumption_charges"]
+                                         + breakdown["destination_consumption_charges"]),
             "lcoe_transmission": breakdown["transmission"],
             # Zero on a domestic route, which builds no destination supply. It is a
             # part like the others so the decomposition still closes on LCOE.
@@ -1239,17 +1387,22 @@ def extract_summary(
         # same imported-MWh denominator — so all three are €/MWh *imported* and add
         # up to the all-in delivered electricity price (not mixed bases).
         if grid_mwh > 0:
+            capacity_rate, energy_rate = _grid_rates(n, "grid_import", assumptions["grid"])
             if grid_energy > 0:
-                fee = float(assumptions["grid"]["fee_eur_per_mwh"])
-                summary["grid_price_eur_per_mwh"] = max(grid_energy / grid_mwh - fee, 0.0)
+                # The energy rate the LP priced, and per MWh what the tariff
+                # billed outside it, so the fee is the cost leaf's over the MWh.
+                fee = energy_rate + _outside_lp(n, "grid_import") / grid_mwh
+                summary["grid_price_eur_per_mwh"] = max(grid_energy / grid_mwh - energy_rate, 0.0)
                 summary["grid_fee_eur_per_mwh"] = fee
             if grid_conn > 0:
                 summary["grid_connection_eur_per_mwh_imported"] = grid_conn / grid_mwh
-                # Its two halves, as the cost leaves split it: the capital and the
-                # capacity fee per MW and year.
-                share = _capacity_fee_share(assumptions["grid"], assumptions["finance"]["origin_wacc"])
-                summary["grid_connection_capex_eur_per_mwh_imported"] = grid_conn * (1 - share) / grid_mwh
-                summary["grid_capacity_fee_eur_per_mwh_imported"] = grid_conn * share / grid_mwh
+                # Its two halves, as the cost leaves split it: the capital, with
+                # the fixed one-off sum, and the capacity fee per MW and year.
+                share = _capacity_fee_share(n, "grid_import", capacity_rate)
+                per_mw = grid_conn - grid_lump_sum
+                summary["grid_connection_capex_eur_per_mwh_imported"] = (
+                    (per_mw * (1 - share) + grid_lump_sum) / grid_mwh)
+                summary["grid_capacity_fee_eur_per_mwh_imported"] = per_mw * share / grid_mwh
 
     # What the destination furnace paid for its power, market price only and on
     # the same footing as `grid_price_eur_per_mwh`: its bill over the MWh it
@@ -1265,25 +1418,50 @@ def extract_summary(
                 n.generators.loc[["destination_supply"]],
                 n.generators_t.p, n.generators_t.marginal_cost,
             )
-            fee = float(assumptions["grid"]["fee_eur_per_mwh"])
-            summary["destination_grid_price_eur_per_mwh"] = destination_energy / destination_mwh - fee
+            capacity_rate, energy_rate = _grid_rates(n, "destination_supply", assumptions["grid"])
+            # As the origin's: the energy rate the LP priced, plus per MWh what
+            # the tariff billed outside it. The run's MWh are put on a year to
+            # meet the yearly part.
+            fee = (energy_rate + _outside_lp(n, "destination_supply")
+                   / (destination_mwh * annual_scale))
+            summary["destination_grid_price_eur_per_mwh"] = destination_energy / destination_mwh - energy_rate
             summary["destination_grid_fee_eur_per_mwh"] = fee
             # The connection's capital and capacity fee over the same MWh, which
             # were drawn over the run and are put on a year to meet a yearly cost.
             connection = (float(n.generators.at["destination_supply", "capital_cost"]
                                 * n.generators.at["destination_supply", "p_nom_opt"])
                           if bool(n.generators.at["destination_supply", "p_nom_extendable"]) else 0.0)
+            # With the connection's fixed one-off sum per year, in its capital half.
+            lump_sum = _connection_lump_sum(n, "destination_supply")
             summary["destination_grid_connection_eur_per_mwh_imported"] = (
-                connection / (destination_mwh * annual_scale))
-            share = _capacity_fee_share(assumptions["grid"], assumptions["finance"]["destination_wacc"])
+                (connection + lump_sum) / (destination_mwh * annual_scale))
+            share = _capacity_fee_share(n, "destination_supply", capacity_rate)
             summary["destination_grid_connection_capex_eur_per_mwh_imported"] = (
-                connection * (1 - share) / (destination_mwh * annual_scale))
+                (connection * (1 - share) + lump_sum) / (destination_mwh * annual_scale))
             summary["destination_grid_capacity_fee_eur_per_mwh_imported"] = (
                 connection * share / (destination_mwh * annual_scale))
             summary["destination_grid_total_eur_per_mwh_imported"] = (
                 summary["destination_grid_price_eur_per_mwh"] + fee
                 + summary["destination_grid_connection_eur_per_mwh_imported"])
 
+
+    # Which consumer of the areas' charges the run was charged as (config
+    # `electricity_charges.consumer`), so two runs of the same scenario as
+    # different consumers read apart.
+    origin_charges = (charges or {}).get("origin")
+    if origin_charges:
+        summary["electricity_consumer"] = origin_charges.get("consumer")
+    # The tariff each connection was billed on: its regime, the utilisation it
+    # reached, and the whole grid bill per tonne, the capacity fee and the fee
+    # leaves together. Regime and hours blank, bill nothing, for a connection
+    # the run does not have.
+    for generator, prefix in (("grid_import", "grid"), ("destination_supply", "destination_grid")):
+        meter = _tariff_meter(n, generator)
+        if meter is None:
+            continue
+        summary[f"{prefix}_tariff_regime"] = meter["regime"]
+        summary[f"{prefix}_utilisation_hours"] = meter["utilisation_hours"]
+        summary[f"{prefix}_charges_eur_per_t_steel"] = meter["bill_eur_per_year"] / steel_t_per_year
 
     # Steel-route process links: capacity in output units (t/h of iron or
     # steel — p_nom is input-side, so scale by the link efficiency) plus
@@ -1614,6 +1792,71 @@ def extract_summary(
     return summary
 
 
+ELECTRICITY_CHARGES_COLUMNS = ("scenario", "run", "side", "base", "area", "source", "consumer",
+                               "regime", "component", "group", "eur_per_year", "eur_per_t_steel")
+
+
+def electricity_charges(n: pypsa.Network, scenario_name: str, run_name: str,
+                        charges: dict | None = None) -> pd.DataFrame:
+    """Every charge on the run's electricity, one row per component, as a long table.
+
+    Three bases: the `grid` connection's tariff bill, which the report's stack
+    has as the capacity fee and the fee, at each component's own rates (a tiered
+    surcharge with its fixed part, the metering); what building the
+    `connection` cost a year, which the stack has as the connection capex; and
+    what the area charges on `consumption`, own renewables included, which the
+    stack has as the consumption charges (a subsidy as a negative row). The
+    components differ by country, which is why they are rows here rather than
+    columns of the report. Each side and base closes with a `total` row. All
+    are the charges of the consumer the run was charged as (`consumer`).
+    """
+    steel_t = float(n.loads.at["steel_load", "p_set"]) * mean_year_hours(n.snapshots)
+    rows = []
+    for side, generator, at_destination in (("origin", "grid_import", False),
+                                            ("destination", "destination_supply", True)):
+        meter = _tariff_meter(n, generator)
+        if meter is not None:
+            common = {"scenario": scenario_name, "run": run_name, "side": side, "base": "grid",
+                      "area": meter["area"], "source": meter["source"]}
+            own = {**common, "consumer": meter.get("consumer"), "regime": meter["regime"]}
+            for line in meter["charges"]:
+                rows.append({**own, "component": line["component"], "group": line["group"],
+                             "eur_per_year": line["eur_per_year"]})
+            rows.append({**own, "component": "total", "group": None,
+                         "eur_per_year": meter["bill_eur_per_year"]})
+            # What building the connection costs a year, the same in any regime:
+            # the annualised €/MW and fixed one-off sum of each component.
+            connection = meter.get("connection")
+            if connection:
+                built = {**common, "base": "connection", "consumer": meter.get("consumer"), "regime": None}
+                for line in connection["charges"]:
+                    rows.append({**built, "component": line["component"], "group": line["group"],
+                                 "eur_per_year": line["eur_per_year"]})
+                rows.append({**built, "component": "total", "group": None,
+                             "eur_per_year": connection["capex_eur_per_year"]
+                             + connection["lump_sum_eur_per_year"]})
+
+        side_charges = (charges or {}).get(side)
+        consumed = _consumption_mwh(n, at_destination)
+        if not side_charges or consumed <= 0:
+            continue
+        rate, components = _consumption_rate(side_charges)
+        if not components:
+            continue
+        own = {"scenario": scenario_name, "run": run_name, "side": side, "base": "consumption",
+               "area": side_charges["area"], "source": side_charges["source"],
+               "consumer": side_charges.get("consumer"), "regime": None}
+        groups = side_charges.get("component_groups") or {}
+        for component, component_rate in components.items():
+            rows.append({**own, "component": component, "group": groups.get(component),
+                         "eur_per_year": component_rate * consumed})
+        rows.append({**own, "component": "total", "group": None, "eur_per_year": rate * consumed})
+
+    table = pd.DataFrame(rows, columns=list(ELECTRICITY_CHARGES_COLUMNS[:-1]))
+    table["eur_per_t_steel"] = table["eur_per_year"] / steel_t
+    return table
+
+
 def input_variants(rows: pd.DataFrame, origin: str) -> dict:
     """Which series each tech contributed to one run, as its `variant_field`s.
 
@@ -1682,9 +1925,20 @@ def main() -> None:
                             run_inputs["destination"], snakemake.config["areas"])
         if run_inputs["destination"] != run_inputs["origin"] else None
     )
+    # Each area's electricity charges, by the side of the run it charges: the
+    # origin's always, the destination's where the furnace melts there. As the
+    # config's consumer pays them, the one the solve charged the run as.
+    charges_by_area = {}
+    for raw in snakemake.input.charges:
+        area_charges = _tariff.for_consumer(yaml.safe_load(Path(raw).read_text(encoding="utf-8")),
+                                            snakemake.params.consumer)
+        charges_by_area[area_charges["area"]] = area_charges
+    charges = {"origin": charges_by_area.get(run_inputs["origin"]),
+               "destination": (charges_by_area.get(run_inputs["destination"])
+                               if run_inputs["destination"] != run_inputs["origin"] else None)}
     summary = extract_summary(
         n, scenario_name, run, assumptions, transport_legs,
-        read_mix(run_inputs["grid_path"]), read_mix(run_inputs["destination_path"]),
+        read_mix(run_inputs["grid_path"]), read_mix(run_inputs["destination_path"]), charges,
     )
     # Trailing the row, because it identifies the inputs rather than describing
     # them: the per-file map it stands for is in the network.
@@ -1700,7 +1954,11 @@ def main() -> None:
     report = pd.DataFrame([summary])
     write_report_file(report, Path(snakemake.output.diagnostic))
     write_report_file(report, Path(snakemake.output.report), hold_back=DIAGNOSTIC_FIELDS)
-    log.info(f"wrote {snakemake.output.report} and {snakemake.output.diagnostic}")
+    # What the run's electricity was charged, component by component, beside the report.
+    electricity_charges(n, scenario_name, run_name, charges).to_csv(
+        snakemake.output.electricity_charges, index=False)
+    log.info(f"wrote {snakemake.output.report}, {snakemake.output.diagnostic} "
+             f"and {snakemake.output.electricity_charges}")
 
 
 if __name__ == "__main__":

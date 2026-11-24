@@ -646,8 +646,9 @@ same four parts as the cost leaves: a) `destination_grid_price_eur_per_mwh`, the
 market price it paid, weighted by the hours it drew in, which is below the
 market's yearly average because the furnace chooses cheap hours, and can be
 negative where it melted in hours the price was; b)
-`destination_grid_fee_eur_per_mwh`, the volumetric grid fee
-(`grid.fee_eur_per_mwh`, 0 in the template); c)
+`destination_grid_fee_eur_per_mwh`, everything else the grid tariff bills per
+MWh: the energy charges and the fixed €/yr spread over the MWh (see
+"Electricity charges" below); c)
 `destination_grid_connection_capex_eur_per_mwh_imported`, the connection's
 annualised capex; and d) `destination_grid_capacity_fee_eur_per_mwh_imported`,
 its yearly capacity fee per MW, both spread over the MWh it carried. c) and d)
@@ -661,6 +662,60 @@ origin's grid has the same set (`grid_price_eur_per_mwh`, `grid_fee_eur_per_mwh`
 `grid_connection_eur_per_mwh_imported`), per MWh imported at the origin. The
 destination's are blank on every route that makes its steel where it made its
 iron.
+
+**Electricity charges.** What a country charges on top of the wholesale price
+is kept in one workbook per country, `data/electricity_charges/{area}.xlsx`, and
+the rule `build_electricity_charges` writes it to
+`resources/electricity_charges/{area}.yaml`. An area without a workbook keeps
+the `grid` block of the assumptions and is charged nothing more. The
+workbook's `model_variable` says what each charge is levied on:
+
+- *the grid connection* (`fee_eur_per_mw_per_year`, `fee_eur_per_mwh`,
+  `fee_eur_per_year`, `multiplier`): the Leistungs- and Arbeitspreis, the
+  surcharges, metering, the §19 discount. Only a run that buys grid power pays
+  them. The rule cuts them into regimes, linear pieces of the bill that each
+  hold for a band of utilisation hours and annual energy, and the solve runs
+  once per regime and keeps the cheapest. A grid run is assumed to build a
+  connection and import at least 1 GWh a year through it, so every regime
+  holds from 1 GWh: the tiered surcharges' higher rate on the first GWh gets
+  no regime of its own but sits in the fixed €/yr of the others. A plant on
+  its own renewables with no connection at all is the RES-only scenario of the
+  same route, technology and site. The report gives the regime as
+  `grid_tariff_regime` and the hours the connection reached as
+  `grid_utilisation_hours`. The cost leaves `cost_grid_capacity_fee` and
+  `cost_grid_fee` together are the whole grid bill, reported per tonne as
+  `grid_charges_eur_per_t_steel`.
+- *consumption* (`consumption_eur_per_mwh`): the Industriestrompreis and the
+  Strompreiskompensation, negative because they are subsidies. They are paid
+  on the electricity the plant's processes drew, own renewables included and
+  battery and line losses not (`el_users_gwh`), so a plant on its own
+  renewables gets them too. The report applies them after the solve, as the
+  cost leaf `cost_consumption_charges` (and `cost_destination_consumption_charges`
+  for the furnace of an export route, whose share of `el_users_gwh` is
+  `el_eaf_gwh`).
+- *building the connection* (`connection_capex_eur_per_mw`,
+  `connection_capex_eur`): the Netzanschlusskosten and the Baukostenzuschuss,
+  paid once and the same whichever regime bills the grid. Both are annualised
+  over `grid.connection_financing_period` at the side's WACC. The part per MW
+  replaces the config's `grid.connection_capex_eur_per_mw` in the LP, so it
+  sizes the connection. The fixed sum, owed for building a connection at all,
+  is a constant, as every grid run builds one, and is added to the cost of
+  every regime the solve tries. Both are in the cost leaf
+  `cost_grid_connection_capex`.
+
+The run's `electricity_charges_{scenario}.csv` lists all three, one row per
+component. The `destination_` fields give the same for the destination furnace.
+
+Which rows bill the plant is the workbook's `consumer` column: a row names the
+consumer it applies to (DEU: `iron_steel` or `standard`), or none for every
+one. A run is charged as `iron_steel`, the plant the model is for, whether it
+makes iron, steel or both (NACE 24.10, basic iron and steel); each country's
+workbook names it so. To price the same plant, under the same conditions, as
+a standard consumer, run it as one, in a checkout of its own as the results go
+to the same paths, and compare the two reports; the report's
+`electricity_consumer` says which a run was:
+
+    python -m snakemake <target> --config electricity_charges='{consumer: standard}'
 
 `el_reduction_mwh_per_t_steel` is the electricity that turned ore into iron
 over the year, per tonne of steel produced, and `cost_electricity_reduction_eur_per_t_steel`

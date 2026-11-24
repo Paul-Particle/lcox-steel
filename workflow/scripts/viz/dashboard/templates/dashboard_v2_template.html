@@ -511,7 +511,7 @@ const PAYLOAD = /*PAYLOAD_JSON*/;
         const contrib=(lp(rec,"grid_connection")||0)+(lp(rec,"grid_energy")||0);
         if(delivered!=null) push("grid electricity:", line(delivered, contrib||null, rec.lcoe, "LCOE"));
         if(price!=null) push("· market price", eur(price));
-        if(fee!=null)   push("· volumetric fee", eur(fee));
+        if(fee!=null)   push("· fees and levies", eur(fee));
         if(ci!=null)    push("· connection", eur(ci));
         return out;
       }
