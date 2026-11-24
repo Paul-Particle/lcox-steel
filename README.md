@@ -193,7 +193,7 @@ single-checkout install, `snakemake` works as it is.
 
 Solves use HiPO, HiGHS's interior-point solver, with options that the released
 HiGHS lacks (`solving.highs` in `config/config.yaml`). They come from a HiGHS
-1.16.0 fork, branch `hipo-options`, checked out at `~/projects/modelling/highs-hipo`;
+1.16.0 fork, checked out at `~/projects/modelling/highs-hipo`;
 its `hipo-tuning/README.md` says why they are needed and how they were tested.
 Install the fork's highspy over the environment's, together with the released
 extras package (OpenBLAS on Linux, Metis, AMD), in whichever environment Step 2
