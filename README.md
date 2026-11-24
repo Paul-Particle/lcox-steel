@@ -204,11 +204,23 @@ extras package (OpenBLAS on Linux, Metis, AMD), in whichever environment Step 2
 installed the package into:
 
 ```bash
-uv pip install --python .venv/bin/python highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@23c80f78ed1a96f92a097d31d750b3391dba1f81"
+uv pip install --python .venv/bin/python highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@10b33d9c876b1553d940e3014020ae344a8aef43"
 ```
 
-Without a venv, use `pip install highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@23c80f78ed1a96f92a097d31d750b3391dba1f81"`.
-The build compiles HiGHS (a few minutes; CMake comes with the build). With
+Without a venv, use `pip install highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@10b33d9c876b1553d940e3014020ae344a8aef43"`.
+The build compiles HiGHS (a few minutes; CMake comes with the build).
+
+On Windows, install the prebuilt wheel from the fork's release
+[v1.16.0-hipo.1](https://github.com/Paul-Particle/highs-hipo/releases/tag/v1.16.0-hipo.1)
+(same commit) instead, as compiling there needs the Microsoft C++ Build Tools.
+The line below is for Python 3.12; the release also has wheels for 3.11 and 3.13
+(change both `cp312` in the file name):
+
+```bash
+pip install highspy-extras==1.16.0 https://github.com/Paul-Particle/highs-hipo/releases/download/v1.16.0-hipo.1/highspy-1.16.0-cp312-cp312-win_amd64.whl
+```
+
+With
 `hipo_fork` enabled, a solve with a highspy that lacks the options stops at once
 and names them. Dispatch figures (curtailment, generation, storage throughput)
 can differ between solvers, as the model's dispatch is not unique; costs and
