@@ -52,11 +52,19 @@ Where the regimes come from, in the tariff sheet's terms:
   the first GWh's higher rate is exact in the fixed term of the others. The
   case of a plant on its own renewables with no connection at all is not lost:
   it is the RES-only scenario of the same route, technology and site.
-* **multipliers** — discount rows (§19 StromNEV) with their own h range and
-  `e_min_mwh`, scaling the components named in `applies_to`. Each adds regimes
-  next to the base bands rather than replacing them. A discount may overlap its
-  base band because the cheapest regime wins; that is why multipliers above 1
-  are refused.
+* **multipliers** — discount rows (§19 StromNEV, the French TURPE reduction)
+  with their own h range and `e_min_mwh`, scaling the components named in
+  `applies_to`: rates and €/yr rows alike (the TURPE reduction also lowers the
+  metering and customer management fees). The workbook lists every component
+  a discount scales; a group name is not enough. Each adds regimes next to the
+  base bands rather than replacing them. A discount may overlap its base band
+  because the cheapest regime wins; that is why multipliers above 1 are
+  refused.
+* **shares** — `percent_of` rows, a percentage of the components named in
+  `applies_to`, as they stand in each regime after its discount (the French
+  CTA: 5 % of the metering, customer management and second-feed fees after
+  the TURPE reduction). A share takes the shape of what it is a share of: of a
+  €/yr fee it is €/yr, of a rate it is a rate.
 
 What stays out of the regimes:
 
@@ -88,7 +96,8 @@ import pandas as pd
 CAPACITY = "fee_eur_per_mw_per_year"  # per MW of the connection's peak (Leistungspreis)
 ENERGY = "fee_eur_per_mwh"  # per MWh imported (Arbeitspreis, surcharges, taxes)
 FIXED = "fee_eur_per_year"  # per year, whatever the plant does (metering)
-MULTIPLIER = "multiplier"  # a factor on other rows' rates (the §19 discount)
+MULTIPLIER = "multiplier"  # a factor on other rows (the §19 discount, the TURPE reduction)
+PERCENT_OF = "percent_of"  # a percentage of other rows, after any discount (the French CTA)
 CONSUMPTION = "consumption_eur_per_mwh"  # per MWh consumed, own renewables included
 CONNECTION = ("connection_capex_eur", "connection_capex_eur_per_mw")  # paid once for the connection
 
@@ -101,6 +110,7 @@ UNITS = {
     ENERGY: "EUR/MWh",
     FIXED: "EUR/yr",
     MULTIPLIER: "factor",
+    PERCENT_OF: "percent",
     CONSUMPTION: "EUR/MWh",
     "connection_capex_eur": "EUR",
     "connection_capex_eur_per_mw": "EUR/MW",
@@ -363,32 +373,44 @@ def build_regimes(rows: pd.DataFrame, source: str) -> list[Regime]:
     one), then one more for each discount and band it overlaps. DEU: h0-2500,
     h2500- and the three §19 discounts.
     """
-    # Three piles by what a row is charged on. The rates make the bands and the
+    # Four piles by what a row is charged on. The rates make the bands and the
     # bill; the €/yr rows go into every regime's fixed term; the multipliers add
-    # the discount regimes. Consumption and connection rows are in none of them:
-    # they are not part of the grid bill (see _consumption, _connection).
+    # the discount regimes; the shares are added last, on what the others came
+    # to. Consumption and connection rows are in none of them: they are not part
+    # of the grid bill (see _consumption, _connection).
     rates = rows[rows["model_variable"].isin([CAPACITY, ENERGY])]
     fixed_rows = rows[rows["model_variable"] == FIXED]
     multipliers = rows[rows["model_variable"] == MULTIPLIER]
+    shares = rows[rows["model_variable"] == PERCENT_OF]
 
-    conditioned_fixed = fixed_rows[fixed_rows[["h_min", "h_max", "e_min_mwh", "tier_from_mwh", "tier_to_mwh"]].notna().any(axis=1)]
+    conditions = ["h_min", "h_max", "e_min_mwh", "tier_from_mwh", "tier_to_mwh"]
+    conditioned_fixed = fixed_rows[fixed_rows[conditions].notna().any(axis=1)]
     if not conditioned_fixed.empty:
         raise NotImplementedError(f"{source}: conditions on €/yr rows {list(conditioned_fixed['component'])} are not modelled yet")
+    # A share follows its components into every regime; it has no box of its own.
+    conditioned_shares = shares[shares[conditions].notna().any(axis=1)]
+    if not conditioned_shares.empty:
+        raise NotImplementedError(f"{source}: conditions on percent_of rows {list(conditioned_shares['component'])} are not modelled yet")
     if rates["e_min_mwh"].notna().any():
         raise NotImplementedError(
             f"{source}: an e_min_mwh condition on a rate row ({list(rates.loc[rates['e_min_mwh'].notna(), 'component'])}) "
             f"is not modelled yet — only multipliers carry one"
         )
+    # What a discount or a share may name: the components that make up the bill
+    # before any share. A share of a share is not allowed, so the order in which
+    # shares are added cannot change the bill.
+    billed = set(rates["component"]) | set(fixed_rows["component"])
     for row in multipliers.itertuples():
         if not 0.0 <= row.value <= 1.0:
             raise ValueError(
                 f"{source}: {row.component} multiplies by {row.value}; only discounts (0–1) are allowed, "
                 f"because the cheapest regime is the one kept"
             )
+    for row in pd.concat([multipliers, shares]).itertuples():
         names = _applies_to(row.applies_to)
         if not names:
             raise ValueError(f"{source}: {row.component} has no applies_to")
-        unknown = set(names) - set(rates["component"])
+        unknown = set(names) - billed
         if unknown:
             raise ValueError(f"{source}: {row.component} applies to unknown components {sorted(unknown)}")
 
@@ -420,17 +442,32 @@ def build_regimes(rows: pd.DataFrame, source: str) -> list[Regime]:
     # One regime: its box (h_lo..h_hi, e_lo..e_hi), every €/yr row, and each
     # rate component's terms in its band and segment, scaled by `scale` where a
     # discount applies to the component (1, no discount, where it does not).
+    # Then the shares, each a percentage of its components as they stand now,
+    # after the discount: the CTA is 5 % of the TURPE fees the plant actually
+    # pays, so in the TURPE reduction's regime it is 5 % of the reduced fees.
     def regime(name, h_lo, h_hi, e_lo, e_hi, band, segment, scale=None):
+        scale = scale or {}
         piece = Regime(name, h_lo, h_hi, e_lo, e_hi)
         for row in fixed_rows.itertuples():
-            piece.add(row.component, fixed=row.value)
+            piece.add(row.component, fixed=row.value * scale.get(row.component, 1.0))
         for component, parts in _component_terms(rates, band, segment, source).items():
-            factor = (scale or {}).get(component, 1.0)
+            factor = scale.get(component, 1.0)
             piece.add(
                 component,
                 capacity=parts.get("capacity", 0.0) * factor,
                 energy=parts.get("energy", 0.0) * factor,
                 fixed=parts.get("fixed", 0.0) * factor,
+            )
+        # A share names no other share (see `billed`), so the order they are
+        # added in does not matter.
+        for row in shares.itertuples():
+            of = [piece.components[name] for name in _applies_to(row.applies_to)]
+            share = row.value / 100.0
+            piece.add(
+                row.component,
+                capacity=share * sum(parts["capacity_eur_per_mw_per_year"] for parts in of),
+                energy=share * sum(parts["energy_eur_per_mwh"] for parts in of),
+                fixed=share * sum(parts["fixed_eur_per_year"] for parts in of),
             )
         return piece
 

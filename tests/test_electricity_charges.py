@@ -144,6 +144,78 @@ def test_a_multiplier_on_an_unknown_component_is_refused():
         _regimes(sheet)
 
 
+# The French TURPE as far as commit 1 reads it: an energy rate and €/yr fees, a
+# reduction that scales all of them, and the CTA on three of the fees after it.
+TURPE = "drawing_electricity, metering_point, customer_management, second_feed"
+FRENCH = _sheet(
+    _row("drawing_electricity", "fee_eur_per_mwh", 4.2),
+    _row("metering_point", "fee_eur_per_year", 3927.0),
+    _row("customer_management", "fee_eur_per_year", 11930.88),
+    _row("second_feed", "fee_eur_per_year", 0.0),
+    _row("turpe_reduction", "multiplier", 0.19, h=(7000, NA), e_min=10000, applies_to=TURPE),
+    _row("pension_charge", "percent_of", 5.0, applies_to="customer_management, metering_point, second_feed"),
+)
+
+
+def test_a_discount_scales_the_yearly_fees_it_names_too():
+    base, reduced = _regimes(FRENCH)
+    assert reduced.name == "turpe_reduction_h7000-_e10000-"
+    fees = 3927.0 + 11930.88
+    assert base.fixed_eur_per_year == pytest.approx(fees * 1.05)
+    assert reduced.fixed_eur_per_year == pytest.approx(fees * 0.19 * 1.05)
+    assert reduced.energy_eur_per_mwh == pytest.approx(4.2 * 0.19)
+
+
+def test_a_share_is_worked_out_on_the_fees_after_the_discount():
+    base, reduced = _regimes(FRENCH)
+    # Its own line in each regime, 5 % of the three fees as that regime bills
+    # them; the energy rate it does not name stays out of it.
+    assert base.components["pension_charge"] == pytest.approx(
+        {"capacity_eur_per_mw_per_year": 0.0, "energy_eur_per_mwh": 0.0,
+         "fixed_eur_per_year": 0.05 * (3927.0 + 11930.88)})
+    assert reduced.components["pension_charge"]["fixed_eur_per_year"] == pytest.approx(
+        0.05 * 0.19 * (3927.0 + 11930.88))
+    # The components still add up to what the solve prices.
+    for regime in (base, reduced):
+        assert sum(parts["fixed_eur_per_year"] for parts in regime.components.values()) == \
+            pytest.approx(regime.fixed_eur_per_year)
+
+
+def test_a_share_of_a_rate_is_a_rate():
+    sheet = _sheet(
+        _row("arbeitspreis", "fee_eur_per_mwh", 10.0),
+        _row("leistungspreis", "fee_eur_per_mw_per_year", 1000.0),
+        _row("surcharge", "percent_of", 5.0, applies_to="arbeitspreis, leistungspreis"),
+    )
+    (regime,) = _regimes(sheet)
+    assert regime.energy_eur_per_mwh == pytest.approx(10.5)
+    assert regime.capacity_eur_per_mw_per_year == pytest.approx(1050.0)
+
+
+@pytest.mark.parametrize("applies_to, match", [
+    ("metering_pont", "unknown components"),
+    ("other_share", "unknown components"),  # a share of a share
+    (NA, "no applies_to"),
+])
+def test_a_share_must_name_the_fees_it_is_a_share_of(applies_to, match):
+    sheet = _sheet(
+        _row("metering_point", "fee_eur_per_year", 3927.0),
+        _row("other_share", "percent_of", 1.0, applies_to="metering_point"),
+        _row("pension_charge", "percent_of", 5.0, applies_to=applies_to),
+    )
+    with pytest.raises(ValueError, match=match):
+        _regimes(sheet)
+
+
+def test_a_share_with_a_condition_of_its_own_is_refused():
+    sheet = _sheet(
+        _row("metering_point", "fee_eur_per_year", 3927.0),
+        _row("pension_charge", "percent_of", 5.0, h=(7000, NA), applies_to="metering_point"),
+    )
+    with pytest.raises(NotImplementedError, match="percent_of"):
+        _regimes(sheet)
+
+
 def test_a_gap_in_a_components_hour_bands_is_refused():
     sheet = _sheet(
         _row("leistungspreis", "fee_eur_per_mw_per_year", 100.0, h=(0, 2500)),
