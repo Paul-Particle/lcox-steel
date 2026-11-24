@@ -204,10 +204,10 @@ extras package (OpenBLAS on Linux, Metis, AMD), in whichever environment Step 2
 installed the package into:
 
 ```bash
-uv pip install --python .venv/bin/python highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@69a1119cdb9f41a62a4b683776f17af5a2ad60f2"
+uv pip install --python .venv/bin/python highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@23c80f78ed1a96f92a097d31d750b3391dba1f81"
 ```
 
-Without a venv, use `pip install highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@69a1119cdb9f41a62a4b683776f17af5a2ad60f2"`.
+Without a venv, use `pip install highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@23c80f78ed1a96f92a097d31d750b3391dba1f81"`.
 The build compiles HiGHS (a few minutes; CMake comes with the build). With
 `hipo_fork` enabled, a solve with a highspy that lacks the options stops at once
 and names them. Dispatch figures (curtailment, generation, storage throughput)

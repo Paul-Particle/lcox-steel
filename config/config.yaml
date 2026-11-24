@@ -31,8 +31,9 @@ inputs:
 # mistakes slow progress for stagnation and falls back to IPX; three correctors
 # and a progress test fix that. HiPO's own feasibility target sits a tenth below
 # the tolerance HiGHS checks the final solution against, so the check after
-# postsolve passes. When HiPO stalls right at the end, it offers its best iterate
-# to that check, not its last.
+# postsolve passes. More static regularisation keeps HiPO's linear algebra
+# accurate near the optimum, and if it still breaks down there, HiPO offers its
+# best iterate to that check, not its last.
 solving:
   hipo_fork:
     enabled: false
@@ -42,7 +43,9 @@ solving:
       hipo_correctors: 3
       hipo_stagnation_min_progress: 0.1
       hipo_feasibility_tolerance_factor: 0.1
-      hipo_stagnation_check_best: true
+      hipo_primal_regularisation: 1.0e-10
+      hipo_dual_regularisation: 1.0e-8
+      hipo_check_best_iterate: true
       ipm_iteration_limit: 500
 
 entsoe:
