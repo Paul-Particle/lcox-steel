@@ -8,10 +8,19 @@ isolation). This file is the IO + orchestration shell driven by the
 import json
 import logging
 import os
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+# Workaround for highspy-extras 1.16.0 on Windows: on CPUs with AVX-512 its OpenBLAS picks
+# kernels with which HiPO stops at its first iteration ("NaN detected"); the AVX2 (Haswell)
+# kernels solve correctly. OpenBLAS reads the variable when highspy is imported, which pypsa
+# does, so it is set before the imports below; a value already set wins. Remove once a
+# highspy-extras release fixes it.
+if sys.platform == "win32":
+    os.environ.setdefault("OPENBLAS_CORETYPE", "Haswell")
 
 # pandas 3.0 defaults to ArrowStringArray for strings; xarray (used by PyPSA
 # internally) doesn't support it. Set python-native strings before any import
@@ -158,7 +167,8 @@ def fail_if_highspy_rejects_solver_options(solver_options: dict) -> None:
                         if highs.setOptionValue(name, value) != highspy.HighsStatus.kOk]
     if rejected_options:
         raise RuntimeError(f"highspy {highs.version()} rejects the solver options {rejected_options}; "
-                           f"install the HiGHS fork with the HiPO options (README, Setup)")
+                           f"install the HiGHS fork with the HiPO options, and on Windows the Microsoft Visual "
+                           f"C++ Redistributable, which HiPO needs (README, Setup)")
 
 
 def build_highs_solver_options(hipo_fork: dict) -> dict:

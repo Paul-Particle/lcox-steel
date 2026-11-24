@@ -220,6 +220,16 @@ The line below is for Python 3.12; the release also has wheels for 3.11 and 3.13
 pip install highspy-extras==1.16.0 https://github.com/Paul-Particle/highs-hipo/releases/download/v1.16.0-hipo.1/highspy-1.16.0-cp312-cp312-win_amd64.whl
 ```
 
+HiPO on Windows also needs the
+[Microsoft Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+(x64), which most Windows PCs already have; without it, HiGHS rejects `solver=hipo`
+and a solve with the overlay stops. On CPUs with AVX-512 (some Intel laptops of the 10th
+and 11th generation, Xeon workstations, AMD Ryzen 7000 and later), the OpenBLAS in
+`highspy-extras` 1.16.0 makes HiPO fail at its first iteration ("NaN detected"). The
+solve script avoids that by setting `OPENBLAS_CORETYPE=Haswell` on Windows; to use HiPO
+outside the model, set it yourself (`setx OPENBLAS_CORETYPE Haswell`, read by new
+terminals). The fork's `hipo-tuning/check_wheel_hipo.py` checks an installation.
+
 With
 `hipo_fork` enabled, a solve with a highspy that lacks the options stops at once
 and names them. Dispatch figures (curtailment, generation, storage throughput)
