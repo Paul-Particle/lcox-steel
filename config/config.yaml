@@ -20,23 +20,30 @@ inputs:
   assumptions: config/generated/assumptions.yaml
   scenarios: config/generated/scenarios.csv
 
-# HiGHS options for every solve, passed as given. HiPO is HiGHS's interior-point
-# solver; we read only objectives and capacities, so no crossover to a vertex.
-# The hipo_* options exist only in the HiGHS build with the HiPO options (README,
-# Setup). On our multi-year designs stock HiPO mistakes slow progress for
-# stagnation and falls back to IPX; three correctors and a progress test fix that.
-# HiPO's own feasibility target sits a tenth below the tolerance HiGHS checks the
-# final solution against, so the check after postsolve passes. When HiPO stalls
-# right at the end, it offers its best iterate to that check, not its last.
+# Solves run HiGHS as installed, with its defaults or the HIGHS_SOLVER,
+# HIGHS_CROSSOVER and HIGHS_THREADS environment variables. With hipo_fork enabled
+# they run HiPO, HiGHS's interior-point solver, with the options below instead
+# (HIGHS_THREADS still applies). Enable it with the overlay
+#   --configfile config/hipo_fork.yaml
+# The hipo_* options exist only in the HiGHS fork (README, Setup 3); a solve stops
+# if the installed highspy lacks any of them. We read only objectives and
+# capacities, so no crossover to a vertex. On our multi-year designs stock HiPO
+# mistakes slow progress for stagnation and falls back to IPX; three correctors
+# and a progress test fix that. HiPO's own feasibility target sits a tenth below
+# the tolerance HiGHS checks the final solution against, so the check after
+# postsolve passes. When HiPO stalls right at the end, it offers its best iterate
+# to that check, not its last.
 solving:
-  highs:
-    solver: hipo
-    run_crossover: "off"
-    hipo_correctors: 3
-    hipo_stagnation_min_progress: 0.1
-    hipo_feasibility_tolerance_factor: 0.1
-    hipo_stagnation_check_best: true
-    ipm_iteration_limit: 500
+  hipo_fork:
+    enabled: false
+    highs_options:
+      solver: hipo
+      run_crossover: "off"
+      hipo_correctors: 3
+      hipo_stagnation_min_progress: 0.1
+      hipo_feasibility_tolerance_factor: 0.1
+      hipo_stagnation_check_best: true
+      ipm_iteration_limit: 500
 
 entsoe:
   # Per-(area, data_type) downloads are pulled on demand by the scenario tables;

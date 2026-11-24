@@ -158,7 +158,39 @@ def fail_if_highspy_rejects_solver_options(solver_options: dict) -> None:
                         if highs.setOptionValue(name, value) != highspy.HighsStatus.kOk]
     if rejected_options:
         raise RuntimeError(f"highspy {highs.version()} rejects the solver options {rejected_options}; "
-                           f"install the HiGHS build with the HiPO options (README, Setup)")
+                           f"install the HiGHS fork with the HiPO options (README, Setup)")
+
+
+def build_highs_solver_options(hipo_fork: dict) -> dict:
+    """HiGHS as installed, steered by environment variables, or HiPO with the fork's options if enabled."""
+    # Snakemake's --config passes nested values as strings, and "false" would read as on.
+    if not isinstance(hipo_fork["enabled"], bool):
+        raise TypeError(f"solving.hipo_fork.enabled is {hipo_fork['enabled']!r}, not true or false; "
+                        f"enable the fork with --configfile config/hipo_fork.yaml")
+    if hipo_fork["enabled"]:
+        solver_options = dict(hipo_fork["highs_options"])
+        fail_if_highspy_rejects_solver_options(solver_options)
+    else:
+        solver_options = {}
+        # HIGHS_SOLVER selects the algorithm: "ipm" (interior-point / barrier) converges
+        # in a small, degeneracy-insensitive iteration count and is far faster than the
+        # default simplex on the large degenerate grid+p95 LPs. We only read off the
+        # objective and capacities (no basis needed), so crossover to a vertex is skipped
+        # unless HIGHS_CROSSOVER=on. Unset => HiGHS default (simplex), best for easy LPs.
+        highs_solver = os.environ.get("HIGHS_SOLVER")
+        if highs_solver:
+            solver_options["solver"] = highs_solver
+            if highs_solver == "ipm":
+                solver_options["run_crossover"] = os.environ.get("HIGHS_CROSSOVER", "off")
+    # HiGHS parallelises across cores by default (not governed by OMP_NUM_THREADS).
+    # When running many independent solves in parallel (batch runs), pin each to a
+    # single thread via HIGHS_THREADS=1 so N solves use N cores instead of each
+    # grabbing all of them and thrashing. Unset => HiGHS default (all cores), which
+    # is best for a single interactive solve.
+    highs_threads = os.environ.get("HIGHS_THREADS")
+    if highs_threads:
+        solver_options["threads"] = int(highs_threads)
+    return solver_options
 
 
 def main() -> None:
@@ -267,13 +299,7 @@ def main() -> None:
         destination_price=destination_price,
     )
     log.info(f"optimising with HiGHS (snapshots={len(n.snapshots)})")
-    solver_options = dict(snakemake.config["solving"]["highs"])
-    # HiGHS may use several cores per solve. Batch runs of many independent solves
-    # pin each to one thread with HIGHS_THREADS=1, so N solves use N cores.
-    highs_threads = os.environ.get("HIGHS_THREADS")
-    if highs_threads:
-        solver_options["threads"] = int(highs_threads)
-    fail_if_highspy_rejects_solver_options(solver_options)
+    solver_options = build_highs_solver_options(snakemake.config["solving"]["hipo_fork"])
     status, condition = n.optimize(solver_name="highs", solver_options=solver_options,
                                    extra_functionality=_tie_battery_inverter)
     # Anything short of an optimum exports zero capacities that read as the cheapest run.

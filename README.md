@@ -189,12 +189,15 @@ Inside such a venv, run Snakemake and pytest through the venv's Python:
 belongs to the conda environment and would run outside the venv. With the
 single-checkout install, `snakemake` works as it is.
 
-### 3. HiGHS with the HiPO options
+### 3. Optional: HiGHS with the HiPO options
 
-Solves use HiPO, HiGHS's interior-point solver, with options that the released
-HiGHS lacks (`solving.highs` in `config/config.yaml`). They come from a HiGHS
-1.16.0 fork, [Paul-Particle/highs-hipo](https://github.com/Paul-Particle/highs-hipo),
-pinned below to the commit whose options the config uses; its
+By default solves run the environment's HiGHS as released. Multi-year designs
+solve far faster with HiPO, HiGHS's interior-point solver, and options that the
+released HiGHS lacks (`solving.hipo_fork` in `config/config.yaml`, off by
+default; enable it by adding the overlay `--configfile config/hipo_fork.yaml`,
+after any other config file). They come from a HiGHS 1.16.0 fork,
+[Paul-Particle/highs-hipo](https://github.com/Paul-Particle/highs-hipo), pinned
+below to the commit whose options the config uses; its
 `hipo-tuning/README.md` says why they are needed and how they were tested.
 Install the fork's highspy over the environment's, together with the released
 extras package (OpenBLAS on Linux, Metis, AMD), in whichever environment Step 2
@@ -205,8 +208,11 @@ uv pip install --python .venv/bin/python highspy-extras==1.16.0 "highspy @ git+h
 ```
 
 Without a venv, use `pip install highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@69a1119cdb9f41a62a4b683776f17af5a2ad60f2"`.
-The build compiles HiGHS (a few minutes; CMake comes with the build). A solve
-with a highspy that lacks the options stops at once and names them.
+The build compiles HiGHS (a few minutes; CMake comes with the build). With
+`hipo_fork` enabled, a solve with a highspy that lacks the options stops at once
+and names them. Dispatch figures (curtailment, generation, storage throughput)
+can differ between solvers, as the model's dispatch is not unique; costs and
+capacities agree.
 
 ### 4. External data files
 

@@ -1,0 +1,8 @@
+# Overlay that solves with HiPO and the HiGHS fork's options (config.yaml,
+# solving.hipo_fork; install the fork first, README Setup 3). Add it after any
+# other config file:
+#   snakemake --configfile config/hipo_fork.yaml
+#   snakemake --configfile config/demo.yaml config/hipo_fork.yaml
+solving:
+  hipo_fork:
+    enabled: true
