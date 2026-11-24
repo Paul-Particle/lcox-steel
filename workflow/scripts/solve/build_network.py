@@ -497,9 +497,17 @@ def _add_battery(
     the optimiser picks the duration instead of being handed one. The inverter is
     a single bidirectional unit rated in MW: it is priced once, on the charger,
     and solve_network ties the two ratings together so it cannot be bought twice.
+
+    The cells' fade is bought back at the energy capex so the battery keeps its
+    rating: the part lost with time on the store each year, the part lost to
+    cycling on every MWh the discharger draws from the store.
     """
     eta = bat_cfg["efficiency_roundtrip"] ** 0.5
     annuity = annuity_factor(wacc, bat_cfg["financing_period"])
+    calendar_fade_eur_per_mwh_per_year = bat_cfg["calendar_fade_per_year"] * bat_cfg["capex_eur_per_mwh"]
+    # A full equivalent cycle draws the store's whole energy once, so each MWh
+    # drawn wears away cycle_fade_per_full_cycle MWh of capacity.
+    cycle_wear_eur_per_mwh_drawn = bat_cfg["cycle_fade_per_full_cycle"] * bat_cfg["capex_eur_per_mwh"]
     store_bus = f"{bus}_battery"
     n.add("Bus", store_bus, carrier="battery")
     # No C-rate limit ties power to energy, as in PyPSA-Eur: the optimiser picks
@@ -511,7 +519,8 @@ def _add_battery(
         carrier="battery",
         e_nom_extendable=True,
         e_cyclic=True,
-        capital_cost=annuity * bat_cfg["capex_eur_per_mwh"] + bat_cfg["fom_eur_per_mwh_per_year"],
+        capital_cost=(annuity * bat_cfg["capex_eur_per_mwh"] + bat_cfg["fom_eur_per_mwh_per_year"]
+                      + calendar_fade_eur_per_mwh_per_year),
         marginal_cost=0.0,
     )
     n.add(
@@ -532,6 +541,7 @@ def _add_battery(
         carrier="battery",
         p_nom_extendable=True,
         efficiency=eta,
+        marginal_cost=cycle_wear_eur_per_mwh_drawn,
     )
 
 

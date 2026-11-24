@@ -131,13 +131,18 @@ def _assemble_multisite_cf(
 
 
 def _tie_battery_inverter(n: pypsa.Network, snapshots) -> None:
-    """Charge and discharge share one inverter rating, so its capex is paid once.
+    """Charge and discharge share one inverter rating, both in size and in each hour.
 
     A grid battery's power electronics are bidirectional and rated in MW at the
     grid terminals, which is what `battery.capex_eur_per_mw` prices. A Link's
     p_nom is measured at its bus0, the grid for the charger but the battery for
     the discharger, so the discharger's rating is scaled by its efficiency to
     put both on the grid side (as PyPSA-Eur's `add_battery_constraints` does).
+
+    Within an hour the two directions share that rating too: charging and
+    discharging together stay within it, as a plant of many inverter units, or
+    one switching direction within the hour, can run them. Without this the two
+    links each run at the full rating at once, twice what the inverter carries.
     """
     p_nom = n.model.variables["Link-p_nom"]
     discharge_efficiency = n.links.at["battery_discharger", "efficiency"]
@@ -145,6 +150,13 @@ def _tie_battery_inverter(n: pypsa.Network, snapshots) -> None:
         p_nom.loc["battery_charger"]
         - discharge_efficiency * p_nom.loc["battery_discharger"] == 0,
         name="battery_inverter_rating",
+    )
+    link_flow = n.model.variables["Link-p"]
+    charge_at_grid = link_flow.sel(name="battery_charger")
+    discharge_at_grid = discharge_efficiency * link_flow.sel(name="battery_discharger")
+    n.model.add_constraints(
+        charge_at_grid + discharge_at_grid - p_nom.loc["battery_charger"] <= 0,
+        name="battery_inverter_shared_hourly",
     )
 
 

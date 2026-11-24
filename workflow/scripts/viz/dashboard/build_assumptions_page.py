@@ -74,6 +74,10 @@ SECTIONS = [
       ("battery.capex_eur_per_mwh", "Battery energy capex", "€/MWh"),
       ("battery.financing_period", "Battery financing period", "years"),
       ("battery.efficiency_roundtrip", "Battery round-trip efficiency", ""),
+      ("battery.fom_eur_per_mw_per_year", "Battery fixed O&M on power", "€/MW/yr"),
+      ("battery.fom_eur_per_mwh_per_year", "Battery fixed O&M on energy", "€/MWh/yr"),
+      ("battery.cycle_fade_per_full_cycle", "Battery capacity fade per full cycle", ""),
+      ("battery.calendar_fade_per_year", "Battery capacity fade per year", ""),
       ("h2_buffer.capex_eur_per_mwh", "Hydrogen store capex", "€/MWh LHV"),
       ("h2_buffer.financing_period", "Hydrogen store financing period", "years")]),
 

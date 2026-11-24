@@ -76,8 +76,11 @@ UNREAD_ROWS = {
 # is not listed here, or one listed that the workbook or the scenarios' overlays now set.
 TEMPLATE_BACKSTOPPED_KEYS = {
     "anchor.min_capacity_mw": "no workbook row: the anchor floor, https://github.com/Paul-Particle/lcox-steel/issues/47",
-    "battery.fom_eur_per_mw_per_year": "its regional rows are not read yet; the template's is eyeballed",
-    "battery.fom_eur_per_mwh_per_year": "its regional rows are not read yet; the template's is eyeballed",
+    **{f"battery.fom_eur_per_{unit}_per_year": "its regional rows are not read yet; the template's is "
+                                               "sourced as maintenance only, apart from the fade"
+       for unit in ("mw", "mwh")},
+    **{f"battery.{key}": "no workbook row: the cells' fade, sourced in the template"
+       for key in ("cycle_fade_per_full_cycle", "calendar_fade_per_year")},
     **{f"briquetting.{key}": "an unsourced token cost, kept in the template by design"
        for key in ("capex_eur_per_t", "fom_eur_per_t_capacity_per_year", "financing_period")},
     "briquetting.yield_t_per_t": "no workbook row: the HBI chain's iron losses, sourced in the template",

@@ -225,15 +225,50 @@ def test_the_hydrogen_buffer_pays_its_fixed_om_on_top_of_its_annuitised_capex(as
 
 
 def test_the_battery_pays_fixed_om_on_its_energy_and_its_inverter(assumptions):
-    """Each capacity carries its own fixed O&M on top of its annuitised capex."""
+    """Each capacity carries its own fixed O&M on top of its annuitised capex, and
+    the energy also the capacity its cells lose each year, bought back at its capex."""
     n = _solved("h2-dri-eaf", assumptions)
     battery_cfg = assumptions["battery"]
     annuity = annuity_factor(assumptions["finance"]["origin_wacc"], battery_cfg["financing_period"])
+    calendar_fade_cost = battery_cfg["calendar_fade_per_year"] * battery_cfg["capex_eur_per_mwh"]
 
     assert n.stores.at["battery", "capital_cost"] == pytest.approx(
-        annuity * battery_cfg["capex_eur_per_mwh"] + battery_cfg["fom_eur_per_mwh_per_year"])
+        annuity * battery_cfg["capex_eur_per_mwh"] + battery_cfg["fom_eur_per_mwh_per_year"] + calendar_fade_cost)
     assert n.links.at["battery_charger", "capital_cost"] == pytest.approx(
         annuity * battery_cfg["capex_eur_per_mw"] + battery_cfg["fom_eur_per_mw_per_year"])
+
+
+def test_every_mwh_drawn_from_the_battery_pays_for_the_capacity_it_wears_away(assumptions):
+    """A full cycle draws the store's energy once and costs its fade at the energy capex."""
+    n = _solved("h2-dri-eaf", assumptions)
+    battery_cfg = assumptions["battery"]
+
+    assert n.links.at["battery_discharger", "marginal_cost"] == pytest.approx(
+        battery_cfg["cycle_fade_per_full_cycle"] * battery_cfg["capex_eur_per_mwh"])
+    assert n.links.at["battery_charger", "marginal_cost"] == 0.0
+
+
+def test_the_battery_leaves_divide_its_cost_on_its_own_quotes(assumptions):
+    """Power capex, energy capex, fixed O&M, calendar fade and cycle wear, each what it was priced at."""
+    n = _solved("h2-dri-eaf", assumptions)
+    fields, breakdown, steel_t = _fields(n, assumptions)
+    battery_cfg = assumptions["battery"]
+    annuity = annuity_factor(assumptions["finance"]["origin_wacc"], battery_cfg["financing_period"])
+    power_mw = n.links.at["battery_charger", "p_nom_opt"]
+    energy_mwh = n.stores.at["battery", "e_nom_opt"]
+    drawn_mwh = n.links_t.p0["battery_discharger"].sum() * 8760.0 / len(n.snapshots)
+    expected = {
+        "battery_power_capex": annuity * battery_cfg["capex_eur_per_mw"] * power_mw,
+        "battery_energy_capex": annuity * battery_cfg["capex_eur_per_mwh"] * energy_mwh,
+        "battery_fom": (battery_cfg["fom_eur_per_mw_per_year"] * power_mw
+                        + battery_cfg["fom_eur_per_mwh_per_year"] * energy_mwh),
+        "battery_calendar_fade": battery_cfg["calendar_fade_per_year"] * battery_cfg["capex_eur_per_mwh"] * energy_mwh,
+        "battery_cycle_wear": battery_cfg["cycle_fade_per_full_cycle"] * battery_cfg["capex_eur_per_mwh"] * drawn_mwh,
+    }
+    for leaf, annual_eur in expected.items():
+        assert annual_eur > 0
+        assert fields[f"cost_{leaf}_eur_per_t_steel"] == pytest.approx(annual_eur / steel_t, rel=1e-9)
+    assert breakdown["battery"] == pytest.approx(sum(expected.values()), rel=1e-9)
 
 
 @pytest.mark.parametrize("route", ["h2-dri-eaf", "moe-eaf", "ewin-eaf",
@@ -409,7 +444,6 @@ def test_the_iron_s_electricity_is_its_share_of_the_steel_s(route, assumptions):
         if set(parts) <= set(ORIGIN_ELECTRICITY_LEAVES):
             assert fields[f"cost_electricity_{name}_eur_per_t_iron"] == pytest.approx(
                 sum(fields[f"cost_electricity_{leaf}_eur_per_t_iron"] for leaf in parts), rel=1e-9)
-    assert pd.isna(fields.get("cost_electricity_battery_fom_eur_per_t_iron", float("nan")))
 
     # Ironmaking stops at the DRI: the press and the furnace after it carry the
     # rest of the origin's draw, and with it the rest of the losses.

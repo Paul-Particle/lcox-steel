@@ -632,7 +632,8 @@ parts below it share the same denominator, so they add up to
 
 `lcoe_storage_eur_per_mwh_discharged` is the battery's own cost per MWh it
 delivered, the companion to its system share `lcoe_storage_eur_per_mwh`. It
-divides a) the battery's yearly cost, energy capacity and inverter together, by
+divides a) the battery's yearly cost, energy capacity and inverter together,
+with its upkeep and the fade bought back, by
 b) the electricity it gave back to the plant in a year after the discharge
 loss, which the report also gives as `battery_discharged_gwh`. It does not
 contain c) the cost of the power that charged it, because that power is already
@@ -692,11 +693,11 @@ origin. The denominator is the tonnes of iron the ironmaking step produced
 over the year (`iron_produced_mt`): what leaves the shaft or the cells, on
 every route, including those that go on to briquette it. The rows below it cut
 the same total as the steel's electricity is cut, renewables by technology
-into capex and fixed O&M, the battery into power and energy capex, the grid
-into connection capex, capacity fee, market purchases and volumetric fee, and
-transmission, with subtotals beside their parts; they all end in
-`_eur_per_t_iron`. `cost_electricity_battery_fom_eur_per_t_iron` is blank until
-the battery's fixed O&M reaches the model. Beside them,
+into capex and fixed O&M, the battery into power and energy capex, fixed O&M
+and the capacity bought back as its cells fade (with time, and with each MWh
+cycled), the grid into connection capex, capacity fee, market purchases and
+volumetric fee, and transmission, with subtotals beside their parts; they all
+end in `_eur_per_t_iron`. Beside them,
 `cost_electricity_briquetting_eur_per_t_iron` is the press's own electricity per
 tonne of DRI it pressed; it is not part of the iron's total and is never added
 to it. Converted to per tonne of steel by the iron per tonne of steel, and

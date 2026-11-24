@@ -540,8 +540,10 @@ def _cost_breakdown(n: pypsa.Network) -> dict[str, float]:
     return {
         "res": float((gens.loc[res_idx, "capital_cost"] * gens.loc[res_idx, "p_nom_opt"]).sum()),
         # Energy on the store, power on the charger — the discharger carries no
-        # capex, since the pair shares one inverter rating (see solve_network).
-        "battery": store_capital("battery") + link_capital(["battery_charger"]),
+        # capex, since the pair shares one inverter rating (see solve_network) —
+        # and the wear of every MWh the discharger draws from the store.
+        "battery": (store_capital("battery") + link_capital(["battery_charger"])
+                    + link_marginal(["battery_discharger"])),
         # Generator marginal costs are zero except grid imports (energy price
         # + volumetric fee) and gas, which gets its own group below — so the
         # generic sum minus gas lands in the grid bucket.
@@ -730,9 +732,25 @@ def _leaf_breakdown(
         )
 
     # The inverter rating and the energy are two components the solve sized
-    # separately, so what each cost needs no assumption about duration.
-    leaves["battery_power_capex"] = link_capital("battery_charger")
-    leaves["battery_energy_capex"] = store_capital("battery")
+    # separately, so what each cost needs no assumption about duration. Each
+    # capital_cost is the annuity, the maintenance and, on the energy, the
+    # calendar fade bought back, divided on build_network's own quotes.
+    battery = assumptions["battery"]
+    battery_annuity = annuity_factor(origin_wacc, battery["financing_period"])
+    power_annual = link_capital("battery_charger")
+    power_capital_cost = battery_annuity * battery["capex_eur_per_mw"] + battery["fom_eur_per_mw_per_year"]
+    energy_annual = store_capital("battery")
+    energy_parts = {
+        "battery_energy_capex": battery_annuity * battery["capex_eur_per_mwh"],
+        "battery_fom": battery["fom_eur_per_mwh_per_year"],
+        "battery_calendar_fade": battery["calendar_fade_per_year"] * battery["capex_eur_per_mwh"],
+    }
+    energy_capital_cost = sum(energy_parts.values())
+    leaves["battery_power_capex"] = power_annual * battery_annuity * battery["capex_eur_per_mw"] / power_capital_cost
+    leaves["battery_fom"] = power_annual * battery["fom_eur_per_mw_per_year"] / power_capital_cost
+    for leaf, part in energy_parts.items():
+        leaves[leaf] += energy_annual * part / energy_capital_cost
+    leaves["battery_cycle_wear"] = link_marginal("battery_discharger")
 
     # The connection pays annuitised capex plus a yearly charge on the same built
     # MW; the imported energy pays the market price plus a flat charge on every

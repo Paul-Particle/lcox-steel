@@ -224,6 +224,11 @@ def leaf_inputs(row: pd.Series) -> dict:
                      quantity("battery_duration_hours", "duration chosen", "{:,.1f} h"))
     add("battery_power_capex", *battery_lines)
     add("battery_energy_capex", *battery_lines)
+    add("battery_fom", *battery_lines)
+    add("battery_calendar_fade", *battery_lines)
+    add("battery_cycle_wear",
+        quantity("battery_discharged_gwh", "discharged", "{:,.1f} GWh/yr"),
+        quantity("battery_cycles_per_year", "full cycles", "{:,.0f} /yr"))
 
     connection_lines = (
         quantity("lcoe_grid_connection_eur_per_mwh", "levelised",
@@ -426,6 +431,16 @@ def spec(assumptions: dict) -> list:
         [("capex quote", f"{battery['capex_eur_per_mwh'] / 1e6:,.2f} M€/MWh"),
          ("duration", "sized by the optimiser"),
          ("round-trip efficiency", f"{battery['efficiency_roundtrip'] * 100:.0f}%")])
+    add("battery_fom", "Battery — fixed O&M (maintenance)", "#EFB2C1",
+        [("on power", f"{battery['fom_eur_per_mw_per_year'] / 1e3:,.1f} k€/MW·yr"),
+         ("on energy", f"{battery['fom_eur_per_mwh_per_year'] / 1e3:,.1f} k€/MWh·yr")])
+    add("battery_calendar_fade", "Battery — capacity bought back, calendar fade", "#B8405C",
+        [("fade", f"{battery['calendar_fade_per_year'] * 100:.2f}% of energy per year"),
+         ("bought back at", "the energy capex quote")])
+    add("battery_cycle_wear", "Battery — capacity bought back, cycle wear", "#9E2F4A",
+        [("fade", f"{battery['cycle_fade_per_full_cycle'] * 100:.4f}% of energy per full cycle"),
+         ("cost per MWh drawn",
+          f"{battery['cycle_fade_per_full_cycle'] * battery['capex_eur_per_mwh']:,.2f} €/MWh")])
 
     grid = assumptions["grid"]
     add("grid_connection_capex", "Grid connection — capital", "#71828F",

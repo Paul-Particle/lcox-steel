@@ -64,15 +64,35 @@ electrolyser:
 battery:
   # Duration is not set here: energy and power capacity are priced separately
   # and sized separately, so the optimiser picks the hours. capex_eur_per_mw
-  # buys one bidirectional inverter, charging and discharging at that rating.
+  # buys one bidirectional inverter, charging and discharging at that rating,
+  # and the two directions share it hour by hour.
+  # The capex is the workbook's global rows, an initial turnkey price; about
+  # 124 €/kWh for 4 h, as https://ember-energy.org/latest-insights/how-cheap-is-battery-storage/
+  # gives ~$125/kWh all-in for 4 h systems outside China and the US.
   capex_eur_per_mw: 138_433   # power capacity cost
   capex_eur_per_mwh: 89_684   # energy capacity cost
-  # Fixed O&M per unit of each capacity per year, eyeballed at 2.5 % of its capex
-  # until the workbook gives a value.
-  fom_eur_per_mw_per_year: 3_461
-  fom_eur_per_mwh_per_year: 2_242
+  # Fixed O&M per unit of each capacity per year: maintenance only, 2 % of its
+  # capex, which leaves out augmentation (the capacity added back as the cells
+  # fade). https://ember-energy.org/latest-insights/how-cheap-is-battery-storage/
+  # The fade is priced by the two keys below instead, so it is not counted twice.
+  fom_eur_per_mw_per_year: 2_769
+  fom_eur_per_mwh_per_year: 1_794
+  # The standard design life, https://ember-energy.org/latest-insights/how-cheap-is-battery-storage/
   financing_period: 20
+  # https://docs.nlr.gov/docs/fy25osti/93281.pdf (NREL, 2025): 85 %.
   efficiency_roundtrip: 0.85
+  # The capacity the cells lose per full equivalent cycle, bought back at
+  # capex_eur_per_mwh, so the battery keeps its rating: a cost on every MWh
+  # discharged. LFP reaches 80 % after 6,000 cycles, 0.20 / 6000:
+  # https://doi.org/10.1016/j.apenergy.2023.121531 (Collath et al., 2023).
+  # Augmentation that costs less than the initial capex, cells alone or at future
+  # prices, would cost less per cycle.
+  cycle_fade_per_full_cycle: 3.3e-5
+  # The capacity lost with time alone, bought back the same way: a yearly cost
+  # on the energy capacity. LFP at 25 °C and half charge loses 3.694e-4 x
+  # sqrt(hours), 15.5 % over 20 years, 0.77 % a year on average:
+  # https://doi.org/10.1149/2.1181714jes (Schimpe et al., 2018).
+  calendar_fade_per_year: 0.008
 
 h2_buffer:
   # Tank with compressor. A salt cavern, at about 350 EUR/MWh, is the low-cost

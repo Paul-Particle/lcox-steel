@@ -175,9 +175,13 @@ LEAF_COSTS_BY_GROUP = (
     ("h2_buffer", "hydrogen"),
     *((f"res_{field_stem(tech)}_{half}", "electricity")
       for tech in RES_TECHS for half in ("capex", "fom")),
-    # Capital only: the battery carries no fixed O&M yet.
+    # The battery's inverter and energy capital, its maintenance on both, and the
+    # capacity bought back as the cells fade: with time, and with each MWh cycled.
     ("battery_power_capex", "electricity"),
     ("battery_energy_capex", "electricity"),
+    ("battery_fom", "electricity"),
+    ("battery_calendar_fade", "electricity"),
+    ("battery_cycle_wear", "electricity"),
     ("grid_connection_capex", "electricity"),
     ("grid_capacity_fee", "electricity"),
     ("grid_market", "electricity"),
@@ -229,7 +233,8 @@ LEAF_SUBTOTALS = {
     **{f"res_{field_stem(tech)}": (f"res_{field_stem(tech)}_capex", f"res_{field_stem(tech)}_fom")
        for tech in RES_TECHS},
     "res": tuple(f"res_{field_stem(tech)}_{half}" for tech in RES_TECHS for half in ("capex", "fom")),
-    "battery": ("battery_power_capex", "battery_energy_capex"),
+    "battery": ("battery_power_capex", "battery_energy_capex", "battery_fom",
+                "battery_calendar_fade", "battery_cycle_wear"),
     # The route's ironmaking plant, capital and upkeep: whichever shaft or cell it
     # built, the others being 0, so one row reads the same on every route.
     "ironmaking_plant": ("ironmaking_plant_capex", "ironmaking_plant_fom"),
@@ -256,20 +261,18 @@ ORIGIN_ELECTRICITY_LEAVES = tuple(
 )
 # The rows of that cut, in the order the report lists them: each subtotal ahead
 # of its own leaves, as a reader goes from the whole to its parts.
-# `battery_fom` is a placeholder, blank until the battery's fixed O&M reaches the
-# solve (see `cost_battery_fom_eur_per_t_steel`).
 IRON_ELECTRICITY_PARTS = (
     "res",
     *(part for tech in RES_TECHS
       for part in (f"res_{field_stem(tech)}", f"res_{field_stem(tech)}_capex",
                    f"res_{field_stem(tech)}_fom")),
     "battery", "battery_power_capex", "battery_energy_capex", "battery_fom",
+    "battery_calendar_fade", "battery_cycle_wear",
     "grid", "grid_connection_capex", "grid_capacity_fee", "grid_market", "grid_fee",
     "transmission",
 )
 assert set(ORIGIN_ELECTRICITY_LEAVES) <= set(IRON_ELECTRICITY_PARTS)
-assert all(part in ORIGIN_ELECTRICITY_LEAVES or part in LEAF_SUBTOTALS or part == "battery_fom"
-           for part in IRON_ELECTRICITY_PARTS)
+assert all(part in ORIGIN_ELECTRICITY_LEAVES or part in LEAF_SUBTOTALS for part in IRON_ELECTRICITY_PARTS)
 
 # The jobs the electricity did, which is the one cut of the levelised cost the
 # leaves above cannot make. They price what was bought; these divide what one of
@@ -497,12 +500,6 @@ REPORT_FIELDS = {
     **{f"cost_{parent}_eur_per_t_steel": ZERO for parent in LEAF_PARENTS},
     # The subtotals (LEAF_SUBTOTALS): a component's leaves added up, beside them.
     **{f"cost_{name}_eur_per_t_steel": ZERO for name in LEAF_SUBTOTALS},
-    # The battery's fixed O&M, held open until the model carries it: the
-    # assumption exists in the input workbook but does not reach the solve, so
-    # the battery is priced on capital alone. Blank, not 0, because 0 would say
-    # the battery costs nothing to run. Once it is wired it becomes a leaf
-    # (`battery_fom`, parent `electricity`) and joins the `battery` subtotal.
-    "cost_battery_fom_eur_per_t_steel": UNDEFINED,
     # The electricity leaf group cut a second way, by the job each euro of it
     # paid for (ELECTRICITY_JOBS). These stack to `cost_electricity_eur_per_t_steel`
     # and to nothing else, so no stack of leaves or subtotals may add them in.
@@ -513,8 +510,7 @@ REPORT_FIELDS = {
     # their MWh over everything drawn at the origin, losses shared in proportion;
     # every MWh is priced at the system's average cost.
     "cost_electricity_eur_per_t_iron": ZERO,
-    **{f"cost_electricity_{part}_eur_per_t_iron": UNDEFINED if part == "battery_fom" else ZERO
-       for part in IRON_ELECTRICITY_PARTS},
+    **{f"cost_electricity_{part}_eur_per_t_iron": ZERO for part in IRON_ELECTRICITY_PARTS},
     # The same total cut a second way, by the job each MWh did, as the steel's
     # electricity is by ELECTRICITY_JOBS. Never to be added to the cut above.
     **{f"cost_electricity_{job}_eur_per_t_iron": ZERO for job in IRON_ELECTRICITY_JOBS},
