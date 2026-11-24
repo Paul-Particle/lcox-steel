@@ -148,6 +148,19 @@ def _tie_battery_inverter(n: pypsa.Network, snapshots) -> None:
     )
 
 
+def fail_if_highspy_rejects_solver_options(solver_options: dict) -> None:
+    """Stop if the installed highspy lacks an option; linopy ignores HiGHS's refusal and solves without it."""
+    import highspy
+
+    highs = highspy.Highs()
+    highs.setOptionValue("output_flag", False)
+    rejected_options = [name for name, value in solver_options.items()
+                        if highs.setOptionValue(name, value) != highspy.HighsStatus.kOk]
+    if rejected_options:
+        raise RuntimeError(f"highspy {highs.version()} rejects the solver options {rejected_options}; "
+                           f"install the HiGHS build with the HiPO options (README, Setup)")
+
+
 def main() -> None:
     """Assemble rule inputs, build and solve the network, export it to netCDF.
 
@@ -254,25 +267,13 @@ def main() -> None:
         destination_price=destination_price,
     )
     log.info(f"optimising with HiGHS (snapshots={len(n.snapshots)})")
-    # HiGHS parallelises across cores by default (not governed by OMP_NUM_THREADS).
-    # When running many independent solves in parallel (batch runs), pin each to a
-    # single thread via HIGHS_THREADS=1 so N solves use N cores instead of each
-    # grabbing all of them and thrashing. Unset => HiGHS default (all cores), which
-    # is best for a single interactive solve.
-    solver_options = {}
+    solver_options = dict(snakemake.config["solving"]["highs"])
+    # HiGHS may use several cores per solve. Batch runs of many independent solves
+    # pin each to one thread with HIGHS_THREADS=1, so N solves use N cores.
     highs_threads = os.environ.get("HIGHS_THREADS")
     if highs_threads:
         solver_options["threads"] = int(highs_threads)
-    # HIGHS_SOLVER selects the algorithm: "ipm" (interior-point / barrier) converges
-    # in a small, degeneracy-insensitive iteration count and is far faster than the
-    # default simplex on the large degenerate grid+p95 LPs. We only read off the
-    # objective and capacities (no basis needed), so crossover to a vertex is skipped
-    # unless HIGHS_CROSSOVER=on. Unset => HiGHS default (simplex), best for easy LPs.
-    highs_solver = os.environ.get("HIGHS_SOLVER")
-    if highs_solver:
-        solver_options["solver"] = highs_solver
-        if highs_solver == "ipm":
-            solver_options["run_crossover"] = os.environ.get("HIGHS_CROSSOVER", "off")
+    fail_if_highspy_rejects_solver_options(solver_options)
     status, condition = n.optimize(solver_name="highs", solver_options=solver_options,
                                    extra_functionality=_tie_battery_inverter)
     # Anything short of an optimum exports zero capacities that read as the cheapest run.

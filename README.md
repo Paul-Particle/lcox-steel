@@ -189,7 +189,25 @@ Inside such a venv, run Snakemake and pytest through the venv's Python:
 belongs to the conda environment and would run outside the venv. With the
 single-checkout install, `snakemake` works as it is.
 
-### 3. External data files
+### 3. HiGHS with the HiPO options
+
+Solves use HiPO, HiGHS's interior-point solver, with options that the released
+HiGHS lacks (`solving.highs` in `config/config.yaml`). They come from a HiGHS
+1.16.0 fork, branch `hipo-options`, checked out at `~/projects/modelling/highs-hipo`;
+its `hipo-tuning/README.md` says why they are needed and how they were tested.
+Install the fork's highspy over the environment's, together with the released
+extras package (OpenBLAS on Linux, Metis, AMD), in whichever environment Step 2
+installed the package into:
+
+```bash
+uv pip install --python .venv/bin/python highspy-extras==1.16.0 ~/projects/modelling/highs-hipo
+```
+
+Without a venv, use `pip install highspy-extras==1.16.0 ~/projects/modelling/highs-hipo`.
+The build compiles HiGHS (a few minutes; CMake comes with the build). A solve
+with a highspy that lacks the options stops at once and names them.
+
+### 4. External data files
 
 Geographic datasets must be downloaded manually and dropped in as ZIPs — the
 pipeline reads them directly via geopandas, no extraction step needed.
@@ -258,7 +276,7 @@ copy. To keep them elsewhere, such as on a larger disk, add
 `LCOX_STORE=/path/to/store` to the main checkout's `.env` (see 4.); an exported
 `LCOX_STORE` takes precedence.
 
-### 4. API keys
+### 5. API keys
 
 **ENTSO-E** — email transparency@entsoe.eu with "Restful API access" in the
 subject, then add the key to a gitignored `.env` in the repo root:
@@ -267,7 +285,7 @@ subject, then add the key to a gitignored `.env` in the repo root:
 ENTSOE_API_KEY=<your-key>
 ```
 
-### 5. ERA5 access (atlite cutouts)
+### 6. ERA5 access (atlite cutouts)
 
 Register at https://cds.climate.copernicus.eu and configure `~/.cdsapirc` per the
 [atlite CDS setup instructions](https://atlite.readthedocs.io/en/latest/installation.html).

@@ -20,6 +20,22 @@ inputs:
   assumptions: config/generated/assumptions.yaml
   scenarios: config/generated/scenarios.csv
 
+# HiGHS options for every solve, passed as given. HiPO is HiGHS's interior-point
+# solver; we read only objectives and capacities, so no crossover to a vertex.
+# The hipo_* options exist only in the HiGHS build with the HiPO options (README,
+# Setup). On our multi-year designs stock HiPO mistakes slow progress for
+# stagnation and falls back to IPX; three correctors and a progress test fix that.
+# HiPO's own feasibility target sits a tenth below the tolerance HiGHS checks the
+# final solution against, so the check after postsolve passes.
+solving:
+  highs:
+    solver: hipo
+    run_crossover: "off"
+    hipo_correctors: 3
+    hipo_stagnation_min_progress: 0.1
+    hipo_feasibility_tolerance_factor: 0.1
+    ipm_iteration_limit: 500
+
 entsoe:
   # Per-(area, data_type) downloads are pulled on demand by the scenario tables;
   # the bidding-zone catalog lives in data/entsoe_cache/entsoe_bidding_zones.csv.
