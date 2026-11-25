@@ -204,20 +204,36 @@ extras package (OpenBLAS on Linux, Metis, AMD), in whichever environment Step 2
 installed the package into:
 
 ```bash
-uv pip install --python .venv/bin/python highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@10b33d9c876b1553d940e3014020ae344a8aef43"
+uv pip install --python .venv/bin/python highspy-extras==1.16.0
+uv pip install --python .venv/bin/python --reinstall-package highspy --no-deps "highspy @ git+https://github.com/Paul-Particle/highs-hipo@10b33d9c876b1553d940e3014020ae344a8aef43"
 ```
 
-Without a venv, use `pip install highspy-extras==1.16.0 "highspy @ git+https://github.com/Paul-Particle/highs-hipo@10b33d9c876b1553d940e3014020ae344a8aef43"`.
-The build compiles HiGHS (a few minutes; CMake comes with the build).
+Without a venv:
+
+```bash
+pip install highspy-extras==1.16.0
+pip install --force-reinstall --no-deps "highspy @ git+https://github.com/Paul-Particle/highs-hipo@10b33d9c876b1553d940e3014020ae344a8aef43"
+```
+
+The environment's own highspy is also version 1.16.0, so without
+`--force-reinstall` (uv: `--reinstall-package highspy`) pip counts it as
+already installed, keeps it and installs only the extras, without an error.
+`--no-deps` keeps the reinstall from replacing numpy and the other dependencies.
+The build compiles HiGHS (a few minutes; CMake comes with the build, a C++
+compiler does not: on a fresh Ubuntu, `sudo apt install build-essential`).
 
 On Windows, install the prebuilt wheel from the fork's release
 [v1.16.0-hipo.1](https://github.com/Paul-Particle/highs-hipo/releases/tag/v1.16.0-hipo.1)
 (same commit) instead, as compiling there needs the Microsoft C++ Build Tools.
+Windows' Smart App Control can block parts of the environment (DLL load failed:
+"An Application Control policy has blocked this file"); in that case run the model in a
+Linux virtual machine, WSL2, following the Linux steps.
 The line below is for Python 3.12; the release also has wheels for 3.11 and 3.13
 (change both `cp312` in the file name):
 
 ```bash
-pip install highspy-extras==1.16.0 https://github.com/Paul-Particle/highs-hipo/releases/download/v1.16.0-hipo.1/highspy-1.16.0-cp312-cp312-win_amd64.whl
+pip install highspy-extras==1.16.0
+pip install --force-reinstall --no-deps https://github.com/Paul-Particle/highs-hipo/releases/download/v1.16.0-hipo.1/highspy-1.16.0-cp312-cp312-win_amd64.whl
 ```
 
 HiPO on Windows also needs the
@@ -229,6 +245,14 @@ and 11th generation, Xeon workstations, AMD Ryzen 7000 and later), the OpenBLAS 
 solve script avoids that by setting `OPENBLAS_CORETYPE=Haswell` on Windows; to use HiPO
 outside the model, set it yourself (`setx OPENBLAS_CORETYPE Haswell`, read by new
 terminals). The fork's `hipo-tuning/check_wheel_hipo.py` checks an installation.
+
+To check which highspy an environment has:
+
+```bash
+python -c "import highspy; print(highspy.Highs().setOptionValue('hipo_correctors', 3))"
+```
+
+The fork prints `HighsStatus.kOk`; the released highspy prints `HighsStatus.kError`.
 
 With
 `hipo_fork` enabled, a solve with a highspy that lacks the options stops at once
